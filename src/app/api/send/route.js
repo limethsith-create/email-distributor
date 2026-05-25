@@ -51,13 +51,19 @@ export async function POST(request) {
           const processedSubject = processTemplate(subject, recipient);
           const processedBody = processTemplate(body, recipient);
 
-          // Convert plain text body to HTML (preserve line breaks)
+          // Convert plain text body to clean HTML paragraphs
+          // Using <p> tags instead of <br> improves spam score
           const htmlBody = processedBody
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\n/g, '<br>')
-            .replace(/  /g, '&nbsp; ');
+            .split(/\n\n+/)
+            .map(paragraph => {
+              const escaped = paragraph
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\n/g, '<br>');
+              return `<p style="margin:0 0 16px 0;">${escaped}</p>`;
+            })
+            .join('\n');
 
           try {
             const sendResult = await sendEmail(account, {
