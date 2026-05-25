@@ -4,5 +4,15 @@
     "src/app/api/**/*.js": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/scrape",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/send",
+      "schedule": "0 4 * * *"
+    }
+  ]
 }
