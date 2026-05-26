@@ -28,30 +28,33 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const accounts = ['aviancesystems@gmail.com', 'avianceops@gmail.com', 'avianceauto@gmail.com', 'avianceflow@gmail.com', 'aviancedev@gmail.com'];
-
+  // Count emails per account dynamically from sent log (works with any number of accounts)
   const accountCounts = {};
   sentLog.forEach(entry => {
     if (entry.from) {
       accountCounts[entry.from] = (accountCounts[entry.from] || 0) + 1;
     }
   });
+  const accounts = Object.keys(accountCounts).sort();
 
   return (
     <div className="max-w-6xl animate-fade-in">
+      {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white mb-1">Dashboard</h1>
         <p className="text-[#6b7280] text-sm">Live overview of your outreach system</p>
       </div>
 
+      {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <StatCard label="Total Leads" value={stats?.totalLeads || 0} color="#5c7cfa" />
         <StatCard label="Emails Sent" value={stats?.totalSent || 0} color="#40c057" />
         <StatCard label="Failed" value={stats?.totalFailed || 0} color="#fa5252" />
         <StatCard label="Replied" value={stats?.replied || 0} color="#be4bdb" />
-        <StatCard label="Connected" value={5} color="#fab005" />
+        <StatCard label="Accounts" value={accounts.length || '...'} color="#fab005" />
       </div>
 
+      {/* Per-Account Breakdown */}
       <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-5 mb-8">
         <h2 className="text-sm font-semibold text-white mb-4">Sends per Account</h2>
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
@@ -71,11 +74,14 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
         <Link href="/leads" className="group p-6 bg-[#12121a] border border-[#2a2a3a] rounded-xl hover:border-[#fab005]/50 transition-all">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-lg bg-[#fab005]/10 flex items-center justify-center text-[#fab005]">
-              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
             </div>
             <div>
               <h3 className="text-white font-medium text-sm">Outreach Dashboard</h3>
@@ -87,7 +93,9 @@ export default function Dashboard() {
         <Link href="/upload" className="group p-6 bg-[#12121a] border border-[#2a2a3a] rounded-xl hover:border-[#40c057]/50 transition-all">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-lg bg-[#40c057]/10 flex items-center justify-center text-[#40c057]">
-              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
             </div>
             <div>
               <h3 className="text-white font-medium text-sm">Upload Leads</h3>
@@ -97,6 +105,7 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      {/* Recent Sent Emails */}
       <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden">
         <div className="p-4 border-b border-[#2a2a3a] flex items-center justify-between">
           <h2 className="text-sm font-semibold text-white">Recent Emails Sent</h2>
