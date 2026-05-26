@@ -2,7 +2,7 @@
  * Direct Outreach Blast — All-in-one endpoint
  * Accepts leads, personalizes emails, and sends immediately.
  * Distributes across Gmail accounts round-robin with random delays.
- * No storage dependency — everything happens in a single request.
+ * Logs every send to Vercel KV for dashboard visibility.
  *
  * POST body:
  * {
@@ -15,6 +15,7 @@
 
 import { sendEmail } from '@/lib/mailer';
 import { getEmailForSequenceDay } from '@/lib/personalize';
+import { upsertLead, logSentEmail } from '@/lib/leads-db';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -114,13 +115,47 @@ async function processBlast(body) {
 
       if (sendResult.success) {
         results.sent++;
-        results.details.push({
+        const detail = {
           to: qualifiedLead.email,
           from: account.email,
           company: qualifiedLead.company_name,
           status: 'sent',
           messageId: sendResult.messageId,
-        });
+        };
+        results.details.push(detail);
+
+        // Log to KV — persist the lead and the sent email
+        try {
+          await upsertLead({
+            email: qualifiedLead.email,
+            company_name: qualifiedLead.company_name,
+            industry: qualifiedLead.industry,
+            city: qualifiedLead.city,
+            status: 'sent-d0',
+            ai_score: lead.ai_score || 8,
+            source: 'outreach-blast',
+            account_used: account.email,
+            sent_at: new Date().toISOString(),
+            send_count: 1,
+            sequence_day: lead.sequenceDay || 0,
+          });
+
+          await logSentEmail({
+            to: qualifiedLead.email,
+            from: account.email,
+            company: qualifiedLead.company_name,
+            industry: qualifiedLead.industry,
+            city: qualifiedLead.city,
+            subject: emailContent.subject,
+            bodyPreview: emailContent.body.substring(0, 200),
+            status: 'sent',
+            messageId: sendResult.messageId,
+            sequenceDay: lead.sequenceDay || 0,
+          });
+        } catch (kvErr) {
+          // Don't fail the send if KV logging fails
+          console.error('KV log error:', kvErr.message);
+        }
       } else {
         results.failed++;
         results.details.push({
@@ -129,6 +164,21 @@ async function processBlast(body) {
           status: 'failed',
           error: sendResult.error,
         });
+
+        // Log failure to KV
+        try {
+          await logSentEmail({
+            to: qualifiedLead.email,
+            from: account.email,
+            company: qualifiedLead.company_name,
+            industry: qualifiedLead.industry,
+            subject: emailContent.subject,
+            status: 'failed',
+            error: sendResult.error,
+          });
+        } catch (kvErr) {
+          console.error('KV log error:', kvErr.message);
+        }
       }
     } catch (err) {
       results.failed++;
