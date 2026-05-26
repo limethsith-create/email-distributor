@@ -17,14 +17,4 @@
       "schedule": "0 */2 * * *"
     }
   ]
-}{
-  "framework": "nextjs",
-  "functions": {
-    "src/app/api/**/*.js": {
-      "maxDuration": 60
-    },
-    "src/app/api/outreach/blast/route.js": {
-      "maxDuration": 300
-    }
-  }
 }
