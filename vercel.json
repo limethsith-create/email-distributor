@@ -3,16 +3,9 @@
   "functions": {
     "src/app/api/**/*.js": {
       "maxDuration": 60
-    }
-  },
-  "crons": [
-    {
-      "path": "/api/cron/scrape",
-      "schedule": "0 3 * * *"
     },
-    {
-      "path": "/api/cron/send",
-      "schedule": "0 4 * * *"
+    "src/app/api/outreach/blast/route.js": {
+      "maxDuration": 300
     }
-  ]
+  }
 }
