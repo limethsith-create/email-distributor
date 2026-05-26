@@ -142,7 +142,7 @@ export default function LeadsPage() {
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">To</th>
                   <th className="px-4 py-3">Company</th>
-                  <th className="px-4 py-3">Industry</th>
+                  <th className="px-4 py-3">Industry</th>a
                   <th className="px-4 py-3">From Account</th>
                   <th className="px-4 py-3">Subject</th>
                   <th className="px-4 py-3">Time</th>
