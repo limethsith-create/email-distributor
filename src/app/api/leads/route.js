@@ -1,8 +1,9 @@
 /**
- * Leads API — View leads, stats, and manage the outreach pipeline
+ * Leads API — View leads, stats, sent log, and manage the outreach pipeline
  */
 
-import { getAllLeads, getStats, getSendQueue } from '@/lib/leads-db';
+import { getAllLeads, getStats, getSentLog, bulkUpsertLeads, upsertLead } from '@/lib/leads-db';
+import { qualifyLeads } from '@/lib/qualify';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,35 +15,16 @@ export async function GET(request) {
     switch (action) {
       case 'stats': {
         const stats = await getStats();
-        const queue = await getSendQueue();
-        const pendingInQueue = queue.filter(q => q.status === 'pending').length;
-        const sentToday = queue.filter(q => q.status === 'sent').length;
-
         return Response.json({
           ...stats,
-          queuePending: pendingInQueue,
-          sentToday,
           timestamp: new Date().toISOString(),
         });
       }
 
-      case 'queue': {
-        const queue = await getSendQueue();
-        return Response.json({
-          total: queue.length,
-          pending: queue.filter(q => q.status === 'pending').length,
-          sent: queue.filter(q => q.status === 'sent').length,
-          failed: queue.filter(q => q.status === 'failed').length,
-          items: queue.slice(0, 50).map(q => ({
-            to: q.email,
-            from: q.accountEmail,
-            scheduledAt: new Date(q.scheduledAt).toISOString(),
-            status: q.status,
-            sequenceDay: q.sequenceDay,
-            sentAt: q.sentAt,
-            error: q.error,
-          })),
-        });
+      case 'sent_log': {
+        const limit = parseInt(searchParams.get('limit') || '100', 10);
+        const log = await getSentLog(limit);
+        return Response.json({ log, total: log.length });
       }
 
       case 'list':
@@ -53,15 +35,12 @@ export async function GET(request) {
 
         let leads = await getAllLeads();
 
-        // Filter by status if specified
         if (status) {
           leads = leads.filter(l => l.status === status);
         }
 
-        // Sort by most recent first
-        leads.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        leads.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
 
-        // Paginate
         const start = (page - 1) * limit;
         const paginatedLeads = leads.slice(start, start + limit);
 
@@ -77,12 +56,50 @@ export async function GET(request) {
             ai_score: l.ai_score,
             status: l.status,
             source: l.source,
+            account_used: l.account_used,
             sent_at: l.sent_at,
             replied_at: l.replied_at,
             sequence_day: l.sequence_day,
+            send_count: l.send_count,
+            createdAt: l.createdAt,
           })),
         });
       }
+    }
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function POST(request) {
+  try {
+    const body = await request.json();
+    const action = body.action || 'add_direct';
+
+    switch (action) {
+      case 'add_direct': {
+        const leads = Array.isArray(body.leads) ? body.leads : [body];
+        const toAdd = leads.map(lead => ({
+          ...lead,
+          email: lead.email.toLowerCase().trim(),
+          status: 'qualified',
+          ai_score: lead.ai_score || 8,
+          source: lead.source || 'manual',
+          qualified_at: new Date().toISOString(),
+        }));
+        const result = await bulkUpsertLeads(toAdd);
+        return Response.json({ success: true, ...result });
+      }
+
+      case 'qualify_and_add': {
+        const leads = Array.isArray(body.leads) ? body.leads : [body];
+        const qualified = qualifyLeads(leads, { minScore: body.minScore || 5 });
+        const result = await bulkUpsertLeads(qualified);
+        return Response.json({ success: true, qualified: qualified.length, ...result });
+      }
+
+      default:
+        return Response.json({ error: 'Unknown action' }, { status: 400 });
     }
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
