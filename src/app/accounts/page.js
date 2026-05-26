@@ -4,6 +4,11 @@ import { useState, useEffect } from 'react';
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState([]);
+  const [sentLog, setSentLog] = useState([]);
+  const [leads, setLeads] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeAccount, setActiveAccount] = useState(null);
+  const [expandedEmail, setExpandedEmail] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ email: '', appPassword: '', displayName: '' });
   const [testing, setTesting] = useState(false);
@@ -11,14 +16,83 @@ export default function AccountsPage() {
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('mail-distro-accounts');
-    if (saved) setAccounts(JSON.parse(saved));
+    async function fetchData() {
+      try {
+        const [accountsRes, logRes, leadsRes] = await Promise.all([
+          fetch('/api/accounts'),
+          fetch('/api/leads?action=sent_log&limit=500'),
+          fetch('/api/leads?action=list&limit=500'),
+        ]);
+        const accData = await accountsRes.json();
+        const logData = await logRes.json();
+        const leadsData = await leadsRes.json();
+
+        const serverAccounts = accData.success ? accData.accounts : [];
+        setAccounts(serverAccounts);
+        setSentLog(logData.log || []);
+        setLeads(leadsData.leads || []);
+
+        // Auto-select first account
+        if (serverAccounts.length > 0 && !activeAccount) {
+          setActiveAccount(serverAccounts[0].email);
+        }
+      } catch (err) {
+        console.error('Accounts fetch error:', err);
+      }
+      setLoading(false);
+    }
+    fetchData();
+    const interval = setInterval(fetchData, 20000);
+    return () => clearInterval(interval);
   }, []);
 
-  const saveAccounts = (updated) => {
-    setAccounts(updated);
-    localStorage.setItem('mail-distro-accounts', JSON.stringify(updated));
-  };
+  // Build per-account data dynamically
+  const accountData = {};
+  accounts.forEach(acc => {
+    accountData[acc.email] = {
+      ...acc,
+      sent: [],
+      totalSent: 0,
+      totalFailed: 0,
+      totalReplied: 0,
+      industries: new Set(),
+    };
+  });
+
+  // Also capture any accounts that appear in sent log but aren't in env vars
+  sentLog.forEach(entry => {
+    if (entry.from && !accountData[entry.from]) {
+      accountData[entry.from] = {
+        email: entry.from,
+        displayName: entry.from.split('@')[0],
+        status: 'active',
+        sent: [],
+        totalSent: 0,
+        totalFailed: 0,
+        totalReplied: 0,
+        industries: new Set(),
+      };
+    }
+    if (entry.from && accountData[entry.from]) {
+      accountData[entry.from].sent.push(entry);
+      if (entry.status === 'sent') accountData[entry.from].totalSent++;
+      if (entry.status === 'failed') accountData[entry.from].totalFailed++;
+      if (entry.industry) accountData[entry.from].industries.add(entry.industry);
+    }
+  });
+
+  // Count replies per account from leads data
+  leads.forEach(lead => {
+    if (lead.status === 'replied' && lead.account_used && accountData[lead.account_used]) {
+      accountData[lead.account_used].totalReplied++;
+    }
+  });
+
+  const allAccounts = Object.keys(accountData).sort();
+  const activeData = activeAccount ? accountData[activeAccount] : null;
+  const activeEmails = activeData ? activeData.sent.sort((a, b) =>
+    new Date(b.timestamp || 0) - new Date(a.timestamp || 0)
+  ) : [];
 
   const showToast = (message, type = 'info') => {
     setToast({ message, type });
@@ -32,7 +106,6 @@ export default function AccountsPage() {
     }
     setTesting(true);
     setTestResult(null);
-
     try {
       const res = await fetch('/api/test-connection', {
         method: 'POST',
@@ -41,12 +114,7 @@ export default function AccountsPage() {
       });
       const data = await res.json();
       setTestResult(data);
-
-      if (data.success) {
-        showToast('Connection successful!', 'success');
-      } else {
-        showToast('Connection failed: ' + data.error, 'error');
-      }
+      showToast(data.success ? 'Connection successful!' : 'Connection failed: ' + data.error, data.success ? 'success' : 'error');
     } catch (err) {
       setTestResult({ success: false, error: err.message });
       showToast('Connection test failed', 'error');
@@ -54,63 +122,40 @@ export default function AccountsPage() {
     setTesting(false);
   };
 
-  const handleAddAccount = async () => {
+  const handleAddAccount = () => {
     if (!form.email || !form.appPassword) {
       showToast('Please fill in email and app password', 'error');
       return;
     }
-
-    if (accounts.some(a => a.email === form.email)) {
-      showToast('This account is already connected', 'error');
-      return;
-    }
-
-    const newAccount = {
-      id: Date.now().toString(),
-      email: form.email,
-      appPassword: form.appPassword,
-      displayName: form.displayName || form.email.split('@')[0],
-      addedAt: new Date().toISOString(),
-      status: testResult?.success ? 'verified' : 'unverified',
-    };
-
-    saveAccounts([...accounts, newAccount]);
-    setForm({ email: '', appPassword: '', displayName: '' });
+    showToast('To add a permanent account, set GMAIL_ACCOUNT_X in Vercel env vars (format: email:appPassword:displayName)', 'info');
     setShowForm(false);
-    setTestResult(null);
-    showToast('Account added successfully!', 'success');
   };
 
-  const handleRemoveAccount = (id) => {
-    saveAccounts(accounts.filter(a => a.id !== id));
-    showToast('Account removed', 'info');
-  };
+  const colors = ['#5c7cfa', '#40c057', '#fab005', '#be4bdb', '#fa5252', '#20c997', '#ff922b', '#845ef7', '#339af0', '#f06595'];
 
-  const handleRetestAccount = async (account) => {
-    try {
-      const res = await fetch('/api/test-connection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: account.email, appPassword: account.appPassword }),
-      });
-      const data = await res.json();
-
-      const updated = accounts.map(a =>
-        a.id === account.id ? { ...a, status: data.success ? 'verified' : 'failed' } : a
-      );
-      saveAccounts(updated);
-      showToast(data.success ? 'Account verified!' : 'Verification failed: ' + data.error, data.success ? 'success' : 'error');
-    } catch (err) {
-      showToast('Test failed: ' + err.message, 'error');
-    }
-  };
+  if (loading) {
+    return (
+      <div className="max-w-6xl animate-fade-in">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-white mb-1">Accounts</h1>
+          <p className="text-[#6b7280] text-sm">Loading account data...</p>
+        </div>
+        <div className="flex items-center justify-center p-20">
+          <div className="w-6 h-6 border-2 border-[#5c7cfa] border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl animate-fade-in">
-      <div className="flex items-center justify-between mb-8">
+    <div className="max-w-6xl animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Gmail Accounts</h1>
-          <p className="text-[#6b7280] text-sm">Connect your Gmail accounts for email distribution</p>
+          <h1 className="text-2xl font-bold text-white mb-1">Accounts</h1>
+          <p className="text-[#6b7280] text-sm">
+            {allAccounts.length} account{allAccounts.length !== 1 ? 's' : ''} active â 30 emails/day limit each
+          </p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
@@ -123,106 +168,260 @@ export default function AccountsPage() {
         </button>
       </div>
 
+      {/* Add Account Info */}
       {showForm && (
-        <div className="mb-6 p-6 bg-[#12121a] border border-[#2a2a3a] rounded-xl animate-fade-in">
-          <h3 className="text-sm font-semibold text-white mb-4">Connect New Gmail Account</h3>
-          <div className="mb-5 p-4 bg-[#5c7cfa]/5 border border-[#5c7cfa]/20 rounded-lg">
+        <div className="mb-6 p-5 bg-[#12121a] border border-[#2a2a3a] rounded-xl animate-fade-in">
+          <h3 className="text-sm font-semibold text-white mb-3">Connect New Gmail Account</h3>
+          <div className="mb-4 p-4 bg-[#5c7cfa]/5 border border-[#5c7cfa]/20 rounded-lg">
             <p className="text-xs text-[#91a7ff] leading-relaxed">
               <strong>How to get a Gmail App Password:</strong><br />
               1. Go to your Google Account &rarr; Security<br />
               2. Enable 2-Step Verification (if not already enabled)<br />
               3. Go to <span className="font-mono bg-[#1a1a25] px-1 rounded">myaccount.google.com/apppasswords</span><br />
               4. Generate a new App Password for &quot;Mail&quot;<br />
-              5. Copy the 16-character password below
+              5. Copy the 16-character password
             </p>
           </div>
-
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div>
-              <label className="block text-xs text-[#6b7280] mb-1.5">Display Name (optional)</label>
-              <input type="text" value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} placeholder="e.g. Marketing Team" className="w-full px-3 py-2.5 bg-[#0a0a0f] border border-[#2a2a3a] rounded-lg text-sm text-white placeholder-[#4a4a5a] focus:border-[#5c7cfa] focus:outline-none transition-colors" />
+              <label className="block text-xs text-[#6b7280] mb-1">Gmail Address *</label>
+              <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})}
+                placeholder="youremail@gmail.com"
+                className="w-full px-3 py-2.5 bg-[#0a0a0f] border border-[#2a2a3a] rounded-lg text-sm text-white placeholder-[#4a4a5a] focus:border-[#5c7cfa] focus:outline-none" />
             </div>
             <div>
-              <label className="block text-xs text-[#6b7280] mb-1.5">Gmail Address *</label>
-              <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="youremail@gmail.com" className="w-full px-3 py-2.5 bg-[#0a0a0f] border border-[#2a2a3a] rounded-lg text-sm text-white placeholder-[#4a4a5a] focus:border-[#5c7cfa] focus:outline-none transition-colors" />
+              <label className="block text-xs text-[#6b7280] mb-1">App Password *</label>
+              <input type="password" value={form.appPassword} onChange={e => setForm({...form, appPassword: e.target.value})}
+                placeholder="xxxx xxxx xxxx xxxx"
+                className="w-full px-3 py-2.5 bg-[#0a0a0f] border border-[#2a2a3a] rounded-lg text-sm text-white placeholder-[#4a4a5a] focus:border-[#5c7cfa] focus:outline-none font-mono" />
             </div>
-            <div>
-              <label className="block text-xs text-[#6b7280] mb-1.5">App Password *</label>
-              <input type="password" value={form.appPassword} onChange={(e) => setForm({ ...form, appPassword: e.target.value })} placeholder="xxxx xxxx xxxx xxxx" className="w-full px-3 py-2.5 bg-[#0a0a0f] border border-[#2a2a3a] rounded-lg text-sm text-white placeholder-[#4a4a5a] focus:border-[#5c7cfa] focus:outline-none transition-colors font-mono" />
-            </div>
-
             {testResult && (
               <div className={`p-3 rounded-lg text-xs ${testResult.success ? 'bg-[#40c057]/10 text-[#40c057] border border-[#40c057]/20' : 'bg-[#fa5252]/10 text-[#fa5252] border border-[#fa5252]/20'}`}>
-                {testResult.success ? 'Connection verified successfully!' : `Error: ${testResult.error}`}
+                {testResult.success ? 'Connection verified!' : `Error: ${testResult.error}`}
               </div>
             )}
-
-            <div className="flex gap-3 pt-2">
-              <button onClick={handleTestConnection} disabled={testing} className="px-4 py-2 bg-[#1a1a25] hover:bg-[#2a2a3a] text-[#91a7ff] text-sm rounded-lg transition-colors border border-[#2a2a3a] disabled:opacity-50">
+            <div className="flex gap-3 pt-1">
+              <button onClick={handleTestConnection} disabled={testing}
+                className="px-4 py-2 bg-[#1a1a25] hover:bg-[#2a2a3a] text-[#91a7ff] text-sm rounded-lg border border-[#2a2a3a] disabled:opacity-50">
                 {testing ? 'Testing...' : 'Test Connection'}
               </button>
-              <button onClick={handleAddAccount} className="px-4 py-2 bg-[#5c7cfa] hover:bg-[#4c6ef5] text-white text-sm rounded-lg transition-colors">
+              <button onClick={handleAddAccount}
+                className="px-4 py-2 bg-[#5c7cfa] hover:bg-[#4c6ef5] text-white text-sm rounded-lg">
                 Add Account
               </button>
-              <button onClick={() => { setShowForm(false); setTestResult(null); }} className="px-4 py-2 text-[#6b7280] hover:text-white text-sm transition-colors">
-                Cancel
-              </button>
+              <button onClick={() => { setShowForm(false); setTestResult(null); }}
+                className="px-4 py-2 text-[#6b7280] hover:text-white text-sm">Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {accounts.length === 0 ? (
+      {/* Account Tabs */}
+      <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+        {allAccounts.map((email, i) => {
+          const data = accountData[email];
+          const isActive = activeAccount === email;
+          const color = colors[i % colors.length];
+          return (
+            <button
+              key={email}
+              onClick={() => { setActiveAccount(email); setExpandedEmail(null); }}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm whitespace-nowrap transition-all ${
+                isActive
+                  ? 'bg-[#1a1a25] border-2 text-white'
+                  : 'bg-[#12121a] border border-[#2a2a3a] text-[#6b7280] hover:text-white hover:border-[#3a3a4a]'
+              }`}
+              style={isActive ? { borderColor: color } : {}}
+            >
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }}></div>
+              <span>{email.split('@')[0]}</span>
+              <span className="text-xs px-1.5 py-0.5 rounded-full bg-[#0d0d14]" style={{ color }}>
+                {data.totalSent}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Active Account Details */}
+      {activeData && (
+        <>
+          {/* Stats Row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <MiniStat label="Emails Sent" value={activeData.totalSent} color="#40c057" />
+            <MiniStat label="Failed" value={activeData.totalFailed} color="#fa5252" />
+            <MiniStat label="Replied" value={activeData.totalReplied} color="#be4bdb" />
+            <MiniStat label="Industries" value={activeData.industries.size} color="#fab005" />
+          </div>
+
+          {/* Daily Limit Progress */}
+          <div className="mb-6 p-4 bg-[#12121a] border border-[#2a2a3a] rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-[#6b7280]">Daily Sending Progress</span>
+              <span className="text-xs text-white font-medium">
+                {Math.min(activeData.totalSent, 30)} / 30 today
+              </span>
+            </div>
+            <div className="w-full h-2 bg-[#0d0d14] rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.min((activeData.totalSent / 30) * 100, 100)}%`,
+                  backgroundColor: activeData.totalSent >= 30 ? '#fa5252' : '#40c057',
+                }}
+              ></div>
+            </div>
+          </div>
+
+          {/* Sent Emails List */}
+          <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden">
+            <div className="p-4 border-b border-[#2a2a3a] flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-white">
+                Emails Sent by {activeAccount?.split('@')[0]}
+              </h2>
+              <span className="text-xs text-[#6b7280]">{activeEmails.length} total</span>
+            </div>
+
+            {activeEmails.length === 0 ? (
+              <div className="p-12 text-center">
+                <p className="text-[#6b7280] text-sm">No emails sent from this account yet.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-[#2a2a3a]">
+                {activeEmails.map((entry, idx) => (
+                  <div key={idx} className="hover:bg-[#1a1a25] transition-colors">
+                    {/* Email Row */}
+                    <button
+                      onClick={() => setExpandedEmail(expandedEmail === idx ? null : idx)}
+                      className="w-full text-left p-4"
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                            entry.status === 'sent' ? 'bg-[#40c057]' : 'bg-[#fa5252]'
+                          }`}></span>
+                          <span className="text-sm text-white font-medium truncate max-w-[300px]">
+                            {entry.company || entry.to}
+                          </span>
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-[#fab005]/10 text-[#fab005] capitalize">
+                            {entry.industry || 'unknown'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-[#6b7280]">
+                            {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : ''}
+                          </span>
+                          <svg
+                            width="14" height="14" fill="none" viewBox="0 0 24 24"
+                            stroke="#6b7280" strokeWidth="2"
+                            className={`transition-transform ${expandedEmail === idx ? 'rotate-180' : ''}`}
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-[#6b7280] mt-1">
+                        <span>To: {entry.to}</span>
+                        {entry.city && <span>City: {entry.city}</span>}
+                      </div>
+                      {entry.subject && (
+                        <p className="text-xs text-[#4b5563] mt-1 truncate">Subject: {entry.subject}</p>
+                      )}
+                    </button>
+
+                    {/* Expanded Email Details */}
+                    {expandedEmail === idx && (
+                      <div className="px-4 pb-4 animate-fade-in">
+                        <div className="p-4 bg-[#0d0d14] rounded-lg border border-[#2a2a3a]">
+                          <div className="grid grid-cols-2 gap-3 mb-3 text-xs">
+                            <div>
+                              <span className="text-[#6b7280]">Recipient: </span>
+                              <span className="text-white">{entry.to}</span>
+                            </div>
+                            <div>
+                              <span className="text-[#6b7280]">Company: </span>
+                              <span className="text-white">{entry.company || 'N/A'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[#6b7280]">Industry: </span>
+                              <span className="text-white capitalize">{entry.industry || 'N/A'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[#6b7280]">Status: </span>
+                              <span className={entry.status === 'sent' ? 'text-[#40c057]' : 'text-[#fa5252]'}>
+                                {entry.status}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[#6b7280]">From Account: </span>
+                              <span className="text-white">{entry.from}</span>
+                            </div>
+                            <div>
+                              <span className="text-[#6b7280]">Sent At: </span>
+                              <span className="text-white">
+                                {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : 'N/A'}
+                              </span>
+                            </div>
+                          </div>
+                          {entry.subject && (
+                            <div className="mb-3">
+                              <span className="text-xs text-[#6b7280]">Subject: </span>
+                              <span className="text-xs text-white">{entry.subject}</span>
+                            </div>
+                          )}
+                          {entry.body && (
+                            <div>
+                              <span className="text-xs text-[#6b7280] block mb-1">Email Body:</span>
+                              <pre className="text-xs text-[#9ca3af] whitespace-pre-wrap leading-relaxed max-h-[300px] overflow-y-auto">
+                                {entry.body}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* No accounts state */}
+      {allAccounts.length === 0 && (
         <div className="p-12 bg-[#12121a] border border-[#2a2a3a] rounded-xl text-center">
           <div className="w-12 h-12 rounded-xl bg-[#5c7cfa]/10 flex items-center justify-center mx-auto mb-4">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#5c7cfa" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
           </div>
-          <p className="text-[#6b7280] text-sm mb-4">No Gmail accounts connected yet.</p>
-          <button onClick={() => setShowForm(true)} className="px-4 py-2 bg-[#5c7cfa] hover:bg-[#4c6ef5] text-white text-sm rounded-lg transition-colors">
-            Connect Your First Account
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {accounts.map((account, idx) => (
-            <div key={account.id} className="p-4 bg-[#12121a] border border-[#2a2a3a] rounded-xl flex items-center justify-between hover:border-[#3a3a4a] transition-colors animate-slide-in" style={{ animationDelay: `${idx * 50}ms` }}>
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#fa5252]/20 to-[#fab005]/20 flex items-center justify-center text-white text-sm font-bold">
-                  {account.email[0].toUpperCase()}
-                </div>
-                <div>
-                  <p className="text-sm text-white font-medium">{account.displayName || account.email}</p>
-                  <p className="text-xs text-[#6b7280]">{account.email}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className={`px-2.5 py-1 rounded-full text-xs ${
-                  account.status === 'verified' ? 'bg-[#40c057]/10 text-[#40c057]'
-                    : account.status === 'failed' ? 'bg-[#fa5252]/10 text-[#fa5252]'
-                    : 'bg-[#fab005]/10 text-[#fab005]'
-                }`}>
-                  {account.status || 'unverified'}
-                </span>
-                <button onClick={() => handleRetestAccount(account)} className="p-2 text-[#6b7280] hover:text-[#91a7ff] transition-colors" title="Re-test connection">
-                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                </button>
-                <button onClick={() => handleRemoveAccount(account.id)} className="p-2 text-[#6b7280] hover:text-[#fa5252] transition-colors" title="Remove account">
-                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                </button>
-              </div>
-            </div>
-          ))}
+          <p className="text-[#6b7280] text-sm mb-4">No Gmail accounts configured yet.</p>
+          <p className="text-[#4b5563] text-xs">
+            Add accounts via Vercel environment variables (GMAIL_ACCOUNT_1, GMAIL_ACCOUNT_2, etc.)
+          </p>
         </div>
       )}
 
+      {/* Toast */}
       {toast && (
-        <div className={`toast toast-${toast.type}`}>
+        <div className={`fixed bottom-6 right-6 px-4 py-3 rounded-lg text-sm z-50 animate-fade-in ${
+          toast.type === 'success' ? 'bg-[#40c057]/20 text-[#40c057] border border-[#40c057]/30' :
+          toast.type === 'error' ? 'bg-[#fa5252]/20 text-[#fa5252] border border-[#fa5252]/30' :
+          'bg-[#5c7cfa]/20 text-[#91a7ff] border border-[#5c7cfa]/30'
+        }`}>
           {toast.message}
         </div>
       )}
+    </div>
+  );
+}
+
+function MiniStat({ label, value, color }) {
+  return (
+    <div className="p-4 bg-[#12121a] border border-[#2a2a3a] rounded-xl">
+      <span className="text-[#6b7280] text-xs uppercase tracking-wider">{label}</span>
+      <p className="text-xl font-bold mt-1" style={{ color }}>{value}</p>
     </div>
   );
 }
