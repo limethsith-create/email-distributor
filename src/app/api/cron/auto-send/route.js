@@ -308,7 +308,8 @@ export async function GET(request) {
         ? `<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">${unsubNote.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
         : '';
 
-      const htmlBody = htmlParagraphs + htmlSignature + htmlUnsubscribe;
+      const trackingPixel = `<img src="https://email-distributor.vercel.app/api/track/open?id=${Buffer.from(qualifiedLead.email).toString('base64')}" width="1" height="1" style="display:none" alt="" />`;
+      const htmlBody = htmlParagraphs + htmlSignature + htmlUnsubscribe + trackingPixel;
 
       try {
         const sendResult = await sendEmail(account, {
