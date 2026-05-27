@@ -1,10 +1,10 @@
 /**
- * Autonomous Email Sender â Zero Claude Dependency
+ * Autonomous Email Sender — Zero Claude Dependency
  *
  * This endpoint runs on a cron schedule (or external trigger) and:
  * 1. Checks how many emails each account has sent TODAY
  * 2. Picks unsent leads from KV (status = "pending" or "new")
- * 3. Sends up to 30 emails per account per day (scales with any number of accounts)
+ * 3. Sends up to 15 emails per account per day (scales with any number of accounts)
  * 4. Logs everything to KV for dashboard visibility
  * 5. Random delays between sends to look natural
  *
@@ -22,7 +22,7 @@ import { logSentEmail } from '@/lib/leads-db';
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-const MAX_PER_ACCOUNT_PER_DAY = 30;
+const MAX_PER_ACCOUNT_PER_DAY = 15;
 const LEADS_KEY = 'leads';
 const DAILY_SEND_KEY = 'daily_sends'; // Hash: "account:YYYY-MM-DD" -> count
 
@@ -168,7 +168,7 @@ export async function GET(request) {
     });
   }
 
-  // Send emails â round-robin across accounts respecting daily limits
+  // Send emails — round-robin across accounts respecting daily limits
   const results = { sent: 0, failed: 0, skipped: 0, details: [] };
   let accountIndex = 0;
 
@@ -220,28 +220,18 @@ export async function GET(request) {
       .split(/\n\n+/)
       .map(p => {
         let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-        // Make URLs clickable
-        escaped = escaped.replace(
-          /https?:\/\/[^\s<]+/g,
-          url => `<a href="${url}" style="color:#4F46E5;text-decoration:none;">${url}</a>`
-        );
+        // Keep URLs as plain text in body — fewer links = better deliverability
+        // Only the signature link is clickable
         return `<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">${escaped}</p>`;
       })
       .join('\n');
 
     const htmlSignature = `
-      <table cellpadding="0" cellspacing="0" style="margin-top:20px;border-top:1px solid #e5e7eb;padding-top:16px;">
-        <tr>
-          <td style="font-family:Arial,sans-serif;">
-            <strong style="font-size:14px;color:#111;">Limethsith</strong><br>
-            <span style="font-size:12px;color:#6b7280;">Head of AI â Aviance</span><br>
-            <span style="font-size:12px;color:#6b7280;">
-              <a href="tel:+94718702702" style="color:#4F46E5;text-decoration:none;">071 870 2702</a> Â·
-              <a href="https://www.aviance.online" style="color:#4F46E5;text-decoration:none;">aviance.online</a>
-            </span>
-          </td>
-        </tr>
-      </table>`;
+      <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
+        Limethsith<br>
+        Aviance — AI Growth Systems<br>
+        071 870 2702 | <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
+      </div>`;
 
     const htmlUnsubscribe = unsubNote
       ? `<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">${unsubNote.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
