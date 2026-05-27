@@ -1,0 +1,237 @@
+/**
+ * Bounce Detection Cron Endpoint
+ *
+ * Connects to all Gmail accounts via IMAP, detects bounce-back
+ * messages (from mailer-daemon, postmaster, etc.), extracts the
+ * bounced recipient address, and updates lead status in Vercel KV.
+ *
+ * Trigger:
+ * - GET /api/cron/check-bounces?token=CRON_SECRET
+ * - n8n or external cron (every 1-2 hours)
+ */
+
+import { ImapFlow } from 'imapflow';
+import { kv } from '@vercel/kv';
+
+export const maxDuration = 120;
+export const dynamic = 'force-dynamic';
+
+const LEADS_KEY = 'leads';
+const BOUNCES_KEY = 'bounces';
+const LAST_CHECK_KEY = 'bounce_last_check';
+
+const BOUNCE_SENDERS = ['mailer-daemon', 'postmaster'];
+
+const BOUNCE_SUBJECT_PATTERNS = [
+  'delivery status notification',
+  'undeliverable',
+  'mail delivery failed',
+  'returned mail',
+  'failure notice',
+  'undelivered mail',
+  'delivery failure',
+  'delivery has failed',
+  'message not delivered',
+  'could not be delivered',
+  'permanent failure',
+];
+
+function getGmailAccounts() {
+  const accounts = [];
+  for (let i = 1; i <= 10; i++) {
+    const envVar = process.env[`GMAIL_ACCOUNT_${i}`];
+    if (!envVar) continue;
+    const parts = envVar.split(':');
+    if (parts.length >= 2) {
+      accounts.push({
+        email: parts[0],
+        appPassword: parts[1],
+        displayName: parts[2] || parts[0].split('@')[0],
+      });
+    }
+  }
+  return accounts;
+}
+
+function isBounceMessage(fromEmail, subject) {
+  const from = (fromEmail || '').toLowerCase();
+  const subj = (subject || '').toLowerCase();
+  const isBounceFrom = BOUNCE_SENDERS.some(
+    (sender) => from.startsWith(sender + '@') || from.includes(sender)
+  );
+  const isBounceSubject = BOUNCE_SUBJECT_PATTERNS.some((pattern) =>
+    subj.includes(pattern)
+  );
+  return isBounceFrom || isBounceSubject;
+}
+
+function extractBouncedEmail(bodyText) {
+  if (!bodyText) return null;
+  const patterns = [
+    /Final-Recipient:\s*(?:rfc822|RFC822);\s*<?([^\s<>\r\n]+@[^\s<>\r\n]+)>?/i,
+    /Original-Recipient:\s*(?:rfc822|RFC822);\s*<?([^\s<>\r\n]+@[^\s<>\r\n]+)>?/i,
+    /not\s+delivered\s+to:?\s*<?([^\s<>\r\n]+@[^\s<>\r\n]+)>?/i,
+    /following\s+recipient.*failed.*?<?([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})>?/is,
+    /tried\s+to\s+reach.*?<?([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})>?/is,
+    /(?:Action:\s*failed)[\s\S]*?(?:To|for):?\s*<?([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})>?/i,
+    /(?:bounce|fail|reject|undeliver|return)[\s\S]{0,300}?<?([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})>?/i,
+    /Original-.*To:?\s*<?([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})>?/i,
+  ];
+  for (const pattern of patterns) {
+    const match = bodyText.match(pattern);
+    if (match && match[1]) {
+      const email = match[1].toLowerCase().trim();
+      if (!email.startsWith('mailer-daemon@') && !email.startsWith('postmaster@') && email.includes('@') && email.includes('.')) {
+        return email;
+      }
+    }
+  }
+  return null;
+}
+
+function extractBounceReason(bodyText) {
+  if (!bodyText) return 'Unknown bounce reason';
+  const reasonPatterns = [
+    /Diagnostic-Code:\s*(?:smtp;\s*)?(.+?)(?:\r?\n(?!\s))/i,
+    /Status:\s*(\d\.\d+\.\d+)/i,
+    /(user\s+(?:unknown|does\s+not\s+exist|not\s+found))/i,
+    /(mailbox\s+(?:not\s+found|unavailable|full|disabled))/i,
+    /(address\s+(?:rejected|not\s+found|does\s+not\s+exist))/i,
+    /(account\s+(?:has\s+been\s+disabled|does\s+not\s+exist|is\s+(?:disabled|inactive)))/i,
+    /(over\s+quota)/i,
+    /(domain\s+(?:not\s+found|does\s+not\s+exist))/i,
+    /(no\s+such\s+user)/i,
+    /(rejected.*?spam)/i,
+    /(blocked)/i,
+  ];
+  for (const pattern of reasonPatterns) {
+    const match = bodyText.match(pattern);
+    if (match && match[1]) {
+      return match[1].trim().substring(0, 200);
+    }
+  }
+  return 'Delivery failed (reason not parsed)';
+}
+
+async function checkBouncesForAccount(account) {
+  const results = { bounces: [], errors: [] };
+  let client;
+  try {
+    client = new ImapFlow({
+      host: 'imap.gmail.com',
+      port: 993,
+      secure: true,
+      auth: { user: account.email, pass: account.appPassword },
+      logger: false,
+    });
+    await client.connect();
+    let lastCheck;
+    try {
+      const saved = await kv.hget(LAST_CHECK_KEY, account.email);
+      lastCheck = saved ? new Date(saved) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    } catch {
+      lastCheck = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    }
+    const mailbox = await client.getMailboxLock('INBOX');
+    try {
+      const messages = client.fetch(
+        { since: lastCheck },
+        { envelope: true, bodyStructure: true, source: { maxBytes: 8000 } }
+      );
+      for await (const msg of messages) {
+        const envelope = msg.envelope;
+        if (!envelope) continue;
+        const fromEmail = envelope.from?.[0]?.address?.toLowerCase() || '';
+        const subject = envelope.subject || '';
+        const date = envelope.date;
+        if (!isBounceMessage(fromEmail, subject)) continue;
+        let bodyText = '';
+        if (msg.source) { bodyText = msg.source.toString(); }
+        const bouncedEmail = extractBouncedEmail(bodyText);
+        if (!bouncedEmail) {
+          results.errors.push({ account: account.email, error: `Bounce detected but could not extract recipient. Subject: "${subject}"` });
+          continue;
+        }
+        const reason = extractBounceReason(bodyText);
+        results.bounces.push({
+          email: bouncedEmail,
+          bouncedAt: date ? date.toISOString() : new Date().toISOString(),
+          reason, account: account.email, subject, messageId: envelope.messageId,
+        });
+      }
+    } finally {
+      mailbox.release();
+    }
+    await kv.hset(LAST_CHECK_KEY, { [account.email]: new Date().toISOString() });
+    await client.logout();
+  } catch (err) {
+    results.errors.push({ account: account.email, error: err.message });
+    if (client) { try { await client.logout(); } catch {} }
+  }
+  return results;
+}
+
+async function processDetectedBounce(bounce) {
+  try {
+    const email = bounce.email.toLowerCase();
+    const lead = await kv.hget(LEADS_KEY, email);
+    if (lead) {
+      const updated = {
+        ...lead, status: 'bounced', bounced_at: bounce.bouncedAt,
+        bounce_reason: bounce.reason, bounce_account: bounce.account,
+        updatedAt: new Date().toISOString(),
+      };
+      await kv.hset(LEADS_KEY, { [email]: updated });
+    }
+    await kv.hset(BOUNCES_KEY, {
+      [email]: { email: bounce.email, bouncedAt: bounce.bouncedAt, reason: bounce.reason, account: bounce.account },
+    });
+    return { processed: true, email, hadLead: !!lead, company: lead?.company || lead?.company_name || null };
+  } catch (err) {
+    return { processed: false, email: bounce.email, error: err.message };
+  }
+}
+
+async function checkAllBounces() {
+  const accounts = getGmailAccounts();
+  if (!accounts.length) return { error: 'No Gmail accounts configured', checked: 0 };
+  const summary = { checked: 0, totalBounces: 0, matchedLeads: 0, detectedBounces: [], errors: [], timestamp: new Date().toISOString() };
+  for (const account of accounts) {
+    summary.checked++;
+    const result = await checkBouncesForAccount(account);
+    if (result.errors.length > 0) summary.errors.push(...result.errors);
+    for (const bounce of result.bounces) {
+      summary.totalBounces++;
+      const processed = await processDetectedBounce(bounce);
+      if (processed.processed) {
+        summary.detectedBounces.push({
+          email: bounce.email, reason: bounce.reason, account: bounce.account,
+          company: processed.company, hadLead: processed.hadLead, bouncedAt: bounce.bouncedAt,
+        });
+        if (processed.hadLead) summary.matchedLeads++;
+      }
+    }
+  }
+  if (summary.totalBounces > 0) {
+    try { await kv.hincrby('stats', 'totalBounced', summary.totalBounces); } catch {}
+  }
+  return summary;
+}
+
+export async function GET(request) {
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret) {
+    const { searchParams } = new URL(request.url);
+    const tokenParam = searchParams.get('token');
+    const authHeader = request.headers.get('authorization');
+    if (authHeader !== `Bearer ${cronSecret}` && tokenParam !== cronSecret) {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+  }
+  try {
+    const result = await checkAllBounces();
+    return Response.json({ success: true, ...result });
+  } catch (err) {
+    return Response.json({ success: false, error: err.message, timestamp: new Date().toISOString() }, { status: 500 });
+  }
+}
