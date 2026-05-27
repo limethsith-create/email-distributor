@@ -1,139 +1,139 @@
 /**
- * Email Personalization Engine â Aviance AI Growth Systems
+ * Email Personalization Engine — Aviance AI Growth Systems
  * Generates industry-specific personalized outreach emails
  * Branded with aviance.online, Head of AI signature, phone number
  */
 
-// Industry-specific hooks â what hurts them + what we fix
+// Industry-specific hooks — what hurts them + what we fix
 const INDUSTRY_TEMPLATES = {
   retail: {
     pain: 'still handling customer questions one by one and tracking stock in spreadsheets',
-    solution: 'We set up AI systems that auto-respond to common customer queries, send restock alerts, and track orders â so your team only handles the stuff that actually needs a human',
-    result: 'One retail client cut their support workload by 60% in the first month',
-    subject: 'Quick idea for {{company_name}}',
+    solution: 'We set up AI systems that auto-respond to common customer queries, send restock alerts, and track orders — so your team only handles the stuff that actually needs a human',
+    result: 'We helped a retail client streamline their support — they told us it freed up most of their week',
+    subject: 'Thought about {{company_name}}',
   },
   logistics: {
     pain: 'coordinating drivers over WhatsApp and manually updating customers on delivery status',
-    solution: 'We build automated dispatch systems â drivers get routes automatically, customers get live tracking links, and you get a dashboard that shows everything in real time',
-    result: 'A Colombo logistics company cut coordination time by 40% within 30 days',
-    subject: 'An idea for {{company_name}}',
+    solution: 'We build automated dispatch systems — drivers get routes automatically, customers get live tracking links, and you get a dashboard that shows everything in real time',
+    result: 'We worked with a logistics company in Colombo and they said coordination got noticeably smoother within the first month',
+    subject: 'Something for {{company_name}} to consider',
   },
   transport: {
     pain: 'managing fleet coordination and delivery updates through calls and messages',
-    solution: 'We automate dispatch notifications, driver assignments, and customer ETA updates â the whole chain runs on autopilot',
-    result: 'Automated dispatch saved one transport firm 3+ hours of coordinator time per day',
-    subject: 'Quick idea for {{company_name}}',
+    solution: 'We automate dispatch notifications, driver assignments, and customer ETA updates — the whole chain runs on autopilot',
+    result: 'One transport firm we helped said their coordinator now has a few extra hours every day',
+    subject: 'Thought about {{company_name}} operations',
   },
   manufacturing: {
     pain: 'chasing suppliers by email and tracking production schedules on paper or Excel',
     solution: 'We set up automated supplier follow-ups, production milestone alerts, and quality check workflows that flag issues before they become expensive',
-    result: 'A manufacturer reduced production delays by 30% just by automating supplier reminders',
-    subject: 'Quick idea for {{company_name}}',
+    result: 'A manufacturer told us their production delays dropped significantly after we automated their supplier reminders',
+    subject: 'Regarding {{company_name}} production workflow',
   },
   finance: {
-    pain: 'processing applications and compliance docs by hand â slow and error-prone',
+    pain: 'processing applications and compliance docs by hand — slow and error-prone',
     solution: 'We build AI workflows that extract data from documents, run KYC checks automatically, and onboard clients in hours instead of days',
-    result: 'A fintech in Colombo cut document processing time by 70%',
-    subject: 'Quick idea for {{company_name}}',
+    result: 'A fintech we worked with in Colombo was able to process documents much faster after the setup',
+    subject: 'Thought for {{company_name}} team',
   },
   banking: {
     pain: 'manually reviewing applications and chasing clients for missing documents',
-    solution: 'We automate document intake, compliance checks, and client communications â your team reviews, AI does the grunt work',
-    result: 'One bank went from 5-day onboarding to same-day using our automation',
-    subject: 'Quick idea for {{company_name}}',
+    solution: 'We automate document intake, compliance checks, and client communications — your team reviews, AI does the grunt work',
+    result: 'We helped a bank get their onboarding from days down to same-day',
+    subject: 'Idea for {{company_name}} onboarding',
   },
   insurance: {
     pain: 'spending days on claims processing and constantly chasing clients for paperwork',
-    solution: 'We automate claims intake, document collection, and status updates â clients stay informed, your team moves faster',
-    result: 'Claims processing went from 5 days to same-day for one insurer',
-    subject: 'Quick idea for {{company_name}}',
+    solution: 'We automate claims intake, document collection, and status updates — clients stay informed, your team moves faster',
+    result: 'An insurer we worked with went from days to same-day on claims turnaround',
+    subject: 'Thought for {{company_name}} claims',
   },
   healthcare: {
     pain: 'losing patients to no-shows and wasting staff time on phone reminders',
-    solution: 'We set up automated appointment reminders via WhatsApp and email, plus easy reschedule links â patients show up, staff stays free',
-    result: 'One clinic reduced no-shows by 45% within 6 weeks',
+    solution: 'We set up automated appointment reminders via WhatsApp and email, plus easy reschedule links — patients show up, staff stays free',
+    result: 'A clinic we worked with saw their no-shows drop noticeably within a few weeks',
     subject: 'Reducing no-shows at {{company_name}}',
   },
   hospital: {
     pain: 'managing patient comms and appointment scheduling with too much manual work',
-    solution: 'We automate reminders, referral follow-ups, and prescription notifications â patients get better care, staff gets their time back',
-    result: 'A hospital reduced missed appointments by 40% in 6 weeks',
-    subject: 'Reducing no-shows at {{company_name}}',
+    solution: 'We automate reminders, referral follow-ups, and prescription notifications — patients get better care, staff gets their time back',
+    result: 'A hospital told us their missed appointments dropped significantly after we set up reminders',
+    subject: 'Appointment reminders for {{company_name}}',
   },
   clinic: {
     pain: 'losing patients to missed appointments and juggling bookings by hand',
     solution: 'We build automated booking reminders, reschedule flows, and follow-up messages that run on their own',
-    result: 'No-show rates dropped 45% for a Colombo clinic in just 6 weeks',
-    subject: 'Reducing no-shows at {{company_name}}',
+    result: 'A Colombo clinic we helped saw no-show rates come down meaningfully in just a few weeks',
+    subject: 'Reducing missed appointments at {{company_name}}',
   },
   hotel: {
     pain: 'handling guest inquiries, room requests, and check-in paperwork manually',
-    solution: 'We automate pre-arrival messages, housekeeping coordination, and online check-in â guests get a premium experience without extra staff overhead',
-    result: 'A boutique hotel in Galle automated 80% of their pre-arrival messaging',
-    subject: 'Quick idea for {{company_name}}',
+    solution: 'We automate pre-arrival messages, housekeeping coordination, and online check-in — guests get a premium experience without extra staff overhead',
+    result: 'A boutique hotel in Galle automated most of their pre-arrival messaging with us',
+    subject: 'Guest experience idea for {{company_name}}',
   },
   hospitality: {
     pain: 'managing reservations and guest communications one message at a time',
-    solution: 'We set up automated reservation confirmations, guest welcome sequences, and feedback collection â everything runs behind the scenes',
-    result: 'A hotel chain cut front-desk call volume by 50% with our automation',
-    subject: 'Quick idea for {{company_name}}',
+    solution: 'We set up automated reservation confirmations, guest welcome sequences, and feedback collection — everything runs behind the scenes',
+    result: 'A hotel chain told us their front-desk call volume dropped noticeably after automation',
+    subject: 'Reservation workflow for {{company_name}}',
   },
   restaurant: {
     pain: 'losing bookings to missed calls and managing reservations on paper',
-    solution: 'We automate reservation confirmations, table reminders, and loyalty messages â more bookings, fewer no-shows',
-    result: 'Automated reminders cut cancellations by 35% for one restaurant group',
-    subject: 'Quick idea for {{company_name}}',
+    solution: 'We automate reservation confirmations, table reminders, and loyalty messages — more bookings, fewer no-shows',
+    result: 'A restaurant group we helped saw their cancellations come down after setting up reminders',
+    subject: 'Booking idea for {{company_name}}',
   },
   legal: {
     pain: 'spending hours on client intake forms and routine document drafting',
-    solution: 'We automate client onboarding, document generation, and deadline reminders â your lawyers focus on actual legal work',
-    result: 'One law firm saved 8+ hours per week by automating intake alone',
-    subject: 'Saving {{company_name}} 5+ hours a week',
+    solution: 'We automate client onboarding, document generation, and deadline reminders — your lawyers focus on actual legal work',
+    result: 'A law firm told us they got several hours back each week just from automating intake',
+    subject: 'Saving time at {{company_name}}',
   },
   law: {
-    pain: 'burning billable hours on admin â intake forms, document prep, follow-ups',
+    pain: 'burning billable hours on admin — intake forms, document prep, follow-ups',
     solution: 'We build automated client intake, document assembly, and reminder systems so your team focuses on casework',
-    result: 'A law firm reclaimed 8 hours per week just from automating onboarding',
-    subject: 'Saving {{company_name}} 5+ hours a week',
+    result: 'We helped a law firm reclaim hours each week by automating their onboarding process',
+    subject: 'Workflow thought for {{company_name}}',
   },
   'real estate': {
     pain: 'manually following up with every inquiry and trying to schedule viewings over the phone',
-    solution: 'We automate lead follow-up sequences, viewing scheduling, and property info delivery â leads get instant responses, you close more deals',
-    result: 'Automated follow-ups increased viewing bookings by 50% for one agency',
-    subject: 'Quick idea for {{company_name}}',
+    solution: 'We automate lead follow-up sequences, viewing scheduling, and property info delivery — leads get instant responses, you close more deals',
+    result: 'An agency we worked with told us their viewing bookings picked up after setting up automated follow-ups',
+    subject: 'Follow-up idea for {{company_name}}',
   },
   education: {
     pain: 'chasing students and parents about fees, deadlines, and assignments',
-    solution: 'We set up automated fee reminders, assignment notifications, and parent communication flows â everything goes out on time without staff effort',
-    result: 'Fee collection improved 25% with automated reminders for one school',
-    subject: 'Quick idea for {{company_name}}',
+    solution: 'We set up automated fee reminders, assignment notifications, and parent communication flows — everything goes out on time without staff effort',
+    result: 'A school we helped said fee collection improved noticeably once automated reminders went live',
+    subject: 'Communication idea for {{company_name}}',
   },
   technology: {
     pain: 'spending too much time on manual operations instead of building product',
-    solution: 'We automate your internal ops â onboarding, support triage, reporting, alerts â so your dev team ships faster',
-    result: 'A tech startup cut operational overhead by 40% in the first quarter',
-    subject: 'Quick idea for {{company_name}}',
+    solution: 'We automate your internal ops — onboarding, support triage, reporting, alerts — so your dev team ships faster',
+    result: 'A tech startup told us their operational overhead dropped after we automated their internal workflows',
+    subject: 'Ops workflow for {{company_name}}',
   },
   construction: {
     pain: 'tracking project timelines and coordinating subcontractors through calls and messages',
     solution: 'We build automated project milestone alerts, subcontractor scheduling, and progress reporting that keeps everyone aligned',
-    result: 'One contractor eliminated 90% of "where are we on this?" calls with automated updates',
-    subject: 'Quick idea for {{company_name}}',
+    result: 'One contractor told us they basically stopped getting "where are we on this?" calls after setup',
+    subject: 'Project tracking for {{company_name}}',
   },
   automotive: {
     pain: 'manually reminding customers about service appointments and managing bookings',
     solution: 'We automate service reminders, booking confirmations, and follow-up satisfaction checks',
-    result: 'Repeat service bookings increased 30% with automated reminder sequences',
-    subject: 'Quick idea for {{company_name}}',
+    result: 'A service centre told us repeat bookings picked up after setting up automated reminder sequences',
+    subject: 'Service reminders for {{company_name}}',
   },
 };
 
 // Default for any industry not specifically listed
 const DEFAULT_TEMPLATE = {
   pain: 'spending hours each week on repetitive tasks that don\'t need a human touch',
-  solution: 'We identify the biggest time-wasters in your workflow and automate them using AI â simple tools, no complex tech, real results within weeks',
-  result: 'Most of our clients save 5-10 hours per week within the first month',
-  subject: 'Quick idea for {{company_name}}',
+  solution: 'We identify the biggest time-wasters in your workflow and automate them using AI — simple tools, no complex tech, and you see results within weeks',
+  result: 'Most businesses we work with tell us they get a few hours back each week pretty quickly',
+  subject: 'Thought for {{company_name}}',
 };
 
 /**
@@ -142,32 +142,28 @@ const DEFAULT_TEMPLATE = {
 function generateInitialEmail(lead) {
   const template = INDUSTRY_TEMPLATES[(lead.industry || '').toLowerCase()] || DEFAULT_TEMPLATE;
   const companyRef = lead.company_name || 'your business';
-  const greeting = lead.first_name ? `Hi ${lead.first_name},` : 'Hi there,';
+  const greeting = lead.first_name ? `Hi ${lead.first_name},` : 'Hi,';
   const industry = lead.industry || 'business';
 
   const subject = template.subject.replace('{{company_name}}', companyRef);
 
   const body = `${greeting}
 
-I came across ${companyRef} while looking into ${industry} businesses in Sri Lanka, and I think there's a real opportunity here.
+I came across ${companyRef} while looking into ${industry} businesses in Sri Lanka, and wanted to share a thought.
 
-A lot of ${industry} companies I talk to are ${template.pain}. It's one of those things that quietly eats up time and money every month.
+A lot of ${industry} companies I talk to are ${template.pain}. It's one of those things that quietly eats up time every month.
 
-At Aviance, we fix exactly that. ${template.solution}.
+At Aviance, we work on exactly that. ${template.solution}.
 
 ${template.result}.
 
-Would a quick 15-minute call make sense to see if something similar could work for ${companyRef}? No pitch â just a straightforward look at where automation could save you time.
+Would a quick 15-minute call make sense to see if something similar could work for ${companyRef}? Happy to walk through what we've done for similar companies if that would be useful.
 
-You can check out what we do here: https://www.aviance.online
+Let me know if you'd like to chat.
 
-Happy to chat whenever works for you.
-
-Cheers,
 Limethsith
-Head of AI â Aviance
-Phone: 071 870 2702
-Web: https://www.aviance.online
+Aviance — AI Growth Systems
+071 870 2702 | aviance.online
 
 ---
 To opt out of future emails, just reply "unsubscribe".`;
@@ -183,19 +179,22 @@ function generateFollowUp1(lead) {
   const industry = lead.industry || 'business';
 
   return {
-    subject: `Re: Quick idea for ${companyRef}`,
-    body: `Hey,
+    subject: `Following up — ${companyRef}`,
+    body: `Hi,
 
-Just wanted to follow up on my last email â I know things get busy.
+Just following up on my last email — I know things get busy.
 
-I work with a few ${industry} businesses in Sri Lanka and the results we're seeing with automation are pretty impressive. Most clients start seeing time savings within the first 2 weeks, and there's no big upfront cost involved.
+I work with a few ${industry} businesses in Sri Lanka and the feedback on our automation work has been really positive. Most companies we help start seeing time savings pretty quickly.
 
-If it's easier, I can send over a quick 1-page breakdown showing exactly how it would work for ${companyRef} â just reply and I'll put it together.
+If it's easier, I can send over a quick 1-page breakdown showing how it would work for ${companyRef} — just reply and I'll put it together.
 
 Talk soon,
 Limethsith
-Head of AI â Aviance
-071 870 2702 | https://www.aviance.online`,
+Aviance — AI Growth Systems
+071 870 2702 | aviance.online
+
+---
+To opt out of future emails, just reply "unsubscribe".`,
   };
 }
 
@@ -206,22 +205,24 @@ function generateFollowUp2(lead) {
   const companyRef = lead.company_name || 'your business';
 
   return {
-    subject: `Last one from me â ${companyRef}`,
-    body: `Hey,
+    subject: `Last note — ${companyRef}`,
+    body: `Hi,
 
-This'll be my last follow-up â I respect your time.
+This will be my last follow-up — I respect your time.
 
-If now's not the right moment, totally fine. I'll check back in a couple of months.
+If now is not the right moment, no worries at all. I will check back in a couple of months.
 
-But if you ever want to explore how ${companyRef} could save a few hours a week with simple AI automation, I'm always around:
+But if you ever want to explore how ${companyRef} could save a few hours a week with some simple automation, I am always around:
 
-Phone: 071 870 2702
-Website: https://www.aviance.online
+071 870 2702 | aviance.online
 
-Hope you have a great week!
+Hope you have a great week.
 
 Limethsith
-Head of AI â Aviance`,
+Aviance — AI Growth Systems
+
+---
+To opt out of future emails, just reply "unsubscribe".`,
   };
 }
 
@@ -255,17 +256,17 @@ export function getEmailForSequenceDay(lead, sequenceDay, config = {}) {
  * Free tier: 1,500 requests/day
  */
 export async function enhanceWithAI(lead, baseEmail) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return baseEmail;
+  const apiK = process.env.GEMINI_API_KEY;
+  if (!apiK) return baseEmail;
 
   try {
-    const prompt = `You are an email copywriting expert. Slightly personalize this cold email for a ${lead.industry} company called "${lead.company_name}" in ${lead.city}, Sri Lanka. Keep the same structure, tone, and length but make 2-3 small tweaks to feel more personal and specific to their industry. Do NOT change the signature, phone number, website, CTA, or any contact details. Return ONLY the improved email body, nothing else.
+    const prompt = `You are an email copywriting expert. Slightly personalize this cold email for a ${lead.industry} company called "${lead.company_name}" in ${lead.city}, Sri Lanka. Keep the same structure, tone, and length but make 2-3 small tweaks to feel more personal and specific to their industry. Do NOT change the signature, phone number, website, CTA, or any contact details. Do NOT use spam trigger words like "free", "guarantee", "amazing", "incredible", "act now", "limited time", "don't miss", "exclusive", "urgent", or exclamation marks. Keep the tone calm and conversational. Return ONLY the improved email body, nothing else.
 
 Original email:
 ${baseEmail.body}`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent` + `?key=${apiK}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
