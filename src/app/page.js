@@ -6,25 +6,33 @@ import Link from 'next/link';
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [sentLog, setSentLog] = useState([]);
+  const [replies, setReplies] = useState([]);
+  const [totalReplies, setTotalReplies] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [statsRes, logRes] = await Promise.all([
+        const [statsRes, logRes, repliesRes] = await Promise.all([
           fetch('/api/leads?action=stats'),
           fetch('/api/leads?action=sent_log&limit=500'),
+          fetch('/api/replies'),
         ]);
         setStats(await statsRes.json());
         const logData = await logRes.json();
         setSentLog(logData.log || []);
+        const repliesData = await repliesRes.json();
+        if (repliesData.success) {
+          setReplies(repliesData.replies || []);
+          setTotalReplies(repliesData.totalReplies || 0);
+        }
       } catch (err) {
         console.error('Dashboard fetch error:', err);
       }
       setLoading(false);
     }
     fetchData();
-    const interval = setInterval(fetchData, 15000);
+    const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -38,6 +46,10 @@ export default function Dashboard() {
   const accounts = Object.keys(accountCounts).sort();
   const colors = ['#5c7cfa', '#40c057', '#fab005', '#be4bdb', '#fa5252', '#20c997', '#ff922b', '#845ef7', '#339af0', '#f06595'];
 
+  const bounceRate = stats?.totalSent > 0
+    ? ((stats?.totalBounced || 0) / stats.totalSent * 100).toFixed(1)
+    : '0.0';
+
   return (
     <div className="max-w-6xl animate-fade-in">
       {/* Header */}
@@ -46,13 +58,31 @@ export default function Dashboard() {
         <p className="text-[#6b7280] text-xs md:text-sm">Live overview of your outreach system</p>
       </div>
 
-      {/* Stats Cards â 2 cols on mobile, 5 on desktop */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mb-6 md:mb-8">
+      {/* Stats Cards â 2 cols on mobile, 6 on desktop */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 md:gap-4 mb-3 md:mb-4">
         <StatCard label="Total Leads" value={stats?.totalLeads || 0} color="#5c7cfa" />
         <StatCard label="Emails Sent" value={stats?.totalSent || 0} color="#40c057" />
         <StatCard label="Failed" value={stats?.totalFailed || 0} color="#fa5252" />
+        <StatCard label="Bounced" value={stats?.totalBounced || 0} color="#fa5252" />
         <StatCard label="Replied" value={stats?.replied || 0} color="#be4bdb" />
         <StatCard label="Accounts" value={accounts.length || '...'} color="#fab005" />
+      </div>
+
+      {/* Bounce Rate */}
+      <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-3 md:p-4 mb-6 md:mb-8 flex items-center gap-3">
+        <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg bg-[#fa5252]/10 flex items-center justify-center flex-shrink-0">
+          <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#fa5252" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15.75h.007v.008H12v-.008z" />
+          </svg>
+        </div>
+        <div>
+          <p className="text-[10px] md:text-xs text-[#6b7280] uppercase tracking-wider">Bounce Rate</p>
+          <p className="text-lg md:text-xl font-bold text-[#fa5252]">{bounceRate}%</p>
+        </div>
+        <div className="ml-auto text-[10px] md:text-xs text-[#6b7280]">
+          {stats?.totalBounced || 0} of {stats?.totalSent || 0} emails bounced
+        </div>
       </div>
 
       {/* Per-Account Breakdown â 2 cols on mobile, 3 on md, flexible on lg */}
@@ -106,7 +136,7 @@ export default function Dashboard() {
       </div>
 
       {/* Recent Sent Emails */}
-      <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden">
+      <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden mb-6 md:mb-8">
         <div className="p-3 md:p-4 border-b border-[#2a2a3a] flex items-center justify-between">
           <h2 className="text-sm font-semibold text-white">Recent Emails Sent</h2>
           <Link href="/leads" className="text-xs text-[#5c7cfa] hover:underline">View all</Link>
@@ -137,6 +167,55 @@ export default function Dashboard() {
                 </div>
                 {entry.subject && (
                   <p className="text-[10px] md:text-xs text-[#4b5563] mt-1 truncate">Subject: {entry.subject}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Replies Section */}
+      <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden">
+        <div className="p-3 md:p-4 border-b border-[#2a2a3a] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-[#be4bdb]"></div>
+            <h2 className="text-sm font-semibold text-white">Replies</h2>
+            <span className="text-[10px] md:text-xs text-[#be4bdb] bg-[#be4bdb]/10 px-2 py-0.5 rounded-full font-medium">
+              {totalReplies}
+            </span>
+          </div>
+        </div>
+        {replies.length === 0 ? (
+          <div className="p-8 md:p-12 text-center">
+            <p className="text-[#6b7280] text-sm">
+              {loading ? 'Loading...' : 'No replies received yet.'}
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[#2a2a3a]">
+            {replies.map((reply, idx) => (
+              <div key={idx} className="p-3 md:p-4 hover:bg-[#1a1a25] transition-colors">
+                <div className="flex items-center justify-between mb-1 gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0 bg-[#be4bdb]"></span>
+                    <span className="text-sm text-white font-medium truncate">{reply.company || 'Unknown'}</span>
+                  </div>
+                  <span className="text-[10px] md:text-xs text-[#6b7280] whitespace-nowrap flex-shrink-0">
+                    {reply.date ? new Date(reply.date).toLocaleString() : ''}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 md:gap-4 text-[10px] md:text-xs text-[#6b7280] mt-1">
+                  <span className="truncate max-w-[140px] md:max-w-none">From: {reply.from}</span>
+                  {reply.industry && <span className="capitalize">{reply.industry}</span>}
+                  {reply.account && <span>Account: {reply.account.split('@')[0]}</span>}
+                </div>
+                {reply.subject && (
+                  <p className="text-[10px] md:text-xs text-[#be4bdb]/70 mt-1 truncate">Subject: {reply.subject}</p>
+                )}
+                {reply.preview && (
+                  <p className="text-[10px] md:text-xs text-[#6b7280] mt-1.5 line-clamp-2 leading-relaxed">
+                    {reply.preview.length > 200 ? reply.preview.slice(0, 200) + '...' : reply.preview}
+                  </p>
                 )}
               </div>
             ))}
