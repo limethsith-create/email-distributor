@@ -1,5 +1,5 @@
 /**
- * Autonomous Email Sender — Zero Claude Dependency
+ * Autonomous Email Sender â Zero Claude Dependency
  *
  * FIXES applied:
  * - Persistent account rotation (KV counter, not resetting to 0)
@@ -23,6 +23,45 @@ const LEADS_KEY = 'leads';
 const DAILY_SEND_KEY = 'daily_sends';
 const LOCK_KEY = 'auto_send_lock';
 const LOCK_TTL_SECONDS = 120; // 2 minute lock
+const COMPANY_SENT_KEY = 'company_sent';
+
+function isGenericEmail(email) {
+  const genericPrefixes = [
+    'info@', 'contact@', 'sales@', 'admin@', 'support@', 'hello@',
+    'reservations@', 'marketing@', 'hr@', 'careers@', 'jobs@',
+    'billing@', 'accounts@', 'enquiries@', 'enquiry@', 'reception@',
+    'office@', 'general@', 'noreply@', 'no-reply@', 'webmaster@',
+  ];
+  const genericDomains = ['ac.lk', 'edu.lk', 'gov.lk', 'mrt.ac.lk', 'cmb.ac.lk'];
+  const lower = email.toLowerCase();
+  if (genericPrefixes.some(p => lower.startsWith(p))) return true;
+  if (genericDomains.some(d => lower.endsWith(d))) return true;
+  return false;
+}
+
+function normalizeCompanyName(name) {
+  if (!name) return '';
+  return name.toLowerCase().trim()
+    .replace(/\s*(pvt\.?\s*ltd\.?|ltd\.?|plc|llc|inc\.?|private\s+limited|limited)\s*$/i, '')
+    .replace(/\s+/g, ' ').trim();
+}
+
+async function isCompanyAlreadySent(companyName) {
+  if (!companyName) return false;
+  const normalized = normalizeCompanyName(companyName);
+  if (!normalized) return false;
+  try {
+    return await kv.sismember(COMPANY_SENT_KEY, normalized);
+  } catch { return false; }
+}
+
+async function markCompanySent(companyName) {
+  if (!companyName) return;
+  const normalized = normalizeCompanyName(companyName);
+  if (normalized) {
+    try { await kv.sadd(COMPANY_SENT_KEY, normalized); } catch {}
+  }
+}
 
 function getGmailAccounts() {
   const accounts = [];
@@ -71,7 +110,7 @@ async function incrementDailySend(accountEmail) {
 async function getNextAccountIndex(numAccounts) {
   try {
     const counter = await kv.hincrby('stats', 'rotationIndex', 1);
-    return (counter - 1) % numAccounts;
+    return (counter - 1) % numAccounts; // -1 because hincrby returns AFTER increment
   } catch {
     return 0;
   }
@@ -79,9 +118,11 @@ async function getNextAccountIndex(numAccounts) {
 
 /**
  * Acquire a simple distributed lock to prevent concurrent sends.
+ * Returns true if lock acquired, false if another invocation is running.
  */
 async function acquireLock() {
   try {
+    // SET NX = only set if not exists, EX = expire after TTL
     const result = await kv.set(LOCK_KEY, Date.now(), { nx: true, ex: LOCK_TTL_SECONDS });
     return result === 'OK';
   } catch {
@@ -96,7 +137,7 @@ async function releaseLock() {
 }
 
 /**
- * Claim a lead atomically — set status to "sending" so no other
+ * Claim a lead atomically â set status to "sending" so no other
  * concurrent request can pick it up. Returns true if claimed.
  */
 async function claimLead(email) {
@@ -104,7 +145,9 @@ async function claimLead(email) {
     const existing = await kv.hget(LEADS_KEY, email.toLowerCase());
     if (!existing) return false;
     const status = (existing.status || '').toLowerCase();
+    // Only claim if still pending/new
     if (status !== 'pending' && status !== 'new') return false;
+    // Mark as "sending" immediately
     await kv.hset(LEADS_KEY, {
       [email.toLowerCase()]: { ...existing, status: 'sending', updatedAt: new Date().toISOString() }
     });
@@ -125,6 +168,7 @@ async function getUnsent(limit = 75) {
         return (status === 'pending' || status === 'new') && lead.email;
       });
 
+    // Shuffle for variety
     for (let i = unsent.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [unsent[i], unsent[j]] = [unsent[j], unsent[i]];
@@ -157,9 +201,11 @@ async function markLeadAsSent(email, accountEmail, subject) {
 
 /**
  * Strip the plain-text signature block from the email body.
- * The templates include "Limethsith\nAviance..." but we add HTML sig separately.
+ * The personalize templates include "Limethsith\nAviance..." in the body,
+ * but we add a proper HTML signature separately, so remove it to avoid duplication.
  */
 function stripPlainTextSignature(body) {
+  // Remove lines starting from the standalone "Limethsith" line through the sig
   const lines = body.split('\n');
   let cutIndex = lines.length;
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -169,12 +215,14 @@ function stripPlainTextSignature(body) {
       break;
     }
   }
+  // Remove trailing empty lines before the signature
   let end = cutIndex;
   while (end > 0 && lines[end - 1].trim() === '') end--;
   return lines.slice(0, end).join('\n');
 }
 
 export async function GET(request) {
+  // Auth check
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 
@@ -186,12 +234,12 @@ export async function GET(request) {
     }
   }
 
-  // Concurrency lock — prevent overlapping sends
+  // Concurrency lock â prevent overlapping sends from multiple triggers
   const lockAcquired = await acquireLock();
   if (!lockAcquired) {
     return Response.json({
       success: true,
-      message: 'Another send is already in progress — skipping',
+      message: 'Another send is already in progress â skipping',
       timestamp: new Date().toISOString(),
       sent: 0,
     });
@@ -207,6 +255,7 @@ export async function GET(request) {
     const { searchParams: params } = new URL(request.url);
     const batchSize = parseInt(params.get('batch') || '0') || 0;
 
+    // Check daily limits for each account
     const accountStatus = [];
     let totalRemaining = 0;
 
@@ -242,29 +291,58 @@ export async function GET(request) {
       });
     }
 
-    // Persistent account rotation via KV counter
+    // ============================================================
+    // FIX #1: Persistent account rotation via KV counter
+    // Each invocation picks the NEXT account, not always account[0]
+    // ============================================================
     const startAccountIdx = await getNextAccountIndex(accounts.length);
     let accountIndex = startAccountIdx;
+
     const results = { sent: 0, failed: 0, skipped: 0, details: [] };
 
     for (const lead of unsent) {
-      // Claim lead atomically — skip if already taken
+      // ============================================================
+      // FIX #3: Claim lead atomically before sending
+      // If another concurrent request already claimed it, skip
+      // ============================================================
       const claimed = await claimLead(lead.email);
       if (!claimed) {
         results.skipped++;
-        results.details.push({ to: lead.email, status: 'skipped', reason: 'already claimed or sent' });
+        results.details.push({
+          to: lead.email,
+          status: 'skipped',
+          reason: 'already claimed or sent',
+        });
         continue;
       }
 
-      // Find account with remaining quota
+      // Skip generic/role-based email addresses
+      if (isGenericEmail(lead.email)) {
+        results.skipped++;
+        results.details.push({ to: lead.email, status: 'skipped', reason: 'generic/role-based email' });
+        try {
+          const existing = await kv.hget(LEADS_KEY, lead.email.toLowerCase());
+          if (existing) {
+            await kv.hset(LEADS_KEY, { [lead.email.toLowerCase()]: { ...existing, status: 'skipped_generic', updatedAt: new Date().toISOString() } });
+          }
+        } catch {}
+        continue;
+      }
+
+      // Find account with remaining quota (starting from rotated index)
       let found = false;
       let attempts = 0;
+
       while (attempts < accounts.length) {
         const accStat = accountStatus[accountIndex % accounts.length];
-        if (accStat.remaining > 0) { found = true; break; }
+        if (accStat.remaining > 0) {
+          found = true;
+          break;
+        }
         accountIndex++;
         attempts++;
       }
+
       if (!found) break;
 
       const accIdx = accountIndex % accounts.length;
@@ -275,22 +353,55 @@ export async function GET(request) {
         ...lead,
         email: lead.email.toLowerCase().trim(),
         industry: lead.industry || 'business',
-        company_name: lead.company || lead.company_name || 'your business',
+        company_name: lead.company || lead.company_name || null,
         city: lead.city || 'Sri Lanka',
         first_name: lead.name?.split(/[\s,]/)[0] || null,
       };
 
+      // Skip leads with missing company name
+      if (!qualifiedLead.company_name || qualifiedLead.company_name === 'your business') {
+        results.skipped++;
+        results.details.push({ to: lead.email, status: 'skipped', reason: 'missing company name' });
+        try {
+          const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
+          if (existing) {
+            await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_no_company', updatedAt: new Date().toISOString() } });
+          }
+        } catch {}
+        continue;
+      }
+
+      // Skip if company already contacted
+      const companyAlreadySent = await isCompanyAlreadySent(qualifiedLead.company_name);
+      if (companyAlreadySent) {
+        results.skipped++;
+        results.details.push({ to: lead.email, status: 'skipped', reason: 'company already contacted' });
+        try {
+          const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
+          if (existing) {
+            await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_dedup', updatedAt: new Date().toISOString() } });
+          }
+        } catch {}
+        continue;
+      }
+
       const emailContent = getEmailForSequenceDay(qualifiedLead, 0);
 
-      // Strip plain-text sig from body (HTML sig added separately)
+      // ============================================================
+      // FIX #2: Strip plain-text signature from body before HTML conversion
+      // The template includes "Limethsith\nAviance..." but we add a proper
+      // HTML signature below â no more duplicate signatures
+      // ============================================================
       const bodyParts = emailContent.body.split('---');
       const rawBody = bodyParts[0];
       const unsubNote = bodyParts[1] || '';
+
+      // Remove the plain-text sig so it doesn't appear twice
       const cleanBody = stripPlainTextSignature(rawBody);
 
       const htmlParagraphs = cleanBody
         .split(/\n\n+/)
-        .filter(p => p.trim().length > 0)
+        .filter(p => p.trim().length > 0) // remove empty paragraphs
         .map(p => {
           let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
           return `<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">${escaped}</p>`;
@@ -300,7 +411,7 @@ export async function GET(request) {
       const htmlSignature = `
       <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
         Limethsith<br>
-        Aviance — AI Growth Systems<br>
+        Aviance â AI Growth Systems<br>
         071 870 2702 | <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
       </div>`;
 
@@ -308,8 +419,7 @@ export async function GET(request) {
         ? `<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">${unsubNote.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
         : '';
 
-      const trackingPixel = `<img src="https://email-distributor.vercel.app/api/track/open?id=${Buffer.from(qualifiedLead.email).toString('base64')}" width="1" height="1" style="display:none" alt="" />`;
-      const htmlBody = htmlParagraphs + htmlSignature + htmlUnsubscribe + trackingPixel;
+      const htmlBody = htmlParagraphs + htmlSignature + htmlUnsubscribe;
 
       try {
         const sendResult = await sendEmail(account, {
@@ -326,6 +436,7 @@ export async function GET(request) {
 
           await incrementDailySend(account.email);
           await markLeadAsSent(qualifiedLead.email, account.email, emailContent.subject);
+          await markCompanySent(qualifiedLead.company_name);
 
           try {
             await logSentEmail({
@@ -352,7 +463,7 @@ export async function GET(request) {
           });
         } else {
           results.failed++;
-          // Revert lead status on failure
+          // Revert lead status back to pending on failure
           try {
             const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
             if (existing) {
@@ -370,6 +481,7 @@ export async function GET(request) {
         }
       } catch (err) {
         results.failed++;
+        // Revert lead status back to pending on error
         try {
           const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
           if (existing) {
@@ -385,13 +497,16 @@ export async function GET(request) {
         });
       }
 
+      // Move to next account for next email
       accountIndex++;
 
+      // Random delay between sends
       if (results.sent + results.failed < unsent.length) {
         await new Promise(r => setTimeout(r, randomDelay()));
       }
     }
 
+    // Update total sent stat
     if (results.sent > 0) {
       try {
         await kv.hincrby('stats', 'totalSent', results.sent);
