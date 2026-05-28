@@ -1,0 +1,52 @@
+name: Email System Cron
+
+# Runs every 30 minutes â the auto-send endpoint decides which
+# accounts are ready based on their randomized per-account timers.
+# Replies checked every 2 hours, bounces every 4 hours.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  email-cron:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Auto-send emails (every 30 min ping)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          echo "Triggering auto-send..."
+          STATUS=$(curl -sf -o /tmp/response.json -w "%{http_code}" \
+            "https://email-distributor.vercel.app/api/cron/auto-send?token=${CRON_SECRET}" || true)
+          echo "HTTP Status: $STATUS"
+          cat /tmp/response.json 2>/dev/null || true
+          echo ""
+
+      - name: Check replies (every 2 hours)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          HOUR=$(date -u +%-H)
+          MIN=$(date -u +%-M)
+          if [ $((HOUR % 2)) -eq 0 ] && [ "$MIN" -lt 35 ]; then
+            echo "Checking replies..."
+            curl -sf "https://email-distributor.vercel.app/api/cron/check-replies?token=${CRON_SECRET}" || true
+          else
+            echo "Skipping reply check (runs every 2 hours)"
+          fi
+
+      - name: Check bounces (every 4 hours)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          HOUR=$(date -u +%-H)
+          MIN=$(date -u +%-M)
+          if [ $((HOUR % 4)) -eq 0 ] && [ "$MIN" -lt 35 ]; then
+            echo "Checking bounces..."
+            curl -sf "https://email-distributor.vercel.app/api/cron/check-bounces?token=${CRON_SECRET}" || true
+          else
+            echo "Skipping bounce check (runs every 4 hours)"
+          fi
