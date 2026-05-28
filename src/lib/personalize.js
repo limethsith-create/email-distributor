@@ -1,229 +1,309 @@
 /**
- * Email Personalization Engine — Aviance AI Growth Systems
+ * Email Personalization Engine â Aviance AI Growth Systems
  * Generates industry-specific personalized outreach emails
- * Branded with aviance.online, Head of AI signature, phone number
+ * Uses 3 structurally different email templates to avoid pattern detection
  */
 
-// Industry-specific hooks — what hurts them + what we fix
+// Industry-specific hooks â what hurts them + what we fix
 const INDUSTRY_TEMPLATES = {
   retail: {
-    pain: 'still handling customer questions one by one and tracking stock in spreadsheets',
-    solution: 'We set up AI systems that auto-respond to common customer queries, send restock alerts, and track orders — so your team only handles the stuff that actually needs a human',
-    result: 'We helped a retail client streamline their support — they told us it freed up most of their week',
-    subject: 'Thought about {{company_name}}',
+    pain: 'handling customer questions one by one and tracking stock in spreadsheets',
+    specificTask: 'customer support and inventory alerts',
+    result: 'cut their support workload by a few hours every week',
+    checklistPains: 'manually answering repeat questions, spreadsheet stock tracking, missed reorder alerts',
     subjects: [
-      'Thought about {{company_name}}',
-      'Quick question for {{company_name}}',
-      '{{company_name}} — saving time on support',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'retail + automation',
+      'quick question',
+      'idea for {{city}}',
+      '{{company_name}} support workflow',
+      'saving time on repeat queries',
     ],
   },
   logistics: {
     pain: 'coordinating drivers over WhatsApp and manually updating customers on delivery status',
-    solution: 'We build automated dispatch systems — drivers get routes automatically, customers get live tracking links, and you get a dashboard that shows everything in real time',
-    result: 'We worked with a logistics company in Colombo and they said coordination got noticeably smoother within the first month',
-    subject: 'Something for {{company_name}} to consider',
+    specificTask: 'dispatch and delivery tracking',
+    result: 'cut coordination time in half within the first month',
+    checklistPains: 'manual dispatch messages, missing delivery updates, phone-tag with drivers',
     subjects: [
-      'Something for {{company_name}} to consider',
-      'Idea for {{company_name}} logistics',
-      '{{company_name}} — automating dispatch',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'logistics + automation',
+      'quick question',
+      'idea for {{city}}',
+      'dispatch workflow thought',
+      'driver coordination',
     ],
   },
   transport: {
     pain: 'managing fleet coordination and delivery updates through calls and messages',
-    solution: 'We automate dispatch notifications, driver assignments, and customer ETA updates — the whole chain runs on autopilot',
-    result: 'One transport firm we helped said their coordinator now has a few extra hours every day',
-    subject: 'Thought about {{company_name}} operations',
+    specificTask: 'fleet dispatch and ETA updates',
+    result: 'freed up their coordinator for a few extra hours every day',
+    checklistPains: 'manual route planning, missed ETA updates, endless driver calls',
     subjects: [
-      'Thought about {{company_name}} operations',
-      'Fleet idea for {{company_name}}',
-      '{{company_name}} — streamlining delivery updates',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'transport + automation',
+      'quick question',
+      'idea for {{city}}',
+      'fleet ops thought',
+      'delivery updates',
     ],
   },
   manufacturing: {
     pain: 'chasing suppliers by email and tracking production schedules on paper or Excel',
-    solution: 'We set up automated supplier follow-ups, production milestone alerts, and quality check workflows that flag issues before they become expensive',
-    result: 'A manufacturer told us their production delays dropped significantly after we automated their supplier reminders',
-    subject: 'Regarding {{company_name}} production workflow',
+    specificTask: 'supplier follow-ups and production tracking',
+    result: 'saw production delays drop significantly',
+    checklistPains: 'chasing supplier replies, Excel production schedules, missed quality checks',
     subjects: [
-      'Regarding {{company_name}} production workflow',
-      'Quick thought for {{company_name}}',
-      '{{company_name}} — fewer supplier delays',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'manufacturing + automation',
+      'quick question',
+      'idea for {{city}}',
+      'supplier follow-ups',
+      'production tracking',
     ],
   },
   finance: {
-    pain: 'processing applications and compliance docs by hand — slow and error-prone',
-    solution: 'We build AI workflows that extract data from documents, run KYC checks automatically, and onboard clients in hours instead of days',
-    result: 'A fintech we worked with in Colombo was able to process documents much faster after the setup',
-    subject: 'Thought for {{company_name}} team',
+    pain: 'processing applications and compliance docs by hand',
+    specificTask: 'document processing and client onboarding',
+    result: 'went from days to hours on document processing',
+    checklistPains: 'manual document extraction, slow KYC checks, multi-day onboarding',
     subjects: [
-      'Thought for {{company_name}} team',
-      'Speeding up docs at {{company_name}}',
-      '{{company_name}} — faster client onboarding',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'finance + automation',
+      'quick question',
+      'idea for {{city}}',
+      'client onboarding',
+      'doc processing',
     ],
   },
   banking: {
     pain: 'manually reviewing applications and chasing clients for missing documents',
-    solution: 'We automate document intake, compliance checks, and client communications — your team reviews, AI does the grunt work',
-    result: 'We helped a bank get their onboarding from days down to same-day',
-    subject: 'Idea for {{company_name}} onboarding',
+    specificTask: 'document intake and compliance checks',
+    result: 'got onboarding from days down to same-day',
+    checklistPains: 'manual application review, chasing missing docs, slow compliance checks',
     subjects: [
-      'Idea for {{company_name}} onboarding',
-      'Quick thought for {{company_name}}',
-      '{{company_name}} — automating document intake',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'banking + automation',
+      'quick question',
+      'idea for {{city}}',
+      'onboarding workflow',
+      'document intake',
     ],
   },
   insurance: {
-    pain: 'spending days on claims processing and constantly chasing clients for paperwork',
-    solution: 'We automate claims intake, document collection, and status updates — clients stay informed, your team moves faster',
-    result: 'An insurer we worked with went from days to same-day on claims turnaround',
-    subject: 'Thought for {{company_name}} claims',
+    pain: 'spending days on claims processing and chasing clients for paperwork',
+    specificTask: 'claims intake and status updates',
+    result: 'went from days to same-day on claims turnaround',
+    checklistPains: 'slow claims intake, chasing paperwork, manual status updates',
     subjects: [
-      'Thought for {{company_name}} claims',
-      'Claims workflow idea for {{company_name}}',
-      '{{company_name}} — faster claims turnaround',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'insurance + automation',
+      'quick question',
+      'idea for {{city}}',
+      'claims workflow',
+      'faster turnaround',
     ],
   },
   healthcare: {
     pain: 'losing patients to no-shows and wasting staff time on phone reminders',
-    solution: 'We set up automated appointment reminders via WhatsApp and email, plus easy reschedule links — patients show up, staff stays free',
-    result: 'A clinic we worked with saw their no-shows drop noticeably within a few weeks',
-    subject: 'Reducing no-shows at {{company_name}}',
+    specificTask: 'appointment reminders and patient follow-ups',
+    result: 'saw no-shows drop noticeably within a few weeks',
+    checklistPains: 'phone reminder calls, missed appointments, manual rescheduling',
     subjects: [
-      'Reducing no-shows at {{company_name}}',
-      'Patient reminders for {{company_name}}',
-      '{{company_name}} — fewer missed appointments',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'healthcare + automation',
+      'quick question',
+      'idea for {{city}}',
+      'patient no-shows',
+      'appointment reminders',
     ],
   },
   hospital: {
     pain: 'managing patient comms and appointment scheduling with too much manual work',
-    solution: 'We automate reminders, referral follow-ups, and prescription notifications — patients get better care, staff gets their time back',
-    result: 'A hospital told us their missed appointments dropped significantly after we set up reminders',
-    subject: 'Appointment reminders for {{company_name}}',
+    specificTask: 'patient reminders and referral follow-ups',
+    result: 'saw missed appointments drop significantly',
+    checklistPains: 'manual scheduling, missed referral follow-ups, phone-based reminders',
     subjects: [
-      'Appointment reminders for {{company_name}}',
-      'Scheduling idea for {{company_name}}',
-      '{{company_name}} — smoother patient comms',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'hospital + automation',
+      'quick question',
+      'idea for {{city}}',
+      'patient scheduling',
+      'appointment reminders',
     ],
   },
   clinic: {
     pain: 'losing patients to missed appointments and juggling bookings by hand',
-    solution: 'We build automated booking reminders, reschedule flows, and follow-up messages that run on their own',
-    result: 'A Colombo clinic we helped saw no-show rates come down meaningfully in just a few weeks',
-    subject: 'Reducing missed appointments at {{company_name}}',
+    specificTask: 'booking reminders and reschedule flows',
+    result: 'saw no-show rates come down meaningfully in weeks',
+    checklistPains: 'manual booking management, missed appointment calls, no reschedule flow',
     subjects: [
-      'Reducing missed appointments at {{company_name}}',
-      'Booking idea for {{company_name}}',
-      '{{company_name}} — automated patient reminders',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'clinic + automation',
+      'quick question',
+      'idea for {{city}}',
+      'booking workflow',
+      'patient reminders',
     ],
   },
   hotel: {
     pain: 'handling guest inquiries, room requests, and check-in paperwork manually',
-    solution: 'We automate pre-arrival messages, housekeeping coordination, and online check-in — guests get a premium experience without extra staff overhead',
-    result: 'A boutique hotel in Galle automated most of their pre-arrival messaging with us',
-    subject: 'Guest experience idea for {{company_name}}',
+    specificTask: 'pre-arrival messaging and check-in',
+    result: 'automated most of their pre-arrival comms',
+    checklistPains: 'manual guest replies, paper check-in, uncoordinated housekeeping',
     subjects: [
-      'Guest experience idea for {{company_name}}',
-      'Quick thought for {{company_name}}',
-      '{{company_name}} — smoother check-ins',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'hotel + automation',
+      'quick question',
+      'idea for {{city}}',
+      'guest experience',
+      'check-in workflow',
     ],
   },
   hospitality: {
     pain: 'managing reservations and guest communications one message at a time',
-    solution: 'We set up automated reservation confirmations, guest welcome sequences, and feedback collection — everything runs behind the scenes',
-    result: 'A hotel chain told us their front-desk call volume dropped noticeably after automation',
-    subject: 'Reservation workflow for {{company_name}}',
+    specificTask: 'reservation confirmations and guest welcome sequences',
+    result: 'saw front-desk call volume drop noticeably',
+    checklistPains: 'one-by-one guest messages, manual reservations, no feedback collection',
     subjects: [
-      'Reservation workflow for {{company_name}}',
-      'Guest comms idea for {{company_name}}',
-      '{{company_name}} — automating reservations',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'hospitality + automation',
+      'quick question',
+      'idea for {{city}}',
+      'reservation workflow',
+      'guest comms',
     ],
   },
   restaurant: {
     pain: 'losing bookings to missed calls and managing reservations on paper',
-    solution: 'We automate reservation confirmations, table reminders, and loyalty messages — more bookings, fewer no-shows',
-    result: 'A restaurant group we helped saw their cancellations come down after setting up reminders',
-    subject: 'Booking idea for {{company_name}}',
+    specificTask: 'reservation confirmations and table reminders',
+    result: 'saw cancellations come down after setting up reminders',
+    checklistPains: 'missed reservation calls, paper booking systems, no-show losses',
     subjects: [
-      'Booking idea for {{company_name}}',
-      'Reservation thought for {{company_name}}',
-      '{{company_name}} — fewer no-shows',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'restaurant + automation',
+      'quick question',
+      'idea for {{city}}',
+      'booking workflow',
+      'fewer no-shows',
     ],
   },
   legal: {
     pain: 'spending hours on client intake forms and routine document drafting',
-    solution: 'We automate client onboarding, document generation, and deadline reminders — your lawyers focus on actual legal work',
-    result: 'A law firm told us they got several hours back each week just from automating intake',
-    subject: 'Saving time at {{company_name}}',
+    specificTask: 'client onboarding and document generation',
+    result: 'got several hours back each week from automating intake',
+    checklistPains: 'manual intake forms, repetitive document drafting, missed deadline reminders',
     subjects: [
-      'Saving time at {{company_name}}',
-      'Client intake idea for {{company_name}}',
-      '{{company_name}} — automating the paperwork',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'legal + automation',
+      'quick question',
+      'idea for {{city}}',
+      'client intake',
+      'document workflow',
     ],
   },
   law: {
-    pain: 'burning billable hours on admin — intake forms, document prep, follow-ups',
-    solution: 'We build automated client intake, document assembly, and reminder systems so your team focuses on casework',
-    result: 'We helped a law firm reclaim hours each week by automating their onboarding process',
-    subject: 'Workflow thought for {{company_name}}',
+    pain: 'burning billable hours on admin â intake forms, document prep, follow-ups',
+    specificTask: 'client intake and document assembly',
+    result: 'reclaimed hours each week by automating onboarding',
+    checklistPains: 'admin eating billable hours, manual document prep, follow-up tracking',
     subjects: [
-      'Workflow thought for {{company_name}}',
-      'Saving billable hours at {{company_name}}',
-      '{{company_name}} — less admin, more casework',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'law + automation',
+      'quick question',
+      'idea for {{city}}',
+      'billable hours',
+      'intake workflow',
     ],
   },
   'real estate': {
-    pain: 'manually following up with every inquiry and trying to schedule viewings over the phone',
-    solution: 'We automate lead follow-up sequences, viewing scheduling, and property info delivery — leads get instant responses, you close more deals',
-    result: 'An agency we worked with told us their viewing bookings picked up after setting up automated follow-ups',
-    subject: 'Follow-up idea for {{company_name}}',
+    pain: 'manually following up with every inquiry and scheduling viewings over the phone',
+    specificTask: 'lead follow-ups and viewing scheduling',
+    result: 'saw viewing bookings pick up after automated follow-ups',
+    checklistPains: 'slow lead follow-ups, phone-based viewing scheduling, missed inquiries',
     subjects: [
-      'Follow-up idea for {{company_name}}',
-      'Viewing bookings at {{company_name}}',
-      '{{company_name}} — faster lead follow-ups',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'real estate + automation',
+      'quick question',
+      'idea for {{city}}',
+      'lead follow-ups',
+      'viewing bookings',
     ],
   },
   education: {
     pain: 'chasing students and parents about fees, deadlines, and assignments',
-    solution: 'We set up automated fee reminders, assignment notifications, and parent communication flows — everything goes out on time without staff effort',
-    result: 'A school we helped said fee collection improved noticeably once automated reminders went live',
-    subject: 'Communication idea for {{company_name}}',
+    specificTask: 'fee reminders and parent communication flows',
+    result: 'saw fee collection improve once automated reminders went live',
+    checklistPains: 'chasing fee payments, manual parent updates, missed deadline reminders',
     subjects: [
-      'Communication idea for {{company_name}}',
-      'Parent updates at {{company_name}}',
-      '{{company_name}} — automating reminders',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'education + automation',
+      'quick question',
+      'idea for {{city}}',
+      'parent comms',
+      'fee reminders',
     ],
   },
   technology: {
     pain: 'spending too much time on manual operations instead of building product',
-    solution: 'We automate your internal ops — onboarding, support triage, reporting, alerts — so your dev team ships faster',
-    result: 'A tech startup told us their operational overhead dropped after we automated their internal workflows',
-    subject: 'Ops workflow for {{company_name}}',
+    specificTask: 'internal ops and support triage',
+    result: 'saw operational overhead drop after automating internal workflows',
+    checklistPains: 'manual onboarding, support triage delays, repetitive reporting',
     subjects: [
-      'Ops workflow for {{company_name}}',
-      'Internal automation for {{company_name}}',
-      '{{company_name}} — less ops, more shipping',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'tech + automation',
+      'quick question',
+      'idea for {{city}}',
+      'ops overhead',
+      'internal workflows',
     ],
   },
   construction: {
     pain: 'tracking project timelines and coordinating subcontractors through calls and messages',
-    solution: 'We build automated project milestone alerts, subcontractor scheduling, and progress reporting that keeps everyone aligned',
-    result: 'One contractor told us they basically stopped getting "where are we on this?" calls after setup',
-    subject: 'Project tracking for {{company_name}}',
+    specificTask: 'milestone alerts and subcontractor scheduling',
+    result: 'basically stopped getting "where are we on this?" calls',
+    checklistPains: 'manual timeline tracking, phone-tag with subs, missing milestone updates',
     subjects: [
-      'Project tracking for {{company_name}}',
-      'Subcontractor coordination at {{company_name}}',
-      '{{company_name}} — automated milestone updates',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'construction + automation',
+      'quick question',
+      'idea for {{city}}',
+      'project tracking',
+      'subcontractor updates',
     ],
   },
   automotive: {
     pain: 'manually reminding customers about service appointments and managing bookings',
-    solution: 'We automate service reminders, booking confirmations, and follow-up satisfaction checks',
-    result: 'A service centre told us repeat bookings picked up after setting up automated reminder sequences',
-    subject: 'Service reminders for {{company_name}}',
+    specificTask: 'service reminders and booking confirmations',
+    result: 'saw repeat bookings pick up after automated reminders',
+    checklistPains: 'manual service reminders, missed booking confirmations, no follow-up system',
     subjects: [
-      'Service reminders for {{company_name}}',
-      'Booking idea for {{company_name}}',
-      '{{company_name}} — more repeat bookings',
+      '{{first_name}}?',
+      '{{company_name}}',
+      'automotive + automation',
+      'quick question',
+      'idea for {{city}}',
+      'service reminders',
+      'repeat bookings',
     ],
   },
 };
@@ -231,106 +311,169 @@ const INDUSTRY_TEMPLATES = {
 // Default for any industry not specifically listed
 const DEFAULT_TEMPLATE = {
   pain: 'spending hours each week on repetitive tasks that don\'t need a human touch',
-  solution: 'We identify the biggest time-wasters in your workflow and automate them using AI — simple tools, no complex tech, and you see results within weeks',
-  result: 'Most businesses we work with tell us they get a few hours back each week pretty quickly',
-  subject: 'Thought for {{company_name}}',
+  specificTask: 'repetitive workflows',
+  result: 'got a few hours back each week pretty quickly',
+  checklistPains: 'manual data entry, repetitive follow-ups, scattered communication',
   subjects: [
-    'Thought for {{company_name}}',
-    'Quick idea for {{company_name}}',
-    '{{company_name}} — saving time with automation',
+    '{{first_name}}?',
+    '{{company_name}}',
+    'automation idea',
+    'quick question',
+    'idea for {{city}}',
+    'saving a few hours',
+    'workflow thought',
   ],
 };
+
+// ---------- Greeting variants ----------
+const GREETINGS = [
+  (name) => name ? `Hi ${name},` : 'Hi,',
+  (name) => name ? `Hey ${name},` : 'Hey,',
+  (name) => name ? `Hi ${name} â` : 'Hi there,',
+];
+
+function pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// ---------- Structure A: Ultra-Short (3-4 lines) ----------
+function structureA(lead, template) {
+  const companyRef = lead.company_name || 'your company';
+  const industry = lead.industry || 'business';
+  const greeting = pickRandom(GREETINGS)(lead.first_name);
+
+  return `${greeting}
+
+Saw ${companyRef} does ${industry} work in Sri Lanka â we've been helping similar companies automate ${template.specificTask} and save a few hours a week.
+
+Worth a quick look? Happy to share what we did for a ${industry} company recently.
+
+Cheers,
+Limethsith`;
+}
+
+// ---------- Structure B: Question-First ----------
+function structureB(lead, template) {
+  const companyRef = lead.company_name || 'your company';
+  const industry = lead.industry || 'business';
+  const city = lead.city || 'Sri Lanka';
+  const greeting = pickRandom(GREETINGS)(lead.first_name);
+
+  return `${greeting}
+
+Quick question â does ${companyRef} still handle ${template.pain}?
+
+We built a system for a ${industry} company in ${city} that ${template.result}. Takes about 2 weeks to set up.
+
+If that sounds relevant, I can send a one-page breakdown. If not, no worries at all.
+
+Limethsith`;
+}
+
+// ---------- Structure C: Value-First (share something useful) ----------
+function structureC(lead, template) {
+  const industry = lead.industry || 'business';
+  const greeting = pickRandom(GREETINGS)(lead.first_name);
+
+  return `${greeting}
+
+I put together a short checklist of the 3 biggest time-wasters I see in ${industry} companies â things like ${template.checklistPains}.
+
+Would it be useful if I sent it your way? No strings attached.
+
+Limethsith`;
+}
+
+const STRUCTURES = [structureA, structureB, structureC];
 
 /**
  * Generate the initial outreach email (Day 0)
  */
 function generateInitialEmail(lead) {
   const template = INDUSTRY_TEMPLATES[(lead.industry || '').toLowerCase()] || DEFAULT_TEMPLATE;
-  const companyRef = lead.company_name || 'your business';
-  const greeting = lead.first_name ? `Hi ${lead.first_name},` : 'Hi,';
-  const industry = lead.industry || 'business';
+  const companyRef = lead.company_name || 'your company';
+  const city = lead.city || 'Sri Lanka';
+  const firstName = lead.first_name || '';
 
-  // A/B testing: randomly pick a subject variant from the subjects array
-  const subjectVariants = template.subjects || [template.subject];
+  // Pick a random subject from the expanded list
+  const subjectVariants = template.subjects;
   const subjectVariant = Math.floor(Math.random() * subjectVariants.length);
-  const subject = subjectVariants[subjectVariant].replace('{{company_name}}', companyRef);
+  const subject = subjectVariants[subjectVariant]
+    .replace('{{company_name}}', companyRef)
+    .replace('{{first_name}}', firstName)
+    .replace('{{city}}', city);
 
-  const body = `${greeting}
-
-I came across ${companyRef} while looking into ${industry} businesses in Sri Lanka, and wanted to share a thought.
-
-A lot of ${industry} companies I talk to are ${template.pain}. It's one of those things that quietly eats up time every month.
-
-At Aviance, we work on exactly that. ${template.solution}.
-
-${template.result}.
-
-Would a quick 15-minute call make sense to see if something similar could work for ${companyRef}? Happy to walk through what we've done for similar companies if that would be useful.
-
-Let me know if you'd like to chat.
-
-Limethsith
-Aviance — AI Growth Systems
-071 870 2702 | aviance.online
-
----
-To opt out of future emails, just reply "unsubscribe".`;
+  // Pick a random structure (A, B, or C)
+  const structureFn = pickRandom(STRUCTURES);
+  const body = structureFn(lead, template);
 
   return { subject, body, subjectVariant };
 }
 
 /**
- * Generate Day 3 follow-up email
+ * Generate Day 3 follow-up email (2-3 sentences only)
  */
 function generateFollowUp1(lead) {
-  const companyRef = lead.company_name || 'your business';
-  const industry = lead.industry || 'business';
+  const companyRef = lead.company_name || 'your company';
+  const template = INDUSTRY_TEMPLATES[(lead.industry || '').toLowerCase()] || DEFAULT_TEMPLATE;
+
+  const variants = [
+    `Hi${lead.first_name ? ' ' + lead.first_name : ''},
+
+Just bumping this up â I know inboxes get crowded. If automating ${template.specificTask} sounds useful for ${companyRef}, I can send a one-page breakdown.
+
+Either way, no pressure.
+
+Limethsith`,
+
+    `Hi${lead.first_name ? ' ' + lead.first_name : ''},
+
+Circling back quickly. Happy to share a short case study on how we helped a similar company with ${template.specificTask} â just say the word.
+
+Limethsith`,
+
+    `Hi${lead.first_name ? ' ' + lead.first_name : ''},
+
+Following up briefly â would a one-page overview of what we do with ${template.specificTask} be useful? Takes 2 minutes to read.
+
+Limethsith`,
+  ];
 
   return {
-    subject: `Following up — ${companyRef}`,
-    body: `Hi,
-
-Just following up on my last email — I know things get busy.
-
-I work with a few ${industry} businesses in Sri Lanka and the feedback on our automation work has been really positive. Most companies we help start seeing time savings pretty quickly.
-
-If it's easier, I can send over a quick 1-page breakdown showing how it would work for ${companyRef} — just reply and I'll put it together.
-
-Talk soon,
-Limethsith
-Aviance — AI Growth Systems
-071 870 2702 | aviance.online
-
----
-To opt out of future emails, just reply "unsubscribe".`,
+    subject: `Re: ${companyRef}`,
+    body: pickRandom(variants),
   };
 }
 
 /**
- * Generate Day 7 final follow-up email
+ * Generate Day 7 final follow-up email (1-2 sentences max)
  */
 function generateFollowUp2(lead) {
-  const companyRef = lead.company_name || 'your business';
+  const companyRef = lead.company_name || 'your company';
+
+  const variants = [
+    `Hi${lead.first_name ? ' ' + lead.first_name : ''},
+
+Last note from me â if the timing is ever right for ${companyRef}, I'm around. No need to reply otherwise.
+
+Limethsith`,
+
+    `Hi${lead.first_name ? ' ' + lead.first_name : ''},
+
+Closing the loop on this. If it's not a fit right now, totally fine â feel free to reach out whenever.
+
+Limethsith`,
+
+    `Hi${lead.first_name ? ' ' + lead.first_name : ''},
+
+Won't follow up again. If you ever want to chat about automation for ${companyRef}, just reply to this thread.
+
+Limethsith`,
+  ];
 
   return {
-    subject: `Last note — ${companyRef}`,
-    body: `Hi,
-
-This will be my last follow-up — I respect your time.
-
-If now is not the right moment, no worries at all. I will check back in a couple of months.
-
-But if you ever want to explore how ${companyRef} could save a few hours a week with some simple automation, I am always around:
-
-071 870 2702 | aviance.online
-
-Hope you have a great week.
-
-Limethsith
-Aviance — AI Growth Systems
-
----
-To opt out of future emails, just reply "unsubscribe".`,
+    subject: `Re: ${companyRef}`,
+    body: pickRandom(variants),
   };
 }
 
@@ -377,30 +520,4 @@ ${baseEmail.body}`;
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 600,
-          },
-        }),
-        signal: AbortSignal.timeout(10000),
-      }
-    );
-
-    if (!response.ok) return baseEmail;
-
-    const data = await response.json();
-    const enhanced = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (enhanced && enhanced.length > 50) {
-      return { subject: baseEmail.subject, body: enhanced };
-    }
-
-    return baseEmail;
-  } catch (err) {
-    console.log(`[personalize] Gemini enhancement failed: ${err.message}`);
-    return baseEmail;
-  }
-}
+     
