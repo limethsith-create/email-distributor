@@ -24,6 +24,7 @@ export async function POST(request) {
       return Response.json({ error: 'No leads provided' }, { status: 400 });
     }
 
+    // Get existing leads and suppression list in bulk
     const [existingLeads, suppressionList] = await Promise.all([
       kv.hgetall(LEADS_KEY).catch(() => ({})),
       kv.smembers(SUPPRESSION_KEY).catch(() => []),
@@ -32,6 +33,7 @@ export async function POST(request) {
     const existing = existingLeads || {};
     const suppressed = new Set(suppressionList || []);
 
+    // Filter and prepare new leads
     const toInsert = {};
     let added = 0;
     let skipped = 0;
@@ -40,21 +42,25 @@ export async function POST(request) {
     for (const lead of leads) {
       const email = (lead.email || '').toLowerCase().trim();
 
+      // Validate email
       if (!email || !email.includes('@')) {
         invalid++;
         continue;
       }
 
+      // Skip suppressed
       if (suppressed.has(email)) {
         skipped++;
         continue;
       }
 
+      // Skip existing
       if (existing[email]) {
         skipped++;
         continue;
       }
 
+      // Skip if already in this batch
       if (toInsert[email]) {
         skipped++;
         continue;
@@ -75,6 +81,7 @@ export async function POST(request) {
       added++;
     }
 
+    // Batch insert all at once
     if (added > 0) {
       await kv.hset(LEADS_KEY, toInsert);
       await kv.hincrby(STATS_KEY, 'totalScraped', added);

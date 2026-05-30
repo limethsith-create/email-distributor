@@ -40,7 +40,7 @@ const SKIP_EMAIL_PATTERNS = [
 
 // Skip personal email domains (we want business emails)
 const SKIP_DOMAINS = [
-  'gmail.com', 'yahoo.com', 'hotmail.com',
+  'yahoo.com', 'hotmail.com',
   'outlook.com', 'live.com', 'aol.com',
   'icloud.com', 'mail.com', 'protonmail.com',
 ];

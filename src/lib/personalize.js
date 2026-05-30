@@ -1,10 +1,10 @@
 /**
- * Email Personalization Engine â Aviance AI Growth Systems
+ * Email Personalization Engine — Aviance AI Growth Systems
  * Generates industry-specific personalized outreach emails
  * Uses 3 structurally different email templates to avoid pattern detection
  */
 
-// Industry-specific hooks â what hurts them + what we fix
+// Industry-specific hooks — what hurts them + what we fix
 const INDUSTRY_TEMPLATES = {
   retail: {
     pain: 'handling customer questions one by one and tracking stock in spreadsheets',
@@ -217,7 +217,7 @@ const INDUSTRY_TEMPLATES = {
     ],
   },
   law: {
-    pain: 'burning billable hours on admin â intake forms, document prep, follow-ups',
+    pain: 'burning billable hours on admin — intake forms, document prep, follow-ups',
     specificTask: 'client intake and document assembly',
     result: 'reclaimed hours each week by automating onboarding',
     checklistPains: 'admin eating billable hours, manual document prep, follow-up tracking',
@@ -329,7 +329,7 @@ const DEFAULT_TEMPLATE = {
 const GREETINGS = [
   (name) => name ? `Hi ${name},` : 'Hi,',
   (name) => name ? `Hey ${name},` : 'Hey,',
-  (name) => name ? `Hi ${name} â` : 'Hi there,',
+  (name) => name ? `Hi ${name} —` : 'Hi there,',
 ];
 
 function pickRandom(arr) {
@@ -344,7 +344,7 @@ function structureA(lead, template) {
 
   return `${greeting}
 
-Saw ${companyRef} does ${industry} work in Sri Lanka â we've been helping similar companies automate ${template.specificTask} and save a few hours a week.
+Saw ${companyRef} does ${industry} work in Sri Lanka — we've been helping similar companies automate ${template.specificTask} and save a few hours a week.
 
 Worth a quick look? Happy to share what we did for a ${industry} company recently.
 
@@ -361,7 +361,7 @@ function structureB(lead, template) {
 
   return `${greeting}
 
-Quick question â does ${companyRef} still handle ${template.pain}?
+Quick question — does ${companyRef} still handle ${template.pain}?
 
 We built a system for a ${industry} company in ${city} that ${template.result}. Takes about 2 weeks to set up.
 
@@ -377,7 +377,7 @@ function structureC(lead, template) {
 
   return `${greeting}
 
-I put together a short checklist of the 3 biggest time-wasters I see in ${industry} companies â things like ${template.checklistPains}.
+I put together a short checklist of the 3 biggest time-wasters I see in ${industry} companies — things like ${template.checklistPains}.
 
 Would it be useful if I sent it your way? No strings attached.
 
@@ -420,7 +420,7 @@ function generateFollowUp1(lead) {
   const variants = [
     `Hi${lead.first_name ? ' ' + lead.first_name : ''},
 
-Just bumping this up â I know inboxes get crowded. If automating ${template.specificTask} sounds useful for ${companyRef}, I can send a one-page breakdown.
+Just bumping this up — I know inboxes get crowded. If automating ${template.specificTask} sounds useful for ${companyRef}, I can send a one-page breakdown.
 
 Either way, no pressure.
 
@@ -428,13 +428,13 @@ Limethsith`,
 
     `Hi${lead.first_name ? ' ' + lead.first_name : ''},
 
-Circling back quickly. Happy to share a short case study on how we helped a similar company with ${template.specificTask} â just say the word.
+Circling back quickly. Happy to share a short case study on how we helped a similar company with ${template.specificTask} — just say the word.
 
 Limethsith`,
 
     `Hi${lead.first_name ? ' ' + lead.first_name : ''},
 
-Following up briefly â would a one-page overview of what we do with ${template.specificTask} be useful? Takes 2 minutes to read.
+Following up briefly — would a one-page overview of what we do with ${template.specificTask} be useful? Takes 2 minutes to read.
 
 Limethsith`,
   ];
@@ -454,13 +454,13 @@ function generateFollowUp2(lead) {
   const variants = [
     `Hi${lead.first_name ? ' ' + lead.first_name : ''},
 
-Last note from me â if the timing is ever right for ${companyRef}, I'm around. No need to reply otherwise.
+Last note from me — if the timing is ever right for ${companyRef}, I'm around. No need to reply otherwise.
 
 Limethsith`,
 
     `Hi${lead.first_name ? ' ' + lead.first_name : ''},
 
-Closing the loop on this. If it's not a fit right now, totally fine â feel free to reach out whenever.
+Closing the loop on this. If it's not a fit right now, totally fine — feel free to reach out whenever.
 
 Limethsith`,
 
@@ -520,4 +520,30 @@ ${baseEmail.body}`;
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
-     
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 600,
+          },
+        }),
+        signal: AbortSignal.timeout(10000),
+      }
+    );
+
+    if (!response.ok) return baseEmail;
+
+    const data = await response.json();
+    const enhanced = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (enhanced && enhanced.length > 50) {
+      return { subject: baseEmail.subject, body: enhanced };
+    }
+
+    return baseEmail;
+  } catch (err) {
+    console.log(`[personalize] Gemini enhancement failed: ${err.message}`);
+    return baseEmail;
+  }
+}

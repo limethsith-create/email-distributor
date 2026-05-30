@@ -58,7 +58,7 @@ export default function Dashboard() {
         <p className="text-[#6b7280] text-xs md:text-sm">Live overview of your outreach system</p>
       </div>
 
-      {/* Stats Cards â 2 cols on mobile, 6 on desktop */}
+      {/* Stats Cards — 2 cols on mobile, 6 on desktop */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 md:gap-4 mb-3 md:mb-4">
         <StatCard label="Total Leads" value={stats?.totalLeads || 0} color="#5c7cfa" />
         <StatCard label="Emails Sent" value={stats?.totalSent || 0} color="#40c057" />
@@ -85,7 +85,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Per-Account Breakdown â 2 cols on mobile, 3 on md, flexible on lg */}
+      {/* Per-Account Breakdown — 2 cols on mobile, 3 on md, flexible on lg */}
       <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4 md:p-5 mb-6 md:mb-8">
         <h2 className="text-sm font-semibold text-white mb-3 md:mb-4">Sends per Account</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
@@ -104,7 +104,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Quick Actions â stack on mobile */}
+      {/* Quick Actions — stack on mobile */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 mb-6 md:mb-8">
         <Link href="/leads" className="group p-4 md:p-6 bg-[#12121a] border border-[#2a2a3a] rounded-xl hover:border-[#fab005]/50 transition-all">
           <div className="flex items-center gap-3 md:gap-4">

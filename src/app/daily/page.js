@@ -25,6 +25,7 @@ function DayCard({ day, isExpanded, onToggle }) {
 
   return (
     <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden transition-all">
+      {/* Day Header */}
       <button
         onClick={onToggle}
         className="w-full flex items-center justify-between p-5 hover:bg-[#1a1a25] transition-colors"
@@ -53,8 +54,10 @@ function DayCard({ day, isExpanded, onToggle }) {
         </svg>
       </button>
 
+      {/* Expanded Content */}
       {isExpanded && (
         <div className="border-t border-[#2a2a3a] p-5 space-y-5">
+          {/* Account Breakdown */}
           {Object.keys(accountBreakdown).length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-3">Sends per Account</h4>
@@ -68,9 +71,12 @@ function DayCard({ day, isExpanded, onToggle }) {
             </div>
           )}
 
+          {/* Sent Emails */}
           {sent.length > 0 && (
             <div>
-              <h4 className="text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-3">Emails Sent ({sent.length})</h4>
+              <h4 className="text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-3">
+                Emails Sent ({sent.length})
+              </h4>
               <div className="space-y-1.5 max-h-64 overflow-y-auto">
                 {sent.map((email, i) => (
                   <div key={i} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-[#0a0a0f]">
@@ -91,9 +97,12 @@ function DayCard({ day, isExpanded, onToggle }) {
             </div>
           )}
 
+          {/* Opens */}
           {opens.length > 0 && (
             <div>
-              <h4 className="text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-3">Opens Tracked ({opens.length})</h4>
+              <h4 className="text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-3">
+                Opens Tracked ({opens.length})
+              </h4>
               <div className="space-y-1.5 max-h-48 overflow-y-auto">
                 {opens.map((open, i) => (
                   <div key={i} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-[#0a0a0f]">
@@ -112,9 +121,12 @@ function DayCard({ day, isExpanded, onToggle }) {
             </div>
           )}
 
+          {/* Replies */}
           {replies.length > 0 && (
             <div>
-              <h4 className="text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-3">Replies Received ({replies.length})</h4>
+              <h4 className="text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-3">
+                Replies Received ({replies.length})
+              </h4>
               <div className="space-y-1.5">
                 {replies.map((reply, i) => (
                   <div key={i} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-[#0a0a0f] border border-[#5c7cfa]/20">
@@ -133,9 +145,12 @@ function DayCard({ day, isExpanded, onToggle }) {
             </div>
           )}
 
+          {/* Bounces */}
           {bounces.length > 0 && (
             <div>
-              <h4 className="text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-3">Bounces Detected ({bounces.length})</h4>
+              <h4 className="text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-3">
+                Bounces Detected ({bounces.length})
+              </h4>
               <div className="space-y-1.5">
                 {bounces.map((bounce, i) => (
                   <div key={i} className="flex items-center gap-3 py-2 px-3 rounded-lg bg-[#0a0a0f] border border-[#fa5252]/20">
@@ -154,6 +169,7 @@ function DayCard({ day, isExpanded, onToggle }) {
             </div>
           )}
 
+          {/* Empty state if nothing to show in expanded view */}
           {sent.length === 0 && opens.length === 0 && replies.length === 0 && bounces.length === 0 && (
             <p className="text-xs text-[#6b7280] text-center py-4">No detailed activity for this day.</p>
           )}
@@ -169,7 +185,9 @@ export default function DailyLogPage() {
   const [error, setError] = useState(null);
   const [expandedDay, setExpandedDay] = useState(null);
 
-  useEffect(() => { fetchDailyLog(); }, []);
+  useEffect(() => {
+    fetchDailyLog();
+  }, []);
 
   async function fetchDailyLog() {
     setLoading(true);
@@ -178,7 +196,10 @@ export default function DailyLogPage() {
       const data = await res.json();
       if (data.success) {
         setDays(data.days);
-        if (data.days.length > 0) setExpandedDay(data.days[0].date);
+        // Auto-expand today
+        if (data.days.length > 0) {
+          setExpandedDay(data.days[0].date);
+        }
       } else {
         setError(data.error || 'Failed to load');
       }
@@ -189,6 +210,7 @@ export default function DailyLogPage() {
     }
   }
 
+  // Compute totals across all days
   const totals = days.reduce(
     (acc, day) => ({
       sent: acc.sent + day.summary.totalSent,
@@ -205,6 +227,7 @@ export default function DailyLogPage() {
 
   return (
     <div className="max-w-4xl animate-fade-in">
+      {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white mb-1">Daily Activity Log</h1>
@@ -218,6 +241,7 @@ export default function DailyLogPage() {
         </button>
       </div>
 
+      {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <div className="p-4 bg-[#12121a] border border-[#2a2a3a] rounded-xl">
           <p className="text-xs text-[#6b7280] uppercase tracking-wider mb-1">Total Sent</p>
@@ -240,6 +264,7 @@ export default function DailyLogPage() {
         </div>
       </div>
 
+      {/* Loading / Error */}
       {loading && (
         <div className="flex items-center justify-center py-16">
           <div className="w-6 h-6 border-2 border-[#5c7cfa] border-t-transparent rounded-full animate-spin" />
@@ -253,11 +278,12 @@ export default function DailyLogPage() {
         </div>
       )}
 
+      {/* Day Cards */}
       {!loading && !error && (
         <div className="space-y-3">
           {days.length === 0 ? (
             <div className="p-12 bg-[#12121a] border border-[#2a2a3a] rounded-xl text-center">
-              <p className="text-[#6b7280] text-sm">No activity recorded yet.</p>
+              <p className="text-[#6b7280] text-sm">No activity recorded yet. Emails will appear here as they are sent.</p>
             </div>
           ) : (
             days.map((day) => (
@@ -272,6 +298,7 @@ export default function DailyLogPage() {
         </div>
       )}
 
+      {/* Footer info */}
       {!loading && days.length > 0 && (
         <p className="text-xs text-[#4a4a5a] text-center mt-6">
           Showing {days.length} day{days.length !== 1 ? 's' : ''} of activity

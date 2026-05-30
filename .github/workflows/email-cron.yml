@@ -1,12 +1,13 @@
 name: Email System Cron
 
-# Runs every 30 minutes â the auto-send endpoint decides which
+# Runs every 10 minutes — the auto-send endpoint decides which
 # accounts are ready based on their randomized per-account timers.
+# 30 emails/account over 9 hours = ~18 min avg between sends.
 # Replies checked every 2 hours, bounces every 4 hours.
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch: {}
 
 jobs:
@@ -14,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Auto-send emails (every 30 min ping)
+      - name: Auto-send emails (every 10 min ping)
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
@@ -31,7 +32,7 @@ jobs:
         run: |
           HOUR=$(date -u +%-H)
           MIN=$(date -u +%-M)
-          if [ $((HOUR % 2)) -eq 0 ] && [ "$MIN" -lt 35 ]; then
+          if [ $((HOUR % 2)) -eq 0 ] && [ "$MIN" -lt 15 ]; then
             echo "Checking replies..."
             curl -sf "https://email-distributor.vercel.app/api/cron/check-replies?token=${CRON_SECRET}" || true
           else
@@ -44,7 +45,7 @@ jobs:
         run: |
           HOUR=$(date -u +%-H)
           MIN=$(date -u +%-M)
-          if [ $((HOUR % 4)) -eq 0 ] && [ "$MIN" -lt 35 ]; then
+          if [ $((HOUR % 4)) -eq 0 ] && [ "$MIN" -lt 15 ]; then
             echo "Checking bounces..."
             curl -sf "https://email-distributor.vercel.app/api/cron/check-bounces?token=${CRON_SECRET}" || true
           else

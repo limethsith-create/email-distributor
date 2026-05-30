@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aviance — Particle Assembly Logo Reveal</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+  canvas#main { display: block; position: absolute; top: 0; left: 0; z-index: 1; }
+
+  /* Film grain overlay */
+  #grain {
+    position: fixed; top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    pointer-events: none; z-index: 20;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation: grain 0.4s steps(5) infinite;
+  }
+  @keyframes grain {
+    0%,100%{transform:translate(0,0)} 20%{transform:translate(-5%,-10%)}
+    40%{transform:translate(3%,-15%)} 60%{transform:translate(12%,9%)}
+    80%{transform:translate(-1%,7%)}
+  }
+
+  /* Vignette */
+  #vignette {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 19;
+    background: radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.7) 100%);
+  }
+
+  /* Tagline */
+  #tagline {
+    position: fixed; bottom: 10%; width: 100%; text-align: center;
+    z-index: 15; opacity: 0;
+    font-size: clamp(14px, 2vw, 22px);
+    font-weight: 300; letter-spacing: 0.35em; text-transform: uppercase;
+    color: rgba(255,255,255,0.7);
+    transition: opacity 1.5s ease;
+  }
+  #tagline.visible { opacity: 1; }
+
+  /* Replay button */
+  #replay {
+    position: fixed; bottom: 3%; right: 4%;
+    z-index: 25; opacity: 0; pointer-events: none;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.5); padding: 8px 20px; border-radius: 30px;
+    font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase;
+    cursor: pointer; transition: all 0.4s ease; font-family: inherit;
+  }
+  #replay.visible { opacity: 1; pointer-events: auto; }
+  #replay:hover { background: rgba(138,92,246,0.15); border-color: rgba(138,92,246,0.4); color: #fff; }
+
+  /* Phase indicator */
+  #phase {
+    position: fixed; top: 4%; left: 50%; transform: translateX(-50%);
+    z-index: 15; opacity: 0;
+    font-size: 10px; letter-spacing: 0.4em; text-transform: uppercase;
+    color: rgba(138,92,246,0.4);
+    transition: opacity 0.8s ease;
+  }
+  #phase.visible { opacity: 1; }
+</style>
+</head>
+<body>
+<canvas id="main"></canvas>
+<div id="grain"></div>
+<div id="vignette"></div>
+<div id="phase"></div>
+<div id="tagline">Intelligent Automation · Elevated</div>
+<button id="replay">↻ Replay</button>
+
+<script>
+// ─── CONFIG ───
+const CFG = {
+  // Particle counts
+  logoParticles: 2800,
+  ringParticles: 600,
+  ambientParticles: 120,
+  sparkCount: 60,
+
+  // Colors (Aviance purple-blue palette)
+  colors: {
+    purple: [138, 92, 246],
+    blue: [99, 130, 255],
+    deepPurple: [88, 52, 196],
+    white: [255, 255, 255],
+    cyan: [130, 200, 255],
+  },
+
+  // Timing (seconds)
+  phases: {
+    ambient: 1.5,       // floating particles appear
+    converge: 3.5,      // particles rush toward logo shape
+    assemble: 2.5,      // snap into logo form
+    ringForm: 1.5,      // orbital ring assembles
+    glow: 1.0,          // bloom pulse
+    glitch: 0.6,        // glitch flash
+    hold: 4.0,          // final hold with breathing
+  },
+};
+
+// ─── CANVAS SETUP ───
+const canvas = document.getElementById('main');
+const ctx = canvas.getContext('2d');
+let W, H, cx, cy, scale;
+let startTime, animFrame;
+let particles = [];
+let ringParts = [];
+let ambients = [];
+let sparks = [];
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  cx = W / 2;
+  cy = H / 2;
+  scale = Math.min(W, H) / 800;
+}
+window.addEventListener('resize', () => { resize(); if (!startTime) init(); });
+resize();
+
+// ─── LOGO PATH (Stylized A) ───
+function getLogoPoints(count) {
+  const pts = [];
+  const s = 130 * scale;
+
+  // Define the Aviance "A" mark as path segments
+  // Main left stroke of A (going up-right)
+  const paths = [
+    // Left leg of A - thick stroke
+    { x1: -55, y1: 70, x2: -10, y2: -75, weight: 3 },
+    // Right leg of A
+    { x1: 10, y1: -75, x2: 55, y2: 70, weight: 2.5 },
+    // Crossbar curve (the alpha-like loop)
+    // Upper left curve
+    { x1: -40, y1: 10, x2: -15, y2: -30, weight: 2 },
+    { x1: -15, y1: -30, x2: 15, y2: -30, weight: 2 },
+    { x1: 15, y1: -30, x2: 35, y2: 5, weight: 2 },
+    // Lower loop
+    { x1: 35, y1: 5, x2: 15, y2: 30, weight: 2 },
+    { x1: 15, y1: 30, x2: -20, y2: 25, weight: 2 },
+    { x1: -20, y1: 25, x2: -40, y2: 10, weight: 2 },
+    // Dot above (like the dot in the logo)
+    { x1: 22, y1: -55, x2: 28, y2: -50, weight: 1.5 },
+  ];
+
+  const totalWeight = paths.reduce((s, p) => s + p.weight, 0);
+
+  for (let i = 0; i < count; i++) {
+    let r = Math.random() * totalWeight;
+    let seg = paths[0];
+    for (const p of paths) {
+      r -= p.weight;
+      if (r <= 0) { seg = p; break; }
+    }
+    const t = Math.random();
+    const x = (seg.x1 + (seg.x2 - seg.x1) * t) * (s / 100);
+    const y = (seg.y1 + (seg.y2 - seg.y1) * t) * (s / 100);
+    // Add slight organic scatter
+    const scatter = 2 * scale;
+    pts.push({
+      x: x + (Math.random() - 0.5) * scatter,
+      y: y + (Math.random() - 0.5) * scatter,
+    });
+  }
+  return pts;
+}
+
+// ─── RING POINTS ───
+function getRingPoints(count) {
+  const pts = [];
+  const radius = 175 * scale;
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.02;
+    pts.push({
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+      angle,
+    });
+  }
+  return pts;
+}
+
+// ─── EASING ───
+function easeOutExpo(t) { return t === 1 ? 1 : 1 - Math.pow(2, -10 * t); }
+function easeInOutCubic(t) { return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+function easeOutBack(t) { const c = 1.70158; return 1 + (c+1)*Math.pow(t-1,3) + c*Math.pow(t-1,2); }
+
+// ─── PARTICLE CLASS ───
+class Particle {
+  constructor(targetX, targetY, type) {
+    this.type = type; // 'logo' | 'ring'
+    this.targetX = targetX + cx;
+    this.targetY = targetY + cy;
+
+    // Spawn from random position far away
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 400 + Math.random() * 600;
+    this.x = cx + Math.cos(angle) * dist * scale;
+    this.y = cy + Math.sin(angle) * dist * scale;
+
+    this.vx = (Math.random() - 0.5) * 2;
+    this.vy = (Math.random() - 0.5) * 2;
+
+    this.size = type === 'logo'
+      ? (1 + Math.random() * 2.2) * scale
+      : (0.8 + Math.random() * 1.5) * scale;
+
+    // Color
+    const colorKeys = ['purple', 'blue', 'white', 'cyan', 'deepPurple'];
+    const weights = type === 'logo' ? [0.3, 0.25, 0.25, 0.1, 0.1] : [0.35, 0.35, 0.15, 0.1, 0.05];
+    let r = Math.random(), cumul = 0;
+    this.colorKey = 'purple';
+    for (let i = 0; i < colorKeys.length; i++) {
+      cumul += weights[i];
+      if (r <= cumul) { this.colorKey = colorKeys[i]; break; }
+    }
+    this.color = CFG.colors[this.colorKey];
+
+    this.alpha = 0;
+    this.targetAlpha = 0.4 + Math.random() * 0.6;
+    this.pulseOffset = Math.random() * Math.PI * 2;
+    this.pulseSpeed = 0.5 + Math.random() * 1.5;
+    this.arrived = false;
+    this.delay = Math.random() * 0.8; // stagger
+  }
+
+  update(progress, phase, dt) {
+    const { ambient, converge, assemble } = CFG.phases;
+    const totalConverge = ambient + converge;
+    const totalAssemble = totalConverge + assemble;
+
+    if (phase === 'ambient' || progress < ambient + this.delay) {
+      // Drift randomly
+      this.x += this.vx * dt * 60;
+      this.y += this.vy * dt * 60;
+      this.vx += (Math.random() - 0.5) * 0.1;
+      this.vy += (Math.random() - 0.5) * 0.1;
+      this.vx *= 0.98;
+      this.vy *= 0.98;
+      this.alpha = Math.min(this.alpha + dt * 2, this.targetAlpha * 0.3);
+    }
+    else if (progress < totalConverge) {
+      // Converge toward target
+      const t = easeOutExpo((progress - ambient - this.delay) / (converge - this.delay));
+      const dx = this.targetX - this.x;
+      const dy = this.targetY - this.y;
+      this.x += dx * t * 0.08;
+      this.y += dy * t * 0.08;
+      this.vx *= 0.92;
+      this.vy *= 0.92;
+      this.alpha = Math.min(this.alpha + dt * 3, this.targetAlpha * 0.6);
+    }
+    else if (progress < totalAssemble) {
+      // Snap into position
+      const t = easeOutBack(Math.min(1, (progress - totalConverge) / assemble));
+      this.x += (this.targetX - this.x) * 0.15;
+      this.y += (this.targetY - this.y) * 0.15;
+      this.alpha = this.targetAlpha * (0.6 + 0.4 * t);
+      if (Math.abs(this.x - this.targetX) < 0.5 && Math.abs(this.y - this.targetY) < 0.5) {
+        this.arrived = true;
+      }
+    }
+    else {
+      // Settled — gentle breathing
+      this.x += (this.targetX - this.x) * 0.2;
+      this.y += (this.targetY - this.y) * 0.2;
+      const breath = Math.sin(progress * this.pulseSpeed + this.pulseOffset) * 0.15;
+      this.alpha = this.targetAlpha * (0.85 + breath);
+    }
+  }
+
+  draw(ctx, glitchOffset) {
+    if (this.alpha < 0.01) return;
+    const gx = glitchOffset ? (Math.random() > 0.5 ? glitchOffset : -glitchOffset) : 0;
+
+    ctx.beginPath();
+    ctx.arc(this.x + gx, this.y, this.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${this.color[0]},${this.color[1]},${this.color[2]},${this.alpha})`;
+    ctx.fill();
+
+    // Glow
+    if (this.alpha > 0.4) {
+      ctx.beginPath();
+      ctx.arc(this.x + gx, this.y, this.size * 3, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${this.color[0]},${this.color[1]},${this.color[2]},${this.alpha * 0.08})`;
+      ctx.fill();
+    }
+  }
+}
+
+// ─── AMBIENT PARTICLE ───
+class AmbientParticle {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.x = Math.random() * W;
+    this.y = Math.random() * H;
+    this.vx = (Math.random() - 0.5) * 0.4;
+    this.vy = (Math.random() - 0.5) * 0.4;
+    this.size = (0.5 + Math.random() * 1.5) * scale;
+    this.alpha = 0.05 + Math.random() * 0.15;
+    const pick = Math.random();
+    this.color = pick < 0.4 ? CFG.colors.purple : pick < 0.7 ? CFG.colors.blue : CFG.colors.cyan;
+  }
+  update(dt) {
+    this.x += this.vx * dt * 60;
+    this.y += this.vy * dt * 60;
+    if (this.x < -10 || this.x > W+10 || this.y < -10 || this.y > H+10) this.reset();
+  }
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${this.color[0]},${this.color[1]},${this.color[2]},${this.alpha})`;
+    ctx.fill();
+  }
+}
+
+// ─── SPARK ───
+class Spark {
+  constructor() {
+    this.active = false;
+  }
+  emit(x, y) {
+    this.x = x; this.y = y;
+    const a = Math.random() * Math.PI * 2;
+    const speed = 2 + Math.random() * 6;
+    this.vx = Math.cos(a) * speed * scale;
+    this.vy = Math.sin(a) * speed * scale;
+    this.life = 0.5 + Math.random() * 0.8;
+    this.maxLife = this.life;
+    this.size = (0.5 + Math.random() * 1.5) * scale;
+    this.color = Math.random() > 0.5 ? CFG.colors.purple : CFG.colors.cyan;
+    this.active = true;
+  }
+  update(dt) {
+    if (!this.active) return;
+    this.x += this.vx * dt * 60;
+    this.y += this.vy * dt * 60;
+    this.vx *= 0.96; this.vy *= 0.96;
+    this.life -= dt;
+    if (this.life <= 0) this.active = false;
+  }
+  draw(ctx) {
+    if (!this.active) return;
+    const a = this.life / this.maxLife;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size * a, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${this.color[0]},${this.color[1]},${this.color[2]},${a * 0.7})`;
+    ctx.fill();
+  }
+}
+
+// ─── INIT ───
+function init() {
+  particles = [];
+  ringParts = [];
+  ambients = [];
+  sparks = [];
+
+  document.getElementById('tagline').classList.remove('visible');
+  document.getElementById('replay').classList.remove('visible');
+  document.getElementById('phase').classList.remove('visible');
+
+  // Logo particles
+  const logoTargets = getLogoPoints(CFG.logoParticles);
+  for (const t of logoTargets) {
+    particles.push(new Particle(t.x, t.y, 'logo'));
+  }
+
+  // Ring particles
+  const ringTargets = getRingPoints(CFG.ringParticles);
+  for (const t of ringTargets) {
+    const rp = new Particle(t.x, t.y, 'ring');
+    rp.delay += 0.5; // ring forms slightly later
+    ringParts.push(rp);
+  }
+
+  // Ambient
+  for (let i = 0; i < CFG.ambientParticles; i++) {
+    ambients.push(new AmbientParticle());
+  }
+
+  // Sparks pool
+  for (let i = 0; i < CFG.sparkCount; i++) {
+    sparks.push(new Spark());
+  }
+
+  startTime = performance.now();
+  if (animFrame) cancelAnimationFrame(animFrame);
+  loop();
+}
+
+// ─── MAIN LOOP ───
+let lastTime = 0;
+let sparkTimer = 0;
+let glitchActive = false;
+let glitchTimer = 0;
+
+function loop() {
+  const now = performance.now();
+  const dt = Math.min((now - (lastTime || now)) / 1000, 0.05);
+  lastTime = now;
+
+  const elapsed = (now - startTime) / 1000;
+  const { ambient, converge, assemble, ringForm, glow, glitch, hold } = CFG.phases;
+  const totalTime = ambient + converge + assemble + ringForm + glow + glitch + hold;
+
+  // Determine phase
+  let phase = 'ambient';
+  if (elapsed > ambient + converge + assemble + ringForm + glow) phase = 'glitch';
+  else if (elapsed > ambient + converge + assemble + ringForm) phase = 'glow';
+  else if (elapsed > ambient + converge + assemble) phase = 'ringForm';
+  else if (elapsed > ambient + converge) phase = 'assemble';
+  else if (elapsed > ambient) phase = 'converge';
+
+  // Phase indicator
+  const phaseEl = document.getElementById('phase');
+  const phaseNames = { ambient: 'Initializing', converge: 'Assembling', assemble: 'Forming', ringForm: 'Activating', glow: 'Powering Up', glitch: 'Online' };
+  if (phaseNames[phase]) {
+    phaseEl.textContent = phaseNames[phase];
+    phaseEl.classList.add('visible');
+  }
+
+  // Glitch effect
+  let glitchOffset = 0;
+  if (phase === 'glitch' || (phase === 'glow' && Math.random() < 0.02)) {
+    glitchTimer += dt;
+    if (glitchTimer < glitch) {
+      const intensity = Math.sin(glitchTimer * 40) * 8 * scale;
+      glitchOffset = Math.random() < 0.3 ? intensity : 0;
+    }
+  }
+
+  // Clear
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+  ctx.fillRect(0, 0, W, H);
+  // On first frames, clear fully
+  if (elapsed < 0.1) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); }
+
+  // Draw ambient particles
+  for (const a of ambients) {
+    a.update(dt);
+    a.draw(ctx);
+  }
+
+  // Update & draw logo particles
+  for (const p of particles) {
+    p.update(elapsed, phase, dt);
+    p.draw(ctx, glitchOffset);
+  }
+
+  // Update & draw ring particles (delayed start)
+  const ringStart = ambient + converge * 0.7;
+  if (elapsed > ringStart) {
+    for (const r of ringParts) {
+      r.update(elapsed - 0.5, phase, dt);
+      r.draw(ctx, glitchOffset * 0.5);
+    }
+
+    // Draw gradient ring glow when assembled
+    if (elapsed > ambient + converge + assemble) {
+      const ringAlpha = Math.min(1, (elapsed - ambient - converge - assemble) / ringForm) * 0.3;
+      const radius = 175 * scale;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(138, 92, 246, ${ringAlpha})`;
+      ctx.lineWidth = 2.5 * scale;
+      ctx.shadowColor = 'rgba(138, 92, 246, 0.5)';
+      ctx.shadowBlur = 20 * scale;
+      ctx.stroke();
+
+      // Second ring pass with blue shift
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(99, 130, 255, ${ringAlpha * 0.5})`;
+      ctx.lineWidth = 1.5 * scale;
+      ctx.shadowColor = 'rgba(99, 130, 255, 0.4)';
+      ctx.shadowBlur = 30 * scale;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Emit sparks during assembly
+  if (phase === 'assemble' || phase === 'ringForm') {
+    sparkTimer += dt;
+    if (sparkTimer > 0.04) {
+      sparkTimer = 0;
+      const inactiveSpark = sparks.find(s => !s.active);
+      if (inactiveSpark) {
+        const src = particles[Math.floor(Math.random() * particles.length)];
+        inactiveSpark.emit(src.x, src.y);
+      }
+    }
+  }
+
+  // Sparks
+  for (const s of sparks) {
+    s.update(dt);
+    s.draw(ctx);
+  }
+
+  // Center glow bloom
+  if (elapsed > ambient + converge) {
+    const bloomProgress = Math.min(1, (elapsed - ambient - converge) / (assemble + ringForm));
+    const bloomAlpha = bloomProgress * 0.12;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 200 * scale);
+    grad.addColorStop(0, `rgba(138, 92, 246, ${bloomAlpha})`);
+    grad.addColorStop(0.5, `rgba(99, 130, 255, ${bloomAlpha * 0.3})`);
+    grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Glitch flash
+  if (phase === 'glitch' && glitchTimer < 0.15) {
+    ctx.fillStyle = `rgba(138, 92, 246, ${0.08 * (1 - glitchTimer / 0.15)})`;
+    ctx.fillRect(0, 0, W, H);
+    // Scan lines
+    for (let i = 0; i < H; i += 4) {
+      if (Math.random() < 0.3) {
+        ctx.fillStyle = `rgba(0,0,0,${0.1 * Math.random()})`;
+        ctx.fillRect(0, i, W, 2);
+      }
+    }
+  }
+
+  // Show tagline after glow
+  if (elapsed > ambient + converge + assemble + ringForm + glow * 0.5) {
+    document.getElementById('tagline').classList.add('visible');
+  }
+
+  // Show replay after everything
+  if (elapsed > totalTime - hold + 2) {
+    document.getElementById('replay').classList.add('visible');
+    phaseEl.textContent = 'Aviance';
+  }
+
+  // Breathing animation on settled particles
+  if (phase === 'glitch' || elapsed > ambient + converge + assemble + ringForm + glow + glitch) {
+    // subtle orbital rotation of ring
+    const rotSpeed = 0.0003;
+    for (const r of ringParts) {
+      const dx = r.targetX - cx;
+      const dy = r.targetY - cy;
+      const angle = Math.atan2(dy, dx) + rotSpeed;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      r.targetX = cx + Math.cos(angle) * dist;
+      r.targetY = cy + Math.sin(angle) * dist;
+    }
+  }
+
+  animFrame = requestAnimationFrame(loop);
+}
+
+// ─── REPLAY ───
+document.getElementById('replay').addEventListener('click', () => {
+  resize();
+  glitchTimer = 0;
+  sparkTimer = 0;
+  init();
+});
+
+// ─── START ───
+init();
+</script>
+</body>
+</html>

@@ -25,8 +25,10 @@ export default function HistoryPage() {
           <p className="text-[#6b7280] text-sm">View past campaigns and their results</p>
         </div>
         {campaigns.length > 0 && (
-          <button onClick={clearHistory}
-            className="px-4 py-2 text-[#fa5252] hover:bg-[#fa5252]/10 text-sm rounded-lg transition-colors border border-[#fa5252]/20">
+          <button
+            onClick={clearHistory}
+            className="px-4 py-2 text-[#fa5252] hover:bg-[#fa5252]/10 text-sm rounded-lg transition-colors border border-[#fa5252]/20"
+          >
             Clear History
           </button>
         )}
@@ -38,6 +40,7 @@ export default function HistoryPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Campaign List */}
           <div className="space-y-3">
             {campaigns.map((campaign, idx) => {
               const sent = campaign.results?.filter(r => r.status === 'sent').length || 0;
@@ -45,13 +48,20 @@ export default function HistoryPage() {
               const total = campaign.results?.length || campaign.recipientCount || 0;
 
               return (
-                <button key={idx} onClick={() => setSelected(campaign)}
+                <button
+                  key={idx}
+                  onClick={() => setSelected(campaign)}
                   className={`w-full text-left p-4 bg-[#12121a] border rounded-xl transition-all ${
                     selected === campaign ? 'border-[#5c7cfa]/50' : 'border-[#2a2a3a] hover:border-[#3a3a4a]'
-                  }`}>
+                  }`}
+                >
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm text-white font-medium truncate max-w-[200px]">{campaign.subject || 'Untitled'}</p>
-                    <span className="text-xs text-[#6b7280]">{new Date(campaign.timestamp).toLocaleDateString()}</span>
+                    <p className="text-sm text-white font-medium truncate max-w-[200px]">
+                      {campaign.subject || 'Untitled'}
+                    </p>
+                    <span className="text-xs text-[#6b7280]">
+                      {new Date(campaign.timestamp).toLocaleDateString()}
+                    </span>
                   </div>
                   <div className="flex items-center gap-3 text-xs">
                     <span className="text-[#40c057]">{sent} sent</span>
@@ -59,17 +69,24 @@ export default function HistoryPage() {
                     <span className="text-[#6b7280]">{total} total</span>
                   </div>
                   {campaign.accountsUsed && (
-                    <p className="text-xs text-[#4a4a5a] mt-2 truncate">via {campaign.accountsUsed.join(', ')}</p>
+                    <p className="text-xs text-[#4a4a5a] mt-2 truncate">
+                      via {campaign.accountsUsed.join(', ')}
+                    </p>
                   )}
                 </button>
               );
             })}
           </div>
 
+          {/* Campaign Detail */}
           {selected && (
             <div className="p-5 bg-[#12121a] border border-[#2a2a3a] rounded-xl sticky top-8">
-              <h3 className="text-sm font-semibold text-white mb-4">{selected.subject || 'Untitled Campaign'}</h3>
-              <p className="text-xs text-[#6b7280] mb-4">{new Date(selected.timestamp).toLocaleString()}</p>
+              <h3 className="text-sm font-semibold text-white mb-4">
+                {selected.subject || 'Untitled Campaign'}
+              </h3>
+              <p className="text-xs text-[#6b7280] mb-4">
+                {new Date(selected.timestamp).toLocaleString()}
+              </p>
 
               {selected.results && selected.results.length > 0 ? (
                 <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -80,7 +97,9 @@ export default function HistoryPage() {
                         <p className="text-xs text-white truncate">{r.to}</p>
                         <p className="text-xs text-[#4a4a5a]">via {r.from}</p>
                       </div>
-                      <span className={`text-xs ${r.status === 'sent' ? 'text-[#40c057]' : 'text-[#fa5252]'}`}>{r.status}</span>
+                      <span className={`text-xs ${r.status === 'sent' ? 'text-[#40c057]' : 'text-[#fa5252]'}`}>
+                        {r.status}
+                      </span>
                     </div>
                   ))}
                 </div>

@@ -153,7 +153,7 @@ export default function AccountsPage() {
         <div className="min-w-0">
           <h1 className="text-xl md:text-2xl font-bold text-white mb-1">Accounts</h1>
           <p className="text-[#6b7280] text-xs md:text-sm">
-            {allAccounts.length} account{allAccounts.length !== 1 ? 's' : ''} active â {DAILY_LIMIT} emails/day each
+            {allAccounts.length} account{allAccounts.length !== 1 ? 's' : ''} active — {DAILY_LIMIT} emails/day each
           </p>
         </div>
         <button
@@ -216,7 +216,7 @@ export default function AccountsPage() {
         </div>
       )}
 
-      {/* Account Tabs â horizontally scrollable on mobile */}
+      {/* Account Tabs — horizontally scrollable on mobile */}
       <div className="flex gap-2 mb-4 md:mb-6 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
         {allAccounts.map((email, i) => {
           const data = accountData[email];
@@ -246,7 +246,7 @@ export default function AccountsPage() {
       {/* Active Account Details */}
       {activeData && (
         <>
-          {/* Stats Row â 2x2 grid on mobile */}
+          {/* Stats Row — 2x2 grid on mobile */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-4 md:mb-6">
             <MiniStat label="Emails Sent" value={activeData.totalSent} color="#40c057" />
             <MiniStat label="Failed" value={activeData.totalFailed} color="#fa5252" />
@@ -254,7 +254,7 @@ export default function AccountsPage() {
             <MiniStat label="Industries" value={activeData.industries.size} color="#fab005" />
           </div>
 
-          {/* Daily Limit Progress â fixed to 15 */}
+          {/* Daily Limit Progress — fixed to 15 */}
           <div className="mb-4 md:mb-6 p-3 md:p-4 bg-[#12121a] border border-[#2a2a3a] rounded-xl">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] md:text-xs text-[#6b7280]">Daily Sending Progress</span>

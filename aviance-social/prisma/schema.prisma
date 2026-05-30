@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Platform {
+  LINKEDIN
+  FACEBOOK
+  INSTAGRAM
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  CAROUSEL
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+model Connection {
+  id             String    @id @default(cuid())
+  platform       Platform
+  accessToken    String
+  refreshToken   String?
+  tokenExpiresAt DateTime?
+  accountName    String
+  accountId      String
+  profileUrl     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([platform, accountId])
+}
+
+model Post {
+  id           String      @id @default(cuid())
+  content      String      @db.Text
+  mediaUrl     String?
+  mediaType    MediaType?
+  platforms    Platform[]
+  scheduledAt  DateTime?
+  publishedAt  DateTime?
+  status       PostStatus  @default(DRAFT)
+  errorMessage String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  results PostResult[]
+}
+
+model PostResult {
+  id             String     @id @default(cuid())
+  postId         String
+  post           Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  platform       Platform
+  platformPostId String?
+  status         PostStatus
+  errorMessage   String?
+  publishedAt    DateTime?
+
+  @@index([postId])
+}

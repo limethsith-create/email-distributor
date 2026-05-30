@@ -213,13 +213,26 @@ export async function processSendQueue(options = {}) {
           messageId: sendResult.messageId,
         });
       } else {
-        item.status = 'failed';
+        // Check if this is a bounce (invalid recipient)
+        const bouncePatterns = ['550', '551', '552', '553', '554', 'user unknown', 'mailbox not found', 'recipient rejected', 'address rejected', 'does not exist', 'no such user'];
+        const errorLower = (sendResult.error || '').toLowerCase();
+        const isBounce = bouncePatterns.some(p => errorLower.includes(p));
+
+        if (isBounce) {
+          item.status = 'bounced';
+          await markAsSent(item.email, account.email, -1); // -1 signals bounce
+          // Also update lead status to bounced
+          const { upsertLead } = await import('./leads-db');
+          await upsertLead({ email: item.email, status: 'bounced', bounced_at: new Date().toISOString() });
+        } else {
+          item.status = 'failed';
+        }
         item.error = sendResult.error;
         results.failed++;
         results.details.push({
           to: item.email,
           from: account.email,
-          status: 'failed',
+          status: isBounce ? 'bounced' : 'failed',
           error: sendResult.error,
         });
       }

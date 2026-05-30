@@ -1,0 +1,93 @@
+[
+  {
+    "company_name": "Lanka Hospitals PLC",
+    "email": "info@lankahospitals.com",
+    "phone": "+94 11 543 0000",
+    "city": "Colombo",
+    "industry": "healthcare"
+  },
+  {
+    "company_name": "Hemas Hospitals",
+    "email": "info@hemashospitals.com",
+    "phone": "+94 117 888 888",
+    "city": "Wattala",
+    "industry": "healthcare"
+  },
+  {
+    "company_name": "Durdans Hospital",
+    "email": "contactus@durdans.com",
+    "phone": "+94 11 2140 000",
+    "city": "Colombo",
+    "industry": "healthcare"
+  },
+  {
+    "company_name": "Asiri Hospital (Group)",
+    "email": "info@asiri.lk",
+    "phone": "+94 11 452 4400",
+    "city": "Colombo",
+    "industry": "healthcare"
+  },
+  {
+    "company_name": "Nawaloka Hospitals PLC",
+    "email": "nawaloka@slt.lk",
+    "phone": "+94 11 5577111",
+    "city": "Colombo",
+    "industry": "healthcare"
+  },
+  {
+    "company_name": "Ninewells Hospital",
+    "email": "info@ninewellshospital.lk",
+    "phone": "+94 11 452 0999",
+    "city": "Colombo",
+    "industry": "healthcare"
+  },
+  {
+    "company_name": "Western Hospital (Western Infirmary)",
+    "email": "info@westernhospital.lk",
+    "phone": "+94 11 739 2260",
+    "city": "Colombo",
+    "industry": "healthcare"
+  },
+  {
+    "company_name": "Arogya Hospitals (Pvt) Ltd",
+    "email": "info@arogyahospitals.lk",
+    "phone": "+94 33 222 4592",
+    "city": "Gampaha",
+    "industry": "healthcare"
+  },
+  {
+    "company_name": "Golden Key Eye & ENT Hospital",
+    "email": "ceogkh@sltnet.lk",
+    "phone": "+94 112 880 288",
+    "city": "Rajagiriya",
+    "industry": "healthcare"
+  },
+  {
+    "company_name": "Santa Dora Hospital",
+    "email": "info@santadorahospital.com",
+    "phone": "+94 11 2874 874",
+    "city": "Battaramulla",
+    "industry": "healthcare"
+  },
+  {
+    "company_name": "IMC MED Hospitals (International Medical Center)",
+    "email": "cof@imcsrilanka.com",
+    "phone": "+94 773 548 249",
+    "city": "Galle",
+    "industry": "healthcare"
+  },
+  {
+    "company_name": "Suwa Shanthi Hospital (Pvt) Ltd",
+    "email": "info@suwashanthi.com",
+    "phone": "+94 25 2223 636",
+    "city": "Anuradhapura",
+    "industry": "healthcare"
+  },
+  {
+    "company_name": "New Pioneer Hospital",
+    "email": "nphbatti009@gmail.com",
+    "phone": "+94 65 222 3642",
+    "city": "Batticaloa",
+    "industry": "healthcare"
+  }
+]

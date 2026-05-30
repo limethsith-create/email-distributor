@@ -1,5 +1,5 @@
 /**
- * Autonomous Email Sender â Zero Claude Dependency
+ * Autonomous Email Sender — Zero Claude Dependency
  *
  * FIXES applied:
  * - Persistent account rotation (KV counter, not resetting to 0)
@@ -14,11 +14,12 @@ import { kv } from '@vercel/kv';
 import { sendEmail } from '@/lib/mailer';
 import { getEmailForSequenceDay } from '@/lib/personalize';
 import { logSentEmail } from '@/lib/leads-db';
+import { verifyEmail } from '@/lib/email-verify';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-const MAX_PER_ACCOUNT_PER_DAY = 15;
+const MAX_PER_ACCOUNT_PER_DAY = 30;
 const LEADS_KEY = 'leads';
 const DAILY_SEND_KEY = 'daily_sends';
 const LOCK_KEY = 'auto_send_lock';
@@ -61,6 +62,63 @@ async function markCompanySent(companyName) {
   if (normalized) {
     try { await kv.sadd(COMPANY_SENT_KEY, normalized); } catch {}
   }
+}
+
+// ============================================================
+// Per-account randomized scheduling — removes Claude dependency
+// Each account gets its own "next send time" stored in Redis.
+// GitHub Actions pings every 30 min; this code decides who's ready.
+// ============================================================
+const ACCOUNT_SCHEDULE_KEY = 'account_next_send';
+
+async function isAccountReady(accountEmail) {
+  try {
+    const nextSendTime = await kv.hget(ACCOUNT_SCHEDULE_KEY, accountEmail);
+    if (!nextSendTime) return true; // First time — ready immediately
+    return Date.now() >= new Date(nextSendTime).getTime();
+  } catch {
+    return true;
+  }
+}
+
+async function scheduleNextSend(accountEmail) {
+  // Random delay: 12 to 24 minutes from now (~30 sends in 9 hours with jitter)
+  const delayMinutes = 12 + Math.floor(Math.random() * 13);
+  const nextTime = new Date(Date.now() + delayMinutes * 60 * 1000);
+  try {
+    await kv.hset(ACCOUNT_SCHEDULE_KEY, { [accountEmail]: nextTime.toISOString() });
+  } catch {}
+}
+
+/**
+ * Business hours check — only send 9 AM to 6 PM Sri Lanka time (UTC+5:30)
+ * This gives a 9-hour window to fit 30 emails per account.
+ */
+function isWithinSendingHours() {
+  const now = new Date();
+  // Sri Lanka is UTC+5:30
+  const sriLankaOffset = 5.5 * 60; // minutes
+  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const slMinutes = (utcMinutes + sriLankaOffset) % (24 * 60);
+  const slHour = Math.floor(slMinutes / 60);
+  return slHour >= 9 && slHour < 18; // 9 AM to 6 PM
+}
+
+async function getAccountScheduleStatus(accounts) {
+  const status = [];
+  for (const acc of accounts) {
+    try {
+      const nextTime = await kv.hget(ACCOUNT_SCHEDULE_KEY, acc.email);
+      status.push({
+        email: acc.email,
+        nextSendAt: nextTime || 'ready now',
+        ready: !nextTime || Date.now() >= new Date(nextTime).getTime(),
+      });
+    } catch {
+      status.push({ email: acc.email, nextSendAt: 'unknown', ready: true });
+    }
+  }
+  return status;
 }
 
 function getGmailAccounts() {
@@ -137,7 +195,7 @@ async function releaseLock() {
 }
 
 /**
- * Claim a lead atomically â set status to "sending" so no other
+ * Claim a lead atomically — set status to "sending" so no other
  * concurrent request can pick it up. Returns true if claimed.
  */
 async function claimLead(email) {
@@ -234,12 +292,22 @@ export async function GET(request) {
     }
   }
 
-  // Concurrency lock â prevent overlapping sends from multiple triggers
+  // Business hours check — only send 9 AM to 6 PM Sri Lanka time
+  if (!isWithinSendingHours()) {
+    return Response.json({
+      success: true,
+      message: 'Outside sending hours (9 AM - 6 PM Sri Lanka time)',
+      timestamp: new Date().toISOString(),
+      sent: 0,
+    });
+  }
+
+  // Concurrency lock — prevent overlapping sends from multiple triggers
   const lockAcquired = await acquireLock();
   if (!lockAcquired) {
     return Response.json({
       success: true,
-      message: 'Another send is already in progress â skipping',
+      message: 'Another send is already in progress — skipping',
       timestamp: new Date().toISOString(),
       sent: 0,
     });
@@ -277,13 +345,220 @@ export async function GET(request) {
       });
     }
 
-    const effectiveLimit = batchSize > 0 ? Math.min(batchSize, totalRemaining) : totalRemaining;
+    // ============================================================
+    // SCHEDULED MODE (default): 1 email per ready account
+    // GitHub Actions pings every 30 min; each account sends when
+    // its randomized timer expires (~1/hour with jitter)
+    // ============================================================
+    if (batchSize === 0) {
+      const readyAccounts = [];
+      const scheduleStatus = await getAccountScheduleStatus(accounts);
+
+      for (let i = 0; i < accounts.length; i++) {
+        if (accountStatus[i].remaining <= 0) continue;
+        const ready = await isAccountReady(accounts[i].email);
+        if (ready) {
+          readyAccounts.push({ account: accounts[i], stat: accountStatus[i] });
+        }
+      }
+
+      if (readyAccounts.length === 0) {
+        await releaseLock();
+        return Response.json({
+          success: true,
+          mode: 'scheduled',
+          message: 'No accounts ready to send right now',
+          timestamp: new Date().toISOString(),
+          sent: 0,
+          accountStatus,
+          scheduleStatus,
+        });
+      }
+
+      const unsent = await getUnsent(readyAccounts.length * 5);
+      if (unsent.length === 0) {
+        await releaseLock();
+        return Response.json({
+          success: true,
+          mode: 'scheduled',
+          message: 'No unsent leads available',
+          timestamp: new Date().toISOString(),
+          sent: 0,
+          accountStatus,
+          scheduleStatus,
+        });
+      }
+
+      const results = { sent: 0, failed: 0, skipped: 0, details: [] };
+      let leadIdx = 0;
+
+      for (const { account, stat } of readyAccounts) {
+        let sentFromThisAccount = false;
+
+        while (leadIdx < unsent.length && !sentFromThisAccount) {
+          const lead = unsent[leadIdx++];
+
+          const claimed = await claimLead(lead.email);
+          if (!claimed) { results.skipped++; continue; }
+
+          if (isGenericEmail(lead.email)) {
+            results.skipped++;
+            try {
+              const existing = await kv.hget(LEADS_KEY, lead.email.toLowerCase());
+              if (existing) await kv.hset(LEADS_KEY, { [lead.email.toLowerCase()]: { ...existing, status: 'skipped_generic', updatedAt: new Date().toISOString() } });
+            } catch {}
+            continue;
+          }
+
+          const qualifiedLead = {
+            ...lead,
+            email: lead.email.toLowerCase().trim(),
+            industry: lead.industry || 'business',
+            company_name: lead.company || lead.company_name || null,
+            city: lead.city || 'Sri Lanka',
+            first_name: lead.name?.split(/[\s,]/)[0] || null,
+          };
+
+          if (!qualifiedLead.company_name || qualifiedLead.company_name === 'your business') {
+            results.skipped++;
+            try {
+              const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
+              if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_no_company', updatedAt: new Date().toISOString() } });
+            } catch {}
+            continue;
+          }
+
+          const companyAlreadySent = await isCompanyAlreadySent(qualifiedLead.company_name);
+          if (companyAlreadySent) {
+            results.skipped++;
+            try {
+              const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
+              if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_dedup', updatedAt: new Date().toISOString() } });
+            } catch {}
+            continue;
+          }
+
+          // Email verification — MX + SMTP check before sending
+          const verification = await verifyEmail(qualifiedLead.email);
+          if (!verification.valid) {
+            results.skipped++;
+            results.details.push({ to: qualifiedLead.email, status: 'skipped', reason: `verification failed: ${verification.reason}` });
+            try {
+              const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
+              if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_unverified', verify_reason: verification.reason, updatedAt: new Date().toISOString() } });
+            } catch {}
+            continue;
+          }
+
+          const emailContent = getEmailForSequenceDay(qualifiedLead, 0);
+          const bodyParts = emailContent.body.split('---');
+          const rawBody = bodyParts[0];
+          const unsubNote = bodyParts[1] || '';
+          const cleanBody = stripPlainTextSignature(rawBody);
+
+          const htmlParagraphs = cleanBody
+            .split(/\n\n+/)
+            .filter(p => p.trim().length > 0)
+            .map(p => {
+              let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+              return `<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">${escaped}</p>`;
+            })
+            .join('\n');
+
+          const htmlSignature = `
+          <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
+            Limethsith<br>
+            Aviance — AI Growth Systems<br>
+            071 870 2702 | <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
+          </div>`;
+
+          const htmlUnsubscribe = unsubNote
+            ? `<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">${unsubNote.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
+            : '';
+
+          const htmlBody = htmlParagraphs + htmlSignature + htmlUnsubscribe;
+
+          try {
+            const sendResult = await sendEmail(account, {
+              to: qualifiedLead.email,
+              subject: emailContent.subject,
+              html: htmlBody,
+              text: emailContent.body,
+            });
+
+            if (sendResult.success) {
+              results.sent++;
+              stat.remaining--;
+              stat.sentToday++;
+              sentFromThisAccount = true;
+
+              await incrementDailySend(account.email);
+              await markLeadAsSent(qualifiedLead.email, account.email, emailContent.subject);
+              await markCompanySent(qualifiedLead.company_name);
+              await scheduleNextSend(account.email);
+
+              try {
+                await logSentEmail({
+                  to: qualifiedLead.email, from: account.email,
+                  company: qualifiedLead.company_name, industry: qualifiedLead.industry,
+                  subject: emailContent.subject, bodyPreview: emailContent.body.substring(0, 200),
+                  status: 'sent', messageId: sendResult.messageId,
+                  sequenceDay: 0, source: 'auto-send-scheduled',
+                });
+              } catch {}
+
+              results.details.push({ to: qualifiedLead.email, from: account.email, company: qualifiedLead.company_name, status: 'sent' });
+            } else {
+              results.failed++;
+              try {
+                const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
+                if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'pending', updatedAt: new Date().toISOString() } });
+              } catch {}
+              results.details.push({ to: qualifiedLead.email, from: account.email, status: 'failed', error: sendResult.error });
+            }
+          } catch (err) {
+            results.failed++;
+            try {
+              const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
+              if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'pending', updatedAt: new Date().toISOString() } });
+            } catch {}
+            results.details.push({ to: qualifiedLead.email, status: 'error', error: err.message });
+          }
+
+          // Random delay between account sends (5-20 seconds)
+          if (sentFromThisAccount) {
+            await new Promise(r => setTimeout(r, randomDelay(5000, 20000)));
+          }
+        }
+      }
+
+      if (results.sent > 0) {
+        try { await kv.hincrby('stats', 'totalSent', results.sent); } catch {}
+      }
+
+      await releaseLock();
+      return Response.json({
+        success: true,
+        mode: 'scheduled',
+        timestamp: new Date().toISOString(),
+        today: getTodayKey(),
+        ...results,
+        accountStatus,
+        scheduleStatus,
+      });
+    }
+
+    // ============================================================
+    // BATCH MODE: Original behavior when ?batch=N is specified
+    // ============================================================
+    const effectiveLimit = Math.min(batchSize, totalRemaining);
     const unsent = await getUnsent(effectiveLimit);
 
     if (unsent.length === 0) {
       await releaseLock();
       return Response.json({
         success: true,
+        mode: 'batch',
         message: 'No unsent leads available',
         timestamp: new Date().toISOString(),
         sent: 0,
@@ -291,58 +566,35 @@ export async function GET(request) {
       });
     }
 
-    // ============================================================
-    // FIX #1: Persistent account rotation via KV counter
-    // Each invocation picks the NEXT account, not always account[0]
-    // ============================================================
     const startAccountIdx = await getNextAccountIndex(accounts.length);
     let accountIndex = startAccountIdx;
-
     const results = { sent: 0, failed: 0, skipped: 0, details: [] };
 
     for (const lead of unsent) {
-      // ============================================================
-      // FIX #3: Claim lead atomically before sending
-      // If another concurrent request already claimed it, skip
-      // ============================================================
       const claimed = await claimLead(lead.email);
       if (!claimed) {
         results.skipped++;
-        results.details.push({
-          to: lead.email,
-          status: 'skipped',
-          reason: 'already claimed or sent',
-        });
+        results.details.push({ to: lead.email, status: 'skipped', reason: 'already claimed or sent' });
         continue;
       }
 
-      // Skip generic/role-based email addresses
       if (isGenericEmail(lead.email)) {
         results.skipped++;
-        results.details.push({ to: lead.email, status: 'skipped', reason: 'generic/role-based email' });
         try {
           const existing = await kv.hget(LEADS_KEY, lead.email.toLowerCase());
-          if (existing) {
-            await kv.hset(LEADS_KEY, { [lead.email.toLowerCase()]: { ...existing, status: 'skipped_generic', updatedAt: new Date().toISOString() } });
-          }
+          if (existing) await kv.hset(LEADS_KEY, { [lead.email.toLowerCase()]: { ...existing, status: 'skipped_generic', updatedAt: new Date().toISOString() } });
         } catch {}
         continue;
       }
 
-      // Find account with remaining quota (starting from rotated index)
       let found = false;
       let attempts = 0;
-
       while (attempts < accounts.length) {
         const accStat = accountStatus[accountIndex % accounts.length];
-        if (accStat.remaining > 0) {
-          found = true;
-          break;
-        }
+        if (accStat.remaining > 0) { found = true; break; }
         accountIndex++;
         attempts++;
       }
-
       if (!found) break;
 
       const accIdx = accountIndex % accounts.length;
@@ -358,50 +610,46 @@ export async function GET(request) {
         first_name: lead.name?.split(/[\s,]/)[0] || null,
       };
 
-      // Skip leads with missing company name
       if (!qualifiedLead.company_name || qualifiedLead.company_name === 'your business') {
         results.skipped++;
-        results.details.push({ to: lead.email, status: 'skipped', reason: 'missing company name' });
         try {
           const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-          if (existing) {
-            await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_no_company', updatedAt: new Date().toISOString() } });
-          }
+          if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_no_company', updatedAt: new Date().toISOString() } });
         } catch {}
         continue;
       }
 
-      // Skip if company already contacted
       const companyAlreadySent = await isCompanyAlreadySent(qualifiedLead.company_name);
       if (companyAlreadySent) {
         results.skipped++;
-        results.details.push({ to: lead.email, status: 'skipped', reason: 'company already contacted' });
         try {
           const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-          if (existing) {
-            await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_dedup', updatedAt: new Date().toISOString() } });
-          }
+          if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_dedup', updatedAt: new Date().toISOString() } });
+        } catch {}
+        continue;
+      }
+
+      // Email verification — MX + SMTP check before sending
+      const verification = await verifyEmail(qualifiedLead.email);
+      if (!verification.valid) {
+        results.skipped++;
+        results.details.push({ to: qualifiedLead.email, status: 'skipped', reason: `verification failed: ${verification.reason}` });
+        try {
+          const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
+          if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_unverified', verify_reason: verification.reason, updatedAt: new Date().toISOString() } });
         } catch {}
         continue;
       }
 
       const emailContent = getEmailForSequenceDay(qualifiedLead, 0);
-
-      // ============================================================
-      // FIX #2: Strip plain-text signature from body before HTML conversion
-      // The template includes "Limethsith\nAviance..." but we add a proper
-      // HTML signature below â no more duplicate signatures
-      // ============================================================
       const bodyParts = emailContent.body.split('---');
       const rawBody = bodyParts[0];
       const unsubNote = bodyParts[1] || '';
-
-      // Remove the plain-text sig so it doesn't appear twice
       const cleanBody = stripPlainTextSignature(rawBody);
 
       const htmlParagraphs = cleanBody
         .split(/\n\n+/)
-        .filter(p => p.trim().length > 0) // remove empty paragraphs
+        .filter(p => p.trim().length > 0)
         .map(p => {
           let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
           return `<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">${escaped}</p>`;
@@ -411,7 +659,7 @@ export async function GET(request) {
       const htmlSignature = `
       <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
         Limethsith<br>
-        Aviance â AI Growth Systems<br>
+        Aviance — AI Growth Systems<br>
         071 870 2702 | <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
       </div>`;
 
@@ -433,96 +681,55 @@ export async function GET(request) {
           results.sent++;
           accStat.remaining--;
           accStat.sentToday++;
-
           await incrementDailySend(account.email);
           await markLeadAsSent(qualifiedLead.email, account.email, emailContent.subject);
           await markCompanySent(qualifiedLead.company_name);
-
           try {
             await logSentEmail({
-              to: qualifiedLead.email,
-              from: account.email,
-              company: qualifiedLead.company_name,
-              industry: qualifiedLead.industry,
-              subject: emailContent.subject,
-              bodyPreview: emailContent.body.substring(0, 200),
-              status: 'sent',
-              messageId: sendResult.messageId,
-              sequenceDay: 0,
-              source: 'auto-send',
+              to: qualifiedLead.email, from: account.email,
+              company: qualifiedLead.company_name, industry: qualifiedLead.industry,
+              subject: emailContent.subject, bodyPreview: emailContent.body.substring(0, 200),
+              status: 'sent', messageId: sendResult.messageId,
+              sequenceDay: 0, source: 'auto-send-batch',
             });
-          } catch (kvErr) {
-            console.error('[auto-send] KV log error:', kvErr.message);
-          }
-
-          results.details.push({
-            to: qualifiedLead.email,
-            from: account.email,
-            company: qualifiedLead.company_name,
-            status: 'sent',
-          });
+          } catch {}
+          results.details.push({ to: qualifiedLead.email, from: account.email, company: qualifiedLead.company_name, status: 'sent' });
         } else {
           results.failed++;
-          // Revert lead status back to pending on failure
           try {
             const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-            if (existing) {
-              await kv.hset(LEADS_KEY, {
-                [qualifiedLead.email]: { ...existing, status: 'pending', updatedAt: new Date().toISOString() }
-              });
-            }
+            if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'pending', updatedAt: new Date().toISOString() } });
           } catch {}
-          results.details.push({
-            to: qualifiedLead.email,
-            from: account.email,
-            status: 'failed',
-            error: sendResult.error,
-          });
+          results.details.push({ to: qualifiedLead.email, from: account.email, status: 'failed', error: sendResult.error });
         }
       } catch (err) {
         results.failed++;
-        // Revert lead status back to pending on error
         try {
           const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-          if (existing) {
-            await kv.hset(LEADS_KEY, {
-              [qualifiedLead.email]: { ...existing, status: 'pending', updatedAt: new Date().toISOString() }
-            });
-          }
+          if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'pending', updatedAt: new Date().toISOString() } });
         } catch {}
-        results.details.push({
-          to: qualifiedLead.email,
-          status: 'error',
-          error: err.message,
-        });
+        results.details.push({ to: qualifiedLead.email, status: 'error', error: err.message });
       }
 
-      // Move to next account for next email
       accountIndex++;
-
-      // Random delay between sends
       if (results.sent + results.failed < unsent.length) {
         await new Promise(r => setTimeout(r, randomDelay()));
       }
     }
 
-    // Update total sent stat
     if (results.sent > 0) {
-      try {
-        await kv.hincrby('stats', 'totalSent', results.sent);
-      } catch {}
+      try { await kv.hincrby('stats', 'totalSent', results.sent); } catch {}
     }
 
     await releaseLock();
-
     return Response.json({
       success: true,
+      mode: 'batch',
       timestamp: new Date().toISOString(),
       today: getTodayKey(),
       accountUsed: accounts[startAccountIdx % accounts.length]?.email,
       ...results,
       accountStatus,
-      unsentRemaining: unsent.length - results.sent - results.failed - results.skipped,
     });
   } catch (err) {
     await releaseLock();

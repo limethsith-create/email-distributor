@@ -1,0 +1,161 @@
+{
+  "name": "MailDistro Randomized Email Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "triggerAtHour": 4 },
+            { "triggerAtHour": 6 },
+            { "triggerAtHour": 8 },
+            { "triggerAtHour": 10 },
+            { "triggerAtHour": 12 },
+            { "triggerAtHour": 14 },
+            { "triggerAtHour": 16 },
+            { "triggerAtHour": 18 },
+            { "triggerAtHour": 20 }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 2 Hours (9AM-2AM SL Time)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "duration": "={{ Math.floor(Math.random() * 45) + 1 }}",
+        "unit": "minutes"
+      },
+      "id": "random-delay",
+      "name": "Random Delay (1-45 min)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "batch-size",
+              "name": "batchSize",
+              "value": "={{ Math.floor(Math.random() * 6) + 5 }}",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "id": "random-batch",
+      "name": "Random Batch Size (5-10)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://email-distributor-git-main-aviance.vercel.app/api/cron/auto-send?token={{ $env.CRON_SECRET }}&batch={{ $json.batchSize }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "trigger-send",
+      "name": "Trigger Auto-Send",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-success",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-result",
+      "name": "Check Result",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "content": "=### ✅ Emails Sent Successfully\n\n**Time:** {{ $now.format('yyyy-MM-dd HH:mm') }}\n**Sent:** {{ $('Trigger Auto-Send').item.json.sent }}\n**Failed:** {{ $('Trigger Auto-Send').item.json.failed }}\n**Remaining Today:** {{ $('Trigger Auto-Send').item.json.unsentRemaining }}",
+        "options": {}
+      },
+      "id": "log-success",
+      "name": "Log Success",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1320, 180]
+    },
+    {
+      "parameters": {
+        "content": "=### ❌ Send Failed\n\n**Time:** {{ $now.format('yyyy-MM-dd HH:mm') }}\n**Error:** {{ $('Trigger Auto-Send').item.json.error || $('Trigger Auto-Send').item.json.message }}",
+        "options": {}
+      },
+      "id": "log-failure",
+      "name": "Log Failure",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1320, 420]
+    }
+  ],
+  "connections": {
+    "Every 2 Hours (9AM-2AM SL Time)": {
+      "main": [
+        [{ "node": "Random Delay (1-45 min)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Random Delay (1-45 min)": {
+      "main": [
+        [{ "node": "Random Batch Size (5-10)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Random Batch Size (5-10)": {
+      "main": [
+        [{ "node": "Trigger Auto-Send", "type": "main", "index": 0 }]
+      ]
+    },
+    "Trigger Auto-Send": {
+      "main": [
+        [{ "node": "Check Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "Check Result": {
+      "main": [
+        [{ "node": "Log Success", "type": "main", "index": 0 }],
+        [{ "node": "Log Failure", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "timezone": "Asia/Colombo"
+  },
+  "tags": [
+    { "name": "email-outreach" },
+    { "name": "automated" }
+  ]
+}

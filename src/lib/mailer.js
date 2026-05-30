@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import crypto from 'crypto';
 
 /**
  * Create a Nodemailer transporter for a Gmail account
@@ -8,6 +9,8 @@ import nodemailer from 'nodemailer';
  * @returns {nodemailer.Transporter}
  */
 export function createTransporter(email, appPassword) {
+  const domain = email.split('@')[1] || 'gmail.com';
+
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
@@ -20,6 +23,8 @@ export function createTransporter(email, appPassword) {
     tls: {
       rejectUnauthorized: true,
     },
+    // Generate Message-IDs using the sender's domain for alignment
+    name: domain,
   });
 }
 
@@ -41,37 +46,22 @@ export async function testConnection(email, appPassword) {
 }
 
 /**
- * Wrap plain text body in a proper HTML email template
- * Proper HTML structure helps avoid spam filters
+ * Wrap HTML body in a minimal template that looks like a personal Gmail message.
+ * Avoid centered tables, 600px wrappers, and newsletter-style structure —
+ * those patterns are a strong spam signal for cold outreach.
  */
-function wrapInHtmlTemplate(htmlContent, senderName, senderEmail) {
+function wrapInHtmlTemplate(htmlContent) {
   return `<!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<html lang="en" dir="ltr" xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-  <title>Email</title>
 </head>
-<body style="margin:0;padding:0;background-color:#ffffff;font-family:Arial,Helvetica,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#ffffff;">
-    <tr>
-      <td align="center" style="padding:20px 0;">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
-          <tr>
-            <td style="padding:30px 40px;font-size:15px;line-height:1.6;color:#333333;">
-              ${htmlContent}
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:20px 40px;border-top:1px solid #eeeeee;font-size:12px;color:#999999;line-height:1.5;">
-              Sent by ${senderName} &lt;${senderEmail}&gt;
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
+<body style="margin:0;padding:0;">
+  <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#222222;">
+    ${htmlContent}
+  </div>
 </body>
 </html>`;
 }
@@ -86,13 +76,14 @@ export async function sendEmail(account, mailOptions) {
   try {
     const transporter = createTransporter(account.email, account.appPassword);
     const senderName = account.displayName || account.email.split('@')[0];
+    const domain = account.email.split('@')[1] || 'gmail.com';
 
-    // Wrap HTML content in a proper email template
-    const wrappedHtml = wrapInHtmlTemplate(
-      mailOptions.html,
-      senderName,
-      account.email
-    );
+    // Wrap HTML content in a minimal personal-style template
+    const wrappedHtml = wrapInHtmlTemplate(mailOptions.html);
+
+    // Generate a proper Message-ID using the sender's domain
+    // This aligns with DKIM/SPF and prevents nodemailer's random domain
+    const messageId = `<${crypto.randomUUID()}@${domain}>`;
 
     const info = await transporter.sendMail({
       from: `"${senderName}" <${account.email}>`,
@@ -101,11 +92,18 @@ export async function sendEmail(account, mailOptions) {
       html: wrappedHtml,
       text: mailOptions.text,
       replyTo: mailOptions.replyTo || account.email,
+      messageId,
+      // Envelope ensures the SMTP MAIL FROM matches the header From
+      // This is critical for SPF alignment
+      envelope: {
+        from: account.email,
+        to: mailOptions.to,
+      },
       headers: {
-        'X-Mailer': 'MailDistro/1.0',
-        'X-Priority': '3',
-        'Importance': 'normal',
-        'MIME-Version': '1.0',
+        // List-Unsubscribe is REQUIRED by Gmail for bulk senders (Feb 2024 policy)
+        // Using mailto: is the simplest approach that works with Gmail
+        'List-Unsubscribe': `<mailto:${account.email}?subject=unsubscribe>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
       },
     });
     transporter.close();

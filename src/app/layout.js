@@ -113,7 +113,7 @@ function Sidebar() {
         />
       )}
 
-      {/* Sidebar â desktop: fixed left, mobile: slide-over */}
+      {/* Sidebar — desktop: fixed left, mobile: slide-over */}
       <aside
         className={`
           fixed top-0 h-screen bg-[#0d0d14] border-r border-[#2a2a3a] z-50 flex flex-col transition-all duration-300
