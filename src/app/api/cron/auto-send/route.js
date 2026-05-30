@@ -19,7 +19,7 @@ import { verifyEmail } from '@/lib/email-verify';
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-const MAX_PER_ACCOUNT_PER_DAY = 30;
+const MAX_PER_ACCOUNT_PER_DAY = 12;
 const LEADS_KEY = 'leads';
 const DAILY_SEND_KEY = 'daily_sends';
 const LOCK_KEY = 'auto_send_lock';
@@ -82,8 +82,8 @@ async function isAccountReady(accountEmail) {
 }
 
 async function scheduleNextSend(accountEmail) {
-  // Random delay: 12 to 24 minutes from now (~30 sends in 9 hours with jitter)
-  const delayMinutes = 12 + Math.floor(Math.random() * 13);
+  // Random delay: 35 to 55 minutes from now (~12 sends in 9 hours with jitter)
+  const delayMinutes = 35 + Math.floor(Math.random() * 21);
   const nextTime = new Date(Date.now() + delayMinutes * 60 * 1000);
   try {
     await kv.hset(ACCOUNT_SCHEDULE_KEY, { [accountEmail]: nextTime.toISOString() });
@@ -236,6 +236,72 @@ async function getUnsent(limit = 75) {
   } catch {
     return [];
   }
+}
+
+/**
+ * Get leads due for follow-up emails (Day 3 or Day 7)
+ * - sent-d0 leads that were sent 3+ days ago → Day 3 follow-up
+ * - sent-d3 leads that were sent 3+ days after d3 (6+ days total) → Day 7 follow-up
+ * Excludes leads that have replied or bounced
+ */
+async function getFollowUpLeads(limit = 10) {
+  try {
+    const allLeads = await kv.hgetall(LEADS_KEY);
+    if (!allLeads) return [];
+
+    const now = Date.now();
+    const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
+    const followUps = [];
+
+    for (const lead of Object.values(allLeads)) {
+      if (!lead.email || !lead.sent_at) continue;
+      const status = (lead.status || '').toLowerCase();
+      const sentAt = new Date(lead.sent_at).getTime();
+      const daysSinceSent = now - sentAt;
+
+      // Day 3 follow-up: sent-d0, 3+ days ago, not replied/bounced
+      if (status === 'sent-d0' && daysSinceSent >= THREE_DAYS) {
+        followUps.push({ ...lead, nextSequenceDay: 3 });
+      }
+      // Day 7 follow-up: sent-d3, 3+ days after d3 send
+      else if (status === 'sent-d3') {
+        const d3SentAt = lead.d3_sent_at ? new Date(lead.d3_sent_at).getTime() : sentAt + THREE_DAYS;
+        if (now - d3SentAt >= THREE_DAYS) {
+          followUps.push({ ...lead, nextSequenceDay: 7 });
+        }
+      }
+    }
+
+    // Shuffle and limit
+    for (let i = followUps.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [followUps[i], followUps[j]] = [followUps[j], followUps[i]];
+    }
+
+    return followUps.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+async function markFollowUpSent(email, sequenceDay) {
+  try {
+    const existing = await kv.hget(LEADS_KEY, email.toLowerCase());
+    if (!existing) return;
+    const updated = {
+      ...existing,
+      status: `sent-d${sequenceDay}`,
+      sequence_day: sequenceDay,
+      [`d${sequenceDay}_sent_at`]: new Date().toISOString(),
+      send_count: (existing.send_count || 0) + 1,
+      updatedAt: new Date().toISOString(),
+    };
+    // Mark as completed after Day 7
+    if (sequenceDay === 7) {
+      updated.status = 'sequence_complete';
+    }
+    await kv.hset(LEADS_KEY, { [email.toLowerCase()]: updated });
+  } catch {}
 }
 
 async function markLeadAsSent(email, accountEmail, subject) {
@@ -532,8 +598,81 @@ export async function GET(request) {
         }
       }
 
-      if (results.sent > 0) {
-        try { await kv.hincrby('stats', 'totalSent', results.sent); } catch {}
+      // ============================================================
+      // FOLLOW-UP SENDING: Send Day 3 and Day 7 follow-ups
+      // Uses the SAME account that sent the original email
+      // ============================================================
+      const followUpLeads = await getFollowUpLeads(6);
+      let followUpsSent = 0;
+
+      for (const fuLead of followUpLeads) {
+        // Use the same account that sent the original
+        const originalAccount = accounts.find(a => a.email === fuLead.account_used);
+        if (!originalAccount) continue;
+
+        // Check daily limit for this account
+        const fuSent = await getDailySendCount(originalAccount.email);
+        if (fuSent >= MAX_PER_ACCOUNT_PER_DAY) continue;
+
+        const qualifiedLead = {
+          ...fuLead,
+          email: fuLead.email.toLowerCase().trim(),
+          industry: fuLead.industry || 'business',
+          company_name: fuLead.company || fuLead.company_name || 'your company',
+          city: fuLead.city || 'Sri Lanka',
+          first_name: fuLead.name?.split(/[\s,]/)[0] || fuLead.first_name || null,
+        };
+
+        const emailContent = getEmailForSequenceDay(qualifiedLead, fuLead.nextSequenceDay);
+        const cleanBody = stripPlainTextSignature(emailContent.body);
+
+        const htmlParagraphs = cleanBody
+          .split(/\n\n+/)
+          .filter(p => p.trim().length > 0)
+          .map(p => {
+            let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+            return `<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">${escaped}</p>`;
+          })
+          .join('\n');
+
+        const htmlSignature = `
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
+          Limethsith<br>
+          Aviance — AI Growth Systems<br>
+          071 870 2702 | <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
+        </div>`;
+
+        const htmlBody = htmlParagraphs + htmlSignature;
+
+        try {
+          const sendResult = await sendEmail(originalAccount, {
+            to: qualifiedLead.email,
+            subject: emailContent.subject,
+            html: htmlBody,
+            text: emailContent.body,
+          });
+
+          if (sendResult.success) {
+            followUpsSent++;
+            await incrementDailySend(originalAccount.email);
+            await markFollowUpSent(qualifiedLead.email, fuLead.nextSequenceDay);
+            try {
+              await logSentEmail({
+                to: qualifiedLead.email, from: originalAccount.email,
+                company: qualifiedLead.company_name, industry: qualifiedLead.industry,
+                subject: emailContent.subject, bodyPreview: emailContent.body.substring(0, 200),
+                status: 'sent', sequenceDay: fuLead.nextSequenceDay,
+                source: `follow-up-d${fuLead.nextSequenceDay}`,
+              });
+            } catch {}
+            results.details.push({ to: qualifiedLead.email, from: originalAccount.email, status: 'follow-up-sent', day: fuLead.nextSequenceDay });
+            await new Promise(r => setTimeout(r, randomDelay(5000, 15000)));
+          }
+        } catch {}
+      }
+
+      if (results.sent + followUpsSent > 0) {
+        try { await kv.hincrby('stats', 'totalSent', results.sent + followUpsSent); } catch {}
       }
 
       await releaseLock();
@@ -543,6 +682,7 @@ export async function GET(request) {
         timestamp: new Date().toISOString(),
         today: getTodayKey(),
         ...results,
+        followUpsSent,
         accountStatus,
         scheduleStatus,
       });
