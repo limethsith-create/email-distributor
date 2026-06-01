@@ -69,7 +69,7 @@ function wrapInHtmlTemplate(htmlContent) {
 /**
  * Send a single email with deliverability-optimized headers
  * @param {object} account - { email, appPassword, displayName }
- * @param {object} mailOptions - { to, subject, html, text, replyTo }
+ * @param {object} mailOptions - { to, subject, html, text, replyTo, inReplyTo, references }
  * @returns {Promise<{success: boolean, messageId?: string, error?: string}>}
  */
 export async function sendEmail(account, mailOptions) {
@@ -99,6 +99,10 @@ export async function sendEmail(account, mailOptions) {
         from: account.email,
         to: mailOptions.to,
       },
+      // Threading headers — when provided, these tell email clients to
+      // group the follow-up in the same conversation as the original
+      ...(mailOptions.inReplyTo ? { inReplyTo: mailOptions.inReplyTo } : {}),
+      ...(mailOptions.references ? { references: mailOptions.references } : {}),
       headers: {
         // List-Unsubscribe is REQUIRED by Gmail for bulk senders (Feb 2024 policy)
         // Using mailto: is the simplest approach that works with Gmail

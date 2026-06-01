@@ -23,7 +23,7 @@ const MAX_PER_ACCOUNT_PER_DAY = 12;
 const LEADS_KEY = 'leads';
 const DAILY_SEND_KEY = 'daily_sends';
 const LOCK_KEY = 'auto_send_lock';
-const LOCK_TTL_SECONDS = 120; // 2 minute lock
+const LOCK_TTL_SECONDS = 300; // 5 minute lock — matches maxDuration
 const COMPANY_SENT_KEY = 'company_sent';
 
 function isGenericEmail(email) {
@@ -91,8 +91,8 @@ async function scheduleNextSend(accountEmail) {
 }
 
 /**
- * Business hours check — only send 9 AM to 6 PM Sri Lanka time (UTC+5:30)
- * This gives a 9-hour window to fit 30 emails per account.
+ * Business hours check — only send 7 AM to 11 PM Sri Lanka time (UTC+5:30)
+ * This gives a 16-hour window to fit sends per account.
  */
 function isWithinSendingHours() {
   const now = new Date();
@@ -101,7 +101,7 @@ function isWithinSendingHours() {
   const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
   const slMinutes = (utcMinutes + sriLankaOffset) % (24 * 60);
   const slHour = Math.floor(slMinutes / 60);
-  return slHour >= 9 && slHour < 18; // 9 AM to 6 PM
+  return slHour >= 7 && slHour < 23; // 7 AM to 11 PM
 }
 
 async function getAccountScheduleStatus(accounts) {
@@ -139,7 +139,9 @@ function getGmailAccounts() {
 }
 
 function getTodayKey() {
-  return new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const slTime = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
+  return slTime.toISOString().split('T')[0];
 }
 
 function randomDelay(min = 3000, max = 15000) {
@@ -284,7 +286,7 @@ async function getFollowUpLeads(limit = 10) {
   }
 }
 
-async function markFollowUpSent(email, sequenceDay) {
+async function markFollowUpSent(email, sequenceDay, messageId) {
   try {
     const existing = await kv.hget(LEADS_KEY, email.toLowerCase());
     if (!existing) return;
@@ -293,6 +295,7 @@ async function markFollowUpSent(email, sequenceDay) {
       status: `sent-d${sequenceDay}`,
       sequence_day: sequenceDay,
       [`d${sequenceDay}_sent_at`]: new Date().toISOString(),
+      [`d${sequenceDay}_message_id`]: messageId || null,
       send_count: (existing.send_count || 0) + 1,
       updatedAt: new Date().toISOString(),
     };
@@ -304,7 +307,7 @@ async function markFollowUpSent(email, sequenceDay) {
   } catch {}
 }
 
-async function markLeadAsSent(email, accountEmail, subject) {
+async function markLeadAsSent(email, accountEmail, subject, messageId) {
   try {
     const existing = await kv.hget(LEADS_KEY, email.toLowerCase());
     const updated = {
@@ -315,6 +318,8 @@ async function markLeadAsSent(email, accountEmail, subject) {
       sent_at: new Date().toISOString(),
       send_count: (existing?.send_count || 0) + 1,
       sequence_day: 0,
+      original_subject: subject,
+      original_message_id: messageId || null,
       updatedAt: new Date().toISOString(),
     };
     await kv.hset(LEADS_KEY, { [email.toLowerCase()]: updated });
@@ -358,11 +363,11 @@ export async function GET(request) {
     }
   }
 
-  // Business hours check — only send 9 AM to 6 PM Sri Lanka time
+  // Business hours check — only send 7 AM to 11 PM Sri Lanka time
   if (!isWithinSendingHours()) {
     return Response.json({
       success: true,
-      message: 'Outside sending hours (9 AM - 6 PM Sri Lanka time)',
+      message: 'Outside sending hours (7 AM - 11 PM Sri Lanka time)',
       timestamp: new Date().toISOString(),
       sent: 0,
     });
@@ -559,7 +564,7 @@ export async function GET(request) {
               sentFromThisAccount = true;
 
               await incrementDailySend(account.email);
-              await markLeadAsSent(qualifiedLead.email, account.email, emailContent.subject);
+              await markLeadAsSent(qualifiedLead.email, account.email, emailContent.subject, sendResult.messageId);
               await markCompanySent(qualifiedLead.company_name);
               await scheduleNextSend(account.email);
 
@@ -644,24 +649,44 @@ export async function GET(request) {
 
         const htmlBody = htmlParagraphs + htmlSignature;
 
+        // Build threading headers from the stored original messageId
+        // For Day 3: reference the original (d0) messageId
+        // For Day 7: reference the original + d3 messageId for full thread chain
+        const threadingHeaders = {};
+        const originalMsgId = fuLead.original_message_id;
+        if (originalMsgId) {
+          if (fuLead.nextSequenceDay === 3) {
+            threadingHeaders.inReplyTo = originalMsgId;
+            threadingHeaders.references = originalMsgId;
+          } else if (fuLead.nextSequenceDay === 7) {
+            const d3MsgId = fuLead.d3_message_id;
+            threadingHeaders.inReplyTo = d3MsgId || originalMsgId;
+            threadingHeaders.references = d3MsgId
+              ? `${originalMsgId} ${d3MsgId}`
+              : originalMsgId;
+          }
+        }
+
         try {
           const sendResult = await sendEmail(originalAccount, {
             to: qualifiedLead.email,
             subject: emailContent.subject,
             html: htmlBody,
             text: emailContent.body,
+            ...threadingHeaders,
           });
 
           if (sendResult.success) {
             followUpsSent++;
             await incrementDailySend(originalAccount.email);
-            await markFollowUpSent(qualifiedLead.email, fuLead.nextSequenceDay);
+            await markFollowUpSent(qualifiedLead.email, fuLead.nextSequenceDay, sendResult.messageId);
             try {
               await logSentEmail({
                 to: qualifiedLead.email, from: originalAccount.email,
                 company: qualifiedLead.company_name, industry: qualifiedLead.industry,
                 subject: emailContent.subject, bodyPreview: emailContent.body.substring(0, 200),
-                status: 'sent', sequenceDay: fuLead.nextSequenceDay,
+                status: 'sent', messageId: sendResult.messageId,
+                sequenceDay: fuLead.nextSequenceDay,
                 source: `follow-up-d${fuLead.nextSequenceDay}`,
               });
             } catch {}
@@ -671,9 +696,7 @@ export async function GET(request) {
         } catch {}
       }
 
-      if (results.sent + followUpsSent > 0) {
-        try { await kv.hincrby('stats', 'totalSent', results.sent + followUpsSent); } catch {}
-      }
+      // NOTE: totalSent is already incremented by logSentEmail() — no hincrby here
 
       await releaseLock();
       return Response.json({
@@ -822,7 +845,7 @@ export async function GET(request) {
           accStat.remaining--;
           accStat.sentToday++;
           await incrementDailySend(account.email);
-          await markLeadAsSent(qualifiedLead.email, account.email, emailContent.subject);
+          await markLeadAsSent(qualifiedLead.email, account.email, emailContent.subject, sendResult.messageId);
           await markCompanySent(qualifiedLead.company_name);
           try {
             await logSentEmail({
@@ -857,9 +880,7 @@ export async function GET(request) {
       }
     }
 
-    if (results.sent > 0) {
-      try { await kv.hincrby('stats', 'totalSent', results.sent); } catch {}
-    }
+    // NOTE: totalSent is already incremented by logSentEmail() — no hincrby here
 
     await releaseLock();
     return Response.json({
