@@ -1,12 +1,14 @@
 /**
  * Server-side accounts endpoint
- * Returns pre-configured Gmail accounts from environment variables
- * Accounts are stored as GMAIL_ACCOUNT_1, GMAIL_ACCOUNT_2, etc.
- * Format: email:appPassword:displayName
+ * Returns configured SMTP accounts from environment variables.
+ * Supports both SMTP_ACCOUNT_* (new) and GMAIL_ACCOUNT_* (legacy) formats.
+ * Format: email:password:displayName
  *
  * Auth: Requires CRON_SECRET token (Bearer header or ?token= param)
  * Passwords are never included in the response.
  */
+
+import { getSmtpAccounts } from '@/lib/smtp-accounts';
 
 export async function GET(request) {
   // Auth check — require CRON_SECRET (same pattern as /api/cron/auto-send)
@@ -22,28 +24,15 @@ export async function GET(request) {
   }
 
   try {
-    const accounts = [];
-
-    // Load accounts from environment variables
-    for (let i = 1; i <= 10; i++) {
-      const envVar = process.env[`GMAIL_ACCOUNT_${i}`];
-      if (!envVar) continue;
-
-      const parts = envVar.split(':');
-      if (parts.length < 2) continue;
-
-      const email = parts[0];
-      const displayName = parts[2] || email.split('@')[0];
-
-      accounts.push({
-        id: `server-${i}`,
-        email,
-        displayName,
-        addedAt: new Date().toISOString(),
-        status: 'verified',
-        source: 'server',
-      });
-    }
+    const rawAccounts = getSmtpAccounts();
+    const accounts = rawAccounts.map((acc, i) => ({
+      id: `server-${i + 1}`,
+      email: acc.email,
+      displayName: acc.displayName,
+      addedAt: new Date().toISOString(),
+      status: 'verified',
+      source: 'server',
+    }));
 
     return Response.json({ success: true, accounts });
   } catch (error) {

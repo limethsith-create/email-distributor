@@ -12,7 +12,7 @@ export default function AccountsPage() {
   const [activeAccount, setActiveAccount] = useState(null);
   const [expandedEmail, setExpandedEmail] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ email: '', appPassword: '', displayName: '' });
+  const [form, setForm] = useState({ email: '', password: '', displayName: '' });
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState(null);
   const [toast, setToast] = useState(null);
@@ -99,8 +99,8 @@ export default function AccountsPage() {
   };
 
   const handleTestConnection = async () => {
-    if (!form.email || !form.appPassword) {
-      showToast('Please fill in email and app password', 'error');
+    if (!form.email || !form.password) {
+      showToast('Please fill in email and password', 'error');
       return;
     }
     setTesting(true);
@@ -109,7 +109,7 @@ export default function AccountsPage() {
       const res = await fetch('/api/test-connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: form.email, appPassword: form.appPassword }),
+        body: JSON.stringify({ email: form.email, appPassword: form.password }),
       });
       const data = await res.json();
       setTestResult(data);
@@ -122,11 +122,11 @@ export default function AccountsPage() {
   };
 
   const handleAddAccount = () => {
-    if (!form.email || !form.appPassword) {
-      showToast('Please fill in email and app password', 'error');
+    if (!form.email || !form.password) {
+      showToast('Please fill in email and password', 'error');
       return;
     }
-    showToast('To add a permanent account, set GMAIL_ACCOUNT_X in Vercel env vars (format: email:appPassword:displayName)', 'info');
+    showToast('To add a permanent account, set SMTP_ACCOUNT_X in Vercel env vars (format: email:password:displayName)', 'info');
     setShowForm(false);
   };
 
@@ -171,28 +171,28 @@ export default function AccountsPage() {
       {/* Add Account Info */}
       {showForm && (
         <div className="mb-4 md:mb-6 p-4 md:p-5 bg-[#12121a] border border-[#2a2a3a] rounded-xl animate-fade-in">
-          <h3 className="text-sm font-semibold text-white mb-3">Connect New Gmail Account</h3>
+          <h3 className="text-sm font-semibold text-white mb-3">Connect SMTP Email Account</h3>
           <div className="mb-4 p-3 md:p-4 bg-[#5c7cfa]/5 border border-[#5c7cfa]/20 rounded-lg">
             <p className="text-[10px] md:text-xs text-[#91a7ff] leading-relaxed">
-              <strong>How to get a Gmail App Password:</strong><br />
-              1. Go to your Google Account &rarr; Security<br />
-              2. Enable 2-Step Verification<br />
-              3. Go to <span className="font-mono bg-[#1a1a25] px-1 rounded text-[9px] md:text-[11px]">myaccount.google.com/apppasswords</span><br />
-              4. Generate a new App Password for &quot;Mail&quot;<br />
-              5. Copy the 16-character password
+              <strong>Namecheap Private Email Setup:</strong><br />
+              1. Log in to Namecheap &rarr; Domain List &rarr; Manage<br />
+              2. Go to Private Email tab<br />
+              3. Create a mailbox (e.g. info@aviance.store)<br />
+              4. Use the mailbox password below<br />
+              5. SMTP: mail.privateemail.com:465 (pre-configured)
             </p>
           </div>
           <div className="space-y-3">
             <div>
-              <label className="block text-xs text-[#6b7280] mb-1">Gmail Address *</label>
+              <label className="block text-xs text-[#6b7280] mb-1">Email Address *</label>
               <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})}
-                placeholder="youremail@gmail.com"
+                placeholder="info@aviance.store"
                 className="w-full px-3 py-2.5 bg-[#0a0a0f] border border-[#2a2a3a] rounded-lg text-sm text-white placeholder-[#4a4a5a] focus:border-[#5c7cfa] focus:outline-none" />
             </div>
             <div>
-              <label className="block text-xs text-[#6b7280] mb-1">App Password *</label>
-              <input type="password" value={form.appPassword} onChange={e => setForm({...form, appPassword: e.target.value})}
-                placeholder="xxxx xxxx xxxx xxxx"
+              <label className="block text-xs text-[#6b7280] mb-1">SMTP Password *</label>
+              <input type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})}
+                placeholder="Your mailbox password"
                 className="w-full px-3 py-2.5 bg-[#0a0a0f] border border-[#2a2a3a] rounded-lg text-sm text-white placeholder-[#4a4a5a] focus:border-[#5c7cfa] focus:outline-none font-mono" />
             </div>
             {testResult && (
@@ -403,9 +403,9 @@ export default function AccountsPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
           </div>
-          <p className="text-[#6b7280] text-sm mb-4">No Gmail accounts configured yet.</p>
+          <p className="text-[#6b7280] text-sm mb-4">No email accounts configured yet.</p>
           <p className="text-[#4b5563] text-xs">
-            Add accounts via Vercel environment variables (GMAIL_ACCOUNT_1, GMAIL_ACCOUNT_2, etc.)
+            Add accounts via Vercel environment variables (SMTP_ACCOUNT_1, SMTP_ACCOUNT_2, etc.)
           </p>
         </div>
       )}

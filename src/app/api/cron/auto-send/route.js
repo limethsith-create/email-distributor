@@ -15,6 +15,7 @@ import { sendEmail } from '@/lib/mailer';
 import { getEmailForSequenceDay } from '@/lib/personalize';
 import { logSentEmail } from '@/lib/leads-db';
 import { verifyEmail } from '@/lib/email-verify';
+import { getSmtpAccounts } from '@/lib/smtp-accounts';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -121,22 +122,8 @@ async function getAccountScheduleStatus(accounts) {
   return status;
 }
 
-function getGmailAccounts() {
-  const accounts = [];
-  for (let i = 1; i <= 10; i++) {
-    const envVar = process.env[`GMAIL_ACCOUNT_${i}`];
-    if (!envVar) continue;
-    const parts = envVar.split(':');
-    if (parts.length >= 2) {
-      accounts.push({
-        email: parts[0],
-        appPassword: parts[1],
-        displayName: parts[2] || parts[0].split('@')[0],
-      });
-    }
-  }
-  return accounts;
-}
+// Account loading delegated to shared smtp-accounts lib
+const getAccounts = getSmtpAccounts;
 
 function getTodayKey() {
   const now = new Date();
@@ -385,10 +372,10 @@ export async function GET(request) {
   }
 
   try {
-    const accounts = getGmailAccounts();
+    const accounts = getAccounts();
     if (!accounts.length) {
       await releaseLock();
-      return Response.json({ error: 'No Gmail accounts configured' }, { status: 500 });
+      return Response.json({ error: 'No SMTP accounts configured' }, { status: 500 });
     }
 
     const { searchParams: params } = new URL(request.url);

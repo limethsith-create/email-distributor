@@ -207,7 +207,7 @@ export default function RootLayout({ children }) {
     <html lang="en">
       <head>
         <title>MailDistro - Email Distribution System</title>
-        <meta name="description" content="Multi-account Gmail email distribution system" />
+        <meta name="description" content="Multi-account email distribution system" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </head>
       <body className="antialiased">

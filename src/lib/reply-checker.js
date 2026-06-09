@@ -1,48 +1,28 @@
 /**
  * IMAP Reply Checker — Aviance MailDistro
  *
- * Connects to each Gmail account via IMAP, checks for replies
+ * Connects to each SMTP account via IMAP, checks for replies
  * to outreach emails, and updates lead status in Vercel KV.
  *
- * Gmail IMAP settings:
- * - Host: imap.gmail.com
+ * IMAP settings (configurable via env):
+ * - Host: IMAP_HOST (default: mail.privateemail.com)
  * - Port: 993
  * - SSL: true
- * - Auth: email + App Password (same one used for SMTP)
- *
- * Must enable IMAP in Gmail settings:
- * Gmail → Settings → See all settings → Forwarding and POP/IMAP → Enable IMAP
+ * - Auth: email + password (same one used for SMTP)
  */
 
 import { ImapFlow } from 'imapflow';
 import { kv } from '@vercel/kv';
+import { getSmtpAccounts } from '@/lib/smtp-accounts';
 
 const LEADS_KEY = 'leads';
 const REPLIES_KEY = 'replies'; // Hash: email -> { reply details }
 const LAST_CHECK_KEY = 'reply_last_check'; // Hash: account -> ISO timestamp
 
-/**
- * Get Gmail accounts from env vars (same as auto-send)
- */
-function getGmailAccounts() {
-  const accounts = [];
-  for (let i = 1; i <= 10; i++) {
-    const envVar = process.env[`GMAIL_ACCOUNT_${i}`];
-    if (!envVar) continue;
-    const parts = envVar.split(':');
-    if (parts.length >= 2) {
-      accounts.push({
-        email: parts[0],
-        appPassword: parts[1],
-        displayName: parts[2] || parts[0].split('@')[0],
-      });
-    }
-  }
-  return accounts;
-}
+const IMAP_HOST = process.env.IMAP_HOST || 'mail.privateemail.com';
 
 /**
- * Connect to a Gmail IMAP account and fetch recent replies
+ * Connect to an IMAP account and fetch recent replies
  */
 async function checkRepliesForAccount(account) {
   const results = { replies: [], errors: [] };
@@ -50,7 +30,7 @@ async function checkRepliesForAccount(account) {
   let client;
   try {
     client = new ImapFlow({
-      host: 'imap.gmail.com',
+      host: IMAP_HOST,
       port: 993,
       secure: true,
       auth: {
@@ -201,9 +181,9 @@ async function matchAndUpdateLead(reply) {
  * This is the main function called by the API endpoint
  */
 export async function checkAllReplies() {
-  const accounts = getGmailAccounts();
+  const accounts = getSmtpAccounts();
   if (!accounts.length) {
-    return { error: 'No Gmail accounts configured', checked: 0 };
+    return { error: 'No SMTP accounts configured', checked: 0 };
   }
 
   const summary = {

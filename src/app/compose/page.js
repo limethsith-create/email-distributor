@@ -346,7 +346,7 @@ export default function ComposePage() {
               </select>
             </div>
             <p className="text-xs text-[#4a4a5a] mt-2">
-              Longer delays help avoid Gmail rate limits. Emails are distributed round-robin across your selected accounts.
+              Longer delays help avoid rate limits. Emails are distributed round-robin across your selected accounts.
             </p>
           </div>
         </div>

@@ -12,6 +12,7 @@
 
 import { ImapFlow } from 'imapflow';
 import { kv } from '@vercel/kv';
+import { getSmtpAccounts } from '@/lib/smtp-accounts';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -19,6 +20,8 @@ export const dynamic = 'force-dynamic';
 const LEADS_KEY = 'leads';
 const BOUNCES_KEY = 'bounces'; // Hash: email -> { bounce details }
 const LAST_CHECK_KEY = 'bounce_last_check'; // Hash: account -> ISO timestamp
+
+const IMAP_HOST = process.env.IMAP_HOST || 'mail.privateemail.com';
 
 /**
  * Sender addresses that indicate a bounce message
@@ -43,23 +46,10 @@ const BOUNCE_SUBJECT_PATTERNS = [
 ];
 
 /**
- * Get Gmail accounts from env vars (same pattern as reply-checker)
+ * Get SMTP accounts from env vars (shared loader)
  */
-function getGmailAccounts() {
-  const accounts = [];
-  for (let i = 1; i <= 10; i++) {
-    const envVar = process.env[`GMAIL_ACCOUNT_${i}`];
-    if (!envVar) continue;
-    const parts = envVar.split(':');
-    if (parts.length >= 2) {
-      accounts.push({
-        email: parts[0],
-        appPassword: parts[1],
-        displayName: parts[2] || parts[0].split('@')[0],
-      });
-    }
-  }
-  return accounts;
+function getAccounts() {
+  return getSmtpAccounts();
 }
 
 /**
@@ -159,7 +149,7 @@ function extractBounceReason(bodyText) {
 }
 
 /**
- * Connect to a Gmail IMAP account and check for bounce messages
+ * Connect to an IMAP account and check for bounce messages
  */
 async function checkBouncesForAccount(account) {
   const results = { bounces: [], errors: [] };
@@ -167,7 +157,7 @@ async function checkBouncesForAccount(account) {
   let client;
   try {
     client = new ImapFlow({
-      host: 'imap.gmail.com',
+      host: IMAP_HOST,
       port: 993,
       secure: true,
       auth: {
@@ -309,9 +299,9 @@ async function processDetectedBounce(bounce) {
  * Main: check all accounts for bounces and update KV
  */
 async function checkAllBounces() {
-  const accounts = getGmailAccounts();
+  const accounts = getAccounts();
   if (!accounts.length) {
-    return { error: 'No Gmail accounts configured', checked: 0 };
+    return { error: 'No SMTP accounts configured', checked: 0 };
   }
 
   const summary = {

@@ -1,7 +1,7 @@
 /**
  * Direct Outreach Blast — All-in-one endpoint
  * Accepts leads, personalizes emails, and sends immediately.
- * Distributes across Gmail accounts round-robin with random delays.
+ * Distributes across SMTP accounts round-robin with random delays.
  * Logs every send to Vercel KV for dashboard visibility.
  *
  * POST body:
@@ -16,26 +16,10 @@
 import { sendEmail } from '@/lib/mailer';
 import { getEmailForSequenceDay } from '@/lib/personalize';
 import { upsertLead, logSentEmail } from '@/lib/leads-db';
+import { getSmtpAccounts } from '@/lib/smtp-accounts';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
-
-function getGmailAccounts() {
-  const accounts = [];
-  for (let i = 1; i <= 10; i++) {
-    const envVar = process.env[`GMAIL_ACCOUNT_${i}`];
-    if (!envVar) continue;
-    const parts = envVar.split(':');
-    if (parts.length >= 2) {
-      accounts.push({
-        email: parts[0],
-        appPassword: parts[1],
-        displayName: parts[2] || parts[0].split('@')[0],
-      });
-    }
-  }
-  return accounts;
-}
 
 function randomDelay() {
   return 2000 + Math.random() * 6000;
@@ -65,9 +49,9 @@ async function processBlast(body) {
     return Response.json({ error: 'No leads provided' }, { status: 400 });
   }
 
-  const accounts = getGmailAccounts();
+  const accounts = getSmtpAccounts();
   if (!accounts.length) {
-    return Response.json({ error: 'No Gmail accounts configured. Set GMAIL_ACCOUNT_1 through GMAIL_ACCOUNT_5 env vars.' }, { status: 500 });
+    return Response.json({ error: 'No SMTP accounts configured. Set SMTP_ACCOUNT_1 env var (format: email:password:displayName).' }, { status: 500 });
   }
 
   const results = { sent: 0, failed: 0, total: leads.length, details: [] };

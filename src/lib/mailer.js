@@ -2,22 +2,29 @@ import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 
 /**
- * Create a Nodemailer transporter for a Gmail account
+ * SMTP configuration — defaults to Namecheap Private Email.
+ * Override via SMTP_HOST / SMTP_PORT env vars for other providers.
+ */
+const SMTP_HOST = process.env.SMTP_HOST || 'mail.privateemail.com';
+const SMTP_PORT = parseInt(process.env.SMTP_PORT || '465');
+
+/**
+ * Create a Nodemailer transporter for any SMTP account
  * Optimized for serverless (no connection pooling)
- * @param {string} email - Gmail address
- * @param {string} appPassword - Gmail App Password (16 chars)
+ * @param {string} email - Email address (used as SMTP user)
+ * @param {string} password - SMTP password
  * @returns {nodemailer.Transporter}
  */
-export function createTransporter(email, appPassword) {
-  const domain = email.split('@')[1] || 'gmail.com';
+export function createTransporter(email, password) {
+  const domain = email.split('@')[1] || 'aviance.store';
 
   return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465,
     auth: {
       user: email,
-      pass: appPassword,
+      pass: password,
     },
     // No pooling - better for serverless environments like Vercel
     tls: {
@@ -29,14 +36,14 @@ export function createTransporter(email, appPassword) {
 }
 
 /**
- * Test a Gmail connection
+ * Test an SMTP connection
  * @param {string} email
- * @param {string} appPassword
+ * @param {string} password
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function testConnection(email, appPassword) {
+export async function testConnection(email, password) {
   try {
-    const transporter = createTransporter(email, appPassword);
+    const transporter = createTransporter(email, password);
     await transporter.verify();
     transporter.close();
     return { success: true };
@@ -74,9 +81,9 @@ function wrapInHtmlTemplate(htmlContent) {
  */
 export async function sendEmail(account, mailOptions) {
   try {
-    const transporter = createTransporter(account.email, account.appPassword);
+    const transporter = createTransporter(account.email, account.appPassword || account.password);
     const senderName = account.displayName || account.email.split('@')[0];
-    const domain = account.email.split('@')[1] || 'gmail.com';
+    const domain = account.email.split('@')[1] || 'aviance.store';
 
     // Wrap HTML content in a minimal personal-style template
     const wrappedHtml = wrapInHtmlTemplate(mailOptions.html);
