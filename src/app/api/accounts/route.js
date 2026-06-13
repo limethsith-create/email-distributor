@@ -1,10 +1,8 @@
 /**
  * Server-side accounts endpoint
  * Returns configured SMTP accounts from environment variables.
- * Supports both SMTP_ACCOUNT_* (new) and GMAIL_ACCOUNT_* (legacy) formats.
  * Format: email:password:displayName
  *
- * Auth: Requires CRON_SECRET token (Bearer header or ?token= param)
  * Passwords are never included in the response.
  */
 

@@ -3,7 +3,6 @@
  *
  * POST body:
  * {
- *   accounts: [{ id, email, ... }],
  *   recipients: [{ email, name?, company? }],
  *   subject: string,
  *   body: string,
@@ -37,7 +36,6 @@ export async function POST(request) {
         const recipient = recipients[i];
         const account = smtpAccounts[i % smtpAccounts.length];
 
-        // Personalize subject and body
         const personalizedSubject = personalizeText(subject, recipient);
         const personalizedBody = personalizeText(emailBody, recipient);
 
@@ -77,17 +75,14 @@ export async function POST(request) {
           };
         }
 
-        // Send progress event
         const progressEvent = `data: ${JSON.stringify({ type: 'progress', current: i + 1, total: recipients.length, result })}\n\n`;
         controller.enqueue(encoder.encode(progressEvent));
 
-        // Delay between sends (except after the last one)
         if (i < recipients.length - 1 && delayMs > 0) {
           await new Promise(r => setTimeout(r, delayMs));
         }
       }
 
-      // Send complete event
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'complete' })}\n\n`));
       controller.close();
     },
