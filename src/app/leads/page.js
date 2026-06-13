@@ -1,387 +1,151 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
+import { useState, useEffect, useRef } from 'react';
+
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return [];
+  const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
+  return lines.slice(1).map((line) => {
+    const cells = line.split(',');
+    const row = {};
+    headers.forEach((h, i) => { row[h] = (cells[i] || '').trim(); });
+    return row;
+  });
+}
 
 export default function LeadsPage() {
-  const [stats, setStats] = useState(null);
   const [leads, setLeads] = useState([]);
-  const [sentLog, setSentLog] = useState([]);
-  const [replies, setReplies] = useState([]);
-  const [statusFilter, setStatusFilter] = useState('');
-  const [activeTab, setActiveTab] = useState('leads'); // 'leads', 'sent', 'replies'
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [expandedRow, setExpandedRow] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [toast, setToast] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
 
-  const fetchData = useCallback(async () => {
+  const showToast = (msg, type = 'info') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
+
+  const load = () => {
+    Promise.all([
+      fetch('/api/leads?action=list&limit=50').then((r) => r.json()).catch(() => ({ leads: [] })),
+      fetch('/api/leads?action=stats').then((r) => r.json()).catch(() => null),
+    ]).then(([list, st]) => { setLeads(list.leads || []); setStats(st); setLoading(false); });
+  };
+  useEffect(load, []);
+
+  const onFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
     try {
-      const [statsRes, leadsRes, logRes, repliesRes] = await Promise.all([
-        fetch('/api/leads?action=stats'),
-        fetch(`/api/leads?action=list&limit=500${statusFilter ? `&status=${statusFilter}` : ''}`),
-        fetch('/api/leads?action=sent_log&limit=500'),
-        fetch('/api/replies').catch(() => ({ json: () => ({ replies: [] }) })),
-      ]);
-
-      setStats(await statsRes.json());
-      const leadsData = await leadsRes.json();
-      setLeads(leadsData.leads || []);
-      const logData = await logRes.json();
-      setSentLog(logData.log || []);
-      const repliesData = await repliesRes.json();
-      setReplies(repliesData.replies || []);
-    } catch (err) {
-      console.error('Fetch error:', err);
-    }
-    setLoading(false);
-  }, [statusFilter]);
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 15000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
-
-  const statusColors = {
-    new: 'bg-gray-700 text-gray-300',
-    pending: 'bg-gray-700 text-gray-300',
-    qualified: 'bg-blue-900/50 text-blue-400',
-    'sent-d0': 'bg-green-900/50 text-green-400',
-    'sent-d3': 'bg-green-800/50 text-green-300',
-    'sent-d7-complete': 'bg-emerald-900/50 text-emerald-400',
-    replied: 'bg-purple-900/50 text-purple-400',
-    unsubscribed: 'bg-red-900/50 text-red-400',
-    bounced: 'bg-orange-900/50 text-orange-400',
-    skipped: 'bg-gray-800 text-gray-500',
+      const text = await file.text();
+      const rows = parseCSV(text);
+      const mapped = rows
+        .map((r) => ({
+          email: r.email || r['email address'] || '',
+          company: r.company || r.company_name || r.organization || '',
+          name: r.name || r.first_name || r.contact || '',
+          industry: r.industry || r.sector || '',
+        }))
+        .filter((r) => r.email.includes('@'));
+      if (!mapped.length) { showToast('No valid emails found. Need an "email" column.', 'error'); setUploading(false); return; }
+      const res = await fetch('/api/leads/bulk', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leads: mapped }),
+      });
+      const data = await res.json();
+      if (res.ok) { showToast(`Added ${data.added ?? mapped.length} leads${data.skipped ? `, skipped ${data.skipped}` : ''}.`, 'success'); load(); }
+      else showToast(data.error || 'Upload failed', 'error');
+    } catch (err) { showToast('Could not read file', 'error'); }
+    setUploading(false);
+    if (fileRef.current) fileRef.current.value = '';
   };
 
-  const statusLabels = {
-    new: 'New',
-    pending: 'Pending',
-    qualified: 'Qualified',
-    'sent-d0': 'Sent (Day 0)',
-    'sent-d3': 'Sent (Day 3)',
-    'sent-d7-complete': 'Sequence Done',
-    replied: 'Replied',
-    unsubscribed: 'Unsubscribed',
-    bounced: 'Bounced',
+  const statusBadge = (s) => {
+    const map = {
+      sent: 'badge-success', sending: 'badge-warning', replied: 'badge-accent',
+      bounced: 'badge-warning', pending: 'badge-muted',
+    };
+    return <span className={`badge ${map[s] || 'badge-muted'}`}>{s || 'pending'}</span>;
   };
-
-  // Per-account stats from sent log
-  const accountStats = {};
-  sentLog.forEach(entry => {
-    if (!entry.from) return;
-    if (!accountStats[entry.from]) accountStats[entry.from] = { sent: 0, failed: 0 };
-    if (entry.status === 'sent') accountStats[entry.from].sent++;
-    else accountStats[entry.from].failed++;
-  });
-
-  // Count leads by status
-  const statusCounts = {};
-  leads.forEach(l => {
-    const s = l.status || 'pending';
-    statusCounts[s] = (statusCounts[s] || 0) + 1;
-  });
-
-  // Filter leads by search term
-  const filteredLeads = leads.filter(l => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      (l.email || '').toLowerCase().includes(term) ||
-      (l.company_name || '').toLowerCase().includes(term) ||
-      (l.industry || '').toLowerCase().includes(term) ||
-      (l.city || '').toLowerCase().includes(term)
-    );
-  });
-
-  if (loading) {
-    return (
-      <div className="max-w-7xl animate-fade-in p-8">
-        <div className="text-[#6b7280] text-sm">Loading outreach dashboard...</div>
-      </div>
-    );
-  }
 
   return (
-    <div className="max-w-7xl animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="space-y-7">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-white">Outreach Dashboard</h1>
-          <p className="text-[#6b7280] text-sm mt-1">Live lead pipeline & email activity</p>
+          <h1 className="text-[22px] font-semibold tracking-tight">Leads</h1>
+          <p className="text-[14px] mt-0.5" style={{ color: 'var(--fg-muted)' }}>
+            Upload recipients and track who&apos;s been emailed.
+          </p>
         </div>
-        <Link href="/" className="px-4 py-2 bg-[#1a1a25] border border-[#2a2a3a] rounded-lg text-sm text-[#6b7280] hover:text-white transition">
-          Back to Home
-        </Link>
+        <button className="btn btn-primary" disabled={uploading} onClick={() => fileRef.current?.click()}>
+          {uploading ? 'Uploading…' : 'Upload CSV'}
+        </button>
+        <input ref={fileRef} type="file" accept=".csv" hidden onChange={onFile} />
       </div>
 
-      {/* Stats Row */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
-          <MiniStat label="Total Leads" value={stats.totalLeads} color="#5c7cfa" />
-          <MiniStat label="Pending" value={statusCounts['pending'] || statusCounts['new'] || 0} color="#6b7280" />
-          <MiniStat label="Sent" value={stats.totalSent} color="#40c057" />
-          <MiniStat label="Failed" value={stats.totalFailed} color="#fa5252" />
-          <MiniStat label="Replied" value={replies.length || stats.replied || 0} color="#be4bdb" />
-          <MiniStat label="Accounts" value={Object.keys(accountStats).length || 0} color="#fab005" />
-        </div>
-      )}
-
-      {/* Account Breakdown */}
-      <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl p-4 mb-6">
-        <h3 className="text-xs font-semibold text-[#6b7280] uppercase tracking-wider mb-3">Per-Account Activity (30/day limit each)</h3>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-          {Object.entries(accountStats).map(([acc, data]) => (
-            <div key={acc} className="flex items-center justify-between p-3 bg-[#0d0d14] rounded-lg">
-              <div>
-                <p className="text-xs text-[#6b7280]">{acc.split('@')[0]}</p>
-                <p className="text-sm font-bold text-white">{data.sent} sent</p>
-              </div>
-              {data.failed > 0 && (
-                <span className="text-xs text-[#fa5252]">{data.failed} failed</span>
-              )}
-            </div>
-          ))}
-          {Object.keys(accountStats).length === 0 && (
-            <p className="text-xs text-[#4b5563] col-span-5">No sends recorded yet</p>
-          )}
-        </div>
-      </div>
-
-      {/* Tab Toggle */}
-      <div className="flex gap-1 mb-4 bg-[#0d0d14] p-1 rounded-lg w-fit">
-        <button
-          onClick={() => setActiveTab('leads')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition ${
-            activeTab === 'leads' ? 'bg-[#5c7cfa] text-white' : 'text-[#6b7280] hover:text-white'
-          }`}
-        >
-          All Leads ({leads.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('sent')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition ${
-            activeTab === 'sent' ? 'bg-[#5c7cfa] text-white' : 'text-[#6b7280] hover:text-white'
-          }`}
-        >
-          Sent Emails ({sentLog.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('replies')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition ${
-            activeTab === 'replies' ? 'bg-[#be4bdb] text-white' : 'text-[#6b7280] hover:text-white'
-          }`}
-        >
-          Replies ({replies.length})
-        </button>
-      </div>
-
-      {/* Leads Tab */}
-      {activeTab === 'leads' && (
-        <>
-          {/* Search + Status Filter */}
-          <div className="mb-4 flex flex-col md:flex-row gap-3">
-            <input
-              type="text"
-              placeholder="Search by company, email, industry..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1 px-4 py-2 bg-[#0d0d14] border border-[#2a2a3a] rounded-lg text-sm text-white placeholder-[#4b5563] focus:outline-none focus:border-[#5c7cfa]"
-            />
-            <div className="flex gap-2 flex-wrap">
-              {['', 'pending', 'new', 'qualified', 'sent-d0', 'replied', 'unsubscribed'].map(s => (
-                <button
-                  key={s}
-                  onClick={() => { setStatusFilter(s); setLoading(true); }}
-                  className={`px-3 py-1.5 rounded-full text-xs transition ${
-                    statusFilter === s
-                      ? 'bg-[#5c7cfa] text-white'
-                      : 'bg-[#1a1a25] text-[#6b7280] hover:text-white'
-                  }`}
-                >
-                  {s ? (statusLabels[s] || s) : 'All'}
-                </button>
-              ))}
-            </div>
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Total leads', value: stats?.total ?? leads.length },
+          { label: 'Sent', value: stats?.sent ?? '—' },
+          { label: 'Pending', value: stats?.pending ?? '—' },
+          { label: 'Replied', value: stats?.replied ?? '—' },
+        ].map((s) => (
+          <div key={s.label} className="card p-5">
+            <div className="stat-label">{s.label}</div>
+            <div className="stat-value mt-1.5">{s.value}</div>
           </div>
+        ))}
+      </div>
 
-          <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-[#2a2a3a] text-left text-[#6b7280] text-xs uppercase tracking-wider">
-                    <th className="px-4 py-3">Company</th>
-                    <th className="px-4 py-3">Email</th>
-                    <th className="px-4 py-3">Industry</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Account Used</th>
-                    <th className="px-4 py-3">Sent At</th>
-                    <th className="px-4 py-3">Replied</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredLeads.length === 0 ? (
-                    <tr>
-                      <td colSpan="7" className="px-4 py-12 text-center text-[#4b5563] text-sm">
-                        {searchTerm ? 'No leads match your search.' : 'No leads found for this filter.'}
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredLeads.map((lead, i) => (
-                      <tr key={i} className="border-b border-[#2a2a3a]/50 hover:bg-[#1a1a25] transition">
-                        <td className="px-4 py-3 text-sm font-medium text-white">{lead.company_name || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-[#9ca3af]">{lead.email}</td>
-                        <td className="px-4 py-3 text-sm text-[#9ca3af] capitalize">{lead.industry || '-'}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            statusColors[lead.status] || 'bg-[#2a2a3a] text-[#6b7280]'
-                          }`}>
-                            {statusLabels[lead.status] || lead.status || 'pending'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-[#6b7280]">
-                          {lead.account_used ? lead.account_used.split('@')[0] : '-'}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-[#4b5563]">
-                          {lead.sent_at ? new Date(lead.sent_at).toLocaleString() : '-'}
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          {lead.replied_at ? (
-                            <span className="text-[#be4bdb] font-medium">
-                              {new Date(lead.replied_at).toLocaleString()}
-                            </span>
-                          ) : lead.status?.startsWith('sent') ? (
-                            <span className="text-[#4b5563]">Waiting...</span>
-                          ) : (
-                            <span className="text-[#4b5563]">-</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            {filteredLeads.length > 0 && (
-              <div className="p-3 border-t border-[#2a2a3a] text-xs text-[#4b5563] text-center">
-                Showing {filteredLeads.length} of {leads.length} leads
-              </div>
-            )}
-          </div>
-        </>
-      )}
+      {/* Format hint */}
+      <div className="card p-4 flex items-start gap-3" style={{ background: 'var(--bg-subtle)' }}>
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#b3a4f5" strokeWidth="1.6" className="mt-0.5 flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
+        <div className="text-[13px]" style={{ color: 'var(--fg-muted)' }}>
+          CSV needs an <b className="text-[var(--fg)]">email</b> column. Optional: <b className="text-[var(--fg)]">name</b>, <b className="text-[var(--fg)]">company</b>, <b className="text-[var(--fg)]">industry</b> — use them as <span className="font-mono">{'{{name}}'}</span>, <span className="font-mono">{'{{company}}'}</span> in your template.
+        </div>
+      </div>
 
-      {/* Sent Emails Tab */}
-      {activeTab === 'sent' && (
-        <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden">
+      {/* Table */}
+      <div className="card overflow-hidden fade-up">
+        <div className="px-5 py-3.5 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
+          <span className="text-[14px] font-medium">Recent leads</span>
+          <span className="text-[12px]" style={{ color: 'var(--fg-dim)' }}>{leads.length} shown</span>
+        </div>
+        {loading ? (
+          <div className="p-6 text-[13px]" style={{ color: 'var(--fg-dim)' }}>Loading…</div>
+        ) : leads.length ? (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full text-[13px]">
               <thead>
-                <tr className="border-b border-[#2a2a3a] text-left text-[#6b7280] text-xs uppercase tracking-wider">
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">To</th>
-                  <th className="px-4 py-3">Company</th>
-                  <th className="px-4 py-3">Industry</th>
-                  <th className="px-4 py-3">From Account</th>
-                  <th className="px-4 py-3">Subject</th>
-                  <th className="px-4 py-3">Time</th>
+                <tr style={{ color: 'var(--fg-dim)' }} className="text-left">
+                  <th className="font-medium px-5 py-2.5">Email</th>
+                  <th className="font-medium px-5 py-2.5">Company</th>
+                  <th className="font-medium px-5 py-2.5">Status</th>
+                  <th className="font-medium px-5 py-2.5">Sent from</th>
                 </tr>
               </thead>
               <tbody>
-                {sentLog.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="px-4 py-12 text-center text-[#4b5563] text-sm">
-                      No emails sent yet. The scheduled tasks will start sending automatically.
-                    </td>
+                {leads.map((l, i) => (
+                  <tr key={l.email + i} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td className="px-5 py-3 truncate max-w-[220px]">{l.email}</td>
+                    <td className="px-5 py-3" style={{ color: 'var(--fg-muted)' }}>{l.company_name || '—'}</td>
+                    <td className="px-5 py-3">{statusBadge(l.status)}</td>
+                    <td className="px-5 py-3" style={{ color: 'var(--fg-dim)' }}>{l.account_used || '—'}</td>
                   </tr>
-                ) : (
-                  sentLog.map((entry, i) => (
-                    <>
-                      <tr
-                        key={i}
-                        className="border-b border-[#2a2a3a]/50 hover:bg-[#1a1a25] transition cursor-pointer"
-                        onClick={() => setExpandedRow(expandedRow === i ? null : i)}
-                      >
-                        <td className="px-4 py-3">
-                          <span className={`w-2 h-2 rounded-full inline-block ${entry.status === 'sent' ? 'bg-[#40c057]' : 'bg-[#fa5252]'}`}></span>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-white">{entry.to}</td>
-                        <td className="px-4 py-3 text-sm text-[#9ca3af]">{entry.company || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-[#9ca3af] capitalize">{entry.industry || '-'}</td>
-                        <td className="px-4 py-3 text-sm text-[#6b7280]">{entry.from?.split('@')[0]}</td>
-                        <td className="px-4 py-3 text-sm text-[#6b7280] max-w-[200px] truncate">{entry.subject || '-'}</td>
-                        <td className="px-4 py-3 text-xs text-[#4b5563] whitespace-nowrap">
-                          {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '-'}
-                        </td>
-                      </tr>
-                      {expandedRow === i && entry.bodyPreview && (
-                        <tr key={`exp-${i}`}>
-                          <td colSpan="7" className="px-6 py-4 bg-[#0d0d14] border-b border-[#2a2a3a]">
-                            <div className="text-xs text-[#6b7280] mb-1">Message Preview:</div>
-                            <div className="text-sm text-[#9ca3af] whitespace-pre-wrap">{entry.bodyPreview}</div>
-                            {entry.messageId && (
-                              <div className="text-xs text-[#4b5563] mt-2">Message ID: {entry.messageId}</div>
-                            )}
-                          </td>
-                        </tr>
-                      )}
-                    </>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="p-8 text-center">
+            <div className="text-[14px] font-medium mb-1">No leads yet</div>
+            <div className="text-[13px]" style={{ color: 'var(--fg-muted)' }}>Upload a CSV to get started.</div>
+          </div>
+        )}
+      </div>
 
-      {/* Replies Tab */}
-      {activeTab === 'replies' && (
-        <div className="bg-[#12121a] border border-[#2a2a3a] rounded-xl overflow-hidden">
-          {replies.length === 0 ? (
-            <div className="p-12 text-center">
-              <div className="text-4xl mb-3">📬</div>
-              <p className="text-[#6b7280] text-sm mb-2">No replies yet</p>
-              <p className="text-[#4b5563] text-xs">Replies are checked automatically every hour via IMAP. When a business replies to your outreach, it'll show up here.</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-[#2a2a3a]">
-              {replies.map((reply, idx) => (
-                <div key={idx} className="p-4 hover:bg-[#1a1a25] transition-colors">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#be4bdb]"></span>
-                      <span className="text-sm text-white font-medium">{reply.company || reply.from}</span>
-                      <span className="px-2 py-0.5 bg-purple-900/50 text-purple-400 text-xs rounded-full">Replied</span>
-                    </div>
-                    <span className="text-xs text-[#6b7280]">
-                      {reply.date ? new Date(reply.date).toLocaleString() : ''}
-                    </span>
-                  </div>
-                  <div className="ml-5">
-                    <p className="text-xs text-[#6b7280] mb-1">From: {reply.from} · Received on: {reply.account?.split('@')[0]}</p>
-                    <p className="text-sm text-[#9ca3af]">Subject: {reply.subject}</p>
-                    {reply.preview && (
-                      <p className="text-sm text-[#6b7280] mt-2 bg-[#0d0d14] rounded-lg p-3">
-                        {reply.preview}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MiniStat({ label, value, color }) {
-  return (
-    <div className="p-4 bg-[#12121a] border border-[#2a2a3a] rounded-xl">
-      <span className="text-[#6b7280] text-xs">{label}</span>
-      <p className="text-xl font-bold mt-1" style={{ color }}>{value || 0}</p>
+      {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
     </div>
   );
 }

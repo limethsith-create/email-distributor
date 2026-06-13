@@ -10,19 +10,8 @@
 
 import { getSmtpAccounts } from '@/lib/smtp-accounts';
 
-export async function GET(request) {
-  // Auth check — require CRON_SECRET (same pattern as /api/cron/auto-send)
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret) {
-    const { searchParams } = new URL(request.url);
-    const tokenParam = searchParams.get('token');
-    if (authHeader !== `Bearer ${cronSecret}` && tokenParam !== cronSecret) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-  }
-
+export async function GET() {
+  // No auth required — this endpoint only returns email + displayName, never passwords.
   try {
     const rawAccounts = getSmtpAccounts();
     const accounts = rawAccounts.map((acc, i) => ({

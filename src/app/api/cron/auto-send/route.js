@@ -16,11 +16,16 @@ import { getEmailForSequenceDay } from '@/lib/personalize';
 import { logSentEmail } from '@/lib/leads-db';
 import { verifyEmail } from '@/lib/email-verify';
 import { getSmtpAccounts } from '@/lib/smtp-accounts';
+import {
+  getMaxPerAccountPerDay,
+  isWithinSendingHours,
+  computeNextSendDelayMs,
+} from '@/lib/warmup';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-const MAX_PER_ACCOUNT_PER_DAY = 12;
+// Warmup ramp + 9am-8pm randomized scheduling now live in src/lib/warmup.js
 const LEADS_KEY = 'leads';
 const DAILY_SEND_KEY = 'daily_sends';
 const LOCK_KEY = 'auto_send_lock';
@@ -82,27 +87,14 @@ async function isAccountReady(accountEmail) {
   }
 }
 
-async function scheduleNextSend(accountEmail) {
-  // Random delay: 35 to 55 minutes from now (~12 sends in 9 hours with jitter)
-  const delayMinutes = 35 + Math.floor(Math.random() * 21);
-  const nextTime = new Date(Date.now() + delayMinutes * 60 * 1000);
+async function scheduleNextSend(accountEmail, remainingToday = 1) {
+  // Randomized spacing across the remaining 9am-8pm window (see lib/warmup.js).
+  // Spreads the day's sends with heavy jitter so cadence looks human.
+  const delayMs = computeNextSendDelayMs(remainingToday);
+  const nextTime = new Date(Date.now() + delayMs);
   try {
     await kv.hset(ACCOUNT_SCHEDULE_KEY, { [accountEmail]: nextTime.toISOString() });
   } catch {}
-}
-
-/**
- * Business hours check — only send 7 AM to 11 PM Sri Lanka time (UTC+5:30)
- * This gives a 16-hour window to fit sends per account.
- */
-function isWithinSendingHours() {
-  const now = new Date();
-  // Sri Lanka is UTC+5:30
-  const sriLankaOffset = 5.5 * 60; // minutes
-  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const slMinutes = (utcMinutes + sriLankaOffset) % (24 * 60);
-  const slHour = Math.floor(slMinutes / 60);
-  return slHour >= 7 && slHour < 23; // 7 AM to 11 PM
 }
 
 async function getAccountScheduleStatus(accounts) {
@@ -387,7 +379,7 @@ export async function GET(request) {
 
     for (const acc of accounts) {
       const sent = await getDailySendCount(acc.email);
-      const remaining = Math.max(0, MAX_PER_ACCOUNT_PER_DAY - sent);
+      const remaining = Math.max(0, getMaxPerAccountPerDay() - sent);
       accountStatus.push({ email: acc.email, sentToday: sent, remaining });
       totalRemaining += remaining;
     }
@@ -553,7 +545,7 @@ export async function GET(request) {
               await incrementDailySend(account.email);
               await markLeadAsSent(qualifiedLead.email, account.email, emailContent.subject, sendResult.messageId);
               await markCompanySent(qualifiedLead.company_name);
-              await scheduleNextSend(account.email);
+              await scheduleNextSend(account.email, Math.max(1, stat.remaining));
 
               try {
                 await logSentEmail({
@@ -604,7 +596,7 @@ export async function GET(request) {
 
         // Check daily limit for this account
         const fuSent = await getDailySendCount(originalAccount.email);
-        if (fuSent >= MAX_PER_ACCOUNT_PER_DAY) continue;
+        if (fuSent >= getMaxPerAccountPerDay()) continue;
 
         const qualifiedLead = {
           ...fuLead,
