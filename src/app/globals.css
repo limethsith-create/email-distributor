@@ -2,20 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ============================================================
-   Aviance Outreach — Dark SaaS theme (Linear / Vercel inspired)
-   ============================================================ */
 :root {
-  --bg: #08080b;            /* page background, near-black */
-  --bg-subtle: #0d0d12;     /* sidebar / raised areas */
-  --card: #101017;          /* cards */
+  --bg: #08080b;
+  --bg-subtle: #0d0d12;
+  --card: #101017;
   --card-hover: #16161f;
-  --border: #1e1e29;        /* hairline borders */
+  --border: #1e1e29;
   --border-strong: #2a2a38;
-  --fg: #ededf2;            /* primary text */
-  --fg-muted: #8b8b9a;      /* secondary text */
-  --fg-dim: #5a5a68;        /* tertiary text */
-  --accent: #6e56cf;        /* violet (Linear-ish) */
+  --fg: #ededf2;
+  --fg-muted: #8b8b9a;
+  --fg-dim: #5a5a68;
+  --accent: #6e56cf;
   --accent-hover: #7c66db;
   --accent-soft: rgba(110, 86, 207, 0.14);
   --success: #3fb950;
@@ -36,7 +33,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Subtle radial glow behind the app */
 body::before {
   content: '';
   position: fixed;
@@ -55,5 +51,52 @@ body::before {
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #383848; }
 
-/* ---- Reusable component classes ---- */
-.card { background: va
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; }
+.card-hover:hover { background: var(--card-hover); border-color: var(--border-strong); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 14px; font-weight: 500; line-height: 1;
+  padding: 10px 16px; border-radius: 9px; cursor: pointer;
+  border: 1px solid transparent; transition: all 0.15s ease; white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-ghost { background: transparent; color: var(--fg-muted); border-color: var(--border-strong); }
+.btn-ghost:hover { color: var(--fg); border-color: #383848; background: var(--card-hover); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.input {
+  width: 100%; background: var(--bg-subtle); border: 1px solid var(--border-strong);
+  border-radius: 9px; padding: 10px 12px; color: var(--fg); font-size: 14px;
+  outline: none; transition: border-color 0.15s ease;
+}
+.input:focus { border-color: var(--accent); }
+.input::placeholder { color: var(--fg-dim); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 500; padding: 3px 9px; border-radius: 999px;
+}
+.badge-success { background: var(--success-soft); color: var(--success); }
+.badge-warning { background: var(--warning-soft); color: var(--warning); }
+.badge-accent { background: var(--accent-soft); color: #b3a4f5; }
+.badge-muted { background: var(--border); color: var(--fg-muted); }
+
+.stat-value { font-size: 30px; font-weight: 650; letter-spacing: -0.02em; color: var(--fg); }
+.stat-label { font-size: 13px; color: var(--fg-muted); }
+.section-title { font-size: 13px; font-weight: 600; color: var(--fg-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+.fade-up { animation: fadeUp 0.4s ease-out forwards; }
+.dot-pulse { animation: pulse 1.6s ease-in-out infinite; }
+
+.toast {
+  position: fixed; bottom: 24px; right: 24px; padding: 12px 18px;
+  border-radius: 10px; font-size: 14px; z-index: 1000; animation: fadeUp 0.3s ease-out;
+  border: 1px solid var(--border-strong); background: var(--card);
+}
+.toast-success { border-color: var(--success); color: var(--success); }
+.toast-error { border-color: var(--danger); color: var(--danger); }
+.toast-info { border-color: var(--accent); color: #b3a4f5; }
