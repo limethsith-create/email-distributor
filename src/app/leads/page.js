@@ -20,17 +20,21 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [niche, setNiche] = useState('all');
   const fileRef = useRef(null);
 
   const showToast = (msg, type = 'info') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
 
   const load = () => {
     Promise.all([
-      fetch('/api/leads?action=list&limit=50').then((r) => r.json()).catch(() => ({ leads: [] })),
+      fetch('/api/leads?action=list&limit=2000').then((r) => r.json()).catch(() => ({ leads: [] })),
       fetch('/api/leads?action=stats').then((r) => r.json()).catch(() => null),
     ]).then(([list, st]) => { setLeads(list.leads || []); setStats(st); setLoading(false); });
   };
   useEffect(load, []);
+
+  const niches = ['all', ...Array.from(new Set(leads.map((l) => l.industry || 'other'))).sort()];
+  const visible = niche === 'all' ? leads : leads.filter((l) => (l.industry || 'other') === niche);
 
   const onFile = async (e) => {
     const file = e.target.files?.[0];
@@ -86,9 +90,9 @@ export default function LeadsPage() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Total leads', value: stats?.total ?? leads.length },
-          { label: 'Sent', value: stats?.sent ?? '—' },
-          { label: 'Pending', value: stats?.pending ?? '—' },
+          { label: 'Total leads', value: stats?.totalLeads ?? stats?.total ?? leads.length },
+          { label: 'Sent', value: stats?.totalSent ?? stats?.sent ?? '—' },
+          { label: 'Pending', value: leads.filter((l) => (l.status || 'pending') === 'pending').length },
           { label: 'Replied', value: stats?.replied ?? '—' },
         ].map((s) => (
           <div key={s.label} className="card p-5">
@@ -109,8 +113,11 @@ export default function LeadsPage() {
       {/* Table */}
       <div className="card overflow-hidden fade-up">
         <div className="px-5 py-3.5 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border)' }}>
-          <span className="text-[14px] font-medium">Recent leads</span>
-          <span className="text-[12px]" style={{ color: 'var(--fg-dim)' }}>{leads.length} shown</span>
+          <span className="text-[14px] font-medium">All leads</span>
+          <select value={niche} onChange={(e) => setNiche(e.target.value)} className="text-[12.5px] rounded-lg px-2.5 py-1.5" style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', color: 'var(--fg)' }}>
+            {niches.map((n) => <option key={n} value={n}>{n === 'all' ? 'All niches' : n}</option>)}
+          </select>
+          <span className="text-[12px]" style={{ color: 'var(--fg-dim)' }}>{visible.length} shown</span>
         </div>
         {loading ? (
           <div className="p-6 text-[13px]" style={{ color: 'var(--fg-dim)' }}>Loading…</div>
@@ -121,15 +128,17 @@ export default function LeadsPage() {
                 <tr style={{ color: 'var(--fg-dim)' }} className="text-left">
                   <th className="font-medium px-5 py-2.5">Email</th>
                   <th className="font-medium px-5 py-2.5">Company</th>
+                  <th className="font-medium px-5 py-2.5">Niche</th>
                   <th className="font-medium px-5 py-2.5">Status</th>
                   <th className="font-medium px-5 py-2.5">Sent from</th>
                 </tr>
               </thead>
               <tbody>
-                {leads.map((l, i) => (
+                {visible.map((l, i) => (
                   <tr key={l.email + i} style={{ borderTop: '1px solid var(--border)' }}>
                     <td className="px-5 py-3 truncate max-w-[220px]">{l.email}</td>
                     <td className="px-5 py-3" style={{ color: 'var(--fg-muted)' }}>{l.company_name || '—'}</td>
+                    <td className="px-5 py-3"><span className="badge badge-muted">{l.industry || '—'}</span></td>
                     <td className="px-5 py-3">{statusBadge(l.status)}</td>
                     <td className="px-5 py-3" style={{ color: 'var(--fg-dim)' }}>{l.account_used || '—'}</td>
                   </tr>
