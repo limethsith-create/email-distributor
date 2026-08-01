@@ -1,159 +1,169 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 
-function StatCard({ label, value, sub, accent }) {
+const C = {
+  us: '#9d7bf0',
+  lk: '#3ecf8e',
+  grid: 'rgba(255,255,255,0.06)',
+  axis: 'var(--fg-dim)',
+};
+
+function regionOf(l) {
+  const ind = (l.industry || '').trim();
+  return (/^USA\s*-/i.test(ind) || /marketing & advertising/i.test(ind)) ? 'us' : 'lk';
+}
+
+const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16 };
+
+function KPI({ label, value, sub, accent, icon }) {
   return (
-    <div className="card p-5 fade-up">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value mt-1.5" style={accent ? { color: '#b3a4f5' } : {}}>{value}</div>
-      {sub && <div className="text-[12px] mt-1" style={{ color: 'var(--fg-dim)' }}>{sub}</div>}
+    <div style={{ ...card, padding: '18px 20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: accent + '22', color: accent }}>{icon}</div>
+        <div style={{ color: 'var(--fg-muted)', fontSize: 13 }}>{label}</div>
+      </div>
+      <div style={{ fontSize: 32, fontWeight: 700, letterSpacing: '-0.02em' }}>{value}</div>
+      {sub && <div style={{ color: 'var(--fg-dim)', fontSize: 12.5, marginTop: 4 }}>{sub}</div>}
     </div>
   );
 }
 
+// build a cumulative stacked-area chart (US bottom, Sri Lanka on top) from lead createdAt dates
+function buildSeries(leads) {
+  const byDay = {};
+  for (const l of leads) {
+    if (!l.createdAt) continue;
+    const d = String(l.createdAt).slice(0, 10);
+    byDay[d] = byDay[d] || { us: 0, lk: 0 };
+    byDay[d][regionOf(l)]++;
+  }
+  const days = Object.keys(byDay).sort();
+  let cu = 0, cl = 0;
+  const pts = days.map((d) => { cu += byDay[d].us; cl += byDay[d].lk; return { d, us: cu, tot: cu + cl }; });
+  return pts;
+}
+
+function AreaChart({ pts }) {
+  const W = 860, H = 260, padL = 8, padR = 8, padT = 14, padB = 26;
+  if (!pts.length) return <div style={{ height: H, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-dim)' }}>No data yet</div>;
+  const max = Math.max(pts[pts.length - 1].tot, 1);
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const x = (i) => padL + (pts.length === 1 ? iw / 2 : (i / (pts.length - 1)) * iw);
+  const y = (v) => padT + ih - (v / max) * ih;
+  const line = (sel) => pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(sel(p)).toFixed(1)}`).join(' ');
+  const areaUS = `${line((p) => p.us)} L ${x(pts.length - 1).toFixed(1)} ${y(0)} L ${x(0).toFixed(1)} ${y(0)} Z`;
+  const areaTOT = `${line((p) => p.tot)} ${pts.slice().reverse().map((p, ri) => `L ${x(pts.length - 1 - ri).toFixed(1)} ${y(p.us).toFixed(1)}`).join(' ')} Z`;
+  const grids = [0, 0.25, 0.5, 0.75, 1];
+  const labelIdx = pts.length <= 6 ? pts.map((_, i) => i) : [0, Math.floor(pts.length / 3), Math.floor((2 * pts.length) / 3), pts.length - 1];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }}>
+      <defs>
+        <linearGradient id="gUS" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.us} stopOpacity="0.45" /><stop offset="100%" stopColor={C.us} stopOpacity="0.03" /></linearGradient>
+        <linearGradient id="gLK" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.lk} stopOpacity="0.4" /><stop offset="100%" stopColor={C.lk} stopOpacity="0.03" /></linearGradient>
+      </defs>
+      {grids.map((g, i) => <line key={i} x1={padL} x2={W - padR} y1={padT + ih - g * ih} y2={padT + ih - g * ih} stroke={C.grid} strokeWidth="1" />)}
+      {grids.map((g, i) => <text key={'t' + i} x={padL} y={padT + ih - g * ih - 4} fill={C.axis} fontSize="10">{Math.round(g * max)}</text>)}
+      <path d={areaTOT} fill="url(#gLK)" />
+      <path d={areaUS} fill="url(#gUS)" />
+      <path d={line((p) => p.tot)} fill="none" stroke={C.lk} strokeWidth="2" />
+      <path d={line((p) => p.us)} fill="none" stroke={C.us} strokeWidth="2" />
+      {labelIdx.map((i) => <text key={'x' + i} x={x(i)} y={H - 8} fill={C.axis} fontSize="10" textAnchor="middle">{pts[i].d.slice(5)}</text>)}
+    </svg>
+  );
+}
+
 export default function Dashboard() {
-  const [data, setData] = useState(null);
+  const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/warmup')
-      .then((r) => r.json())
-      .then((d) => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    let alive = true;
+    fetch('/api/leads?action=list&limit=3000&page=1').then((r) => r.json())
+      .then((d) => { if (alive) { setLeads(Array.isArray(d) ? d : (d.leads || [])); setLoading(false); } })
+      .catch(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
   }, []);
 
-  const stages = data?.stages || [
-    { week: 1, cap: 5 }, { week: 2, cap: 8 }, { week: 3, cap: 12 }, { week: 4, cap: 15 },
+  const fresh = leads.filter((l) => l.status === 'pending');
+  const us = fresh.filter((l) => regionOf(l) === 'us').length;
+  const lk = fresh.filter((l) => regionOf(l) === 'lk').length;
+  const pts = buildSeries(leads);
+  const inboxes = [
+    { email: 'limethsith@getaviance.site', epd: '3 / 25' },
+    { email: 'limethsith.weerasinghe@getaviance.site', epd: '3 / 25' },
   ];
-  const currentWeek = data?.week || 1;
 
   return (
-    <div className="space-y-7">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-[14px] mt-0.5" style={{ color: 'var(--fg-muted)' }}>
-            Cold outreach for getaviance.site — running on autopilot.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="badge" style={data?.windowOpenNow
-            ? { background: 'var(--success-soft)', color: 'var(--success)' }
-            : { background: 'var(--border)', color: 'var(--fg-muted)' }}>
-            <span className="w-1.5 h-1.5 rounded-full dot-pulse"
-              style={{ background: data?.windowOpenNow ? 'var(--success)' : 'var(--fg-dim)' }} />
-            {data?.windowOpenNow ? 'Sending window open' : 'Outside send window'}
-          </span>
-        </div>
+    <div className="fade-up" style={{ maxWidth: 1180 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+        <h1 className="text-[26px] font-bold tracking-tight">Dashboard</h1>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(157,123,240,0.14)', color: '#b3a4f5', border: '1px solid #6e56cf', borderRadius: 999, padding: '5px 12px', fontSize: 12.5, fontWeight: 600 }}>
+          <span style={{ width: 7, height: 7, borderRadius: 999, background: '#b3a4f5', display: 'inline-block' }} /> Warmup mode · sending paused
+        </span>
+      </div>
+      <p style={{ color: 'var(--fg-muted)', fontSize: 14, marginBottom: 20 }}>Your outreach at a glance.</p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14, marginBottom: 18 }}>
+        <KPI label="Total leads" value={loading ? '—' : fresh.length} sub={`${us} US · ${lk} Sri Lanka`} accent="#9d7bf0"
+          icon={<svg width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.1a9.4 9.4 0 006.7-.6 4.1 4.1 0 00-7.5-2.5M15 19.1v.1A12.3 12.3 0 018.6 21c-2.3 0-4.5-.6-6.4-1.8v-.1a6.4 6.4 0 0112-3M12 6.4a3.4 3.4 0 11-6.8 0 3.4 3.4 0 016.8 0z" /></svg>} />
+        <KPI label="Inboxes warming" value="2" sub="AutoMailer · active" accent="#3ecf8e"
+          icon={<svg width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M15.4 5.2A8.3 8.3 0 0112 21 8.3 8.3 0 016 7a8.3 8.3 0 003 2.6A9 9 0 0112.4 2.7a8.2 8.2 0 003 2.5z" /></svg>} />
+        <KPI label="Emails sent" value="0" sub="paused for warmup" accent="#e0a458"
+          icon={<svg width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.3 3.5a.6.6 0 01.8-.7l16.5 8.2a.6.6 0 010 1L4 20.2a.6.6 0 01-.8-.7L6 12zm0 0h6" /></svg>} />
+        <KPI label="Replied" value="0" sub="campaigns not started" accent="#e06a9c"
+          icon={<svg width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M8 10.5h8M8 14h5m-9 5.5 3.5-2h8A2.5 2.5 0 0018 15V7a2.5 2.5 0 00-2.5-2.5h-9A2.5 2.5 0 004 7v12.5z" /></svg>} />
       </div>
 
-      {/* Stat grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Warmup week" value={loading ? '—' : `Week ${currentWeek}`}
-          sub={data ? `Day ${data.daysElapsed} since start` : ''} accent />
-        <StatCard label="Cap per inbox / day" value={loading ? '—' : data?.capPerInbox ?? '—'}
-          sub="auto-ramping" />
-        <StatCard label="Sent today" value={loading ? '—' : data?.sentToday ?? 0}
-          sub={data ? `of ${data.dailyCapacity} max` : ''} />
-        <StatCard label="Inboxes" value={loading ? '—' : data?.inboxCount ?? 0}
-          sub={data?.inboxCount ? 'connected' : 'none yet'} />
-      </div>
-
-      {/* Warmup ramp visual */}
-      <div className="card p-6 fade-up">
-        <div className="flex items-center justify-between mb-5">
+      <div style={{ ...card, padding: '20px 22px', marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <div>
-            <h2 className="text-[15px] font-semibold">Warmup ramp</h2>
-            <p className="text-[13px] mt-0.5" style={{ color: 'var(--fg-muted)' }}>
-              New inboxes ramp slowly over 4 weeks so they never get flagged. Fully automatic.
-            </p>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>Lead growth</div>
+            <div style={{ color: 'var(--fg-dim)', fontSize: 12.5 }}>Cumulative leads added, by market</div>
           </div>
-          <span className="badge badge-accent">Auto</span>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--fg-muted)' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: C.us }} /> US</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--fg-muted)' }}><span style={{ width: 10, height: 10, borderRadius: 3, background: C.lk }} /> Sri Lanka</span>
+          </div>
         </div>
-        <div className="grid grid-cols-4 gap-3">
-          {stages.map((s) => {
-            const active = s.week === currentWeek;
-            const done = s.week < currentWeek;
-            return (
-              <div key={s.week} className="rounded-xl p-4 text-center transition-all"
-                style={{
-                  background: active ? 'var(--accent-soft)' : 'var(--bg-subtle)',
-                  border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                  opacity: done ? 0.55 : 1,
-                }}>
-                <div className="text-[12px]" style={{ color: 'var(--fg-muted)' }}>Week {s.week}</div>
-                <div className="text-[24px] font-semibold mt-1"
-                  style={{ color: active ? '#b3a4f5' : 'var(--fg)' }}>{s.cap}</div>
-                <div className="text-[11px] mt-0.5" style={{ color: 'var(--fg-dim)' }}>per inbox/day</div>
-                {active && <div className="text-[10px] mt-2 font-medium" style={{ color: 'var(--success)' }}>● current</div>}
-                {done && <div className="text-[10px] mt-2" style={{ color: 'var(--fg-dim)' }}>done</div>}
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-5 pt-4 flex items-center gap-2 text-[13px]"
-          style={{ borderTop: '1px solid var(--border)', color: 'var(--fg-muted)' }}>
-          <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.6">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          Sends are spread randomly between <b className="text-[var(--fg)]">&nbsp;9 AM – 8 PM&nbsp;</b>, every day of the week.
-        </div>
+        {loading ? <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-dim)' }}>Loading…</div> : <AreaChart pts={pts} />}
       </div>
 
-      {/* Inbox quick status + quick actions */}
-      <div className="grid lg:grid-cols-2 gap-4">
-        <div className="card p-6 fade-up">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[15px] font-semibold">Inboxes</h2>
-            <Link href="/inboxes" className="text-[13px]" style={{ color: '#b3a4f5' }}>Manage →</Link>
-          </div>
-          {loading ? (
-            <p className="text-[13px]" style={{ color: 'var(--fg-dim)' }}>Loading…</p>
-          ) : data?.inboxes?.length ? (
-            <div className="space-y-2.5">
-              {data.inboxes.map((ib) => (
-                <div key={ib.email} className="flex items-center justify-between rounded-lg p-3"
-                  style={{ background: 'var(--bg-subtle)' }}>
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-medium truncate">{ib.email}</div>
-                    <div className="text-[11px]" style={{ color: 'var(--fg-dim)' }}>{ib.displayName}</div>
-                  </div>
-                  <div className="text-right flex-shrink-0 ml-3">
-                    <div className="text-[13px] font-semibold">{ib.sentToday}/{ib.capPerInbox}</div>
-                    <div className="text-[11px]" style={{ color: 'var(--fg-dim)' }}>today</div>
-                  </div>
-                </div>
-              ))}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 18 }}>
+        <div style={{ ...card, padding: '20px 22px' }}>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Inbox warmup</div>
+          {inboxes.map((b) => (
+            <div key={b.email} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 0', borderTop: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 999, background: C.lk, flexShrink: 0 }} />
+                <span style={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.email}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                <span style={{ fontSize: 12.5, color: 'var(--fg-dim)' }}>{b.epd}/day</span>
+                <span style={{ fontSize: 11.5, color: C.lk, background: 'rgba(62,207,142,0.14)', borderRadius: 8, padding: '3px 9px' }}>Warming</span>
+              </div>
             </div>
-          ) : (
-            <div className="text-[13px]" style={{ color: 'var(--fg-muted)' }}>
-              No inboxes connected yet. Add them once provisioning finishes —
-              <Link href="/inboxes" style={{ color: '#b3a4f5' }}> setup guide</Link>.
-            </div>
-          )}
+          ))}
+          <div style={{ marginTop: 14, fontSize: 12.5, color: 'var(--fg-dim)' }}>DNS 4/4 · warmup ramps automatically over ~14 days.</div>
         </div>
 
-        <div className="card p-6 fade-up">
-          <h2 className="text-[15px] font-semibold mb-4">Quick actions</h2>
-          <div className="space-y-2.5">
-            <Link href="/leads" className="flex items-center gap-3 rounded-lg p-3 card-hover transition-all"
-              style={{ background: 'var(--bg-subtle)' }}>
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-soft)' }}>
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#b3a4f5" strokeWidth="1.6"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+        <div style={{ ...card, padding: '20px 22px' }}>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Pipeline</div>
+          {[
+            { k: 'Ready to send (fresh)', v: fresh.length, c: '#9d7bf0' },
+            { k: 'US market', v: us, c: C.us },
+            { k: 'Sri Lanka market', v: lk, c: C.lk },
+          ].map((r) => (
+            <div key={r.k} style={{ padding: '11px 0', borderTop: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, marginBottom: 7 }}>
+                <span style={{ color: 'var(--fg-muted)' }}>{r.k}</span><span style={{ fontWeight: 600 }}>{loading ? '—' : r.v}</span>
               </div>
-              <div><div className="text-[13px] font-medium">Upload leads</div><div className="text-[11px]" style={{ color: 'var(--fg-dim)' }}>Import a CSV of recipients</div></div>
-            </Link>
-            <Link href="/compose" className="flex items-center gap-3 rounded-lg p-3 card-hover transition-all"
-              style={{ background: 'var(--bg-subtle)' }}>
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-soft)' }}>
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#b3a4f5" strokeWidth="1.6"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
+              <div style={{ height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: (fresh.length ? Math.round((r.v / fresh.length) * 100) : 0) + '%', background: r.c, borderRadius: 999 }} />
               </div>
-              <div><div className="text-[13px] font-medium">Edit email template</div><div className="text-[11px]" style={{ color: 'var(--fg-dim)' }}>Your cold email + variables</div></div>
-            </Link>
-          </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
