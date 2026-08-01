@@ -1,35 +1,48 @@
-name: Recording Cron
+name: Email System Cron
 
-# Sending is handled by an external tool — this workflow NEVER sends email.
-# It only records inbound activity: replies and bounces, so the leads list
-# stays up to date. Runs every 2 hours.
+# Pings the auto-sender every 10 minutes. The auto-sender only sends from
+# inboxes whose physical switch is ON (Inboxes page). With all switches off,
+# every ping is a harmless no-op that sends nothing.
+# Replies checked every 2 hours, bounces every 4 hours.
 
 on:
   schedule:
-    - cron: '0 */2 * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch: {}
 
 jobs:
-  record:
+  email-cron:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check replies (records replies onto leads)
+      - name: Auto-send (only from switched-on inboxes)
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          echo "Checking replies..."
-          curl -sf "https://email-distributor.vercel.app/api/cron/check-replies?token=${CRON_SECRET}" || true
+          echo "Pinging auto-send..."
+          curl -sf "https://email-distributor.vercel.app/api/cron/auto-send?token=${CRON_SECRET}" || true
           echo ""
+
+      - name: Check replies (every 2 hours)
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          HOUR=$(date -u +%-H)
+          MIN=$(date -u +%-M)
+          if [ $((HOUR % 2)) -eq 0 ] && [ "$MIN" -lt 15 ]; then
+            curl -sf "https://email-distributor.vercel.app/api/cron/check-replies?token=${CRON_SECRET}" || true
+          else
+            echo "Skipping reply check"
+          fi
 
       - name: Check bounces (every 4 hours)
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           HOUR=$(date -u +%-H)
-          if [ $((HOUR % 4)) -eq 0 ]; then
-            echo "Checking bounces..."
+          MIN=$(date -u +%-M)
+          if [ $((HOUR % 4)) -eq 0 ] && [ "$MIN" -lt 15 ]; then
             curl -sf "https://email-distributor.vercel.app/api/cron/check-bounces?token=${CRON_SECRET}" || true
           else
-            echo "Skipping bounce check (runs every 4 hours)"
+            echo "Skipping bounce check"
           fi
