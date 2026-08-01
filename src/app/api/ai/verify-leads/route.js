@@ -127,7 +127,9 @@ If not deliverable, score 1. Employees who can't buy and off-fit industries scor
       return { score, reason: String(p.reason || '').slice(0, 90) };
     }
     lastStatus = res.status;
-    if (res.status !== 404) throw new Error('gemini_http_' + res.status);
+    // 400/401/403 = key/auth problem; no model switch will help — fail fast to rules.
+    if (res.status === 400 || res.status === 401 || res.status === 403) throw new Error('gemini_http_' + res.status);
+    // 404 (model gone) or 429 (that model's quota) — try the next model, which has its own quota.
   }
   throw new Error('gemini_http_' + lastStatus + '_all_models');
 }
