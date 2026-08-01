@@ -8,7 +8,7 @@ function isUSA(lead) {
 }
 // Fresh start: only sends recorded on/after campaign start count. Older
 // pre-warmup sends stay on the lead but read as available ("new") again.
-const CAMPAIGN_START = '2026-08-01T00:00:00Z';
+const CAMPAIGN_START = '2026-08-01T09:30:00Z';
 function afterStart(ts) { return ts && String(ts) >= CAMPAIGN_START; }
 function isSent(l) {
   return afterStart(l.sent_at);
