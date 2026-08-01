@@ -63,6 +63,31 @@ export default function ScoutPage() {
         </div>
       </div>
 
+      {/* Ideal Customer Profile */}
+      {status?.icp && (
+        <div style={{ ...card, padding: '18px 20px', marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <div style={{ fontSize: 15, fontWeight: 600 }}>Ideal Customer Profile</div>
+            <span style={{ background: 'var(--accent-soft)', color: 'var(--accent)', borderRadius: 8, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>what Scout scores against</span>
+          </div>
+          <div style={{ fontSize: 13.5, color: 'var(--fg-muted)', lineHeight: 1.6, marginBottom: 12 }}>{status.icp.summary}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#15803d', marginBottom: 6 }}>Green flags</div>
+              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12.5, color: 'var(--fg-muted)', lineHeight: 1.7 }}>
+                {status.icp.greenFlags.map((f, i) => <li key={i}>{f}</li>)}
+              </ul>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#b91c1c', marginBottom: 6 }}>Not a fit</div>
+              <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12.5, color: 'var(--fg-muted)', lineHeight: 1.7 }}>
+                {status.icp.redFlags.map((f, i) => <li key={i}>{f}</li>)}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginBottom: 20 }}>
         {[
