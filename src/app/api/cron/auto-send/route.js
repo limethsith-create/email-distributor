@@ -81,6 +81,13 @@ const ACCOUNT_SCHEDULE_KEY = 'account_next_send';
 const INBOX_ENABLED_KEY = 'inbox_enabled';
 // Daily cap per inbox once its switch is ON.
 const SEND_CAP = 25;
+// Only leads Scout has scored this high are ever sent.
+const QUALITY_THRESHOLD = 9;
+// US-only targeting (Sri Lanka retired).
+function isUSALead(l) {
+  const ind = (l.industry || '').trim();
+  return /^USA\s*-/i.test(ind) || /marketing & advertising/i.test(ind);
+}
 
 async function getEnabledInboxes() {
   // Returns a Set of inbox emails that are switched ON. Fail-safe: on any
@@ -221,7 +228,10 @@ async function getUnsent(limit = 75) {
     const unsent = Object.values(allLeads)
       .filter(lead => {
         const status = (lead.status || '').toLowerCase();
-        return (status === 'pending' || status === 'new') && lead.email;
+        const fresh = (status === 'pending' || status === 'new') && lead.email && !lead.account_used && !lead.sent_at;
+        // Scout gate: only high-scored, US leads are eligible to send.
+        const qualified = (Number(lead.quality_score) || 0) >= QUALITY_THRESHOLD;
+        return fresh && qualified && isUSALead(lead);
       });
 
     // Shuffle for variety
