@@ -2,23 +2,18 @@
 
 import { useState, useEffect } from 'react';
 
-const BASE = `Hi {{name}},
-
-Quick one. Most founders are great at the actual work — it's chasing new clients that quietly eats the week.
-
-That's the part we take off your plate: we run cold email for {{company}} and book you sales calls on a plan that fits — 10, 20, even 50 a month. Inboxes, lists, copy, sending — all done for you. You just show up and close.
-
-And it's fully guaranteed: if we don't hit your number, we refund every cent. No risk on your end at all.
-
-Open to seeing how it'd work?
-
-Best,
-Limethsith`;
-
 const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: '0 1px 2px rgba(16,24,40,0.04)' };
 const mono = { fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 13.5, whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'var(--fg)' };
+const label = { fontSize: 12.5, color: 'var(--fg-dim)', marginBottom: 6 };
 
 export default function OfferPage() {
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState(null);
+  const [err, setErr] = useState('');
+
   const [leads, setLeads] = useState([]);
   const [sel, setSel] = useState('');
   const [out, setOut] = useState(null);
@@ -26,15 +21,30 @@ export default function OfferPage() {
 
   useEffect(() => {
     let alive = true;
-    fetch('/api/leads?action=list&limit=500&page=1').then((r) => r.json())
-      .then((d) => {
-        if (!alive) return;
-        const arr = ((d && d.leads) || []).filter((l) => l.status === 'pending');
-        setLeads(arr);
-        if (arr[0]) setSel(arr[0].email);
-      }).catch(() => {});
+    fetch('/api/offer').then((r) => r.json()).then((d) => {
+      if (!alive) return;
+      if (d && d.offer) { setSubject(d.offer.subject || ''); setBody(d.offer.body || ''); }
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+    fetch('/api/leads?action=list&limit=3000&page=1').then((r) => r.json()).then((d) => {
+      if (!alive) return;
+      const arr = ((d && d.leads) || []).filter((l) => l.status === 'pending');
+      setLeads(arr);
+      if (arr[0]) setSel(arr[0].email);
+    }).catch(() => {});
     return () => { alive = false; };
   }, []);
+
+  const save = async () => {
+    setErr(''); setSaving(true); setSavedAt(null);
+    try {
+      const r = await fetch('/api/offer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subject, body }) });
+      const d = await r.json();
+      if (d.success) setSavedAt(Date.now());
+      else setErr(d.error || 'Could not save.');
+    } catch (e) { setErr(String(e)); }
+    setSaving(false);
+  };
 
   const run = async () => {
     const lead = leads.find((l) => l.email === sel);
@@ -51,7 +61,7 @@ export default function OfferPage() {
     const map = {
       gemini: { t: 'Gemini · personalized', bg: 'rgba(22,163,74,0.12)', fg: '#15803d' },
       fallback: { t: 'Fallback (key error)', bg: 'rgba(217,119,6,0.12)', fg: '#b45309' },
-      base: { t: 'Base (no key yet)', bg: 'rgba(110,86,207,0.12)', fg: '#6e56cf' },
+      base: { t: 'Rule-based (no key yet)', bg: 'rgba(110,86,207,0.12)', fg: '#6e56cf' },
     };
     const m = map[eng] || map.base;
     return <span style={{ background: m.bg, color: m.fg, borderRadius: 8, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>{m.t}</span>;
@@ -61,25 +71,40 @@ export default function OfferPage() {
     <div className="fade-up" style={{ maxWidth: 1080 }}>
       <h1 className="text-[26px] font-bold tracking-tight mb-1">Offer</h1>
       <p style={{ color: 'var(--fg-muted)', fontSize: 14, marginBottom: 20 }}>
-        Your locked base offer, plus an AI agent that tailors it to each company before sending.
+        Edit your base offer here anytime — it saves instantly and the AI agent uses it on every lead. Use {'{{name}}'} and {'{{company}}'} as placeholders.
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))', gap: 18 }}>
+        {/* editable base offer */}
         <div style={{ ...card, padding: '20px 22px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ fontSize: 15, fontWeight: 600 }}>Base offer</div>
-            <span style={{ background: 'rgba(110,86,207,0.12)', color: '#6e56cf', borderRadius: 8, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>Locked</span>
+            <span style={{ background: 'rgba(22,163,74,0.12)', color: '#15803d', borderRadius: 8, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>Editable</span>
           </div>
-          <div style={{ fontSize: 12.5, color: 'var(--fg-dim)', marginBottom: 6 }}>Subject</div>
-          <div style={{ ...mono, marginBottom: 14 }}>{'{{name}} — quick idea for {{company}}'}</div>
-          <div style={{ fontSize: 12.5, color: 'var(--fg-dim)', marginBottom: 6 }}>Body</div>
-          <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', ...mono }}>{BASE}</div>
+
+          <div style={label}>Subject</div>
+          <input value={subject} onChange={(e) => setSubject(e.target.value)} disabled={!loaded}
+            style={{ width: '100%', background: 'var(--bg)', color: 'var(--fg)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', fontSize: 13.5, marginBottom: 14, fontFamily: 'ui-monospace, Menlo, monospace' }} />
+
+          <div style={label}>Body</div>
+          <textarea value={body} onChange={(e) => setBody(e.target.value)} disabled={!loaded} rows={16}
+            style={{ width: '100%', background: 'var(--bg)', color: 'var(--fg)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 14px', ...mono, resize: 'vertical' }} />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
+            <button onClick={save} disabled={saving || !loaded}
+              style={{ background: saving ? 'var(--border-strong)' : 'var(--accent)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 14, fontWeight: 600, cursor: saving ? 'default' : 'pointer' }}>
+              {saving ? 'Saving…' : 'Save offer'}
+            </button>
+            {savedAt && <span style={{ fontSize: 12.5, color: '#15803d' }}>Saved ✓</span>}
+            {err && <span style={{ fontSize: 12.5, color: '#b45309' }}>{err}</span>}
+          </div>
         </div>
 
+        {/* AI preview */}
         <div style={{ ...card, padding: '20px 22px' }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>AI agent</div>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>AI agent preview</div>
           <div style={{ fontSize: 12.5, color: 'var(--fg-dim)', marginBottom: 14 }}>
-            Runs on Google Gemini — independent of Claude. Reads the company + industry and rewrites the opener and offer line to fit, keeping the guarantee.
+            Runs on Google Gemini — independent of Claude. Uses your saved offer above and rewrites the opener + offer line to fit each company, keeping the guarantee. (Save first to preview the latest wording.)
           </div>
 
           <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
@@ -102,13 +127,12 @@ export default function OfferPage() {
             <div style={{ color: '#b45309', fontSize: 13 }}>Error: {out.error}</div>
           ) : (
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
                 {engineBadge(out.engine)}
-                {out.note && <span style={{ fontSize: 11.5, color: 'var(--fg-dim)' }}>{out.note}</span>}
               </div>
-              <div style={{ fontSize: 12.5, color: 'var(--fg-dim)', marginBottom: 6 }}>Subject</div>
+              <div style={label}>Subject</div>
               <div style={{ ...mono, marginBottom: 12 }}>{out.subject}</div>
-              <div style={{ fontSize: 12.5, color: 'var(--fg-dim)', marginBottom: 6 }}>Body</div>
+              <div style={label}>Body</div>
               <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', ...mono }}>{out.body}</div>
             </div>
           )}
