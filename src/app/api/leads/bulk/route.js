@@ -72,11 +72,21 @@ export async function POST(request) {
         company_name: lead.company || lead.company_name || '',
         industry: lead.industry || 'business',
         name: lead.name || '',
+        title: lead.title || '',
+        city: lead.city || '',
+        country: lead.country || '',
         status: lead.status || 'pending',
         send_count: 0,
         sequence_day: -1,
-        source: 'bulk-upload',
+        source: lead.source || 'bulk-upload',
         createdAt: new Date().toISOString(),
+        // pre-computed Scout enrichment (if provided)
+        ...(lead.quality_score != null ? {
+          quality_score: lead.quality_score,
+          quality_reason: lead.quality_reason || '',
+          quality_engine: lead.quality_engine || 'icp',
+          verified_at: new Date().toISOString(),
+        } : {}),
       };
       added++;
     }
