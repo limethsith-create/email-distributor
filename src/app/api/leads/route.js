@@ -62,6 +62,10 @@ export async function GET(request) {
             sequence_day: l.sequence_day,
             send_count: l.send_count,
             createdAt: l.createdAt,
+            quality_score: l.quality_score,
+            quality_reason: l.quality_reason,
+            quality_engine: l.quality_engine,
+            verified_at: l.verified_at,
           })),
         });
       }
