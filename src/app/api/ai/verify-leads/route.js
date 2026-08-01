@@ -1,153 +1,175 @@
 /**
  * SCOUT — autonomous lead-verification & quality-scoring agent.
  *
- * Runs on Google Gemini (free tier), independent of Claude. For every new lead
- * it: (1) checks deliverability (MX records, via email-verify), (2) reads the
- * email type + company/industry, and (3) rates the lead 1-10 for how good a
- * prospect it is for a done-for-you cold-email offer. Scores are saved on each
- * lead so only the best (>= threshold) are ever sent.
- *
- * It runs over and over (pinged by the cron) and skips leads it has already
- * scored, so new leads coming in get picked up automatically.
+ * Scores every lead 1-10 against Aviance's Ideal Customer Profile (below),
+ * on its own, on Google Gemini (free) or a rule-based fallback — no Claude.
+ * Only leads at/above the threshold are ever sent. Deliverability is checked
+ * first (MX); undeliverable = 1 (would bounce).
  */
 
 export const runtime = 'nodejs';
+export const maxDuration = 300;
 
 import { kv } from '@vercel/kv';
 import { verifyEmail } from '@/lib/email-verify';
 
 const LEADS_KEY = 'leads';
-export const QUALITY_THRESHOLD = 9; // only leads scored 9-10 are used for sending
+export const QUALITY_THRESHOLD = 9;
 
-// ── free signal helpers (no external API) ──
-const FREE_DOMAINS = ['gmail.com','yahoo.com','hotmail.com','outlook.com','live.com','aol.com','icloud.com','mail.com','protonmail.com','gmx.com','yandex.com','me.com','msn.com'];
-const DISPOSABLE = ['mailinator.com','guerrillamail.com','10minutemail.com','tempmail.com','trashmail.com','yopmail.com','sharklasers.com'];
-const ROLE_LOCALS = ['info','sales','admin','contact','support','hello','team','office','enquiries','enquiry','marketing','hr','careers','jobs','billing','accounts','help','service','mail','general','ask','connect'];
+// ─────────────────────────────────────────────────────────────
+// IDEAL CUSTOMER PROFILE — the "perfect customer" Scout scores against.
+// ─────────────────────────────────────────────────────────────
+export const ICP = {
+  title: 'US agency owner who needs a steady flow of booked calls',
+  summary: 'A US-based founder or owner of a small-to-mid B2B service business — especially marketing, advertising, creative, digital, PR, branding and design agencies — that sells to other businesses, leans on referrals for new clients, and wants a predictable pipeline of booked sales calls.',
+  greenFlags: [
+    'Decision-maker: Founder, Co-Founder, Owner, CEO, President, Principal, Managing Partner',
+    'Marketing / advertising / creative / digital / PR / branding / design agency (or close B2B service)',
+    'Small-to-mid, lean team — big enough to afford it, small enough that the owner still owns growth',
+    'Based in the United States',
+    'Reachable at a real, deliverable, personal business email',
+  ],
+  redFlags: [
+    'Employees who cannot buy (VP, manager, coordinator, associate, analyst, etc.)',
+    'Huge enterprises with in-house marketing teams',
+    'Off-fit industries: healthcare, retail, restaurants, finance/banking at big firms, government, education, non-profits',
+    'Role-based (info@/sales@), free (gmail), or undeliverable email addresses',
+  ],
+};
 
-// ICP fit for a "we run cold email and book you sales calls" offer:
-// businesses that sell to other businesses and want more clients score highest.
-const HIGH_FIT = ['market','advertis','agency','agencies','consult','staffing','recruit','software','saas','it service','web ','web design','design','media','digital','pr ','public relation','b2b','coaching','training','solar','roofing','law','legal','account','financial','insurance','real estate','property','logistics','manufactur','wholesale','distributor'];
-const LOW_FIT = ['nonprofit','charity','government','school','university','hospital','clinic','restaurant','cafe','retail','ecommerce','shop','store','personal'];
+// ─── ICP scoring signals ───
+const DECISION_RE = /\b(founder|co-?founder|owner|chief executive|ceo|principal|managing partner|managing director|proprietor|president)\b/i;
+const VICE_RE = /vice\s*president|\bvp\b|\bsvp\b|\bevp\b/i;
+const EMPLOYEE_RE = /\b(assistant|associate|coordinator|analyst|specialist|manager|representative|advisor|agent|realtor|registered|pharmacist|physician|engineer|clerk|staff|intern|attorney|account executive|sales rep|technician|nurse|rn|pastor|teacher|professor|retired|worker|designer|developer|supervisor|director)\b/i;
+const NAME_AGENCY_RE = /\b(agency|agencies|media|marketing|creative|design|studio|communications|branding|advertis\w*|productions|promotions|digital|pr|seo|public relations?)\b/i;
+const IND_MKT_RE = /\b(marketing|advertising)\b/i;
+const B2B_RE = /\b(consult\w*|software|saas|staffing|recruit\w*|it services|coaching)\b/i;
+const BAD_RE = /\b(financial|bank\w*|insurance|hospital|health\w*|pharma\w*|religio\w*|church|government|universit\w*|school|construction|manufactur\w*|automotive|real estate|law|legal|retail|restaurant|nonprofit|non-profit)\b/i;
+const DISPOSABLE = new Set(['mailinator.com','guerrillamail.com','10minutemail.com','tempmail.com','trashmail.com','yopmail.com','sharklasers.com']);
+const FREE = new Set(['gmail.com','yahoo.com','hotmail.com','outlook.com','live.com','aol.com','icloud.com','mail.com','protonmail.com','gmx.com','yandex.com','me.com','msn.com']);
+const ROLE = new Set(['info','sales','admin','contact','support','hello','team','office','enquiries','enquiry','marketing','hr','careers','jobs','billing','accounts','help','service','mail','general','ask','connect']);
 
 function emailType(email) {
-  const [local = '', domain = ''] = (email || '').toLowerCase().split('@');
-  if (DISPOSABLE.includes(domain)) return 'disposable';
-  if (FREE_DOMAINS.includes(domain)) return 'free';
-  if (ROLE_LOCALS.includes(local) || !/[a-z]/.test(local)) return 'role';
+  const [local = '', dom = ''] = (email || '').toLowerCase().split('@');
+  if (DISPOSABLE.has(dom)) return 'disposable';
+  if (FREE.has(dom)) return 'free';
+  if (ROLE.has(local) || !/[a-z]/.test(local)) return 'role';
   if (local.includes('.') || local.length >= 3) return 'personal';
   return 'business';
 }
-
-function fitScore(company, industry) {
-  const t = ((company || '') + ' ' + (industry || '')).toLowerCase();
-  if (LOW_FIT.some((k) => t.includes(k)) && !HIGH_FIT.some((k) => t.includes(k))) return 4;
-  if (HIGH_FIT.some((k) => t.includes(k))) return 9;
-  return 6;
+function titlerank(t) {
+  t = t || '';
+  if (VICE_RE.test(t) || (EMPLOYEE_RE.test(t) && !DECISION_RE.test(t))) return 'employee';
+  if (DECISION_RE.test(t)) return 'decision';
+  return 'other';
+}
+function primaryMkt(ind) {
+  const first = String(ind || '').replace('USA - ', '').split(',')[0].trim().toLowerCase();
+  return first.includes('marketing') || first.includes('advertis');
+}
+function icpRuleScore({ company, industry, title, etype, mx }) {
+  if (!mx) return { score: 1, reason: 'Domain has no mail server — would bounce.' };
+  if (etype === 'disposable') return { score: 1, reason: 'Disposable/temporary email domain.' };
+  const comp = company || '', ind = industry || '', both = comp + ' ' + ind;
+  const tr = titlerank(title);
+  const nameAg = NAME_AGENCY_RE.test(comp);
+  const indMkt = IND_MKT_RE.test(ind);
+  const bad = BAD_RE.test(both) && !nameAg;
+  const svc = B2B_RE.test(both);
+  const strong = nameAg || primaryMkt(ind) || (indMkt && tr === 'decision');
+  let s = 5; const notes = [];
+  if (strong) { s += 3; notes.push('agency/marketing fit'); }
+  else if (bad) { s -= 3; notes.push('off-ICP industry'); }
+  else if (svc || indMkt) { s += 1; notes.push('B2B service fit'); }
+  if (tr === 'decision') { s += 2; notes.push('decision-maker'); }
+  else if (tr === 'employee') { s -= 3; notes.push('not a decision-maker'); }
+  if (etype === 'free') { s -= 3; notes.push('free-mail'); }
+  else if (etype === 'role') { s -= 2; notes.push('role-based email'); }
+  else if (etype === 'personal') s += 1;
+  if (bad) s = Math.min(s, 5);
+  s = Math.max(2, Math.min(10, s));
+  return { score: s, reason: (notes.join('; ') || 'neutral') + '.' };
 }
 
-function ruleScore({ company, industry, email, mxValid }) {
-  if (!mxValid) return { score: 1, reason: 'Domain has no mail server — email would bounce.' };
-  const et = emailType(email);
-  if (et === 'disposable') return { score: 1, reason: 'Disposable/temporary email domain.' };
-  let s = fitScore(company, industry);
-  let note = '';
-  if (et === 'free') { s -= 3; note = 'personal free-mail address'; }
-  else if (et === 'role') { s -= 2; note = 'role-based address (info@/sales@)'; }
-  else if (et === 'personal') { s += 1; note = 'personal business email'; }
-  s = Math.max(1, Math.min(10, s));
-  const fitWord = s >= 9 ? 'strong' : s >= 6 ? 'moderate' : 'weak';
-  return { score: s, reason: `${fitWord} fit${note ? ', ' + note : ''}, deliverable domain.` };
-}
+async function geminiScore({ company, industry, title, region, etype, mx }, key) {
+  const prompt = `You are Scout, a lead-qualification agent for Aviance, a done-for-you cold-email agency that books guaranteed sales calls for clients.
 
-async function geminiScore({ company, industry, email, region, mxValid, etype }, key) {
-  const prompt = `You are Scout, a lead-qualification agent for a done-for-you cold-email agency. The agency runs cold email for its clients and books them sales calls, guaranteed. The BEST prospects are B2B businesses that sell to other businesses and want more clients — agencies, consultancies, software/SaaS, staffing/recruiting, professional services, B2B service providers.
+IDEAL CUSTOMER PROFILE (score high only if it matches):
+${ICP.summary}
+GREEN FLAGS: ${ICP.greenFlags.join(' | ')}
+RED FLAGS (score low): ${ICP.redFlags.join(' | ')}
 
-Rate this lead from 1 to 10 on how good a prospect it is (10 = ideal, buy-ready fit; 1 = poor fit or unreachable).
-
-Lead:
+Rate this lead 1-10 (10 = perfect ICP match, buy-ready; 1 = poor fit or unreachable):
 - Company: ${company || 'unknown'}
 - Industry: ${industry || 'unknown'}
-- Email: ${email}
-- Email type: ${etype}
+- Title: ${title || 'unknown'}
 - Region: ${region}
-- Deliverable (valid mail server): ${mxValid ? 'yes' : 'no'}
-
-Scoring guidance:
-- If not deliverable, score 1-2.
-- Personal business email (john@company.com) is best; role-based (info@, sales@) is weaker; free/personal domains (gmail) are weak.
-- Strong ICP fit (B2B service businesses that want clients) scores high; consumer/retail/nonprofit/government score lower.
-Return ONLY compact JSON: {"score": <1-10 integer>, "reason": "<max 12 words>"}.`;
+- Email type: ${etype}
+- Deliverable: ${mx ? 'yes' : 'no'}
+If not deliverable, score 1. Employees who can't buy and off-fit industries score low. Return ONLY JSON: {"score": <1-10 int>, "reason": "<max 12 words>"}.`;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 120 } }),
-  });
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 120 } }) });
   if (!res.ok) throw new Error('gemini_http_' + res.status);
   const j = await res.json();
   const text = (j?.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
   const m = text.match(/\{[\s\S]*\}/);
   if (!m) throw new Error('gemini_no_json');
-  const parsed = JSON.parse(m[0]);
-  let score = parseInt(parsed.score);
+  const p = JSON.parse(m[0]); let score = parseInt(p.score);
   if (!(score >= 1 && score <= 10)) throw new Error('gemini_bad_score');
-  return { score, reason: String(parsed.reason || '').slice(0, 90) };
+  return { score, reason: String(p.reason || '').slice(0, 90) };
 }
 
-function isUSA(lead) {
-  const ind = (lead.industry || '').trim();
-  return /^USA\s*-/i.test(ind) || /marketing & advertising/i.test(ind);
+function isUSA(l) {
+  const ind = (l.industry || '').trim();
+  if (/^USA\s*-/i.test(ind) || /marketing & advertising/i.test(ind)) return true;
+  return /united states/i.test(l.country || '');
 }
 
 async function scoreOne(lead, key) {
   const email = lead.email || '';
   const company = lead.company_name || lead.company || '';
   const industry = lead.industry || '';
+  const title = lead.title || '';
   const region = isUSA(lead) ? 'USA' : 'Other';
-  let mxValid = true;
-  try { const v = await verifyEmail(email); mxValid = !!v.valid; } catch { mxValid = true; }
+  let mx = true;
+  try { const v = await verifyEmail(email); mx = !!v.valid; } catch { mx = true; }
   const etype = emailType(email);
-
-  if (key) {
+  if (key && mx && etype !== 'disposable') {
     try {
-      const g = await geminiScore({ company, industry, email, region, mxValid, etype }, key);
-      // deliverability hard cap
-      const score = mxValid ? g.score : Math.min(g.score, 2);
-      return { score, reason: g.reason, engine: 'gemini' };
+      const g = await geminiScore({ company, industry, title, region, etype, mx }, key);
+      return { score: g.score, reason: g.reason, engine: 'icp-gemini' };
     } catch (e) {
-      const r = ruleScore({ company, industry, email, mxValid });
-      return { ...r, engine: 'rules', note: String(e.message || e) };
+      return { ...icpRuleScore({ company, industry, title, etype, mx }), engine: 'icp-rules', note: String(e.message || e) };
     }
   }
-  return { ...ruleScore({ company, industry, email, mxValid }), engine: 'rules' };
+  return { ...icpRuleScore({ company, industry, title, etype, mx }), engine: 'icp-rules' };
+}
+
+function needsScore(l, force) {
+  if (force) return true;
+  if (l.quality_score == null) return true;
+  return !String(l.quality_engine || '').startsWith('icp'); // re-score legacy (non-ICP) ratings
 }
 
 async function runBatch(limit, force) {
   const all = (await kv.hgetall(LEADS_KEY)) || {};
   const key = process.env.GEMINI_API_KEY;
-  // candidates: real, not-yet-sent leads that are unscored (or force re-score)
   const candidates = Object.values(all).filter((l) => {
     const s = (l.status || '').toLowerCase();
-    const sendable = (s === 'pending' || s === 'new') && !l.account_used && !l.sent_at;
-    const needsScore = force || l.quality_score == null;
-    return l.email && sendable && needsScore;
+    const sendable = (s === 'pending' || s === 'new') && !l.account_used && !l.sent_at && l.email;
+    return sendable && needsScore(l, force);
   }).slice(0, limit);
-
   const results = [];
   for (const lead of candidates) {
     const r = await scoreOne(lead, key);
     const existing = await kv.hget(LEADS_KEY, lead.email.toLowerCase());
-    const updated = {
-      ...existing,
-      email: lead.email.toLowerCase(),
-      quality_score: r.score,
-      quality_reason: r.reason,
-      quality_engine: r.engine,
-      verified_at: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    await kv.hset(LEADS_KEY, { [lead.email.toLowerCase()]: updated });
-    results.push({ email: updated.email, company: existing?.company_name, score: r.score, reason: r.reason, engine: r.engine });
+    await kv.hset(LEADS_KEY, { [lead.email.toLowerCase()]: {
+      ...existing, email: lead.email.toLowerCase(),
+      quality_score: r.score, quality_reason: r.reason, quality_engine: r.engine,
+      verified_at: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    } });
+    results.push({ email: lead.email.toLowerCase(), company: existing?.company_name, score: r.score, reason: r.reason, engine: r.engine });
   }
   const qualified = results.filter((r) => r.score >= QUALITY_THRESHOLD).length;
   return { scored: results.length, qualified, threshold: QUALITY_THRESHOLD, hasKey: !!key, results };
@@ -158,29 +180,25 @@ async function status() {
   let scored = 0, qualified = 0, unscored = 0, pending = 0;
   for (const l of Object.values(all)) {
     const s = (l.status || '').toLowerCase();
-    const sendable = (s === 'pending' || s === 'new') && !l.account_used && !l.sent_at;
-    if (!sendable) continue;
+    if (!((s === 'pending' || s === 'new') && !l.account_used && !l.sent_at)) continue;
     pending++;
     if (l.quality_score == null) unscored++;
     else { scored++; if (l.quality_score >= QUALITY_THRESHOLD) qualified++; }
   }
-  return { name: 'Scout', threshold: QUALITY_THRESHOLD, hasKey: !!process.env.GEMINI_API_KEY, pending, scored, unscored, qualified };
+  return { name: 'Scout', threshold: QUALITY_THRESHOLD, hasKey: !!process.env.GEMINI_API_KEY, icp: ICP, pending, scored, unscored, qualified };
 }
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   if (searchParams.get('run') === '1') {
-    const limit = Math.min(parseInt(searchParams.get('limit') || '15', 10) || 15, 40);
-    const force = searchParams.get('force') === '1';
-    return Response.json(await runBatch(limit, force));
+    const limit = Math.min(parseInt(searchParams.get('limit') || '15', 10) || 15, 50);
+    return Response.json(await runBatch(limit, searchParams.get('force') === '1'));
   }
   return Response.json(await status());
 }
-
 export async function POST(request) {
   let body = {};
   try { body = await request.json(); } catch {}
-  const limit = Math.min(parseInt(body.limit || 15, 10) || 15, 40);
-  const force = !!body.force;
-  return Response.json(await runBatch(limit, force));
+  const limit = Math.min(parseInt(body.limit || 15, 10) || 15, 50);
+  return Response.json(await runBatch(limit, !!body.force));
 }
