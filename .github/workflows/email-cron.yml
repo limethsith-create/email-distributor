@@ -15,6 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Scout — score new leads (runs every ping)
+        run: |
+          echo "Running Scout lead verification..."
+          curl -sf "https://email-distributor.vercel.app/api/ai/verify-leads?run=1&limit=25" || true
+          echo ""
+
       - name: Auto-send (only from switched-on inboxes)
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
