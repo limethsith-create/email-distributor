@@ -8,12 +8,20 @@ const C = {
   axis: 'var(--fg-dim)',
 };
 
-function isSent(l) {
+// Fresh start: only count sends recorded on/after the campaign start.
+// Older pre-warmup sends are kept on the leads but don't count here.
+const CAMPAIGN_START = '2026-08-01T00:00:00Z';
+function afterStart(ts) { return ts && String(ts) >= CAMPAIGN_START; }
+function isReal(l) {
   const s = (l.status || '');
-  return !!l.sent_at || s.startsWith('sent') || s === 'sequence_complete';
+  return !s.startsWith('skipped') && s !== 'bounced';
+}
+
+function isSent(l) {
+  return afterStart(l.sent_at);
 }
 function isReplied(l) {
-  return (l.status || '') === 'replied' || !!l.replied_at;
+  return afterStart(l.replied_at);
 }
 
 const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: '0 1px 2px rgba(16,24,40,0.04)' };
@@ -86,12 +94,13 @@ export default function Dashboard() {
     return () => { alive = false; };
   }, []);
 
-  const total = leads.length;
-  const sentLeads = leads.filter(isSent);
-  const repliedLeads = leads.filter(isReplied);
-  const newLeads = leads.filter((l) => l.status === 'pending');
-  const emailsSent = sentLeads.reduce((a, l) => a + (l.send_count || 1), 0);
-  const pts = buildSentSeries(leads);
+  const real = leads.filter(isReal);
+  const total = real.length;
+  const sentLeads = real.filter(isSent);
+  const repliedLeads = real.filter(isReplied);
+  const newLeads = real.filter((l) => !isSent(l));
+  const emailsSent = sentLeads.length;
+  const pts = buildSentSeries(real);
 
   const inboxes = [
     { email: 'limethsith@getaviance.site' },
