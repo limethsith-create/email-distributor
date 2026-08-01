@@ -91,6 +91,9 @@ function icpRuleScore({ company, industry, title, etype, mx }) {
   return { score: s, reason: (notes.join('; ') || 'neutral') + '.' };
 }
 
+let WORKING_MODEL = null;
+const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-1.5-flash'];
+
 async function geminiScore({ company, industry, title, region, etype, mx }, key) {
   const prompt = `You are Scout, a lead-qualification agent for Aviance, a done-for-you cold-email agency that books guaranteed sales calls for clients.
 
@@ -107,17 +110,26 @@ Rate this lead 1-10 (10 = perfect ICP match, buy-ready; 1 = poor fit or unreacha
 - Email type: ${etype}
 - Deliverable: ${mx ? 'yes' : 'no'}
 If not deliverable, score 1. Employees who can't buy and off-fit industries score low. Return ONLY JSON: {"score": <1-10 int>, "reason": "<max 12 words>"}.`;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 120 } }) });
-  if (!res.ok) throw new Error('gemini_http_' + res.status);
-  const j = await res.json();
-  const text = (j?.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
-  const m = text.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('gemini_no_json');
-  const p = JSON.parse(m[0]); let score = parseInt(p.score);
-  if (!(score >= 1 && score <= 10)) throw new Error('gemini_bad_score');
-  return { score, reason: String(p.reason || '').slice(0, 90) };
+  const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 120 } });
+  const models = WORKING_MODEL ? [WORKING_MODEL, ...GEMINI_MODELS.filter((mm) => mm !== WORKING_MODEL)] : GEMINI_MODELS;
+  let lastStatus = 0;
+  for (const model of models) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    if (res.ok) {
+      WORKING_MODEL = model;
+      const j = await res.json();
+      const text = (j?.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+      const m = text.match(/\{[\s\S]*\}/);
+      if (!m) throw new Error('gemini_no_json');
+      const p = JSON.parse(m[0]); let score = parseInt(p.score);
+      if (!(score >= 1 && score <= 10)) throw new Error('gemini_bad_score');
+      return { score, reason: String(p.reason || '').slice(0, 90) };
+    }
+    lastStatus = res.status;
+    if (res.status !== 404) throw new Error('gemini_http_' + res.status);
+  }
+  throw new Error('gemini_http_' + lastStatus + '_all_models');
 }
 
 function isUSA(l) {
@@ -169,7 +181,7 @@ async function runBatch(limit, force) {
       quality_score: r.score, quality_reason: r.reason, quality_engine: r.engine,
       verified_at: new Date().toISOString(), updatedAt: new Date().toISOString(),
     } });
-    results.push({ email: lead.email.toLowerCase(), company: existing?.company_name, score: r.score, reason: r.reason, engine: r.engine });
+    results.push({ email: lead.email.toLowerCase(), company: existing?.company_name, score: r.score, reason: r.reason, engine: r.engine, note: r.note || null });
   }
   const qualified = results.filter((r) => r.score >= QUALITY_THRESHOLD).length;
   return { scored: results.length, qualified, threshold: QUALITY_THRESHOLD, hasKey: !!key, results };
