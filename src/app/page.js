@@ -10,7 +10,7 @@ const C = {
 
 // Fresh start: only count sends recorded on/after the campaign start.
 // Older pre-warmup sends are kept on the leads but don't count here.
-const CAMPAIGN_START = '2026-08-01T00:00:00Z';
+const CAMPAIGN_START = '2026-08-01T09:30:00Z';
 function afterStart(ts) { return ts && String(ts) >= CAMPAIGN_START; }
 function isReal(l) {
   const s = (l.status || '');
