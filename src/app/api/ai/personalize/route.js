@@ -1,8 +1,12 @@
 // AI personalization agent — runs on Google Gemini (free tier), independent of Claude.
-// Takes a lead + the hardcoded base offer and tailors it to the company before sending.
+// Reads the CURRENT base offer (editable + saved in KV) and tailors it per company.
 export const runtime = 'nodejs';
 
-const BASE = `Hi {{name}},
+import { kv } from '@vercel/kv';
+
+const DEFAULT_OFFER = {
+  subject: '{{name}} — quick idea for {{company}}',
+  body: `Hi {{name}},
 
 Quick one. Most founders are great at the actual work — it's chasing new clients that quietly eats the week.
 
@@ -13,7 +17,16 @@ And it's fully guaranteed: if we don't hit your number, we refund every cent. No
 Open to seeing how it'd work?
 
 Best,
-Limethsith`;
+Limethsith`,
+};
+
+async function getOffer() {
+  try {
+    const saved = await kv.get('base_offer').catch(() => null);
+    if (saved && saved.subject && saved.body) return saved;
+  } catch {}
+  return DEFAULT_OFFER;
+}
 
 function firstNameFromEmail(email = '') {
   const local = (email.split('@')[0] || '').split(/[._+\-0-9]/)[0] || '';
@@ -34,17 +47,17 @@ function nounFor(industry) {
   return 'founders';
 }
 
-function ruleFallback(name, company, industry) {
-  const body = BASE.replace('Most founders', 'Most ' + nounFor(industry));
+function ruleFallback(offerBody, name, company, industry) {
+  const body = offerBody.replace('Most founders', 'Most ' + nounFor(industry));
   return fill(body, name, company);
 }
 
-async function gemini(name, company, industry, key) {
+async function gemini(offerBody, name, company, industry, key) {
   const prompt = `You are a cold-email personalization agent for a done-for-you cold email agency.
 
 BASE EMAIL:
 """
-${BASE}
+${offerBody}
 """
 
 Tailor it to this company:
@@ -73,21 +86,22 @@ Rules:
 }
 
 async function handle(lead) {
+  const offer = await getOffer();
   const email = lead.email || '';
   const company = lead.company_name || lead.company || 'your company';
   const industry = lead.industry || '';
   const name = lead.name || firstNameFromEmail(email);
-  const subject = `${name} — quick idea for ${company}`;
+  const subject = fill(offer.subject, name, company);
   const key = process.env.GEMINI_API_KEY;
   if (key) {
     try {
-      const out = await gemini(name, company, industry, key);
+      const out = await gemini(offer.body, name, company, industry, key);
       return { subject, body: out, engine: 'gemini', personalized: true };
     } catch (e) {
-      return { subject, body: ruleFallback(name, company, industry), engine: 'fallback', personalized: false, note: String((e && e.message) || e) };
+      return { subject, body: ruleFallback(offer.body, name, company, industry), engine: 'fallback', personalized: false, note: String((e && e.message) || e) };
     }
   }
-  return { subject, body: ruleFallback(name, company, industry), engine: 'base', personalized: false, note: 'No GEMINI_API_KEY set — add it in Vercel to activate the AI agent.' };
+  return { subject, body: ruleFallback(offer.body, name, company, industry), engine: 'base', personalized: false, note: 'No GEMINI_API_KEY set — add it in Vercel to activate the AI agent.' };
 }
 
 export async function POST(req) {
@@ -99,5 +113,5 @@ export async function POST(req) {
 }
 
 export async function GET() {
-  return Response.json({ ok: true, hasKey: !!process.env.GEMINI_API_KEY, base: BASE });
+  return Response.json({ ok: true, hasKey: !!process.env.GEMINI_API_KEY });
 }
