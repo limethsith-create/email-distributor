@@ -57,7 +57,23 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const { email, enabled } = await request.json();
+    const body = await request.json();
+
+    // Reset today's send counters to zero (fresh start).
+    if (body.action === 'reset_counts') {
+      const accounts = getSmtpAccounts();
+      const list = accounts.length ? accounts : [
+        { email: 'limethsith@getaviance.site' },
+        { email: 'limethsith.weerasinghe@getaviance.site' },
+      ];
+      const today = getTodayKey();
+      for (const a of list) {
+        try { await kv.hset(DAILY_SEND_KEY, { [`${a.email}:${today}`]: 0 }); } catch {}
+      }
+      return Response.json({ success: true, reset: list.map((a) => a.email) });
+    }
+
+    const { email, enabled } = body;
     if (!email) return Response.json({ success: false, error: 'email required' }, { status: 400 });
     await kv.hset(INBOX_ENABLED_KEY, { [email.toLowerCase()]: enabled ? '1' : '0' });
     return Response.json({ success: true, email: email.toLowerCase(), enabled: !!enabled });
