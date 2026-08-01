@@ -6,18 +6,21 @@ function isUSA(lead) {
   const ind = (lead.industry || '').trim();
   return /^USA\s*-/i.test(ind) || /marketing & advertising/i.test(ind);
 }
+// Fresh start: only sends recorded on/after campaign start count. Older
+// pre-warmup sends stay on the lead but read as available ("new") again.
+const CAMPAIGN_START = '2026-08-01T00:00:00Z';
+function afterStart(ts) { return ts && String(ts) >= CAMPAIGN_START; }
 function isSent(l) {
-  const s = (l.status || '');
-  return !!l.sent_at || s.startsWith('sent') || s === 'sequence_complete';
+  return afterStart(l.sent_at);
 }
 function isReplied(l) {
-  return (l.status || '') === 'replied' || !!l.replied_at;
+  return afterStart(l.replied_at);
 }
 function isSending(l) {
-  return isSent(l) && !isReplied(l) && (l.status || '') !== 'sequence_complete';
+  return isSent(l) && !isReplied(l);
 }
 function isNew(l) {
-  return (l.status || '') === 'pending';
+  return !isSent(l);
 }
 
 // only show real leads — hide dedup/generic/no-company/unverified junk & bounces
