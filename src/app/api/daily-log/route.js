@@ -103,7 +103,7 @@ export async function GET() {
 
     // Process replies
     for (const reply of repliesArr) {
-      const ts = reply.repliedAt || reply.receivedAt || reply.timestamp;
+      const ts = reply.repliedAt || reply.receivedAt || reply.timestamp || reply.date;
       if (ts) {
         const dayEntry = ensureDay(ts);
         dayEntry.replies.push({
