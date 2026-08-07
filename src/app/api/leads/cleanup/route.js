@@ -51,6 +51,39 @@ export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = body.action || 'remove';
 
+  if (action === 'promote') {
+    // Bump quality_score for all leads matching a source (or explicit emails).
+    // Used to mark a hand-curated, verified list as send-ready.
+    const all = (await kv.hgetall(LEADS_KEY)) || {};
+    const score = Number(body.score);
+    const source = body.source || null;
+    const emailSet = (body.emails && body.emails.length)
+      ? new Set(body.emails.map((e) => String(e).toLowerCase()))
+      : null;
+    if (!(score >= 1 && score <= 10)) {
+      return Response.json({ error: 'score must be 1-10' }, { status: 400 });
+    }
+    const updates = {};
+    for (const [email, lead] of Object.entries(all)) {
+      if (!lead) continue;
+      if (isProtected(lead)) continue; // never touch sent/replied leads
+      const match = emailSet ? emailSet.has(String(email).toLowerCase()) : (source && lead.source === source);
+      if (!match) continue;
+      updates[email] = {
+        ...lead,
+        quality_score: score,
+        quality_reason: body.reason || lead.quality_reason || 'Hand-curated, verified list.',
+        quality_engine: 'curated-verified',
+        verified_at: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    const keys = Object.keys(updates);
+    if (body.dryRun) return Response.json({ dryRun: true, wouldPromote: keys.length, score, source });
+    if (keys.length) await chunkedHset(LEADS_KEY, updates);
+    return Response.json({ promoted: keys.length, score, source });
+  }
+
   if (action === 'restore') {
     const arch = (await kv.hgetall(ARCHIVE_KEY)) || {};
     const emails = (body.emails && body.emails.length)
