@@ -52,6 +52,9 @@ function ruleFallback(offerBody, name, company, industry) {
   return fill(body, name, company);
 }
 
+let WORKING_MODEL = null;
+const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-1.5-flash'];
+
 async function gemini(offerBody, name, company, industry, key) {
   const prompt = `You are a cold-email personalization agent for a done-for-you cold email agency.
 
@@ -72,17 +75,24 @@ Rules:
 - Keep it under 90 words, plain text, no links, warm and human.
 - Do NOT invent facts about the company.
 - Return ONLY the email body, nothing else.`;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.75, maxOutputTokens: 400 } }),
-  });
-  if (!res.ok) throw new Error('gemini_http_' + res.status);
-  const j = await res.json();
-  const text = (j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts || []).map((p) => p.text || '').join('');
-  if (!text.trim()) throw new Error('gemini_empty');
-  return text.trim();
+  const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.75, maxOutputTokens: 400 } });
+  const models = WORKING_MODEL ? [WORKING_MODEL, ...GEMINI_MODELS.filter((mm) => mm !== WORKING_MODEL)] : GEMINI_MODELS;
+  let lastStatus = 0;
+  for (const model of models) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    if (res.ok) {
+      WORKING_MODEL = model;
+      const j = await res.json();
+      const text = (j && j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts || []).map((p) => p.text || '').join('');
+      if (!text.trim()) throw new Error('gemini_empty');
+      return text.trim();
+    }
+    lastStatus = res.status;
+    if (res.status === 400 || res.status === 401 || res.status === 403) throw new Error('gemini_http_' + res.status);
+    // 404 (model gone) or 429 (that model's quota) — try the next model.
+  }
+  throw new Error('gemini_http_' + lastStatus + '_all_models');
 }
 
 async function handle(lead) {
