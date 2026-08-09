@@ -1,9 +1,10 @@
 /**
- * Inbox sending control — the physical ON/OFF switch per inbox.
+ * Inbox sending control — the physical ON/OFF switch + daily-limit per inbox.
  *
  * Sending is OFF by default. An inbox only sends when its switch here is ON.
  * The auto-sender reads this same KV key and refuses to send from any inbox
- * that isn't switched on.
+ * that isn't switched on. Each inbox also has a per-day send limit (default 25,
+ * the hard max) that you can dial down to ramp volume gradually.
  */
 
 import { kv } from '@vercel/kv';
@@ -12,8 +13,9 @@ import { getSmtpAccounts } from '@/lib/smtp-accounts';
 export const dynamic = 'force-dynamic';
 
 const INBOX_ENABLED_KEY = 'inbox_enabled';
+const INBOX_CAP_KEY = 'inbox_caps';
 const DAILY_SEND_KEY = 'daily_sends';
-const SEND_CAP = 25;
+const SEND_CAP = 25; // hard daily maximum per inbox
 
 function getTodayKey() {
   const slTime = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
@@ -29,10 +31,20 @@ async function sentToday(email) {
   }
 }
 
+function capFromMap(capMap, email) {
+  const raw = capMap[(email || '').toLowerCase()];
+  if (raw === null || raw === undefined || raw === '') return SEND_CAP;
+  const n = parseInt(raw);
+  if (isNaN(n)) return SEND_CAP;
+  return Math.max(0, Math.min(SEND_CAP, n));
+}
+
 export async function GET() {
   const accounts = getSmtpAccounts();
   let enabledMap = {};
+  let capMap = {};
   try { enabledMap = (await kv.hgetall(INBOX_ENABLED_KEY)) || {}; } catch {}
+  try { capMap = (await kv.hgetall(INBOX_CAP_KEY)) || {}; } catch {}
 
   // Fallback list so the page still shows the two inboxes even before env is read
   const list = accounts.length ? accounts : [
@@ -49,10 +61,11 @@ export async function GET() {
       displayName: a.displayName || (a.email || '').split('@')[0],
       enabled: !!on,
       sentToday: await sentToday(a.email),
-      cap: SEND_CAP,
+      cap: capFromMap(capMap, a.email),
+      maxCap: SEND_CAP,
     });
   }
-  return Response.json({ inboxes, cap: SEND_CAP });
+  return Response.json({ inboxes, cap: SEND_CAP, maxCap: SEND_CAP });
 }
 
 export async function POST(request) {
@@ -73,10 +86,26 @@ export async function POST(request) {
       return Response.json({ success: true, reset: list.map((a) => a.email) });
     }
 
-    const { email, enabled } = body;
+    const { email } = body;
     if (!email) return Response.json({ success: false, error: 'email required' }, { status: 400 });
-    await kv.hset(INBOX_ENABLED_KEY, { [email.toLowerCase()]: enabled ? '1' : '0' });
-    return Response.json({ success: true, email: email.toLowerCase(), enabled: !!enabled });
+    const key = email.toLowerCase();
+
+    // Set the per-inbox daily limit (clamped 0..SEND_CAP).
+    if (body.cap !== undefined) {
+      let n = parseInt(body.cap);
+      if (isNaN(n)) n = SEND_CAP;
+      n = Math.max(0, Math.min(SEND_CAP, n));
+      await kv.hset(INBOX_CAP_KEY, { [key]: String(n) });
+      return Response.json({ success: true, email: key, cap: n });
+    }
+
+    // Flip the on/off switch.
+    if (body.enabled !== undefined) {
+      await kv.hset(INBOX_ENABLED_KEY, { [key]: body.enabled ? '1' : '0' });
+      return Response.json({ success: true, email: key, enabled: !!body.enabled });
+    }
+
+    return Response.json({ success: false, error: 'nothing to update' }, { status: 400 });
   } catch (error) {
     return Response.json({ success: false, error: error.message }, { status: 500 });
   }
