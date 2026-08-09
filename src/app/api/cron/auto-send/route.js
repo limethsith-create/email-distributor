@@ -81,6 +81,19 @@ const ACCOUNT_SCHEDULE_KEY = 'account_next_send';
 const INBOX_ENABLED_KEY = 'inbox_enabled';
 // Daily cap per inbox once its switch is ON.
 const SEND_CAP = 25;
+// Optional per-inbox daily cap (<= SEND_CAP) so volume can be ramped gradually.
+const INBOX_CAP_KEY = 'inbox_caps';
+async function getInboxCap(email) {
+  try {
+    const v = await kv.hget(INBOX_CAP_KEY, (email || '').toLowerCase());
+    if (v === null || v === undefined || v === '') return SEND_CAP;
+    const n = parseInt(v);
+    if (isNaN(n)) return SEND_CAP;
+    return Math.max(0, Math.min(SEND_CAP, n));
+  } catch {
+    return SEND_CAP;
+  }
+}
 // Only leads Scout has scored this high are ever sent.
 const QUALITY_THRESHOLD = 9;
 // US-only targeting (Sri Lanka retired).
@@ -422,7 +435,8 @@ export async function GET(request) {
 
     for (const acc of accounts) {
       const sent = await getDailySendCount(acc.email);
-      const remaining = Math.max(0, SEND_CAP - sent);
+      const cap = await getInboxCap(acc.email);
+      const remaining = Math.max(0, cap - sent);
       accountStatus.push({ email: acc.email, sentToday: sent, remaining });
       totalRemaining += remaining;
     }
@@ -639,7 +653,8 @@ export async function GET(request) {
 
         // Check daily limit for this account
         const fuSent = await getDailySendCount(originalAccount.email);
-        if (fuSent >= SEND_CAP) continue;
+        const fuCap = await getInboxCap(originalAccount.email);
+        if (fuSent >= fuCap) continue;
 
         const qualifiedLead = {
           ...fuLead,
