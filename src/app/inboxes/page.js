@@ -20,13 +20,32 @@ function Toggle({ on, busy, onClick }) {
   );
 }
 
+// Stepper for the per-inbox daily send limit.
+function CapStepper({ value, max, busy, onChange }) {
+  const step = (delta) => onChange(Math.max(0, Math.min(max, value + delta)));
+  const btn = {
+    width: 30, height: 30, borderRadius: 8, border: '1px solid var(--border-strong)',
+    background: 'var(--card-hover)', color: 'var(--fg)', fontSize: 17, fontWeight: 600,
+    cursor: busy ? 'default' : 'pointer', lineHeight: 1, opacity: busy ? 0.5 : 1,
+  };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <button style={btn} disabled={busy || value <= 0} onClick={() => step(-1)}>−</button>
+      <div style={{ minWidth: 58, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>
+        {value}<span style={{ color: 'var(--fg-dim)', fontWeight: 400 }}> /{max}</span>
+      </div>
+      <button style={btn} disabled={busy || value >= max} onClick={() => step(1)}>+</button>
+    </div>
+  );
+}
+
 export default function InboxesPage() {
   const [inboxes, setInboxes] = useState(null);
-  const [cap, setCap] = useState(25);
+  const [maxCap, setMaxCap] = useState(25);
   const [busy, setBusy] = useState('');
 
   const load = () => fetch('/api/inboxes-control', { cache: 'no-store' }).then((r) => r.json())
-    .then((d) => { setInboxes(d.inboxes || []); if (d.cap) setCap(d.cap); })
+    .then((d) => { setInboxes(d.inboxes || []); if (d.maxCap) setMaxCap(d.maxCap); })
     .catch(() => setInboxes([]));
 
   useEffect(() => { load(); }, []);
@@ -34,13 +53,23 @@ export default function InboxesPage() {
   const toggle = async (ib) => {
     const next = !ib.enabled;
     setBusy(ib.email);
-    // optimistic
     setInboxes((arr) => arr.map((x) => x.email === ib.email ? { ...x, enabled: next } : x));
     try {
       await fetch('/api/inboxes-control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: ib.email, enabled: next }) });
     } catch {
-      // revert on failure
       setInboxes((arr) => arr.map((x) => x.email === ib.email ? { ...x, enabled: !next } : x));
+    }
+    setBusy('');
+  };
+
+  const setCap = async (ib, cap) => {
+    setBusy(ib.email + ':cap');
+    const prev = ib.cap;
+    setInboxes((arr) => arr.map((x) => x.email === ib.email ? { ...x, cap } : x));
+    try {
+      await fetch('/api/inboxes-control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: ib.email, cap }) });
+    } catch {
+      setInboxes((arr) => arr.map((x) => x.email === ib.email ? { ...x, cap: prev } : x));
     }
     setBusy('');
   };
@@ -51,7 +80,8 @@ export default function InboxesPage() {
     <div className="fade-up" style={{ maxWidth: 1080 }}>
       <h1 className="text-[26px] font-bold tracking-tight mb-1">Inboxes</h1>
       <p style={{ color: 'var(--fg-muted)', fontSize: 14, marginBottom: 18 }}>
-        Each inbox has a physical switch. Off means it never sends. Turn it on and that inbox starts sending up to {cap} emails/day.
+        Each inbox has a physical switch and a daily send limit. Off means it never sends. Turn it on and it sends up to its
+        daily limit — dial the limit down to ramp volume gradually, then raise it as your inboxes prove out.
       </p>
 
       {/* master status banner */}
@@ -70,6 +100,7 @@ export default function InboxesPage() {
       ) : (
         <div style={{ display: 'grid', gap: 14 }}>
           {inboxes.map((ib) => {
+            const capBusy = busy === ib.email + ':cap';
             const pct = ib.cap ? Math.min(100, Math.round((ib.sentToday / ib.cap) * 100)) : 0;
             return (
               <div key={ib.email} style={{ ...card, padding: '18px 20px' }}>
@@ -92,7 +123,17 @@ export default function InboxesPage() {
                   </div>
                 </div>
 
-                <div style={{ marginTop: 16 }}>
+                {/* daily limit control */}
+                <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+                  padding: '12px 14px', borderRadius: 12, background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>Daily send limit</div>
+                    <div style={{ fontSize: 12, color: 'var(--fg-dim)' }}>Emails this inbox may send per day (max {ib.maxCap || maxCap}).</div>
+                  </div>
+                  <CapStepper value={ib.cap} max={ib.maxCap || maxCap} busy={capBusy} onChange={(v) => setCap(ib, v)} />
+                </div>
+
+                <div style={{ marginTop: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--fg-muted)', marginBottom: 6 }}>
                     <span>Sent today</span>
                     <span>{ib.sentToday} / {ib.cap}</span>
@@ -111,7 +152,8 @@ export default function InboxesPage() {
         <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>How the switch works</div>
         <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--fg-muted)', fontSize: 13.5, lineHeight: 1.9 }}>
           <li>Off by default — the system sends nothing until you switch an inbox on.</li>
-          <li>Switched on, that inbox sends up to {cap} emails/day, spaced with random gaps between 9 AM and 8 PM.</li>
+          <li>Switched on, that inbox sends up to its daily limit, spaced with random gaps between 9 AM and 8 PM.</li>
+          <li>Ramp gradually: start the limit low (e.g. 8), raise it every few days as deliverability holds.</li>
           <li>Turn it back off any time and it stops sending immediately.</li>
           <li>Warmup itself keeps running in AutoMailer regardless of these switches.</li>
         </ul>
