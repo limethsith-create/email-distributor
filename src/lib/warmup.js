@@ -3,21 +3,23 @@
  * ------------------------------------------------------------
  * Single source of truth for:
  *   1) The 4-week warmup ramp (daily cap per inbox grows over time)
- *   2) The daily sending window (9 AM – 8 PM, every day of the week)
+ *   2) The daily sending window (US Eastern business hours)
  *   3) Randomized spacing between sends so we never look robotic
  *
- * All times are computed in Sri Lanka time (UTC+5:30).
+ * All times are computed in US Eastern time (America/New_York, DST-aware),
+ * because the leads are US businesses — email should land in their workday.
  *
  * To set when warmup begins, set WARMUP_START_DATE=YYYY-MM-DD in env.
- * If unset, it falls back to the date below (the day the system went live).
  */
 
 const WARMUP_START_DATE = process.env.WARMUP_START_DATE || '2026-06-13';
-const SL_OFFSET_MIN = 5.5 * 60; // Sri Lanka is UTC+5:30
+const SEND_TZ = 'America/New_York';
 
-// Sending window (Sri Lanka local time), inclusive start, exclusive end.
-export const SEND_WINDOW_START_HOUR = 9;  // 9 AM
-export const SEND_WINDOW_END_HOUR = 20;   // 8 PM
+// Sending window (US Eastern local time), inclusive start, exclusive end.
+// 8 AM ET catches the East Coast morning; 7 PM ET (= 4 PM Pacific) still lands
+// inside the West Coast workday, so it covers US business hours coast-to-coast.
+export const SEND_WINDOW_START_HOUR = 8;   // 8 AM ET
+export const SEND_WINDOW_END_HOUR = 19;    // 7 PM ET
 
 /**
  * The 4-stage ramp. Caps are PER INBOX, PER DAY.
@@ -48,22 +50,25 @@ export function getMaxPerAccountPerDay(now = Date.now()) {
   return getWarmupStage(now).cap;
 }
 
-/** Convert a Date to Sri Lanka local hour (0-23) and minutes-of-day. */
-function slClock(now = new Date()) {
-  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const slMinutes = (utcMinutes + SL_OFFSET_MIN) % (24 * 60);
-  return { hour: Math.floor(slMinutes / 60), minuteOfDay: slMinutes };
+/** Convert a Date to US Eastern local hour (0-23) and minutes-of-day (DST-aware). */
+function etClock(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: SEND_TZ, hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(now);
+  let hour = parseInt(parts.find((p) => p.type === 'hour').value, 10) % 24;
+  const minute = parseInt(parts.find((p) => p.type === 'minute').value, 10);
+  return { hour, minuteOfDay: hour * 60 + minute };
 }
 
-/** True if current time is inside the 9 AM – 8 PM window. Every day of the week. */
+/** True if current time is inside the US Eastern business-hours window. */
 export function isWithinSendingHours(now = new Date()) {
-  const { hour } = slClock(now);
+  const { hour } = etClock(now);
   return hour >= SEND_WINDOW_START_HOUR && hour < SEND_WINDOW_END_HOUR;
 }
 
 /** Minutes remaining in today's window (0 if outside it). */
 function minutesLeftInWindow(now = new Date()) {
-  const { minuteOfDay } = slClock(now);
+  const { minuteOfDay } = etClock(now);
   const endMinute = SEND_WINDOW_END_HOUR * 60;
   if (minuteOfDay < SEND_WINDOW_START_HOUR * 60) return endMinute - SEND_WINDOW_START_HOUR * 60;
   if (minuteOfDay >= endMinute) return 0;
@@ -74,10 +79,6 @@ function minutesLeftInWindow(now = new Date()) {
  * Pick a randomized delay (ms) until this inbox should send its NEXT email.
  * We spread `remaining` sends across the time left in the window, then add
  * heavy jitter (±45%) so the cadence looks human, not scheduled.
- *
- * @param {number} remainingToday  how many sends this inbox still has today
- * @param {Date}   now
- * @returns {number} delay in milliseconds
  */
 export function computeNextSendDelayMs(remainingToday, now = new Date()) {
   const left = minutesLeftInWindow(now);
@@ -100,7 +101,7 @@ export function getWarmupSummary(now = Date.now()) {
     daysElapsed: days,
     week: stage.week,
     capPerInbox: stage.cap,
-    windowLabel: `${SEND_WINDOW_START_HOUR}:00 – ${SEND_WINDOW_END_HOUR}:00 (Asia/Colombo), every day`,
+    windowLabel: `${SEND_WINDOW_START_HOUR}:00 – ${SEND_WINDOW_END_HOUR}:00 (US Eastern), every day`,
     stages: WARMUP_STAGES.map((s) => ({ week: s.week, cap: s.cap })),
   };
 }
