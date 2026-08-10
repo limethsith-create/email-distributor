@@ -155,9 +155,8 @@ async function getAccountScheduleStatus(accounts) {
 const getAccounts = getSmtpAccounts;
 
 function getTodayKey() {
-  const now = new Date();
-  const slTime = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
-  return slTime.toISOString().split('T')[0];
+  // US Eastern calendar day (DST-aware) — matches the US send window.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
 }
 
 function randomDelay(min = 3000, max = 15000) {
