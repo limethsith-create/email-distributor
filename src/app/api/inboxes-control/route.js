@@ -18,8 +18,8 @@ const DAILY_SEND_KEY = 'daily_sends';
 const SEND_CAP = 25; // hard daily maximum per inbox
 
 function getTodayKey() {
-  const slTime = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
-  return slTime.toISOString().split('T')[0];
+  // US Eastern calendar day (DST-aware) — matches the US send window.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
 }
 
 async function sentToday(email) {
