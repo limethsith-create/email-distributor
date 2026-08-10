@@ -32,6 +32,31 @@ const LOCK_KEY = 'auto_send_lock';
 const LOCK_TTL_SECONDS = 300; // 5 minute lock — matches maxDuration
 const COMPANY_SENT_KEY = 'company_sent';
 
+// ── GLOBAL ANTI-BURST PACING ──
+// The hard guard that guarantees emails drip out across the day instead of
+// firing in a burst. No two emails may go out closer than MIN_SEND_GAP_MS
+// apart, no matter how often the heartbeat pings or how many follow-ups
+// are due. Each successful send stamps `last_global_send`; every send path
+// checks it first.
+const LAST_GLOBAL_SEND_KEY = 'last_global_send';
+const MIN_SEND_GAP_MS = 12 * 60 * 1000; // never two emails within 12 minutes
+
+async function tooSoonToSend() {
+  try {
+    const last = await kv.get(LAST_GLOBAL_SEND_KEY);
+    if (!last) return false;
+    return (Date.now() - new Date(last).getTime()) < MIN_SEND_GAP_MS;
+  } catch {
+    return false;
+  }
+}
+
+async function recordGlobalSend() {
+  try {
+    await kv.set(LAST_GLOBAL_SEND_KEY, new Date().toISOString());
+  } catch {}
+}
+
 function isGenericEmail(email) {
   const genericPrefixes = [
     'info@', 'contact@', 'sales@', 'admin@', 'support@', 'hello@',
@@ -451,10 +476,27 @@ export async function GET(request) {
       });
     }
 
+    // ── ANTI-BURST GATE (applies to every mode) ──
+    // If we sent an email very recently, stop now and send nothing. This is
+    // what spreads sends evenly through the day even though the heartbeat
+    // pings every ~10 minutes.
+    if (await tooSoonToSend()) {
+      await releaseLock();
+      return Response.json({
+        success: true,
+        paced: true,
+        sent: 0,
+        message: `Spacing sends across the day — at least ${Math.round(MIN_SEND_GAP_MS / 60000)} min between emails.`,
+        timestamp: new Date().toISOString(),
+        accountStatus,
+      });
+    }
+
     // ============================================================
-    // SCHEDULED MODE (default): 1 email per ready account
-    // GitHub Actions pings every 30 min; each account sends when
-    // its randomized timer expires (~1/hour with jitter)
+    // SCHEDULED MODE (default): ONE email per heartbeat
+    // The heartbeat pings every ~10 min; each account also has its own
+    // randomized timer, and the anti-burst gate above keeps every send
+    // at least MIN_SEND_GAP_MS apart. Net effect: a steady drip.
     // ============================================================
     if (batchSize === 0) {
       const readyAccounts = [];
@@ -574,7 +616,7 @@ export async function GET(request) {
           const htmlSignature = `
           <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
             Limethsith<br>
-            Aviance — AI Growth Systems<br>
+            Aviance — Guaranteed booked sales calls<br>
             071 870 2702 | <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
           </div>`;
 
@@ -602,6 +644,7 @@ export async function GET(request) {
               await markLeadAsSent(qualifiedLead.email, account.email, emailContent.subject, sendResult.messageId);
               await markCompanySent(qualifiedLead.company_name);
               await scheduleNextSend(account.email, Math.max(1, stat.remaining));
+              await recordGlobalSend();
 
               try {
                 await logSentEmail({
@@ -631,18 +674,19 @@ export async function GET(request) {
             results.details.push({ to: qualifiedLead.email, status: 'error', error: err.message });
           }
 
-          // Random delay between account sends (5-20 seconds)
-          if (sentFromThisAccount) {
-            await new Promise(r => setTimeout(r, randomDelay(5000, 20000)));
-          }
         }
+        // ONE email per heartbeat: stop after the first successful send so
+        // sends stay evenly spread through the day (never a burst).
+        if (sentFromThisAccount) break;
       }
 
       // ============================================================
-      // FOLLOW-UP SENDING: Send Day 3 and Day 7 follow-ups
-      // Uses the SAME account that sent the original email
+      // FOLLOW-UP SENDING: Day 3 / Day 7, on the SAME account.
+      // Only if we didn't just send a fresh email this run and we're past
+      // the spacing gap — and at most ONE follow-up per run.
       // ============================================================
-      const followUpLeads = await getFollowUpLeads(6);
+      const canFollowUp = results.sent === 0 && !(await tooSoonToSend());
+      const followUpLeads = canFollowUp ? await getFollowUpLeads(6) : [];
       let followUpsSent = 0;
 
       for (const fuLead of followUpLeads) {
@@ -679,7 +723,7 @@ export async function GET(request) {
         const htmlSignature = `
         <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
           Limethsith<br>
-          Aviance — AI Growth Systems<br>
+          Aviance — Guaranteed booked sales calls<br>
           071 870 2702 | <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
         </div>`;
 
@@ -727,7 +771,8 @@ export async function GET(request) {
               });
             } catch {}
             results.details.push({ to: qualifiedLead.email, from: originalAccount.email, status: 'follow-up-sent', day: fuLead.nextSequenceDay });
-            await new Promise(r => setTimeout(r, randomDelay(5000, 15000)));
+            await recordGlobalSend();
+            break; // one follow-up per run — keep sends spaced out
           }
         } catch {}
       }
@@ -770,6 +815,8 @@ export async function GET(request) {
     const results = { sent: 0, failed: 0, skipped: 0, details: [] };
 
     for (const lead of unsent) {
+      // Anti-burst: even in batch mode, never send two emails within the gap.
+      if (await tooSoonToSend()) break;
       const claimed = await claimLead(lead.email);
       if (!claimed) {
         results.skipped++;
@@ -858,7 +905,7 @@ export async function GET(request) {
       const htmlSignature = `
       <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
         Limethsith<br>
-        Aviance — AI Growth Systems<br>
+        Aviance — Guaranteed booked sales calls<br>
         071 870 2702 | <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
       </div>`;
 
@@ -883,6 +930,7 @@ export async function GET(request) {
           await incrementDailySend(account.email);
           await markLeadAsSent(qualifiedLead.email, account.email, emailContent.subject, sendResult.messageId);
           await markCompanySent(qualifiedLead.company_name);
+          await recordGlobalSend();
           try {
             await logSentEmail({
               to: qualifiedLead.email, from: account.email,
