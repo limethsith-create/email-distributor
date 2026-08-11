@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: '0 1px 2px rgba(16,24,40,0.04)' };
+const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 3, boxShadow: 'none' };
 
 // ---- Rule-based sentiment: reads the subject + preview of each reply ----
 const POS = [
