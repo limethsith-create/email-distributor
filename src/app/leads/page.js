@@ -17,7 +17,7 @@ function isReplied(l) {
   return (l.status || '') === 'replied' || !!l.replied_at;
 }
 
-const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, padding: '18px 20px', boxShadow: '0 1px 2px rgba(16,24,40,0.04)' };
+const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 3, padding: '18px 20px', boxShadow: 'none' };
 
 function scoreBadge(v) {
   if (v == null) return <span style={{ color: 'var(--fg-dim)', fontSize: 12 }}>—</span>;
@@ -27,7 +27,7 @@ function scoreBadge(v) {
 
 function statusLabel(l) {
   if (isReplied(l)) return { t: 'replied', bg: 'rgba(8,145,178,0.14)', fg: '#0e7490' };
-  if (isSent(l)) return { t: 'sent', bg: 'rgba(110,86,207,0.14)', fg: '#6e56cf' };
+  if (isSent(l)) return { t: 'sent', bg: 'rgba(224,41,15,0.14)', fg: '#e0290f' };
   return { t: 'new', bg: 'rgba(22,163,74,0.14)', fg: '#15803d' };
 }
 
@@ -88,7 +88,7 @@ export default function LeadsPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginBottom: 18 }}>
         <div style={card}><div style={{ color: 'var(--fg-muted)', fontSize: 13 }}>Total leads</div><div style={{ fontSize: 30, fontWeight: 700 }}>{loading ? '—' : stat.total}</div></div>
         <div style={card}><div style={{ color: 'var(--fg-muted)', fontSize: 13 }}>Not yet sent</div><div style={{ fontSize: 30, fontWeight: 700, color: '#15803d' }}>{loading ? '—' : stat.fresh}</div></div>
-        <div style={card}><div style={{ color: 'var(--fg-muted)', fontSize: 13 }}>Already sent</div><div style={{ fontSize: 30, fontWeight: 700, color: '#6e56cf' }}>{loading ? '—' : stat.sent}</div></div>
+        <div style={card}><div style={{ color: 'var(--fg-muted)', fontSize: 13 }}>Already sent</div><div style={{ fontSize: 30, fontWeight: 700, color: '#e0290f' }}>{loading ? '—' : stat.sent}</div></div>
         <div style={card}><div style={{ color: 'var(--fg-muted)', fontSize: 13 }}>Replied</div><div style={{ fontSize: 30, fontWeight: 700, color: '#0e7490' }}>{loading ? '—' : stat.replied}</div></div>
       </div>
 
