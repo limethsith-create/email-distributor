@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: '0 1px 2px rgba(16,24,40,0.04)' };
+const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 3, boxShadow: 'none' };
 const mono = { fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 13.5, whiteSpace: 'pre-wrap', lineHeight: 1.6, color: 'var(--fg)' };
 const label = { fontSize: 12.5, color: 'var(--fg-dim)', marginBottom: 6 };
 
@@ -61,7 +61,7 @@ export default function OfferPage() {
     const map = {
       gemini: { t: 'Gemini · personalized', bg: 'rgba(22,163,74,0.12)', fg: '#15803d' },
       fallback: { t: 'Fallback (key error)', bg: 'rgba(217,119,6,0.12)', fg: '#b45309' },
-      base: { t: 'Rule-based (no key yet)', bg: 'rgba(110,86,207,0.12)', fg: '#6e56cf' },
+      base: { t: 'Rule-based (no key yet)', bg: 'rgba(224,41,15,0.12)', fg: '#e0290f' },
     };
     const m = map[eng] || map.base;
     return <span style={{ background: m.bg, color: m.fg, borderRadius: 8, padding: '3px 10px', fontSize: 12, fontWeight: 600 }}>{m.t}</span>;
