@@ -2,25 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+   Aviance dashboard theme — editorial / technical
+   Matches aviance.online: white canvas, black ink, signature red,
+   Inter Tight + JetBrains Mono, sharp corners, flat surfaces.
+   ============================================================ */
+
 :root {
-  --bg: #f6f7f9;
-  --bg-subtle: #ffffff;
+  --bg: #ffffff;
+  --bg-subtle: #fafafa;
   --card: #ffffff;
-  --card-hover: #f3f4f6;
-  --border: #e6e8ec;
-  --border-strong: #d7dae0;
-  --fg: #1a1d24;
-  --fg-muted: #5b6472;
-  --fg-dim: #98a0ac;
-  --accent: #6e56cf;
-  --accent-hover: #5f49bd;
-  --accent-soft: rgba(110, 86, 207, 0.10);
+  --card-hover: #f4f4f4;
+  --border: #e6e6e6;        /* hairline */
+  --border-strong: #111111; /* black rule */
+  --fg: #0a0a0a;
+  --fg-muted: #5c5c5c;
+  --fg-dim: #9a9a9a;
+  --accent: #e0290f;        /* brand red */
+  --accent-hover: #c42408;
+  --accent-soft: rgba(224, 41, 15, 0.08);
   --success: #16a34a;
   --success-soft: rgba(22, 163, 74, 0.12);
   --warning: #d97706;
   --warning-soft: rgba(217, 119, 6, 0.12);
-  --danger: #dc2626;
-  --danger-soft: rgba(220, 38, 38, 0.12);
+  --danger: #e0290f;
+  --danger-soft: rgba(224, 41, 15, 0.10);
+  --mono: 'JetBrains Mono', ui-monospace, 'Courier New', monospace;
+  --radius: 3px;
 }
 
 * { box-sizing: border-box; }
@@ -29,37 +37,58 @@ html, body { padding: 0; margin: 0; }
 body {
   background: var(--bg);
   color: var(--fg);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #c2c6cd; }
+::-webkit-scrollbar-thumb { background: #d4d4d4; border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: #bcbcbc; }
 
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04); }
-.card-hover:hover { background: var(--card-hover); border-color: var(--border-strong); }
+/* Flat, sharp-cornered surfaces */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: none; }
+.card-hover:hover { background: var(--card-hover); border-color: #111; }
 
+/* Monospace eyebrow / section label — e.g. "00 / OVERVIEW" */
+.eyebrow {
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.eyebrow b, .eyebrow .idx { color: var(--accent); font-weight: 600; }
+
+.mono { font-family: var(--mono); }
+
+/* Buttons — black fill, sharp corners, like the site's "BOOK A CALL" */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  font-size: 14px; font-weight: 500; line-height: 1;
-  padding: 10px 16px; border-radius: 9px; cursor: pointer;
+  font-size: 13px; font-weight: 600; line-height: 1;
+  padding: 12px 18px; border-radius: 0; cursor: pointer;
   border: 1px solid transparent; transition: all 0.15s ease; white-space: nowrap;
+  letter-spacing: 0.02em;
 }
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-primary:hover { background: var(--accent-hover); }
-.btn-ghost { background: transparent; color: var(--fg-muted); border-color: var(--border-strong); }
-.btn-ghost:hover { color: var(--fg); border-color: #c2c6cd; background: var(--card-hover); }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: #0a0a0a; color: #fff; }
+.btn-primary:hover { background: var(--accent); }
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-accent:hover { background: var(--accent-hover); }
+.btn-ghost { background: transparent; color: var(--fg); border-color: #111; }
+.btn-ghost:hover { color: #fff; background: #0a0a0a; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .inp {
-  width: 100%; background: var(--card); border: 1px solid var(--border);
-  border-radius: 9px; padding: 10px 12px; color: var(--fg); font-size: 14px;
+  width: 100%; background: var(--card); border: 1px solid #111;
+  border-radius: 0; padding: 11px 13px; color: var(--fg); font-size: 14px;
   transition: border-color 0.15s ease;
 }
 .inp::placeholder { color: var(--fg-dim); }
-.inp:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.inp:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 
 .fade-up { animation: fadeUp 0.4s ease both; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* Full-width hairline divider like the site's section rules */
+.rule { height: 1px; background: #111; width: 100%; }
+.rule-soft { height: 1px; background: var(--border); width: 100%; }
