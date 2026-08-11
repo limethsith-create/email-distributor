@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 14, boxShadow: '0 1px 2px rgba(16,24,40,0.04)' };
+const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 3, boxShadow: 'none' };
 
 function prettyDay(d) {
   if (!d) return '';
@@ -51,7 +51,7 @@ export default function ActivityPage() {
 
       {/* lifetime totals */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginBottom: 22 }}>
-        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: 'var(--fg-muted)', fontSize: 13 }}>Sent (all time)</div><div style={{ fontSize: 30, fontWeight: 700, color: '#6e56cf' }}>{loading ? '—' : totals.sent}</div></div>
+        <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: 'var(--fg-muted)', fontSize: 13 }}>Sent (all time)</div><div style={{ fontSize: 30, fontWeight: 700, color: '#e0290f' }}>{loading ? '—' : totals.sent}</div></div>
         <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: 'var(--fg-muted)', fontSize: 13 }}>Opens</div><div style={{ fontSize: 30, fontWeight: 700, color: '#0891b2' }}>{loading ? '—' : totals.opens}</div></div>
         <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: 'var(--fg-muted)', fontSize: 13 }}>Replies</div><div style={{ fontSize: 30, fontWeight: 700, color: '#16a34a' }}>{loading ? '—' : totals.replies}</div></div>
         <div style={{ ...card, padding: '16px 18px' }}><div style={{ color: 'var(--fg-muted)', fontSize: 13 }}>Bounces</div><div style={{ fontSize: 30, fontWeight: 700, color: '#dc2626' }}>{loading ? '—' : totals.bounces}</div></div>
@@ -75,7 +75,7 @@ export default function ActivityPage() {
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '16px 20px', flexWrap: 'wrap' }}>
                   <div style={{ fontWeight: 600, fontSize: 14.5 }}>{prettyDay(d.date)}</div>
                   <div style={{ display: 'flex', gap: 22, alignItems: 'center' }}>
-                    <Metric label="sent" value={s.totalSent || 0} color="#6e56cf" />
+                    <Metric label="sent" value={s.totalSent || 0} color="#e0290f" />
                     <Metric label="opens" value={s.totalOpens || 0} color="#0891b2" />
                     <Metric label="replies" value={s.totalReplies || 0} color="#16a34a" />
                     <Metric label="bounces" value={s.totalBounces || 0} color="#dc2626" />
@@ -87,7 +87,7 @@ export default function ActivityPage() {
                   <div style={{ borderTop: '1px solid var(--border)', padding: '14px 20px', fontSize: 13 }}>
                     {(d.sent || []).length > 0 && (
                       <div style={{ marginBottom: 12 }}>
-                        <div style={{ fontWeight: 600, color: '#6e56cf', marginBottom: 6 }}>Sent ({d.sent.length})</div>
+                        <div style={{ fontWeight: 600, color: '#e0290f', marginBottom: 6 }}>Sent ({d.sent.length})</div>
                         {d.sent.slice(0, 50).map((x, i) => (
                           <div key={i} style={{ color: 'var(--fg-muted)', padding: '2px 0' }}>
                             {x.to} {x.company ? <span style={{ color: 'var(--fg-dim)' }}>· {x.company}</span> : null} {x.from ? <span style={{ color: 'var(--fg-dim)' }}>· from {x.from}</span> : null}
