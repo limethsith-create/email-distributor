@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: '0 1px 2px rgba(16,24,40,0.04)' };
+const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 3, boxShadow: 'none' };
 
 function Toggle({ on, busy, onClick }) {
   return (
