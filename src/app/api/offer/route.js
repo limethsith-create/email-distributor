@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 const OFFER_KEY = 'base_offer';
 
-export const DEFAULT_OFFER = {
+const DEFAULT_OFFER = {
   subject: '{{name}} — quick idea for {{company}}',
   body: `Hi {{name}},
 
