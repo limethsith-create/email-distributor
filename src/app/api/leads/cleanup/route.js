@@ -105,29 +105,42 @@ export async function POST(request) {
     await chunkedHset(LEADS_KEY, updates);
 
     // Purge event stores: old replies, opens, bounce events, conversations.
-    try { await kv.del('replies'); } catch {}
-    try { await kv.del('email_opens'); } catch {}
-    try { await kv.del('bounces'); } catch {}
-    try { await kv.del('conversations'); } catch {}
+    const diag = {};
+    for (const key of ['replies', 'email_opens', 'bounces', 'conversations']) {
+      try { diag[key + '_deleted'] = await kv.del(key); }
+      catch (e) { diag[key + '_error'] = e.message; }
+    }
 
     // Rebuild sent_log: keep only entries from keepFrom (ET) onward.
+    // Read in small pages — the full list is too large for a single call.
     try {
-      const log = (await kv.lrange('sent_log', 0, 4999)) || [];
-      const kept = log.filter((e) => {
-        const ts = e && (e.timestamp || e.sentAt || e.createdAt);
-        return ts && etDay(ts) >= keepFrom;
-      });
+      const kept = [];
+      let total = 0;
+      for (let page = 0; page < 40; page++) {
+        let batch;
+        try { batch = await kv.lrange('sent_log', page * 200, page * 200 + 199); }
+        catch (e) { diag.sent_log_page_error = `page ${page}: ${e.message}`; break; }
+        if (!batch || !batch.length) break;
+        total += batch.length;
+        for (const e of batch) {
+          const ts = e && (e.timestamp || e.sentAt || e.createdAt);
+          if (ts && etDay(ts) >= keepFrom) kept.push(e);
+        }
+        if (batch.length < 200) break;
+      }
+      diag.sent_log_before = total;
+      diag.sent_log_kept = kept.length;
       await kv.del('sent_log');
       // lrange returns newest-first (lpush order); re-push oldest-first to preserve order.
       for (let i = kept.length - 1; i >= 0; i--) await kv.lpush('sent_log', kept[i]);
-    } catch {}
+    } catch (e) { diag.sent_log_error = e.message; }
 
     // Rebuild stats from what actually remains.
     try {
       await kv.hset('stats', { totalSent: keptSent, totalReplied: 0, totalOpens: 0, totalBounced: 0 });
-    } catch {}
+    } catch (e) { diag.stats_error = e.message; }
 
-    return Response.json({ success: true, keepFrom, keptSent, resetToPending, clearedReplies, bouncedKept });
+    return Response.json({ success: true, keepFrom, keptSent, resetToPending, clearedReplies, bouncedKept, diag });
   }
 
   if (action === 'promote') {
