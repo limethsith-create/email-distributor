@@ -75,12 +75,16 @@ function SentChart({ pts }) {
 export default function Dashboard() {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [inboxes, setInboxes] = useState([]);
 
   useEffect(() => {
     let alive = true;
     fetch('/api/leads?action=list&limit=3000&page=1').then((r) => r.json())
       .then((d) => { if (alive) { setLeads(Array.isArray(d) ? d : (d.leads || [])); setLoading(false); } })
       .catch(() => { if (alive) setLoading(false); });
+    fetch('/api/inboxes-control', { cache: 'no-store' }).then((r) => r.json())
+      .then((d) => { if (alive) setInboxes(d.inboxes || []); })
+      .catch(() => {});
     return () => { alive = false; };
   }, []);
 
@@ -91,11 +95,6 @@ export default function Dashboard() {
   const newLeads = real.filter((l) => !isSent(l));
   const emailsSent = sentLeads.length;
   const pts = buildSentSeries(real);
-
-  const inboxes = [
-    { email: 'limethsith@getaviance.site' },
-    { email: 'limethsith.weerasinghe@getaviance.site' },
-  ];
 
   return (
     <div className="fade-up">
@@ -116,7 +115,8 @@ export default function Dashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14, marginBottom: 20 }}>
         <KPI idx="01" label="Total leads" value={loading ? '—' : total} sub={`${newLeads.length} not yet sent`} />
-        <KPI idx="02" label="Inboxes live" value="2" sub="12 / day each" />
+        <KPI idx="02" label="Inboxes live" value={inboxes.length ? inboxes.filter((i) => i.enabled).length : '—'}
+          sub={inboxes.length ? inboxes.map((i) => i.cap + '/day').join(' · ') : 'loading'} />
         <KPI idx="03" label="Emails sent" value={loading ? '—' : emailsSent} sub="this campaign" />
         <KPI idx="04" label="Replied" value={loading ? '—' : repliedLeads.length} sub="recorded" />
       </div>
@@ -132,13 +132,15 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 18 }}>
         <div style={{ ...card, padding: '20px 22px' }}>
           <div className="eyebrow" style={{ marginBottom: 14 }}><span className="idx">06</span>&nbsp;/&nbsp;INBOXES</div>
-          {inboxes.map((b) => (
+          {(inboxes.length ? inboxes : [{ email: 'Loading…', enabled: false, sentToday: 0, cap: 0 }]).map((b) => (
             <div key={b.email} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderTop: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <span style={{ width: 7, height: 7, background: '#16a34a', flexShrink: 0 }} />
+                <span style={{ width: 7, height: 7, background: b.enabled ? '#16a34a' : 'var(--fg-dim)', flexShrink: 0 }} />
                 <span style={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.email}</span>
               </div>
-              <span className="mono" style={{ fontSize: 10.5, color: '#15803d', border: '1px solid rgba(22,163,74,0.4)', padding: '3px 8px', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Live</span>
+              <span className="mono" style={{ fontSize: 10.5, color: b.enabled ? '#15803d' : 'var(--fg-dim)', border: '1px solid ' + (b.enabled ? 'rgba(22,163,74,0.4)' : 'var(--border)'), padding: '3px 8px', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                {b.enabled ? `On · ${b.sentToday}/${b.cap}` : 'Off'}
+              </span>
             </div>
           ))}
           <div className="mono" style={{ marginTop: 14, fontSize: 11, color: 'var(--fg-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sending spread across US business hours</div>
