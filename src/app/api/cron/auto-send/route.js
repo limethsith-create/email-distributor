@@ -19,6 +19,7 @@ import { getSmtpAccounts } from '@/lib/smtp-accounts';
 import {
   isWithinSendingHours,
   computeNextSendDelayMs,
+  computeEvenGapMs,
 } from '@/lib/warmup';
 
 export const maxDuration = 300;
@@ -38,13 +39,16 @@ const COMPANY_SENT_KEY = 'company_sent';
 // are due. Each successful send stamps `last_global_send`; every send path
 // checks it first.
 const LAST_GLOBAL_SEND_KEY = 'last_global_send';
-const MIN_SEND_GAP_MS = 12 * 60 * 1000; // never two emails within 12 minutes
+const MIN_SEND_GAP_MS = 12 * 60 * 1000; // hard floor: never two emails within 12 min
 
-async function tooSoonToSend() {
+// The gap is DYNAMIC and even: it's computed from how much of the workday is
+// left divided by how many emails remain (see computeEvenGapMs). We pass that
+// in as `gapMs`. It falls back to the 12-min floor when no gap is supplied.
+async function tooSoonToSend(gapMs = MIN_SEND_GAP_MS) {
   try {
     const last = await kv.get(LAST_GLOBAL_SEND_KEY);
     if (!last) return false;
-    return (Date.now() - new Date(last).getTime()) < MIN_SEND_GAP_MS;
+    return (Date.now() - new Date(last).getTime()) < gapMs;
   } catch {
     return false;
   }
@@ -494,16 +498,18 @@ export async function GET(request) {
     }
 
     // ── ANTI-BURST GATE (applies to every mode) ──
-    // If we sent an email very recently, stop now and send nothing. This is
-    // what spreads sends evenly through the day even though the heartbeat
-    // pings every ~10 minutes.
-    if (await tooSoonToSend()) {
+    // DYNAMIC EVEN SPACING: the gap between any two sends is the workday time
+    // remaining divided by the emails remaining, so the day's emails land in
+    // equal steps instead of a burst. e.g. 24 left over 8 h → ~20 min apart;
+    // with two inboxes taking turns that's ~40 min per inbox.
+    const evenGapMs = computeEvenGapMs(totalRemaining);
+    if (await tooSoonToSend(evenGapMs)) {
       await releaseLock();
       return Response.json({
         success: true,
         paced: true,
         sent: 0,
-        message: `Spacing sends across the day — at least ${Math.round(MIN_SEND_GAP_MS / 60000)} min between emails.`,
+        message: `Spacing sends evenly across the workday — ~${Math.round(evenGapMs / 60000)} min between emails right now.`,
         timestamp: new Date().toISOString(),
         accountStatus,
       });
@@ -516,16 +522,25 @@ export async function GET(request) {
     // at least MIN_SEND_GAP_MS apart. Net effect: a steady drip.
     // ============================================================
     if (batchSize === 0) {
-      const readyAccounts = [];
       const scheduleStatus = await getAccountScheduleStatus(accounts);
 
+      // ── SELF-BALANCING INBOX SELECTION ──
+      // Every eligible inbox (switch on, cap not hit) is a candidate. We sort
+      // so the inbox that is FURTHEST BEHIND today (most remaining) goes first;
+      // ties are broken at random. Because each send decrements that inbox's
+      // remaining, the two inboxes automatically take turns — neither can race
+      // ahead of the other, and both end the day at the same count. This is the
+      // fix for "only one Gmail is sending": selection is by workload now, not
+      // by fixed list order.
+      const readyAccounts = [];
       for (let i = 0; i < accounts.length; i++) {
         if (accountStatus[i].remaining <= 0) continue;
-        const ready = await isAccountReady(accounts[i].email);
-        if (ready) {
-          readyAccounts.push({ account: accounts[i], stat: accountStatus[i] });
-        }
+        readyAccounts.push({ account: accounts[i], stat: accountStatus[i], __r: Math.random() });
       }
+      readyAccounts.sort((a, b) => {
+        const diff = b.stat.remaining - a.stat.remaining; // most-behind first
+        return diff !== 0 ? diff : a.__r - b.__r;         // random tie-break
+      });
 
       if (readyAccounts.length === 0) {
         await releaseLock();
