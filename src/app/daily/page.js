@@ -1,9 +1,0 @@
-'use client';
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-// Old daily log — folded into Dashboard
-export default function DailyRedirect() {
-  const router = useRouter();
-  useEffect(() => { router.replace('/'); }, [router]);
-  return null;
-}
