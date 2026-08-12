@@ -17,7 +17,6 @@ import { logSentEmail } from '@/lib/leads-db';
 import { verifyEmail } from '@/lib/email-verify';
 import { getSmtpAccounts } from '@/lib/smtp-accounts';
 import {
-  getMaxPerAccountPerDay,
   isWithinSendingHours,
   computeNextSendDelayMs,
 } from '@/lib/warmup';
@@ -262,6 +261,20 @@ async function getUnsent(limit = 75) {
     const allLeads = await kv.hgetall(LEADS_KEY);
     if (!allLeads) return [];
 
+    // Reaper: a lead stuck in 'sending' for >30 min means a previous run
+    // died mid-send (timeout/crash). Flip it back to 'pending' so it can
+    // be picked up again instead of being stranded forever.
+    const STALE_MS = 30 * 60 * 1000;
+    for (const lead of Object.values(allLeads)) {
+      if ((lead.status || '').toLowerCase() === 'sending' && lead.email) {
+        const ts = lead.updatedAt ? new Date(lead.updatedAt).getTime() : 0;
+        if (!ts || Date.now() - ts > STALE_MS) {
+          lead.status = 'pending';
+          try { await kv.hset(LEADS_KEY, { [lead.email.toLowerCase()]: { ...lead, status: 'pending', updatedAt: new Date().toISOString() } }); } catch {}
+        }
+      }
+    }
+
     const unsent = Object.values(allLeads)
       .filter(lead => {
         const status = (lead.status || '').toLowerCase();
@@ -406,11 +419,11 @@ export async function GET(request) {
     }
   }
 
-  // Business hours check — only send 7 AM to 11 PM Sri Lanka time
+  // Business hours check — only send 8 AM to 7 PM US Eastern
   if (!isWithinSendingHours()) {
     return Response.json({
       success: true,
-      message: 'Outside sending hours (7 AM - 11 PM Sri Lanka time)',
+      message: 'Outside sending hours (8 AM - 7 PM US Eastern)',
       timestamp: new Date().toISOString(),
       sent: 0,
     });
@@ -563,7 +576,7 @@ export async function GET(request) {
             email: lead.email.toLowerCase().trim(),
             industry: lead.industry || 'business',
             company_name: lead.company || lead.company_name || null,
-            city: lead.city || 'Sri Lanka',
+            city: lead.city || 'USA',
             first_name: lead.name?.split(/[\s,]/)[0] || null,
           };
 
@@ -703,7 +716,7 @@ export async function GET(request) {
           email: fuLead.email.toLowerCase().trim(),
           industry: fuLead.industry || 'business',
           company_name: fuLead.company || fuLead.company_name || 'your company',
-          city: fuLead.city || 'Sri Lanka',
+          city: fuLead.city || 'USA',
           first_name: fuLead.name?.split(/[\s,]/)[0] || fuLead.first_name || null,
         };
 
@@ -850,7 +863,7 @@ export async function GET(request) {
         email: lead.email.toLowerCase().trim(),
         industry: lead.industry || 'business',
         company_name: lead.company || lead.company_name || null,
-        city: lead.city || 'Sri Lanka',
+        city: lead.city || 'USA',
         first_name: lead.name?.split(/[\s,]/)[0] || null,
       };
 
