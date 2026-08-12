@@ -16,10 +16,11 @@ const WARMUP_START_DATE = process.env.WARMUP_START_DATE || '2026-06-13';
 const SEND_TZ = 'America/New_York';
 
 // Sending window (US Eastern local time), inclusive start, exclusive end.
-// 8 AM ET catches the East Coast morning; 7 PM ET (= 4 PM Pacific) still lands
-// inside the West Coast workday, so it covers US business hours coast-to-coast.
-export const SEND_WINDOW_START_HOUR = 8;   // 8 AM ET
-export const SEND_WINDOW_END_HOUR = 19;    // 7 PM ET
+// A tight 9 AM – 5 PM ET (8-hour US workday) so the day's emails land inside
+// core business hours and spread out to ~40 min apart per inbox. This matches
+// the "8 hours / 12 emails ≈ 40-minute gaps" cadence we want.
+export const SEND_WINDOW_START_HOUR = 9;   // 9 AM ET
+export const SEND_WINDOW_END_HOUR = 17;    // 5 PM ET
 
 /**
  * The 4-stage ramp. Caps are PER INBOX, PER DAY.
@@ -76,9 +77,9 @@ function minutesLeftInWindow(now = new Date()) {
 }
 
 /**
- * Pick a randomized delay (ms) until this inbox should send its NEXT email.
- * We spread `remaining` sends across the time left in the window, then add
- * heavy jitter (±45%) so the cadence looks human, not scheduled.
+ * Pick a delay (ms) until this inbox should send its NEXT email.
+ * We spread `remaining` sends evenly across the time left in the window, with
+ * only light jitter (±10%) so the cadence is even, not clustered.
  */
 export function computeNextSendDelayMs(remainingToday, now = new Date()) {
   const left = minutesLeftInWindow(now);
@@ -87,8 +88,25 @@ export function computeNextSendDelayMs(remainingToday, now = new Date()) {
     return 8 * 60 * 60 * 1000; // ~8h; the window check will gate actual sends
   }
   const baseGap = left / Math.max(1, remainingToday); // minutes
-  const jitter = 0.55 + Math.random() * 0.9;          // 0.55x – 1.45x
-  const gapMin = Math.max(4, baseGap * jitter);       // never less than 4 min apart
+  const jitter = 0.9 + Math.random() * 0.2;           // 0.9x – 1.1x (even, light)
+  const gapMin = Math.max(6, baseGap * jitter);       // never less than 6 min apart
+  return Math.round(gapMin * 60 * 1000);
+}
+
+/**
+ * Even, self-pacing GLOBAL gap (ms) between ANY two sends across ALL inboxes,
+ * so the whole day's remaining emails are spread evenly across the time left
+ * in the window: gap = minutesLeft / totalRemaining. Light ±10% jitter only.
+ *
+ * Example: 24 emails left and 480 min (8 h) left → ~20 min between any two
+ * sends. With two inboxes taking turns, each inbox fires ~40 min apart.
+ */
+export function computeEvenGapMs(totalRemaining, now = new Date()) {
+  const left = minutesLeftInWindow(now); // minutes
+  if (left <= 0 || totalRemaining <= 0) return 8 * 60 * 60 * 1000;
+  const baseGap = left / totalRemaining;        // minutes between any two sends
+  const jitter = 0.9 + Math.random() * 0.2;     // ±10% — keep it even
+  const gapMin = Math.max(6, baseGap * jitter); // floor so we never burst
   return Math.round(gapMin * 60 * 1000);
 }
 
