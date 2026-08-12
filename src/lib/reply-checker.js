@@ -108,6 +108,7 @@ async function checkRepliesForAccount(account) {
             account: account.email,
             preview: preview,
             messageId: envelope.messageId,
+            inReplyTo: inReplyTo || null,
           });
         }
       }
@@ -129,18 +130,46 @@ async function checkRepliesForAccount(account) {
   return results;
 }
 
+/** Normalize a Message-ID for comparison: strip < >, whitespace, lowercase. */
+function normId(x) {
+  return String(x || '').trim().replace(/^<|>$/g, '').trim().toLowerCase();
+}
+
 /**
- * Match a reply to a lead in the database and update status
+ * Match a reply to a lead in the database and update status.
+ *
+ * STRICT: we only treat a message as a real reply when
+ *   (a) the sender is a lead we actually emailed, AND
+ *   (b) the message threads back to a Message-ID WE generated for that lead
+ *       (In-Reply-To matches our day-0 / day-3 / day-7 / bot Message-ID).
+ * This makes it impossible to ever "reply" to a warmup email, an out-of-pool
+ * message, or any stray inbox mail — those never thread back to our sends.
  */
 async function matchAndUpdateLead(reply) {
   try {
     const fromEmail = reply.from.toLowerCase();
 
-    // Check if this sender is in our leads database
+    // (a) Sender must be a lead we actually emailed.
     const lead = await kv.hget(LEADS_KEY, fromEmail);
+    if (!lead) return { matched: false, email: fromEmail, reason: 'not_a_lead' };
+    const st = String(lead.status || '');
+    const wasEmailed = Boolean(lead.account_used || lead.sent_at || st.startsWith('sent') || st === 'replied');
+    if (!wasEmailed) return { matched: false, email: fromEmail, reason: 'lead_not_emailed' };
 
-    if (lead && lead.status && lead.status.startsWith('sent')) {
-      // This is a reply from a lead we emailed! Update their status
+    // (b) Must thread back to an email WE sent this exact lead.
+    const ourIds = [
+      lead.original_message_id,
+      lead.d3_message_id,
+      lead.d7_message_id,
+      lead.auto_reply_message_id,
+    ].filter(Boolean).map(normId);
+    const inReplyTo = normId(reply.inReplyTo);
+    if (!inReplyTo || !ourIds.includes(inReplyTo)) {
+      return { matched: false, email: fromEmail, reason: 'no_thread_match' };
+    }
+
+    {
+      // Genuine reply from a real lead — update their status.
       const updated = {
         ...lead,
         status: 'replied',

@@ -275,6 +275,9 @@ export async function maybeAutoReply(reply, lead) {
         status: 'replied',
         auto_replied: true,
         auto_replied_at: new Date().toISOString(),
+        // Remember the id of the email the bot just sent, so a further reply
+        // from this lead (which threads back to it) still matches as genuine.
+        auto_reply_message_id: result.messageId || lead.auto_reply_message_id || null,
         updatedAt: new Date().toISOString(),
       };
       await kv.hset(LEADS_KEY, { [leadEmail]: updatedLead });
