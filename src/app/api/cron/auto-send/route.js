@@ -284,11 +284,15 @@ async function getUnsent(limit = 75) {
         return fresh && qualified && isUSALead(lead);
       });
 
-    // Shuffle for variety
-    for (let i = unsent.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [unsent[i], unsent[j]] = [unsent[j], unsent[i]];
-    }
+    // BEST CUSTOMERS FIRST: highest-rated leads get emailed before anyone else.
+    // Random jitter only breaks ties within the same score, so order still
+    // varies between runs without ever letting a lower-rated lead jump ahead.
+    for (const l of unsent) l.__jitter = Math.random();
+    unsent.sort((a, b) => {
+      const diff = (Number(b.quality_score) || 0) - (Number(a.quality_score) || 0);
+      return diff !== 0 ? diff : a.__jitter - b.__jitter;
+    });
+    for (const l of unsent) delete l.__jitter;
 
     return unsent.slice(0, limit);
   } catch {
