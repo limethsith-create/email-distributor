@@ -608,16 +608,15 @@ export async function GET(request) {
             .split(/\n\n+/)
             .filter(p => p.trim().length > 0)
             .map(p => {
-              let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+              let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); escaped = escaped.replace(/aviance\.online/g, '<a href="https://www.aviance.online" style="color:#0a0a0a;">aviance.online</a>');
               return `<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">${escaped}</p>`;
             })
             .join('\n');
 
           const htmlSignature = `
           <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
-            Limethsith<br>
-            Aviance — Guaranteed booked sales calls<br>
-            071 870 2702 | <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
+                        Aviance — Guaranteed booked sales calls<br>
+            <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
           </div>`;
 
           const htmlUnsubscribe = unsubNote
@@ -715,16 +714,15 @@ export async function GET(request) {
           .split(/\n\n+/)
           .filter(p => p.trim().length > 0)
           .map(p => {
-            let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+            let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); escaped = escaped.replace(/aviance\.online/g, '<a href="https://www.aviance.online" style="color:#0a0a0a;">aviance.online</a>');
             return `<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">${escaped}</p>`;
           })
           .join('\n');
 
         const htmlSignature = `
         <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
-          Limethsith<br>
-          Aviance — Guaranteed booked sales calls<br>
-          071 870 2702 | <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
+                    Aviance — Guaranteed booked sales calls<br>
+          <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
         </div>`;
 
         const htmlBody = htmlParagraphs + htmlSignature;
@@ -897,16 +895,15 @@ export async function GET(request) {
         .split(/\n\n+/)
         .filter(p => p.trim().length > 0)
         .map(p => {
-          let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+          let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); escaped = escaped.replace(/aviance\.online/g, '<a href="https://www.aviance.online" style="color:#0a0a0a;">aviance.online</a>');
           return `<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">${escaped}</p>`;
         })
         .join('\n');
 
       const htmlSignature = `
       <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
-        Limethsith<br>
-        Aviance — Guaranteed booked sales calls<br>
-        071 870 2702 | <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
+                Aviance — Guaranteed booked sales calls<br>
+        <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
       </div>`;
 
       const htmlUnsubscribe = unsubNote
