@@ -14,6 +14,7 @@
 import { ImapFlow } from 'imapflow';
 import { kv } from '@vercel/kv';
 import { getSmtpAccounts } from '@/lib/smtp-accounts';
+import { maybeAutoReply } from '@/lib/auto-reply';
 
 const LEADS_KEY = 'leads';
 const REPLIES_KEY = 'replies'; // Hash: email -> { reply details }
@@ -191,6 +192,7 @@ export async function checkAllReplies() {
     totalReplies: 0,
     matchedLeads: 0,
     newReplies: [],
+    autoReplies: [],
     errors: [],
     timestamp: new Date().toISOString(),
   };
@@ -216,6 +218,18 @@ export async function checkAllReplies() {
           preview: reply.preview,
           date: reply.date,
         });
+
+        // Auto-reply bot: send exactly one automatic reply per lead,
+        // then a human takes over. Never throws.
+        try {
+          const updatedLead = await kv.hget(LEADS_KEY, reply.from.toLowerCase());
+          if (updatedLead) {
+            const autoResult = await maybeAutoReply(reply, updatedLead);
+            summary.autoReplies.push({ to: reply.from, ...autoResult });
+          }
+        } catch (err) {
+          summary.autoReplies.push({ to: reply.from, skipped: `error: ${err.message}` });
+        }
       }
     }
   }
