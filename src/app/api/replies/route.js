@@ -17,11 +17,18 @@ export async function GET() {
       replyCount = await kv.hget('stats', 'totalReplied') || 0;
     } catch {}
 
+    // Full two-way conversations (auto-reply bot log) for the UI
+    let conversations = {};
+    try {
+      conversations = (await kv.hgetall('conversations')) || {};
+    } catch {}
+
     return Response.json({
       success: true,
       totalReplies: replies.length,
       statCount: parseInt(replyCount || '0'),
       replies,
+      conversations,
     });
   } catch (err) {
     return Response.json({
