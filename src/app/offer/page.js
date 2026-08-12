@@ -71,7 +71,8 @@ export default function OfferPage() {
     <div className="fade-up" style={{ maxWidth: 1080 }}>
       <h1 className="text-[26px] font-bold tracking-tight mb-1">Offer</h1>
       <p style={{ color: 'var(--fg-muted)', fontSize: 14, marginBottom: 20 }}>
-        Edit your base offer here anytime — it saves instantly and the AI agent uses it on every lead. Use {'{{name}}'} and {'{{company}}'} as placeholders.
+        Live sending uses the built-in 3-step sequence (initial, day-3, day-7) that ends on your money-back guarantee.
+        This editor is a scratchpad + preview: save a draft and test how the personalizer would adapt it per company.
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(340px,1fr))', gap: 18 }}>
