@@ -13,12 +13,123 @@
  */
 
 import { kv } from '@vercel/kv';
+import { promises as dns } from 'node:dns';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 const LEADS_KEY = 'leads';
 const ARCHIVE_KEY = 'removed_leads';
+
+// ─────────────────────────────────────────────────────────────
+// REQUALIFICATION RULE DATA (targeting + deliverability)
+// ─────────────────────────────────────────────────────────────
+const EMAIL_OK = /^[A-Za-z0-9._%+'-]+@(?=.{1,253}$)([a-z0-9](-*[a-z0-9])*\.)+[a-z]{2,63}$/;
+
+// Shared/functional inboxes — near-zero cold-reply value.
+const ROLE_PREFIXES = new Set([
+  'info', 'sales', 'support', 'admin', 'administrator', 'webmaster', 'postmaster', 'hostmaster',
+  'abuse', 'noc', 'security', 'root', 'sysadmin', 'help', 'helpdesk', 'billing', 'accounts',
+  'accounting', 'ap', 'ar', 'finance', 'invoices', 'invoice', 'payments', 'payroll', 'hr', 'jobs',
+  'careers', 'recruiting', 'recruitment', 'marketing', 'newsletter', 'news', 'press', 'media', 'pr',
+  'noreply', 'no-reply', 'donotreply', 'do-not-reply', 'bounce', 'bounces', 'notifications',
+  'notification', 'alerts', 'alert', 'system', 'mail', 'email', 'feedback', 'subscribe',
+  'unsubscribe', 'order', 'orders', 'shop', 'store', 'returns', 'service', 'services',
+  'customerservice', 'customercare', 'care', 'enquiry', 'enquiries', 'inquiry', 'inquiries',
+  'general', 'staff', 'legal', 'compliance', 'privacy', 'it', 'dev', 'test', 'qa', 'api',
+  'office', 'team', 'contact', 'hello', 'reception', 'frontdesk', 'reservations', 'bookings',
+]);
+
+const FREE_PROVIDERS = new Set([
+  'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.uk', 'ymail.com', 'rocketmail.com',
+  'hotmail.com', 'hotmail.co.uk', 'outlook.com', 'live.com', 'msn.com', 'aol.com', 'aim.com',
+  'icloud.com', 'me.com', 'mac.com', 'proton.me', 'protonmail.com', 'pm.me', 'gmx.com', 'gmx.net',
+  'mail.com', 'yandex.com', 'zoho.com', 'fastmail.com', 'comcast.net', 'verizon.net', 'att.net',
+  'sbcglobal.net', 'bellsouth.net', 'cox.net', 'earthlink.net', 'qq.com', '163.com', '126.com',
+  'naver.com', 'mail.ru',
+]);
+
+const DISPOSABLE = new Set([
+  'mailinator.com', 'guerrillamail.com', 'sharklasers.com', 'grr.la', '10minutemail.com',
+  '10minutemail.net', 'tempmail.com', 'temp-mail.org', 'tempmailo.com', 'throwawaymail.com',
+  'getnada.com', 'trashmail.com', 'dispostable.com', 'yopmail.com', 'mailnesia.com', 'maildrop.cc',
+  'mintemail.com', 'fakeinbox.com', 'mohmal.com', 'emailondeck.com', 'moakt.com', 'mailcatch.com',
+  'discard.email', '1secmail.com', '1secmail.net', '1secmail.org', 'spambog.com', 'mailsac.com',
+  'meltmail.com', 'temp-mail.io', 'burnermail.io',
+]);
+
+const TYPO_DOMAINS = new Set([
+  'gmial.com', 'gmai.com', 'gmal.com', 'gamil.com', 'gmail.co', 'gmail.con', 'gmail.cm',
+  'gmaill.com', 'gnail.com', 'gmail.comm', 'yaho.com', 'yahooo.com', 'yahoo.co', 'yhoo.com',
+  'hotmial.com', 'hotmai.com', 'hotmil.com', 'homail.com', 'hotmail.co', 'hotmail.con',
+  'outlok.com', 'outook.com', 'outlook.co', 'iclould.com', 'icloud.co',
+]);
+
+// Consumer / local / regulated verticals that don't fit a "booked B2B sales call" offer.
+const EXCLUDE_INDUSTRY = /(education|school|university|college|construction|contractor|hotel|hospitality|resort|retail|restaurant|cafe|\bfood\b|beverage|healthcare|health\s*care|medical|clinic|dental|pharma|real\s*estate|realtor|realty|automotive|dealership|travel|tourism|fitness|\bgym\b|salon|\bspa\b|beauty|ecommerce|e-commerce|nonprofit|non-profit|church|religio)/i;
+
+// B2B service sellers that live on booked calls — the ICP.
+const TARGET_INDUSTRY = /(^\s*usa\s*-|marketing|advert|agenc|consult|professional\s*service|technology|software|saas|\bit\b|managed\s*service|\bmsp\b|finance|financial|fintech|manufactur|logistic|b2b)/i;
+
+// Sends we must never archive (real, active contacts). NOTE: 'bounced' is intentionally
+// NOT protected — dead addresses should be removed.
+const REQUALIFY_PROTECTED = new Set(['replied', 'sent-d0', 'sent-d3', 'sequence_complete']);
+// Statuses that mark an address as already dead / skipped.
+const DEAD_STATUSES = new Set([
+  'bounced', 'skipped_unverified', 'skipped_generic', 'skipped_no_company', 'skipped_dedup',
+  'invalid', 'skipped_dead', 'skipped',
+]);
+
+function emailParts(email) {
+  const e = String(email || '').trim().toLowerCase();
+  const parts = e.split('@');
+  return { e, local: parts[0] || '', domain: parts[1] || '', atCount: (e.match(/@/g) || []).length };
+}
+
+function industryBucket(lead) {
+  const ind = String(lead.industry || '').trim();
+  if (!ind) return 'ambiguous';
+  if (EXCLUDE_INDUSTRY.test(ind)) return 'exclude';
+  if (TARGET_INDUSTRY.test(ind)) return 'target';
+  return 'ambiguous';
+}
+
+function requalifyReason(email, lead, opts) {
+  const { e, local, domain, atCount } = emailParts(email);
+  const st = String(lead.status || '').toLowerCase();
+  if (DEAD_STATUSES.has(st)) return 'dead_status';
+  if (atCount !== 1 || !local || !domain) return 'invalid_syntax';
+  if (!EMAIL_OK.test(e) || e.includes('..')) return 'invalid_syntax';
+  if (DISPOSABLE.has(domain)) return 'disposable';
+  if (TYPO_DOMAINS.has(domain)) return 'typo_domain';
+  const base = local.split(/[.\-_+]/)[0];
+  if (ROLE_PREFIXES.has(local) || ROLE_PREFIXES.has(base)) return 'role_inbox';
+  if (opts.removeFreeProviders && FREE_PROVIDERS.has(domain)) return 'free_provider';
+  const bucket = industryBucket(lead);
+  if (bucket === 'exclude') return 'offtarget_industry';
+  if (bucket === 'ambiguous' && opts.removeAmbiguous) return 'ambiguous_industry';
+  return null;
+}
+
+// MX verdict for a domain: 'REMOVE' (dead), 'KEEP', or 'RETRY' (transient — never remove).
+async function mxVerdict(domain) {
+  const withTimeout = (p, ms) => Promise.race([
+    p, new Promise((_, rej) => setTimeout(() => rej({ code: 'ETIMEOUT' }), ms)),
+  ]);
+  try {
+    const mx = await withTimeout(dns.resolveMx(domain), 3000);
+    if (!mx || !mx.length) return 'REMOVE';
+    if (mx.every((r) => !r.exchange || r.exchange === '.')) return 'REMOVE';
+    return 'KEEP';
+  } catch (err) {
+    const c = err && err.code;
+    if (c === 'ENOTFOUND' || c === 'NXDOMAIN') return 'REMOVE';
+    if (c === 'ENODATA') {
+      try { await withTimeout(dns.resolve(domain, 'A'), 2500); return 'KEEP'; } catch { return 'REMOVE'; }
+    }
+    return 'RETRY';
+  }
+}
 
 function isProtected(lead) {
   if (!lead) return false;
@@ -50,6 +161,122 @@ async function chunkedHset(key, obj) {
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const action = body.action || 'remove';
+
+  if (action === 'requalify') {
+    // Full targeting + deliverability re-qualification. Archives (reversible),
+    // never deletes; never touches replied / in-sequence leads. Supports dryRun.
+    const dryRun = !!body.dryRun;
+    const opts = {
+      removeFreeProviders: body.removeFreeProviders !== false, // default ON
+      removeAmbiguous: !!body.removeAmbiguous,                  // default OFF (keep unknown-industry)
+      dedupeDomain: body.dedupeDomain !== false,               // default ON (one contact per company)
+    };
+
+    const all = (await kv.hgetall(LEADS_KEY)) || {};
+    const diag = { total: 0, protectedKept: 0, byRule: {}, industries: {}, scoreDist: {} };
+    const bump = (o, k) => { o[k] = (o[k] || 0) + 1; };
+    const toArchive = {};
+    const survivors = [];
+    const protectedDomains = new Set();
+
+    for (const [email, lead] of Object.entries(all)) {
+      if (!lead) continue;
+      diag.total++;
+      bump(diag.industries, industryBucket(lead));
+      bump(diag.scoreDist, String(lead.quality_score ?? 'none'));
+      const st = String(lead.status || '').toLowerCase();
+      if (REQUALIFY_PROTECTED.has(st)) {
+        diag.protectedKept++;
+        const d = emailParts(email).domain;
+        if (d) protectedDomains.add(d);
+        continue;
+      }
+      const reason = requalifyReason(email, lead, opts);
+      if (reason) { bump(diag.byRule, reason); toArchive[email] = lead; }
+      else survivors.push([email, lead]);
+    }
+
+    // One contact per company domain: keep the highest-scored survivor per domain
+    // (or drop all survivors whose company we've already emailed).
+    if (opts.dedupeDomain) {
+      const byDomain = {};
+      for (const [email, lead] of survivors) {
+        const d = emailParts(email).domain;
+        (byDomain[d] = byDomain[d] || []).push([email, lead]);
+      }
+      for (const [d, group] of Object.entries(byDomain)) {
+        group.sort((a, b) => (Number(b[1].quality_score) || 0) - (Number(a[1].quality_score) || 0));
+        const start = protectedDomains.has(d) ? 0 : 1;
+        for (let i = start; i < group.length; i++) {
+          bump(diag.byRule, 'duplicate_domain');
+          toArchive[group[i][0]] = group[i][1];
+        }
+      }
+    }
+
+    const removeEmails = Object.keys(toArchive);
+    diag.wouldRemove = removeEmails.length;
+    diag.wouldKeepActive = diag.total - diag.protectedKept - diag.wouldRemove;
+    diag.keepersTotal = diag.total - diag.wouldRemove;
+
+    if (dryRun) return Response.json({ dryRun: true, opts, ...diag });
+
+    if (removeEmails.length) {
+      await chunkedHset(ARCHIVE_KEY, toArchive);
+      await chunkedHdel(LEADS_KEY, removeEmails);
+    }
+    return Response.json({ requalified: true, removed: removeEmails.length, opts, ...diag });
+  }
+
+  if (action === 'verify_mx') {
+    // Batched MX / dead-domain check over not-yet-sent leads. Removes addresses
+    // whose domain has no mail server (hard bounce); never removes on a transient
+    // DNS error. Call repeatedly until remainingUnchecked hits 0.
+    const dryRun = !!body.dryRun;
+    const limit = Math.min(500, parseInt(body.limit) || 150);
+    const all = (await kv.hgetall(LEADS_KEY)) || {};
+    const pending = Object.entries(all).filter(([, l]) => {
+      if (!l) return false;
+      const st = String(l.status || '').toLowerCase();
+      return (st === 'pending' || st === 'new') && !l.mx_checked;
+    });
+    const slice = pending.slice(0, limit);
+
+    // Resolve each unique domain once, with limited concurrency.
+    const uniqueDomains = [...new Set(slice.map(([e]) => emailParts(e).domain).filter(Boolean))];
+    const verdict = {};
+    let idx = 0;
+    async function worker() {
+      while (idx < uniqueDomains.length) {
+        const d = uniqueDomains[idx++];
+        verdict[d] = await mxVerdict(d);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(16, uniqueDomains.length) }, worker));
+
+    const toArchive = {};
+    const updates = {};
+    let removed = 0, kept = 0, retried = 0;
+    for (const [email, lead] of slice) {
+      const d = emailParts(email).domain;
+      const v = d ? verdict[d] : 'REMOVE';
+      if (v === 'REMOVE') { toArchive[email] = { ...lead, requalify_reason: 'no_mx' }; removed++; }
+      else if (v === 'RETRY') { retried++; }
+      else { updates[email] = { ...lead, mx_checked: true, updatedAt: new Date().toISOString() }; kept++; }
+    }
+
+    if (!dryRun) {
+      if (Object.keys(toArchive).length) {
+        await chunkedHset(ARCHIVE_KEY, toArchive);
+        await chunkedHdel(LEADS_KEY, Object.keys(toArchive));
+      }
+      if (Object.keys(updates).length) await chunkedHset(LEADS_KEY, updates);
+    }
+    return Response.json({
+      verify_mx: true, dryRun, batch: slice.length, uniqueDomains: uniqueDomains.length,
+      removed, kept, retried, remainingUnchecked: pending.length - slice.length,
+    });
+  }
 
   if (action === 'reset_history') {
     // Fresh-start reset: only sends from keepFrom (US Eastern date, default
