@@ -228,6 +228,33 @@ export async function POST(request) {
     return Response.json({ requalified: true, removed: removeEmails.length, opts, ...diag });
   }
 
+  if (action === 'keep_min_score') {
+    // Keep only leads scoring >= minScore (default 9, the send gate), plus
+    // protected (replied / in-sequence) contacts. Everything else is archived.
+    const min = Number(body.minScore) || 9;
+    const dryRun = !!body.dryRun;
+    const all = (await kv.hgetall(LEADS_KEY)) || {};
+    const toArchive = {};
+    let kept = 0, protectedKept = 0;
+    for (const [email, lead] of Object.entries(all)) {
+      if (!lead) continue;
+      const st = String(lead.status || '').toLowerCase();
+      if (REQUALIFY_PROTECTED.has(st)) { protectedKept++; continue; }
+      const sc = Number(lead.quality_score);
+      if (Number.isFinite(sc) && sc >= min) { kept++; continue; }
+      toArchive[email] = lead;
+    }
+    const emails = Object.keys(toArchive);
+    if (dryRun) {
+      return Response.json({ dryRun: true, minScore: min, wouldRemove: emails.length, kept, protectedKept, total: Object.keys(all).length });
+    }
+    if (emails.length) {
+      await chunkedHset(ARCHIVE_KEY, toArchive);
+      await chunkedHdel(LEADS_KEY, emails);
+    }
+    return Response.json({ keep_min_score: true, minScore: min, removed: emails.length, kept, protectedKept, remaining: kept + protectedKept });
+  }
+
   if (action === 'verify_mx') {
     // Batched MX / dead-domain check over not-yet-sent leads. Removes addresses
     // whose domain has no mail server (hard bounce); never removes on a transient
