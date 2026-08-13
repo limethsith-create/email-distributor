@@ -15,13 +15,37 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     // Fetch all data sources in parallel
-    const [sentLog, allLeads, emailOpens, replies, bounces] = await Promise.all([
+    const [sentLog, allLeads, removedLeads, emailOpens, replies, bounces] = await Promise.all([
       kv.lrange('sent_log', 0, 499).catch(() => []),
       kv.hgetall('leads').catch(() => ({})),
+      kv.hgetall('removed_leads').catch(() => ({})),
       kv.hgetall('email_opens').catch(() => ({})),
       kv.hgetall('replies').catch(() => ({})),
       kv.hgetall('bounces').catch(() => ({})),
     ]);
+
+    // ── WARMUP EXCLUSION ──
+    // Daily Activity must count ONLY genuine cold outreach the app sent, never
+    // warmup traffic. Warmup emails are sent by a separate tool and target
+    // random warmup-network inboxes, never our prospects — so a send only
+    // counts if it goes to a real lead of ours (current OR archived), or it is
+    // explicitly tagged with one of our outreach sources. Anything else is
+    // dropped from the count.
+    const leadEmailSet = new Set();
+    for (const e of Object.keys(allLeads || {})) leadEmailSet.add(String(e).toLowerCase());
+    for (const e of Object.keys(removedLeads || {})) leadEmailSet.add(String(e).toLowerCase());
+
+    function isRealOutreach(entry) {
+      const src = String(entry.source || '').toLowerCase();
+      if (src.startsWith('auto-send') || src.startsWith('follow-up')) return true;
+      const to = String(entry.to || '').toLowerCase();
+      return Boolean(to && leadEmailSet.has(to));
+    }
+
+    function isFollowUp(entry) {
+      const src = String(entry.source || '').toLowerCase();
+      return src.startsWith('follow-up') || Number(entry.sequenceDay) > 0;
+    }
 
     const leadsArr = allLeads ? Object.values(allLeads) : [];
     const opensArr = emailOpens ? Object.values(emailOpens) : [];
@@ -46,8 +70,9 @@ export async function GET() {
       return dayMap[day];
     }
 
-    // Process sent log
+    // Process sent log — warmup and any non-outreach entries are skipped.
     for (const entry of (sentLog || [])) {
+      if (!isRealOutreach(entry)) continue;
       const ts = entry.timestamp || entry.sentAt || entry.createdAt;
       const dayEntry = ensureDay(ts);
       dayEntry.sent.push({
@@ -57,6 +82,7 @@ export async function GET() {
         industry: entry.industry,
         subject: entry.subject,
         status: entry.status,
+        followUp: isFollowUp(entry),
         timestamp: ts,
       });
       // Account breakdown
@@ -79,6 +105,7 @@ export async function GET() {
             industry: lead.industry,
             subject: '',
             status: 'sent',
+            followUp: false,
             timestamp: lead.sent_at,
           });
           const accKey = lead.account_used || 'unknown';
@@ -173,6 +200,8 @@ export async function GET() {
         ...day,
         summary: {
           totalSent: day.sent.length,
+          newSends: day.sent.filter(s => !s.followUp).length,
+          followUps: day.sent.filter(s => s.followUp).length,
           totalOpens: day.opens.length,
           totalReplies: day.replies.length,
           totalBounces: day.bounces.length,
