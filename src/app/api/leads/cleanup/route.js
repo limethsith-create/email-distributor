@@ -228,6 +228,30 @@ export async function POST(request) {
     return Response.json({ requalified: true, removed: removeEmails.length, opts, ...diag });
   }
 
+  if (action === 'import_leads') {
+    // Add externally-sourced leads into the active list. Never clobbers an
+    // existing lead (protects sent/replied) unless overwrite:true.
+    const leads = Array.isArray(body.leads) ? body.leads : [];
+    const overwrite = !!body.overwrite;
+    const existing = (await kv.hgetall(LEADS_KEY)) || {};
+    const updates = {};
+    let added = 0, skipped = 0;
+    for (const l of leads) {
+      const email = String((l && l.email) || '').toLowerCase().trim();
+      if (!email || !email.includes('@')) { skipped++; continue; }
+      if (existing[email] && !overwrite) { skipped++; continue; }
+      updates[email] = {
+        ...l, email,
+        status: l.status || 'pending',
+        added_at: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      added++;
+    }
+    if (Object.keys(updates).length) await chunkedHset(LEADS_KEY, updates);
+    return Response.json({ import_leads: true, received: leads.length, added, skipped });
+  }
+
   if (action === 'keep_min_score') {
     // Keep only leads scoring >= minScore (default 9, the send gate), plus
     // protected (replied / in-sequence) contacts. Everything else is archived.
