@@ -10,6 +10,7 @@
 import { kv } from '@vercel/kv';
 import { sendEmail } from '@/lib/mailer';
 import { getSmtpAccounts } from '@/lib/smtp-accounts';
+import { proposeSlotsForLead } from '@/lib/calendar';
 
 const LEADS_KEY = 'leads';
 const CONVERSATIONS_KEY = 'conversations';
@@ -37,6 +38,23 @@ In short: Aviance runs done-for-you cold email that books qualified sales calls 
 Would a quick 15-minute call work to see if it's a fit? Let us know what time suits you — more at aviance.online.
 
 — Aviance Team`;
+
+/**
+ * Positive reply that offers concrete times drawn from the calendar's open
+ * slots. The slots are already HELD (status 'proposed') for this lead, so they
+ * surface on the Calendar tab for the human to confirm. All times US Eastern.
+ */
+function buildPositiveWithSlots(slots) {
+  const lines = slots.map((s) => `  • ${s.usDate}, ${s.usTime} ET`).join('\n');
+  return `Thanks for getting back to us — glad this could be a fit.
+
+To keep it quick, here are a few times for a 15-minute call (all US Eastern):
+${lines}
+
+Just reply with whichever works best and we'll lock it in and send an invite. More at aviance.online.
+
+— Aviance Team`;
+}
 
 const FALLBACK_NEGATIVE = `Thanks for letting us know — we appreciate you taking the time to reply.
 
@@ -243,9 +261,21 @@ export async function maybeAutoReply(reply, lead) {
     }
     const account = accounts.find((a) => a.email === reply.account) || accounts[0];
 
-    // Generate the reply body
+    // Generate the reply body. For interested (non-negative) replies, offer
+    // real open calendar slots and hold them for this lead; a human confirms
+    // on the Calendar tab. If no slots are available, fall back to the generic
+    // "what time works for you?" copy.
     const isNegative = NEGATIVE_RE.test(haystack);
-    const body = await generateReplyBody(reply, lead, isNegative);
+    let body;
+    if (isNegative) {
+      body = FALLBACK_NEGATIVE;
+    } else {
+      let slots = [];
+      try {
+        slots = await proposeSlotsForLead(leadEmail, lead.company_name || lead.company || '', 3);
+      } catch { slots = []; }
+      body = slots.length ? buildPositiveWithSlots(slots) : await generateReplyBody(reply, lead, false);
+    }
 
     // Build and send the threaded reply
     const subject = /^re:/i.test(reply.subject || '')
