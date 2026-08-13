@@ -46,13 +46,21 @@ export default function ActivityPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {days.map((d) => {
             const isOpen = !!open[d.date];
-            const sentCount = (d.sent || []).length;
+            const sentArr = d.sent || [];
+            const sentCount = sentArr.length;
+            const followCount = sentArr.filter((s) => s.followUp).length;
+            const newCount = sentCount - followCount;
             return (
               <div key={d.date} style={{ ...card, overflow: 'hidden' }}>
                 <button onClick={() => setOpen((o) => ({ ...o, [d.date]: !o[d.date] }))}
                   style={{ width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '18px 22px' }}>
-                  <div style={{ fontWeight: 600, fontSize: 15 }}>{prettyDay(d.date)}</div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 15 }}>{prettyDay(d.date)}</div>
+                    <div className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)', marginTop: 3 }}>
+                      {followCount > 0 ? `${newCount} new · ${followCount} follow-up` : 'cold outreach only · no warmup counted'}
+                    </div>
+                  </div>
                   <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
                     <span style={{ fontSize: 30, fontWeight: 800, color: '#e0290f', lineHeight: 1 }}>{sentCount}</span>
                     <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>sent</span>
