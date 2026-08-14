@@ -123,11 +123,15 @@ async function getInboxCap(email) {
   }
 }
 // Only leads Scout has scored this high are ever sent.
-const QUALITY_THRESHOLD = 9;
-// US-only targeting (Sri Lanka retired).
+const QUALITY_THRESHOLD = 8;
+// Target-industry gate. Broadened to the full B2B target set — the lead list is
+// already requalified to clean US targets, so the old narrow "USA -"/"marketing
+// & advertising" test was silently blocking IT/MSP, agencies, SaaS, financial
+// and other perfect-fit leads from ever sending.
 function isUSALead(l) {
   const ind = (l.industry || '').trim();
-  return /^USA\s*-/i.test(ind) || /marketing & advertising/i.test(ind);
+  if (/^\s*usa\s*-/i.test(ind)) return true;
+  return /(marketing|advert|agenc|consult|professional\s*service|technolog|software|saas|\bit\b|it\s*service|managed\s*service|\bmsp\b|finance|financial|fintech|\bb2b\b|logistic|revenue|growth|outbound|lead\s*gen)/i.test(ind);
 }
 
 async function getEnabledInboxes() {
