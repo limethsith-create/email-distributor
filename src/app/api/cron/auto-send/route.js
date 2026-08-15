@@ -13,6 +13,7 @@
 import { kv } from '@vercel/kv';
 import { sendEmail } from '@/lib/mailer';
 import { getEmailForSequenceDay } from '@/lib/personalize';
+import { checkAllReplies } from '@/lib/reply-checker';
 import { logSentEmail } from '@/lib/leads-db';
 import { verifyEmail } from '@/lib/email-verify';
 import { getSmtpAccounts } from '@/lib/smtp-accounts';
@@ -231,6 +232,32 @@ async function getFollowupCountToday() {
 async function incrementFollowupToday() {
   const key = `__followups__:${getTodayKey()}`;
   try { await kv.hincrby(DAILY_SEND_KEY, key, 1); } catch {}
+}
+
+// --- Reply check piggyback ----------------------------------------------
+// vercel.json defines NO cron for /api/cron/check-replies, so on its own the
+// reply scanner never runs (that's why the Replies tab stays at 0). The
+// auto-send heartbeat IS pinged regularly, so we run the reply scan from here
+// at most once per throttle window: it detects genuine lead replies (strict
+// thread match), logs them to the Replies tab, updates lead status to
+// "replied", and fires exactly one auto-reply per lead. Fully self-guarded so
+// it can never break or delay a send beyond its own time.
+const REPLY_CHECK_THROTTLE_MS = 40 * 60 * 1000; // ~40 min
+const REPLY_CHECK_KEY = 'reply_check_last_run';
+
+async function maybeRunReplyCheck() {
+  try {
+    const now = Date.now();
+    const last = Number(await kv.get(REPLY_CHECK_KEY)) || 0;
+    if (now - last < REPLY_CHECK_THROTTLE_MS) return;
+    // Claim the slot before the (slow) IMAP scan so overlapping heartbeats
+    // don't both run it. The scan itself is idempotent, so a rare overlap is
+    // harmless anyway.
+    await kv.set(REPLY_CHECK_KEY, now);
+    await checkAllReplies();
+  } catch {
+    // Never let reply-checking break the send heartbeat.
+  }
 }
 
 /**
@@ -476,6 +503,10 @@ export async function GET(request) {
   }
 
   try {
+    // Detect + handle any lead replies first (throttled). Populates the
+    // Replies tab and sends the one-time auto-reply. Non-fatal.
+    await maybeRunReplyCheck();
+
     let accounts = getAccounts();
     if (!accounts.length) {
       await releaseLock();
