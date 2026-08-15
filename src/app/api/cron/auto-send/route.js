@@ -210,6 +210,29 @@ async function incrementDailySend(accountEmail) {
   await kv.hincrby(DAILY_SEND_KEY, key, 1);
 }
 
+// --- Follow-up daily cap -------------------------------------------------
+// New (day-0) outreach is always sent first; follow-ups only run when a cycle
+// had no fresh lead. This cap makes sure follow-ups can never eat more than a
+// small slice of the day's volume, so a big fresh pool (e.g. new MSP leads)
+// always gets the bulk of sends. Counted separately from per-inbox caps.
+const FOLLOWUP_DAILY_CAP = 6;
+
+async function getFollowupCountToday() {
+  // Stored on the same daily_sends hash under a synthetic key that can never
+  // collide with a real inbox email address.
+  const key = `__followups__:${getTodayKey()}`;
+  try {
+    return parseInt((await kv.hget(DAILY_SEND_KEY, key)) || '0');
+  } catch {
+    return 0;
+  }
+}
+
+async function incrementFollowupToday() {
+  const key = `__followups__:${getTodayKey()}`;
+  try { await kv.hincrby(DAILY_SEND_KEY, key, 1); } catch {}
+}
+
 /**
  * Get the next account index using a persistent KV counter.
  * Each invocation increments and gets the next account in rotation.
@@ -720,7 +743,13 @@ export async function GET(request) {
       // Only if we didn't just send a fresh email this run and we're past
       // the spacing gap — and at most ONE follow-up per run.
       // ============================================================
-      const canFollowUp = results.sent === 0 && !(await tooSoonToSend());
+      // New (day-0) sends always win: only consider follow-ups if no fresh
+      // email went out this cycle, we're past the spacing gap, AND we haven't
+      // hit the daily follow-up cap (keeps the bulk of volume on new outreach).
+      const followupsToday = await getFollowupCountToday();
+      const canFollowUp = results.sent === 0
+        && followupsToday < FOLLOWUP_DAILY_CAP
+        && !(await tooSoonToSend());
       const followUpLeads = canFollowUp ? await getFollowUpLeads(6) : [];
       let followUpsSent = 0;
 
@@ -793,6 +822,7 @@ export async function GET(request) {
           if (sendResult.success) {
             followUpsSent++;
             await incrementDailySend(originalAccount.email);
+            await incrementFollowupToday();
             await markFollowUpSent(qualifiedLead.email, fuLead.nextSequenceDay, sendResult.messageId);
             try {
               await logSentEmail({
