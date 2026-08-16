@@ -17,6 +17,7 @@ function isReal(l) {
 }
 function isSent(l) { return afterStart(l.sent_at); }
 function isReplied(l) { return afterStart(l.replied_at); }
+function isOpened(l) { return afterStart(l.opened_at); }
 
 const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 3, boxShadow: 'none' };
 
@@ -92,8 +93,10 @@ export default function Dashboard() {
   const total = real.length;
   const sentLeads = real.filter(isSent);
   const repliedLeads = real.filter(isReplied);
+  const openedLeads = real.filter(isOpened);
   const newLeads = real.filter((l) => !isSent(l));
   const emailsSent = sentLeads.length;
+  const openRate = emailsSent ? Math.round((openedLeads.length / emailsSent) * 100) : 0;
   const pts = buildSentSeries(real);
 
   return (
@@ -118,12 +121,13 @@ export default function Dashboard() {
         <KPI idx="02" label="Inboxes live" value={inboxes.length ? inboxes.filter((i) => i.enabled).length : '—'}
           sub={inboxes.length ? inboxes.map((i) => i.cap + '/day').join(' · ') : 'loading'} />
         <KPI idx="03" label="Emails sent" value={loading ? '—' : emailsSent} sub="this campaign" />
-        <KPI idx="04" label="Replied" value={loading ? '—' : repliedLeads.length} sub="recorded" />
+        <KPI idx="04" label="Opened" value={loading ? '—' : openedLeads.length} sub={loading ? '' : `${openRate}% open rate`} />
+        <KPI idx="05" label="Replied" value={loading ? '—' : repliedLeads.length} sub="recorded" />
       </div>
 
       <div style={{ ...card, padding: '20px 22px', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <div className="eyebrow"><span className="idx">05</span>&nbsp;/&nbsp;SENDS PER DAY</div>
+          <div className="eyebrow"><span className="idx">06</span>&nbsp;/&nbsp;SENDS PER DAY</div>
           <span className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, color: 'var(--fg-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}><span style={{ width: 10, height: 3, background: C.sent, display: 'inline-block' }} /> Sent</span>
         </div>
         {loading ? <div style={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--fg-dim)' }}>Loading…</div> : <SentChart pts={pts} />}
@@ -131,7 +135,7 @@ export default function Dashboard() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 18 }}>
         <div style={{ ...card, padding: '20px 22px' }}>
-          <div className="eyebrow" style={{ marginBottom: 14 }}><span className="idx">06</span>&nbsp;/&nbsp;INBOXES</div>
+          <div className="eyebrow" style={{ marginBottom: 14 }}><span className="idx">07</span>&nbsp;/&nbsp;INBOXES</div>
           {(inboxes.length ? inboxes : [{ email: 'Loading…', enabled: false, sentToday: 0, cap: 0 }]).map((b) => (
             <div key={b.email} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderTop: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -147,10 +151,11 @@ export default function Dashboard() {
         </div>
 
         <div style={{ ...card, padding: '20px 22px' }}>
-          <div className="eyebrow" style={{ marginBottom: 14 }}><span className="idx">07</span>&nbsp;/&nbsp;PIPELINE</div>
+          <div className="eyebrow" style={{ marginBottom: 14 }}><span className="idx">08</span>&nbsp;/&nbsp;PIPELINE</div>
           {[
             { k: 'Not yet sent', v: newLeads.length, c: '#0a0a0a' },
             { k: 'Already sent', v: sentLeads.length, c: '#e0290f' },
+            { k: 'Opened', v: openedLeads.length, c: '#c8811f' },
             { k: 'Replied', v: repliedLeads.length, c: '#9a9a9a' },
           ].map((r) => (
             <div key={r.k} style={{ padding: '12px 0', borderTop: '1px solid var(--border)' }}>
