@@ -1,5 +1,6 @@
 'use client';
 
+// Dashboard — overview KPIs incl. open tracking (opens + open rate).
 import { useState, useEffect } from 'react';
 
 const C = {
