@@ -15,6 +15,7 @@ import { ImapFlow } from 'imapflow';
 import { kv } from '@vercel/kv';
 import { getSmtpAccounts } from '@/lib/smtp-accounts';
 import { maybeAutoReply } from '@/lib/auto-reply';
+import { createTransporter } from '@/lib/mailer';
 
 const LEADS_KEY = 'leads';
 const REPLIES_KEY = 'replies'; // Hash: email -> { reply details }
@@ -213,8 +214,27 @@ async function matchAndUpdateLead(reply) {
 export async function checkAllReplies() {
   const accounts = getSmtpAccounts();
   if (!accounts.length) {
+    console.log('[diag] NO SMTP accounts configured — env SMTP_ACCOUNT_1.. missing');
     return { error: 'No SMTP accounts configured', checked: 0 };
   }
+
+  // ── TEMP DIAGNOSTIC ──────────────────────────────────────────────
+  // Logs mail-host config + per-account SMTP(send) and IMAP(read) health.
+  // Only host names + ok/err are logged — never passwords or message bodies.
+  const SMTP_HOST_CFG = process.env.SMTP_HOST || 'mail.privateemail.com';
+  const SMTP_PORT_CFG = process.env.SMTP_PORT || '465';
+  console.log(`[diag] hosts smtp=${SMTP_HOST_CFG}:${SMTP_PORT_CFG} imap=${IMAP_HOST}:993 accounts=${accounts.length}`);
+  for (const a of accounts) {
+    try {
+      const t = createTransporter(a.email, a.appPassword);
+      await t.verify();
+      try { t.close(); } catch {}
+      console.log(`[diag] SMTP ok  ${a.email} via ${SMTP_HOST_CFG}`);
+    } catch (e) {
+      console.log(`[diag] SMTP ERR ${a.email} via ${SMTP_HOST_CFG} :: ${e.message}`);
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────
 
   const summary = {
     checked: 0,
@@ -229,6 +249,13 @@ export async function checkAllReplies() {
   for (const account of accounts) {
     summary.checked++;
     const result = await checkRepliesForAccount(account);
+
+    // TEMP DIAGNOSTIC — IMAP connect/read result (host + counts only)
+    if (result.errors.length > 0) {
+      console.log(`[diag] IMAP ERR ${account.email} via ${IMAP_HOST} :: ${result.errors[0].error}`);
+    } else {
+      console.log(`[diag] IMAP ok  ${account.email} via ${IMAP_HOST} — inbox msgs seen(reply-like)=${result.replies.length}`);
+    }
 
     if (result.errors.length > 0) {
       summary.errors.push(...result.errors);
@@ -269,6 +296,9 @@ export async function checkAllReplies() {
       await kv.hincrby('stats', 'totalReplied', summary.matchedLeads);
     } catch {}
   }
+
+  // TEMP DIAGNOSTIC — overall reply-scan result
+  console.log(`[diag] reply-scan done checked=${summary.checked} replyLikeSeen=${summary.totalReplies} matchedLeads=${summary.matchedLeads} errors=${summary.errors.length}`);
 
   return summary;
 }
