@@ -61,8 +61,19 @@ function etClock(now = new Date()) {
   return { hour, minuteOfDay: hour * 60 + minute };
 }
 
-/** True if current time is inside the US Eastern business-hours window. */
+/** US Eastern weekday short name ('Mon'..'Sun'), DST-aware. */
+function etWeekday(now = new Date()) {
+  return new Intl.DateTimeFormat('en-US', { timeZone: SEND_TZ, weekday: 'short' }).format(now);
+}
+
+/**
+ * True if current time is inside the US Eastern business-hours window AND it's a
+ * weekday. B2B cold email opened on Sat/Sun is far lower and weekend sends read
+ * as automated, so we only send Mon–Fri (Tue–Thu are strongest).
+ */
 export function isWithinSendingHours(now = new Date()) {
+  const wd = etWeekday(now);
+  if (wd === 'Sat' || wd === 'Sun') return false;
   const { hour } = etClock(now);
   return hour >= SEND_WINDOW_START_HOUR && hour < SEND_WINDOW_END_HOUR;
 }

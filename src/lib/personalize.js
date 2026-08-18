@@ -25,12 +25,27 @@ function promise(co) {
   return `We'll book 20 sales calls for ${co} in the next 4 weeks — and if we don't hit 20, you don't pay a cent.`;
 }
 
-const SUBJECTS = [
-  '{{company_name}} — 20 calls in 4 weeks?',
-  'booked calls for {{company_name}}',
-  '{{company_name}} — pipeline that doesn\'t dry up',
-  'a full calendar for {{company_name}}?',
-  '{{company_name}} — 20 sales calls, or you don\'t pay',
+// Subject lines drive opens more than anything else in the email. Research on
+// millions of cold sends is consistent: SHORT (2-4 words), lowercase, a touch
+// of curiosity, and a first-name token beat long "salesy" subjects by a wide
+// margin. We keep three pools and pick by what data we have, so the subject
+// degrades gracefully when a first name is missing.
+const SUBJECTS_NAMED = [
+  'quick question, {{first_name}}',
+  '{{first_name}} — quick idea',
+  '{{first_name}}, worth a look?',
+  '{{first_name}}, quick one',
+  'idea for {{first_name}}',
+];
+const SUBJECTS_COMPANY = [
+  'idea for {{company_name}}',
+  '{{company_name}} — quick one',
+  'a quick idea for {{company_name}}',
+];
+const SUBJECTS_NEUTRAL = [
+  'quick question',
+  'are you the right person?',
+  'worth a quick look?',
 ];
 
 // Per-industry angle:
@@ -100,22 +115,28 @@ function templateFor(lead) {
   return DEFAULT_TEMPLATE;
 }
 
-/** Day 0 — pain first, promise + guarantee up front, link. Short. */
+/** Day 0 — pain first, promise + guarantee up front. Short, plain, link-free. */
 function generateInitialEmail(lead) {
   const t = templateFor(lead);
   const company = lead.company_name || lead.company || 'your company';
-  const name = lead.first_name || '';
+  const name = (lead.first_name || '').trim();
   const hi = name ? `Hi ${name},` : 'Hi,';
 
-  const subject = pickRandom(SUBJECTS)
+  // Pick the subject pool by the data we actually have.
+  const pool = name ? SUBJECTS_NAMED : (lead.company_name ? SUBJECTS_COMPANY : SUBJECTS_NEUTRAL);
+  const subject = pickRandom(pool)
     .replace(/{{company_name}}/g, company)
     .replace(/{{first_name}}/g, name);
 
+  // Day 0 is deliberately plain and LINK-FREE: no URL and no image on the first
+  // touch keeps it out of spam and makes it read like a real 1:1 note, which
+  // lifts inbox placement (and therefore opens). The CTA is a soft reply-ask;
+  // the aviance.online link appears only on the follow-ups (day 3 / day 7).
   const body = `${hi}
 
 ${t.pain} ${promise(company)}
 
-We do it done-for-you — the calls just show up on your calendar. Here's how it works: ${SITE}`;
+We handle it end-to-end — the calls just land on your calendar. Worth a quick word?`;
 
   return { subject, body };
 }
