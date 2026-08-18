@@ -4,6 +4,7 @@
 
 import { getAllLeads, getStats, getSentLog, bulkUpsertLeads, upsertLead } from '@/lib/leads-db';
 import { qualifyLeads } from '@/lib/qualify';
+import { kv } from '@vercel/kv';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,29 +45,40 @@ export async function GET(request) {
         const start = (page - 1) * limit;
         const paginatedLeads = leads.slice(start, start + limit);
 
+        // Merge open-tracking data from the email_opens store (source of truth
+        // for opens) so the dashboard reflects every recorded open even if the
+        // lead record's own opened_at wasn't written.
+        let opensMap = {};
+        try { opensMap = (await kv.hgetall('email_opens')) || {}; } catch {}
+
         return Response.json({
           total: leads.length,
           page,
           limit,
-          leads: paginatedLeads.map(l => ({
-            email: l.email,
-            company_name: l.company_name,
-            industry: l.industry,
-            city: l.city,
-            ai_score: l.ai_score,
-            status: l.status,
-            source: l.source,
-            account_used: l.account_used,
-            sent_at: l.sent_at,
-            replied_at: l.replied_at,
-            sequence_day: l.sequence_day,
-            send_count: l.send_count,
-            createdAt: l.createdAt,
-            quality_score: l.quality_score,
-            quality_reason: l.quality_reason,
-            quality_engine: l.quality_engine,
-            verified_at: l.verified_at,
-          })),
+          leads: paginatedLeads.map(l => {
+            const o = opensMap[(l.email || '').toLowerCase()] || null;
+            return {
+              email: l.email,
+              company_name: l.company_name,
+              industry: l.industry,
+              city: l.city,
+              ai_score: l.ai_score,
+              status: l.status,
+              source: l.source,
+              account_used: l.account_used,
+              sent_at: l.sent_at,
+              replied_at: l.replied_at,
+              opened_at: l.opened_at || (o && (o.openedAt || o.lastOpenedAt)) || null,
+              open_count: l.open_count || (o && o.count) || 0,
+              sequence_day: l.sequence_day,
+              send_count: l.send_count,
+              createdAt: l.createdAt,
+              quality_score: l.quality_score,
+              quality_reason: l.quality_reason,
+              quality_engine: l.quality_engine,
+              verified_at: l.verified_at,
+            };
+          }),
         });
       }
     }
