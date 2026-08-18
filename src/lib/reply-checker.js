@@ -15,13 +15,17 @@ import { ImapFlow } from 'imapflow';
 import { kv } from '@vercel/kv';
 import { getSmtpAccounts } from '@/lib/smtp-accounts';
 import { maybeAutoReply } from '@/lib/auto-reply';
-import { createTransporter } from '@/lib/mailer';
 
 const LEADS_KEY = 'leads';
 const REPLIES_KEY = 'replies'; // Hash: email -> { reply details }
 const LAST_CHECK_KEY = 'reply_last_check'; // Hash: account -> ISO timestamp
 
-const IMAP_HOST = process.env.IMAP_HOST || 'mail.privateemail.com';
+// IMAP host for reading replies. If not explicitly set, derive it from the
+// SMTP host: when we SEND via Gmail (Google Workspace), we must also READ via
+// Gmail's IMAP — otherwise the reply scan connects to the wrong server and
+// silently finds nothing. Falls back to privateemail for non-Google setups.
+const IMAP_HOST = process.env.IMAP_HOST
+  || (/gmail|google/i.test(process.env.SMTP_HOST || '') ? 'imap.gmail.com' : 'mail.privateemail.com');
 
 /**
  * Connect to an IMAP account and fetch recent replies
@@ -157,7 +161,14 @@ async function matchAndUpdateLead(reply) {
     const wasEmailed = Boolean(lead.account_used || lead.sent_at || st.startsWith('sent') || st === 'replied');
     if (!wasEmailed) return { matched: false, email: fromEmail, reason: 'lead_not_emailed' };
 
-    // (b) Must thread back to an email WE sent this exact lead.
+    // (b) Confirm it's a genuine reply to our outreach — via EITHER:
+    //   - thread-match: In-Reply-To equals a Message-ID we generated, OR
+    //   - a "Re:" reply from this emailed lead (covers cases where the sending
+    //     provider, e.g. Gmail, rewrites the outbound Message-ID so the stored
+    //     id no longer equals what the recipient threads back to).
+    // The sender is already proven to be a lead WE emailed (guard above), so
+    // this stays safe against warmup / stray inbox mail while not losing real
+    // replies to an id mismatch.
     const ourIds = [
       lead.original_message_id,
       lead.d3_message_id,
@@ -165,7 +176,9 @@ async function matchAndUpdateLead(reply) {
       lead.auto_reply_message_id,
     ].filter(Boolean).map(normId);
     const inReplyTo = normId(reply.inReplyTo);
-    if (!inReplyTo || !ourIds.includes(inReplyTo)) {
+    const threadMatched = Boolean(inReplyTo && ourIds.includes(inReplyTo));
+    const looksLikeReply = /^\s*re\s*:/i.test(String(reply.subject || ''));
+    if (!threadMatched && !looksLikeReply) {
       return { matched: false, email: fromEmail, reason: 'no_thread_match' };
     }
 
@@ -218,23 +231,9 @@ export async function checkAllReplies() {
     return { error: 'No SMTP accounts configured', checked: 0 };
   }
 
-  // ── TEMP DIAGNOSTIC ──────────────────────────────────────────────
-  // Logs mail-host config + per-account SMTP(send) and IMAP(read) health.
-  // Only host names + ok/err are logged — never passwords or message bodies.
-  const SMTP_HOST_CFG = process.env.SMTP_HOST || 'mail.privateemail.com';
-  const SMTP_PORT_CFG = process.env.SMTP_PORT || '465';
-  console.log(`[diag] hosts smtp=${SMTP_HOST_CFG}:${SMTP_PORT_CFG} imap=${IMAP_HOST}:993 accounts=${accounts.length}`);
-  for (const a of accounts) {
-    try {
-      const t = createTransporter(a.email, a.appPassword);
-      await t.verify();
-      try { t.close(); } catch {}
-      console.log(`[diag] SMTP ok  ${a.email} via ${SMTP_HOST_CFG}`);
-    } catch (e) {
-      console.log(`[diag] SMTP ERR ${a.email} via ${SMTP_HOST_CFG} :: ${e.message}`);
-    }
-  }
-  // ─────────────────────────────────────────────────────────────────
+  // Lightweight host log (no extra connections) — confirms which IMAP server
+  // the scan is using. Safe to keep: host names only, no creds or bodies.
+  console.log(`[diag] reply-scan using imap=${IMAP_HOST}:993 accounts=${accounts.length}`);
 
   const summary = {
     checked: 0,
