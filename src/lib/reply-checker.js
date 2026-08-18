@@ -20,12 +20,21 @@ const LEADS_KEY = 'leads';
 const REPLIES_KEY = 'replies'; // Hash: email -> { reply details }
 const LAST_CHECK_KEY = 'reply_last_check'; // Hash: account -> ISO timestamp
 
-// IMAP host for reading replies. If not explicitly set, derive it from the
-// SMTP host: when we SEND via Gmail (Google Workspace), we must also READ via
-// Gmail's IMAP — otherwise the reply scan connects to the wrong server and
-// silently finds nothing. Falls back to privateemail for non-Google setups.
-const IMAP_HOST = process.env.IMAP_HOST
-  || (/gmail|google/i.test(process.env.SMTP_HOST || '') ? 'imap.gmail.com' : 'mail.privateemail.com');
+// IMAP host for reading replies. This MUST match where the mailboxes actually
+// live. When we SEND via Gmail (Google Workspace), replies live in Gmail and we
+// must READ via Gmail's IMAP — otherwise the reply scan connects to the wrong
+// server and silently finds nothing (the original zero-replies bug).
+//
+// Precedence:
+//   1. If SMTP is Google, force imap.gmail.com. This deliberately overrides a
+//      stale/mis-set IMAP_HOST (e.g. a leftover mail.privateemail.com), because
+//      Google-hosted mail can never be read from privateemail.
+//   2. Otherwise honor an explicit IMAP_HOST.
+//   3. Otherwise fall back to privateemail.
+const SMTP_IS_GOOGLE = /gmail|google/i.test(process.env.SMTP_HOST || '');
+const IMAP_HOST = SMTP_IS_GOOGLE
+  ? 'imap.gmail.com'
+  : (process.env.IMAP_HOST || 'mail.privateemail.com');
 
 /**
  * Connect to an IMAP account and fetch recent replies
