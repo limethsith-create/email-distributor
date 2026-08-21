@@ -22,7 +22,7 @@ import { getSmtpAccounts } from '@/lib/smtp-accounts';
 import { maybeAutoReply } from '@/lib/auto-reply';
 
 const LEADS_KEY = 'leads';
-const REPLIES_KEY = 'replies'; // Hash: email -> { reply details }
+const REPLIES_KEY = 'replies_v2'; // Hash: leadEmail:date -> reply details (old 'replies' key has a wrong redis type; writes to it silently failed)
 const LAST_CHECK_KEY = 'reply_last_check'; // Hash: account -> ISO timestamp
 
 // How far behind the watermark we re-scan on every run (crash insurance).
