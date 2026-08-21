@@ -22,7 +22,7 @@ import { getSmtpAccounts } from '@/lib/smtp-accounts';
 import { maybeAutoReply } from '@/lib/auto-reply';
 
 const LEADS_KEY = 'leads';
-const REPLIES_KEY = 'replies_v2'; // Hash: leadEmail:date -> reply details (old 'replies' key has a wrong redis type; writes to it silently failed)
+const REPLIES_KEY = 'replies_v3'; // Hash: leadEmail:date -> reply details (fresh key; original 'replies' key has a wrong redis type)
 const LAST_CHECK_KEY = 'reply_last_check'; // Hash: account -> ISO timestamp
 
 // How far behind the watermark we re-scan on every run (crash insurance).
@@ -77,6 +77,15 @@ async function scanFolder(client, folder, sinceDate, account) {
 
       // Skip our own sent emails
       if (!fromEmail || fromEmail.includes('aviance') || fromEmail.includes(account.email)) {
+        continue;
+      }
+
+      // Skip bounce/DSN notifications — those are the bounce checker's job,
+      // never replies. Without this, DSNs thread-match our Message-IDs and
+      // pollute the Replies tab (and wrongly flip dead leads to 'replied').
+      const subjLower = subject.toLowerCase();
+      if (/mailer-daemon|postmaster|no-?reply|donotreply/.test(fromEmail) ||
+          /delivery status|undeliverable|mail delivery|returned mail|failure notice|delivery has failed|message not delivered|could not be delivered|delivery incomplete/.test(subjLower)) {
         continue;
       }
 
