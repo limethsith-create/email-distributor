@@ -115,7 +115,7 @@ export async function sendEmail(account, mailOptions) {
 
     // Wrap HTML content in a minimal personal-style template, embedding an
     // invisible open-tracking pixel keyed to the recipient (unless disabled).
-    const trackingPixel = mailOptions.noTrack ? '' : buildTrackingPixel(mailOptions.to);
+        const trackingPixel = (process.env.OPEN_TRACKING === 'on' && !mailOptions.noTrack) ? buildTrackingPixel(mailOptions.to) : '';
     const wrappedHtml = wrapInHtmlTemplate(mailOptions.html, trackingPixel);
 
     // Generate a proper Message-ID using the sender's domain
