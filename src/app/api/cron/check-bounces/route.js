@@ -21,7 +21,7 @@ const LEADS_KEY = 'leads';
 const BOUNCES_KEY = 'bounces'; // Hash: email -> { bounce details }
 const LAST_CHECK_KEY = 'bounce_last_check'; // Hash: account -> ISO timestamp
 
-const IMAP_HOST = process.env.IMAP_HOST || 'mail.privateemail.com';
+const SMTP_IS_GOOGLE = /gmail|google/i.test(process.env.SMTP_HOST || ''); const IMAP_HOST = SMTP_IS_GOOGLE ? 'imap.gmail.com' : (process.env.IMAP_HOST || 'mail.privateemail.com');
 
 /**
  * Sender addresses that indicate a bounce message
