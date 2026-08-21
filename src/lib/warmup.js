@@ -19,8 +19,8 @@ const SEND_TZ = 'America/New_York';
 // A tight 9 AM – 5 PM ET (8-hour US workday) so the day's emails land inside
 // core business hours and spread out to ~40 min apart per inbox. This matches
 // the "8 hours / 12 emails ≈ 40-minute gaps" cadence we want.
-export const SEND_WINDOW_START_HOUR = 9;   // 9 AM ET
-export const SEND_WINDOW_END_HOUR = 17;    // 5 PM ET
+export const SEND_WINDOW_START_HOUR = 8;   // 8 AM ET
+export const SEND_WINDOW_END_HOUR = 19;   // 7 PM ET
 
 /**
  * The 4-stage ramp. Caps are PER INBOX, PER DAY.
