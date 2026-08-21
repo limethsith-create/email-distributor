@@ -691,7 +691,7 @@ export async function GET(request) {
           const emailContent = getEmailForSequenceDay(qualifiedLead, 0);
           const bodyParts = emailContent.body.split('---');
           const rawBody = bodyParts[0];
-          const unsubNote = bodyParts[1] || '';
+                    const unsubNote = bodyParts[1] || "Not the right fit? Just reply STOP and I will not email you again.";
           const cleanBody = stripPlainTextSignature(rawBody);
 
           const htmlParagraphs = cleanBody
@@ -985,7 +985,7 @@ export async function GET(request) {
       const emailContent = getEmailForSequenceDay(qualifiedLead, 0);
       const bodyParts = emailContent.body.split('---');
       const rawBody = bodyParts[0];
-      const unsubNote = bodyParts[1] || '';
+            const unsubNote = bodyParts[1] || "Not the right fit? Just reply STOP and I will not email you again.";
       const cleanBody = stripPlainTextSignature(rawBody);
 
       const htmlParagraphs = cleanBody
