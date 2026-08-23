@@ -31,21 +31,18 @@ function promise(co) {
 // margin. We keep three pools and pick by what data we have, so the subject
 // degrades gracefully when a first name is missing.
 const SUBJECTS_NAMED = [
-  'quick question, {{first_name}}',
-  '{{first_name}} — quick idea',
-  '{{first_name}}, worth a look?',
-  '{{first_name}}, quick one',
-  'idea for {{first_name}}',
+  '{{first_name}} + dry referral months + 20 on the calendar',
+  '{{first_name}} + referrals gone quiet + a written guarantee',
+  '{{first_name}} + empty pipeline weeks + 20 booked calls',
 ];
 const SUBJECTS_COMPANY = [
-  'idea for {{company_name}}',
-  '{{company_name}} — quick one',
-  'a quick idea for {{company_name}}',
+  '{{company_name}} + dry referral months + 20 on the calendar',
+  '{{company_name}} + referrals gone quiet + a written guarantee',
+  '{{company_name}} + empty pipeline weeks + 20 booked calls',
 ];
 const SUBJECTS_NEUTRAL = [
-  'quick question',
-  'are you the right person?',
-  'worth a quick look?',
+  'dry referral months + 20 on the calendar',
+  'referrals gone quiet + a written guarantee',
 ];
 
 // Per-industry angle:
@@ -134,9 +131,15 @@ function generateInitialEmail(lead) {
   // the aviance.online link appears only on the follow-ups (day 3 / day 7).
   const body = `${hi}
 
-${t.pain} ${promise(company)}
+We have yet to be properly introduced — we're Aviance, and we fix the one problem referrals can't: the pipeline goes quiet the month your network does.
 
-We handle it end-to-end — the calls just land on your calendar. Worth a quick word?`;
+${t.pain} ${promise(company)} We handle it end-to-end — domains, lists, copy, sending — and the calls just land on your calendar.
+
+And we know the usual worry: "cold outreach doesn't work in our space", or "we've been burned by an agency before". That's exactly why the risk sits on our side — we hit the number, or we keep working free until we do.
+
+One thing worth knowing: we're onboarding three founding clients at a permanently reduced founding rate. Once those slots fill, that rate is gone for good.
+
+Do you have time over the next week or two to hear how it'd work? Just reply here and we'll take it from there.`;
 
   return { subject, body };
 }
@@ -149,7 +152,7 @@ function generateFollowUp1(lead) {
 
   const body = `Hi${name},
 
-Quick nudge — ${t.proof}. Same deal for ${company}: 20 booked calls in 4 weeks, or you don't pay a cent.
+Quick nudge — ${t.proof}. Same deal for ${company}: 20 booked calls in 4 weeks, or you don't pay a cent — and one of our three founding-client slots (permanently reduced rate) is still open.
 
 ${SITE}`;
 
