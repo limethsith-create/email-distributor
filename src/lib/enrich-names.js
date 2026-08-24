@@ -64,7 +64,7 @@ Website text:
 ${siteText}`;
 
   try {
-    const text = await geminiGenerate(apiKey, prompt, { temperature: 0.1, maxOutputTokens: 100 });
+    const text = await geminiGenerate(apiKey, prompt, { temperature: 0.1, maxOutputTokens: 1024 });
     if (!text || text === 'null') return null;
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) return null;
