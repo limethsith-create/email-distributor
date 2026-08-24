@@ -17,6 +17,8 @@
  * - Personalized by industry (pain) + company (name).
  */
 
+import { geminiGenerate } from '@/lib/gemini';
+
 const SITE = 'aviance.online';
 
 // The promise sentence — carries Result (20) + Time (4 weeks) + Guarantee up front.
@@ -194,32 +196,17 @@ export async function enhanceWithAI(lead, baseEmail) {
   if (!apiKey) return baseEmail;
 
   try {
-    const prompt = `You are lightly editing a SHORT B2B cold email for "${lead.company_name}"${lead.industry ? ` (industry: ${lead.industry})` : ''}.
+    const prompt = `You are lightly editing a B2B cold email for "${lead.company_name}"${lead.industry ? ` (industry: ${lead.industry})` : ''}.
 
 We sell done-for-you cold email that books qualified sales calls onto the recipient's calendar: 20 booked calls in 4 weeks or they don't pay a cent.
 
-Make 1 small tweak so the opening pain line feels specific to this company. Keep it UNDER 60 words. Keep it pain-first. Keep the promise sentence (20 calls, 4 weeks, don't pay a cent) and the "${SITE}" link exactly. No personal sender name, no spam words, no exclamation marks, no hype. Return ONLY the email body.
+Rewrite ONLY the opening pain sentence so it feels specific to this company and its industry. Keep every other sentence exactly as it is. Keep it plain text, no links, no exclamation marks, no invented facts, no personal sender name. Return ONLY the email body.
 
 Original:
 ${baseEmail.body}`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 300 },
-        }),
-        signal: AbortSignal.timeout(10000),
-      }
-    );
-
-    if (!response.ok) return baseEmail;
-    const data = await response.json();
-    const enhanced = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (enhanced && enhanced.length > 30 && enhanced.length < 500) {
+    const enhanced = await geminiGenerate(apiKey, prompt, { temperature: 0.7, maxOutputTokens: 500 });
+    if (enhanced && enhanced.length > 100 && enhanced.length < 1600) {
       return { subject: baseEmail.subject, body: enhanced };
     }
     return baseEmail;
