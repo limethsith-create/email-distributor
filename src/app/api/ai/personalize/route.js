@@ -76,7 +76,7 @@ Rules:
 - Keep it under 90 words, plain text, no links, warm and human.
 - Do NOT invent facts about the company.
 - Return ONLY the email body, nothing else.`;
-  const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.75, maxOutputTokens: 400 } });
+  const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.75, maxOutputTokens: 2048 } });
   const discovered = await getWorkingModel(key);
   const base = WORKING_MODEL ? [WORKING_MODEL, ...GEMINI_MODELS.filter((mm) => mm !== WORKING_MODEL)] : GEMINI_MODELS;
   const models = discovered ? [discovered, ...base.filter((mm) => mm !== discovered)] : base;
