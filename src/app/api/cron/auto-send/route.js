@@ -12,7 +12,8 @@
 
 import { kv } from '@vercel/kv';
 import { sendEmail } from '@/lib/mailer';
-import { getEmailForSequenceDay } from '@/lib/personalize';
+import { getEmailForSequenceDay, enhanceWithAI } from '@/lib/personalize';
+import { maybeEnrichNames } from '@/lib/enrich-names';
 import { checkAllReplies } from '@/lib/reply-checker';
 import { logSentEmail } from '@/lib/leads-db';
 import { verifyEmail } from '@/lib/email-verify';
@@ -507,6 +508,10 @@ export async function GET(request) {
     // Replies tab and sends the one-time auto-reply. Non-fatal.
     await maybeRunReplyCheck();
 
+    // Name-enrichment bot (throttled, capped, no-op without GEMINI_API_KEY).
+    // Finds owner first names for unsent leads so sends switch to named copy.
+    await maybeEnrichNames();
+
     let accounts = getAccounts();
     if (!accounts.length) {
       await releaseLock();
@@ -654,7 +659,7 @@ export async function GET(request) {
             industry: lead.industry || 'business',
             company_name: lead.company || lead.company_name || null,
             city: lead.city || 'USA',
-            first_name: lead.name?.split(/[\s,]/)[0] || null,
+            first_name: lead.first_name || lead.name?.split(/[\s,]/)[0] || null,
           };
 
           if (!qualifiedLead.company_name || qualifiedLead.company_name === 'your business') {
@@ -688,7 +693,7 @@ export async function GET(request) {
             continue;
           }
 
-          const emailContent = getEmailForSequenceDay(qualifiedLead, 0);
+          const emailContent = await enhanceWithAI(qualifiedLead, getEmailForSequenceDay(qualifiedLead, 0));
           const bodyParts = emailContent.body.split('---');
           const rawBody = bodyParts[0];
                     const unsubNote = bodyParts[1] || "Not the right fit? Just reply STOP and I will not email you again.";
@@ -800,7 +805,7 @@ export async function GET(request) {
           industry: fuLead.industry || 'business',
           company_name: fuLead.company || fuLead.company_name || 'your company',
           city: fuLead.city || 'USA',
-          first_name: fuLead.name?.split(/[\s,]/)[0] || fuLead.first_name || null,
+          first_name: fuLead.first_name || fuLead.name?.split(/[\s,]/)[0] || null,
         };
 
         const emailContent = getEmailForSequenceDay(qualifiedLead, fuLead.nextSequenceDay);
@@ -948,7 +953,7 @@ export async function GET(request) {
         industry: lead.industry || 'business',
         company_name: lead.company || lead.company_name || null,
         city: lead.city || 'USA',
-        first_name: lead.name?.split(/[\s,]/)[0] || null,
+        first_name: lead.first_name || lead.name?.split(/[\s,]/)[0] || null,
       };
 
       if (!qualifiedLead.company_name || qualifiedLead.company_name === 'your business') {
@@ -982,7 +987,7 @@ export async function GET(request) {
         continue;
       }
 
-      const emailContent = getEmailForSequenceDay(qualifiedLead, 0);
+      const emailContent = await enhanceWithAI(qualifiedLead, getEmailForSequenceDay(qualifiedLead, 0));
       const bodyParts = emailContent.body.split('---');
       const rawBody = bodyParts[0];
             const unsubNote = bodyParts[1] || "Not the right fit? Just reply STOP and I will not email you again.";
