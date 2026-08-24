@@ -3,6 +3,7 @@
 export const runtime = 'nodejs';
 
 import { kv } from '@vercel/kv';
+import { getWorkingModel } from '@/lib/gemini';
 
 const DEFAULT_OFFER = {
   subject: '{{name}} — quick idea for {{company}}',
@@ -76,7 +77,9 @@ Rules:
 - Do NOT invent facts about the company.
 - Return ONLY the email body, nothing else.`;
   const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.75, maxOutputTokens: 400 } });
-  const models = WORKING_MODEL ? [WORKING_MODEL, ...GEMINI_MODELS.filter((mm) => mm !== WORKING_MODEL)] : GEMINI_MODELS;
+  const discovered = await getWorkingModel(key);
+  const base = WORKING_MODEL ? [WORKING_MODEL, ...GEMINI_MODELS.filter((mm) => mm !== WORKING_MODEL)] : GEMINI_MODELS;
+  const models = discovered ? [discovered, ...base.filter((mm) => mm !== discovered)] : base;
   let lastStatus = 0;
   for (const model of models) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
