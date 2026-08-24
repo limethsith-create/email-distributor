@@ -205,7 +205,7 @@ Rewrite ONLY the opening pain sentence so it feels specific to this company and 
 Original:
 ${baseEmail.body}`;
 
-    const enhanced = await geminiGenerate(apiKey, prompt, { temperature: 0.7, maxOutputTokens: 500 });
+    const enhanced = await geminiGenerate(apiKey, prompt, { temperature: 0.7, maxOutputTokens: 2048 });
     if (enhanced && enhanced.length > 100 && enhanced.length < 1600) {
       return { subject: baseEmail.subject, body: enhanced };
     }
