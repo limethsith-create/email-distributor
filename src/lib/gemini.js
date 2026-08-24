@@ -7,6 +7,10 @@
  * KV for a day. If a cached model starts 404ing, the cache is cleared and the
  * next call re-discovers. All failures return null — callers always have a
  * non-AI fallback.
+ *
+ * thinkingBudget: 0 disables the model's internal reasoning phase — without
+ * it, 2.5-era flash models can burn the whole token budget on thinking and
+ * return empty text (the gemini_empty bug).
  */
 
 import { kv } from '@vercel/kv';
@@ -29,8 +33,8 @@ export async function getWorkingModel(apiKey) {
       (m) => (m.supportedGenerationMethods || []).includes('generateContent')
     );
     const pick =
-      usable.find((m) => /flash/i.test(m.name) && !/thinking|image|live|audio|tts|embed|8b|lite/i.test(m.name)) ||
-      usable.find((m) => /flash/i.test(m.name)) ||
+      usable.find((m) => /flash/i.test(m.name) && !/thinking|image|live|audio|tts|embed|8b|lite|preview|omni/i.test(m.name)) ||
+      usable.find((m) => /flash/i.test(m.name) && !/image|live|audio|tts|embed/i.test(m.name)) ||
       usable[0];
     if (!pick) return null;
     const name = pick.name.replace(/^models\//, '');
@@ -43,7 +47,7 @@ export async function getWorkingModel(apiKey) {
 
 /** Generate text. Returns the text or null (never throws). */
 export async function geminiGenerate(apiKey, prompt, opts = {}) {
-  const { temperature = 0.7, maxOutputTokens = 300 } = opts;
+  const { temperature = 0.7, maxOutputTokens = 2048 } = opts;
   if (!apiKey) return null;
   const model = await getWorkingModel(apiKey);
   if (!model) return null;
@@ -55,9 +59,9 @@ export async function geminiGenerate(apiKey, prompt, opts = {}) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature, maxOutputTokens },
+          generationConfig: { temperature, maxOutputTokens, thinkingConfig: { thinkingBudget: 0 } },
         }),
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(20000),
       }
     );
     if (!res.ok) {
@@ -66,7 +70,8 @@ export async function geminiGenerate(apiKey, prompt, opts = {}) {
       return null;
     }
     const data = await res.json();
-    const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    const text = parts.filter((p) => !p.thought).map((p) => p.text || '').join('');
     return text.trim() || null;
   } catch {
     return null;
