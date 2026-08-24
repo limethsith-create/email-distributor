@@ -469,6 +469,106 @@ function stripPlainTextSignature(body) {
   return lines.slice(0, end).join('\n');
 }
 
+// ============================================================
+// SHARED FOLLOW-UP SENDER — used by every mode (scheduled AND batch).
+// Sends at most ONE due follow-up (day-3 = personalized flyer, day-7 =
+// nudge) on the same account/thread as the original. Returns
+// { sent: bool, detail } so callers can report it.
+// ============================================================
+async function sendOneDueFollowUp(accounts) {
+  let sentInfo = null;
+  const followUpLeads = await getFollowUpLeads(6);
+  console.log('[diag] follow-up scan: due=' + followUpLeads.length);
+        for (const fuLead of followUpLeads) {
+    // Use the same account that sent the original
+    const originalAccount = accounts.find(a => a.email === fuLead.account_used);
+    if (!originalAccount) continue;
+
+    // Check daily limit for this account
+    const fuSent = await getDailySendCount(originalAccount.email);
+    const fuCap = await getInboxCap(originalAccount.email);
+    if (fuSent >= fuCap) continue;
+
+    const qualifiedLead = {
+      ...fuLead,
+      email: fuLead.email.toLowerCase().trim(),
+      industry: fuLead.industry || 'business',
+      company_name: fuLead.company || fuLead.company_name || 'your company',
+      city: fuLead.city || 'USA',
+      first_name: fuLead.first_name || fuLead.name?.split(/[\s,]/)[0] || null,
+    };
+
+    const emailContent = getEmailForSequenceDay(qualifiedLead, fuLead.nextSequenceDay);
+    const cleanBody = stripPlainTextSignature(emailContent.body);
+
+    const htmlParagraphs = cleanBody
+      .split(/\n\n+/)
+      .filter(p => p.trim().length > 0)
+      .map(p => {
+        let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); escaped = escaped.replace(/aviance\.online/g, '<a href=\"https://www.aviance.online\" style=\"color:#0a0a0a;\">aviance.online</a>');
+        return `<p style=\"margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;\">${escaped}</p>`;
+      })
+      .join('\n');
+
+    const htmlSignature = `
+    <div style=\"margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;\">
+                Aviance — Guaranteed booked sales calls<br>
+      <a href=\"https://www.aviance.online\" style=\"color:#555;text-decoration:none;\">aviance.online</a>
+    </div>`;
+
+    const htmlBody = fuLead.nextSequenceDay === 3 ? flyerHtml(qualifiedLead) : (htmlParagraphs + htmlSignature);
+
+    // Build threading headers from the stored original messageId
+    // For Day 3: reference the original (d0) messageId
+    // For Day 7: reference the original + d3 messageId for full thread chain
+    const threadingHeaders = {};
+    const originalMsgId = fuLead.original_message_id;
+    if (originalMsgId) {
+      if (fuLead.nextSequenceDay === 3) {
+        threadingHeaders.inReplyTo = originalMsgId;
+        threadingHeaders.references = originalMsgId;
+      } else if (fuLead.nextSequenceDay === 7) {
+        const d3MsgId = fuLead.d3_message_id;
+        threadingHeaders.inReplyTo = d3MsgId || originalMsgId;
+        threadingHeaders.references = d3MsgId
+          ? `${originalMsgId} ${d3MsgId}`
+          : originalMsgId;
+      }
+    }
+
+    try {
+      const sendResult = await sendEmail(originalAccount, {
+        to: qualifiedLead.email,
+        subject: emailContent.subject,
+        html: htmlBody,
+        text: emailContent.body,
+        ...threadingHeaders,
+      });
+
+      if (sendResult.success) {
+        sentInfo = { to: qualifiedLead.email, from: originalAccount.email, status: "follow-up-sent", day: fuLead.nextSequenceDay };
+        await incrementDailySend(originalAccount.email);
+        await incrementFollowupToday();
+        await markFollowUpSent(qualifiedLead.email, fuLead.nextSequenceDay, sendResult.messageId);
+        try {
+          await logSentEmail({
+            to: qualifiedLead.email, from: originalAccount.email,
+            company: qualifiedLead.company_name, industry: qualifiedLead.industry,
+            subject: emailContent.subject, bodyPreview: emailContent.body.substring(0, 200),
+            status: 'sent', messageId: sendResult.messageId,
+            sequenceDay: fuLead.nextSequenceDay,
+            source: `follow-up-d${fuLead.nextSequenceDay}`,
+          });
+        } catch {}
+        
+        await recordGlobalSend();
+        break; // one follow-up per run — keep sends spaced out
+      }
+    } catch (e) { console.log("[diag] follow-up send error " + fuLead.email + ": " + e.message); }
+  }
+  return { sent: !!sentInfo, detail: sentInfo };
+}
+
 export async function GET(request) {
   // Auth check
   const authHeader = request.headers.get('authorization');
@@ -584,6 +684,28 @@ export async function GET(request) {
     // randomized timer, and the anti-burst gate above keeps every send
     // at least MIN_SEND_GAP_MS apart. Net effect: a steady drip.
     // ============================================================
+    // POSTER PRIORITY (all modes): due follow-ups (day-3 flyer / day-7 nudge)
+    // go out first — one per cycle — so every lead gets the poster on
+    // schedule even when the heartbeat calls ?batch=N.
+    if (batchSize !== 0) {
+      const fuToday = await getFollowupCountToday();
+      if (fuToday < FOLLOWUP_DAILY_CAP && !(await tooSoonToSend())) {
+        const fu = await sendOneDueFollowUp(accounts);
+        if (fu.sent) {
+          await releaseLock();
+          return Response.json({
+            success: true,
+            mode: 'follow-up',
+            sent: 0,
+            followUpsSent: 1,
+            detail: fu.detail,
+            timestamp: new Date().toISOString(),
+            accountStatus,
+          });
+        }
+      }
+    }
+
     if (batchSize === 0) {
       const scheduleStatus = await getAccountScheduleStatus(accounts);
 
@@ -782,107 +904,14 @@ export async function GET(request) {
         // sends stay evenly spread through the day (never a burst).
         if (sentFromThisAccount) break;
       }
-      // ============================================================
-      // FOLLOW-UP SENDING: Day 3 / Day 7, on the SAME account.
-      // Only if we didn't just send a fresh email this run and we're past
-      // the spacing gap — and at most ONE follow-up per run.
-      // ============================================================
-      // New (day-0) sends always win: only consider follow-ups if no fresh
-      // email went out this cycle, we're past the spacing gap, AND we haven't
-      // hit the daily follow-up cap (keeps the bulk of volume on new outreach).
+      // FOLLOW-UP SENDING (scheduled mode): one due follow-up per cycle via
+      // the shared sender — day-3 sends the personalized flyer.
       const followupsToday = await getFollowupCountToday();
-      const canFollowUp = results.sent === 0
-        && followupsToday < FOLLOWUP_DAILY_CAP
-        && !(await tooSoonToSend());
-      const followUpLeads = canFollowUp ? await getFollowUpLeads(6) : [];
       let followUpsSent = 0;
-
-      for (const fuLead of followUpLeads) {
-        // Use the same account that sent the original
-        const originalAccount = accounts.find(a => a.email === fuLead.account_used);
-        if (!originalAccount) continue;
-
-        // Check daily limit for this account
-        const fuSent = await getDailySendCount(originalAccount.email);
-        const fuCap = await getInboxCap(originalAccount.email);
-        if (fuSent >= fuCap) continue;
-
-        const qualifiedLead = {
-          ...fuLead,
-          email: fuLead.email.toLowerCase().trim(),
-          industry: fuLead.industry || 'business',
-          company_name: fuLead.company || fuLead.company_name || 'your company',
-          city: fuLead.city || 'USA',
-          first_name: fuLead.first_name || fuLead.name?.split(/[\s,]/)[0] || null,
-        };
-
-        const emailContent = getEmailForSequenceDay(qualifiedLead, fuLead.nextSequenceDay);
-        const cleanBody = stripPlainTextSignature(emailContent.body);
-
-        const htmlParagraphs = cleanBody
-          .split(/\n\n+/)
-          .filter(p => p.trim().length > 0)
-          .map(p => {
-            let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); escaped = escaped.replace(/aviance\.online/g, '<a href="https://www.aviance.online" style="color:#0a0a0a;">aviance.online</a>');
-            return `<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">${escaped}</p>`;
-          })
-          .join('\n');
-
-        const htmlSignature = `
-        <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
-                    Aviance — Guaranteed booked sales calls<br>
-          <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
-        </div>`;
-
-        const htmlBody = fuLead.nextSequenceDay === 3 ? flyerHtml(qualifiedLead) : (htmlParagraphs + htmlSignature);
-
-        // Build threading headers from the stored original messageId
-        // For Day 3: reference the original (d0) messageId
-        // For Day 7: reference the original + d3 messageId for full thread chain
-        const threadingHeaders = {};
-        const originalMsgId = fuLead.original_message_id;
-        if (originalMsgId) {
-          if (fuLead.nextSequenceDay === 3) {
-            threadingHeaders.inReplyTo = originalMsgId;
-            threadingHeaders.references = originalMsgId;
-          } else if (fuLead.nextSequenceDay === 7) {
-            const d3MsgId = fuLead.d3_message_id;
-            threadingHeaders.inReplyTo = d3MsgId || originalMsgId;
-            threadingHeaders.references = d3MsgId
-              ? `${originalMsgId} ${d3MsgId}`
-              : originalMsgId;
-          }
-        }
-
-        try {
-          const sendResult = await sendEmail(originalAccount, {
-            to: qualifiedLead.email,
-            subject: emailContent.subject,
-            html: htmlBody,
-            text: emailContent.body,
-            ...threadingHeaders,
-          });
-
-          if (sendResult.success) {
-            followUpsSent++;
-            await incrementDailySend(originalAccount.email);
-            await incrementFollowupToday();
-            await markFollowUpSent(qualifiedLead.email, fuLead.nextSequenceDay, sendResult.messageId);
-            try {
-              await logSentEmail({
-                to: qualifiedLead.email, from: originalAccount.email,
-                company: qualifiedLead.company_name, industry: qualifiedLead.industry,
-                subject: emailContent.subject, bodyPreview: emailContent.body.substring(0, 200),
-                status: 'sent', messageId: sendResult.messageId,
-                sequenceDay: fuLead.nextSequenceDay,
-                source: `follow-up-d${fuLead.nextSequenceDay}`,
-              });
-            } catch {}
-            results.details.push({ to: qualifiedLead.email, from: originalAccount.email, status: 'follow-up-sent', day: fuLead.nextSequenceDay });
-            await recordGlobalSend();
-            break; // one follow-up per run — keep sends spaced out
-          }
-        } catch {}
+      console.log('[diag] followup gate: freshSent=' + results.sent + ' fuToday=' + followupsToday + ' tooSoon=' + (await tooSoonToSend()));
+      if (results.sent === 0 && followupsToday < FOLLOWUP_DAILY_CAP && !(await tooSoonToSend())) {
+        const fu = await sendOneDueFollowUp(accounts);
+        if (fu.sent) { followUpsSent = 1; results.details.push(fu.detail); }
       }
 
       // NOTE: totalSent is already incremented by logSentEmail() — no hincrby here
