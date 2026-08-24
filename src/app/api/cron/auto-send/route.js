@@ -14,6 +14,7 @@ import { kv } from '@vercel/kv';
 import { sendEmail } from '@/lib/mailer';
 import { getEmailForSequenceDay, enhanceWithAI } from '@/lib/personalize';
 import { maybeEnrichNames } from '@/lib/enrich-names';
+import { flyerHtml } from '@/lib/flyer';
 import { checkAllReplies } from '@/lib/reply-checker';
 import { logSentEmail } from '@/lib/leads-db';
 import { verifyEmail } from '@/lib/email-verify';
@@ -404,7 +405,6 @@ async function getFollowUpLeads(limit = 10) {
     return [];
   }
 }
-
 async function markFollowUpSent(email, sequenceDay, messageId) {
   try {
     const existing = await kv.hget(LEADS_KEY, email.toLowerCase());
@@ -635,7 +635,16 @@ export async function GET(request) {
       const results = { sent: 0, failed: 0, skipped: 0, details: [] };
       let leadIdx = 0;
 
-      for (const { account, stat } of readyAccounts) {
+      // POSTER PRIORITY: when day-3/day-7 follow-ups are due and the daily
+      // follow-up cap isn't hit, this cycle sends a follow-up (the
+      // personalized flyer on day 3) instead of a fresh email. Keeps the
+      // one-email-per-cycle drip; fresh outreach resumes once follow-ups
+      // are caught up or the cap is reached.
+      const dueNow = await getFollowUpLeads(6);
+      const fuCountToday = await getFollowupCountToday();
+      const preferFollowUp = dueNow.length > 0 && fuCountToday < FOLLOWUP_DAILY_CAP;
+
+      for (const { account, stat } of (preferFollowUp ? [] : readyAccounts)) {
         let sentFromThisAccount = false;
 
         while (leadIdx < unsent.length && !sentFromThisAccount) {
@@ -773,7 +782,6 @@ export async function GET(request) {
         // sends stay evenly spread through the day (never a burst).
         if (sentFromThisAccount) break;
       }
-
       // ============================================================
       // FOLLOW-UP SENDING: Day 3 / Day 7, on the SAME account.
       // Only if we didn't just send a fresh email this run and we're past
@@ -826,7 +834,7 @@ export async function GET(request) {
           <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
         </div>`;
 
-        const htmlBody = htmlParagraphs + htmlSignature;
+        const htmlBody = fuLead.nextSequenceDay === 3 ? flyerHtml(qualifiedLead) : (htmlParagraphs + htmlSignature);
 
         // Build threading headers from the stored original messageId
         // For Day 3: reference the original (d0) messageId
@@ -891,7 +899,6 @@ export async function GET(request) {
         scheduleStatus,
       });
     }
-
     // ============================================================
     // BATCH MODE: Original behavior when ?batch=N is specified
     // ============================================================
