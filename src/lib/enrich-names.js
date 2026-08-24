@@ -15,6 +15,7 @@
  */
 
 import { kv } from '@vercel/kv';
+import { geminiGenerate } from '@/lib/gemini';
 
 const LEADS_KEY = 'leads';
 const THROTTLE_KEY = 'enrich_names_last_run';
@@ -63,21 +64,7 @@ Website text:
 ${siteText}`;
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 100 },
-        }),
-        signal: AbortSignal.timeout(10000),
-      }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text = (data.candidates?.[0]?.content?.parts?.[0]?.text || '').trim();
+    const text = await geminiGenerate(apiKey, prompt, { temperature: 0.1, maxOutputTokens: 100 });
     if (!text || text === 'null') return null;
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) return null;
