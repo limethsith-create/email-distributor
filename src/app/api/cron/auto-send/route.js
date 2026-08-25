@@ -520,7 +520,15 @@ async function sendOneDueFollowUp(accounts) {
       <a href=\"https://www.aviance.online\" style=\"color:#555;text-decoration:none;\">aviance.online</a>
     </div>`;
 
-    const htmlBody = htmlParagraphs + htmlSignature;
+    // Every touch carries the personalised one-pager, not just day 0. The
+    // poster is re-rendered with THIS lead's first name and company, so day 3
+    // and day 7 look identical in quality to the first email. The plain-text
+    // alternative below still differs per sequence day.
+    const htmlUnsubscribe =
+      '<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">' +
+      'Not a fit? Reply STOP and I won\'t contact you again.</p>';
+
+    const htmlBody = flyerHtml(qualifiedLead) + htmlUnsubscribe;
 
     // Build threading headers from the stored original messageId
     // For Day 3: reference the original (d0) messageId
