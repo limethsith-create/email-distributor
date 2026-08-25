@@ -165,6 +165,9 @@ async function checkBouncesForAccount(account) {
         pass: account.appPassword,
       },
       logger: false,
+      connectionTimeout: 12000,
+      greetingTimeout: 8000,
+      socketTimeout: 25000,
     });
 
     await client.connect();
