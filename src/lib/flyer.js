@@ -22,7 +22,7 @@ export function flyerHtml(lead) {
   const company = lead.company_name || lead.company || 'your company';
   const hi = name ? `Hi ${name},` : 'Hi,';
 
-  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#222;line-height:1.6;">${hi}<br><br>We have yet to be properly introduced — we're Aviance. We book qualified sales calls straight onto the calendars of firms like ${company}. Rather than pitch you, here is exactly what we do and what we guarantee, in writing.<br><br></div>
+  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#222;line-height:1.6;">${hi}<br><br>We have yet to be properly introduced — we're Aviance. We book qualified sales calls straight onto the calendars of firms like ${escapeHtml(company)}. Rather than pitch you, here is exactly what we do and what we guarantee, in writing.<br><br></div>
 <div style="background:#EFEDE8;padding:14px 0;"><table role="presentation" width="620" cellpadding="0" cellspacing="0" align="center" style="max-width:620px;width:100%;background:#FFFFFF;">
 <tbody>
 <tr><td style="padding:24px 28px 20px 28px;background:#FFFFFF;border-bottom:4px solid #141414;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td style="vertical-align:middle;"><img src="${LOGO_URL}" alt="Aviance" width="48" height="48" style="vertical-align:middle;margin-right:12px;"><span style="${HEAD}font-size:27px;letter-spacing:2px;color:#141414;vertical-align:middle;">AVIANCE</span></td><td align="right" style="${MONO}font-size:10px;font-weight:700;letter-spacing:1px;color:#8A8A85;">PREPARED&nbsp;FOR<br><span style="color:#E0290F;">${escapeHtml(company).toUpperCase()}</span></td></tr></tbody></table></td></tr>
