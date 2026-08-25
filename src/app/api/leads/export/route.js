@@ -20,12 +20,16 @@ export async function GET(request) {
   const source = searchParams.get('source');
   const status = searchParams.get('status');
   const industry = searchParams.get('industry');
-  const namedOnly = searchParams.get('namedOnly') === '1';
+  const namedOnlyRaw = (searchParams.get('namedOnly') || '').toLowerCase();
+  const namedOnly = namedOnlyRaw === '1' || namedOnlyRaw === 'true' || namedOnlyRaw === 'yes' || (searchParams.has('namedOnly') && namedOnlyRaw === '');
 
   let leads = await getAllLeads();
 
-  if (source) leads = leads.filter(l => (l.source || '') === source);
-  if (status) leads = leads.filter(l => (l.status || '') === status);
+  // Case-insensitive prefix match so ?status=sent catches sent-d0/sent-d3 and
+  // ?source=apify catches every apify-* batch. Exact values still work.
+  const pre = (v, q) => String(v || '').toLowerCase().startsWith(String(q).toLowerCase());
+  if (source) leads = leads.filter(l => pre(l.source, source));
+  if (status) leads = leads.filter(l => pre(l.status, status));
   if (industry) leads = leads.filter(l => (l.industry || '').toLowerCase().includes(industry.toLowerCase()));
   if (namedOnly) {
     const ROLE = /^(info|sales|support|admin|hello|contact|office|help|service|services|team|marketing|billing|accounts|accounting|careers|jobs|hr|general|reception|press|enquiries|inquiries|mail)@/i;
