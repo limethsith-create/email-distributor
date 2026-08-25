@@ -516,7 +516,7 @@ async function sendOneDueFollowUp(accounts) {
       <a href=\"https://www.aviance.online\" style=\"color:#555;text-decoration:none;\">aviance.online</a>
     </div>`;
 
-    const htmlBody = fuLead.nextSequenceDay === 3 ? flyerHtml(qualifiedLead) : (htmlParagraphs + htmlSignature);
+    const htmlBody = htmlParagraphs + htmlSignature;
 
     // Build threading headers from the stored original messageId
     // For Day 3: reference the original (d0) messageId
@@ -849,7 +849,7 @@ export async function GET(request) {
             ? `<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">${unsubNote.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
             : '';
 
-          const htmlBody = htmlParagraphs + htmlSignature + htmlUnsubscribe;
+          const htmlBody = flyerHtml(qualifiedLead) + htmlUnsubscribe;
 
           try {
             const sendResult = await sendEmail(account, {
@@ -1048,7 +1048,7 @@ export async function GET(request) {
         ? `<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">${unsubNote.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
         : '';
 
-      const htmlBody = htmlParagraphs + htmlSignature + htmlUnsubscribe;
+      const htmlBody = flyerHtml(qualifiedLead) + htmlUnsubscribe;
 
       try {
         const sendResult = await sendEmail(account, {
