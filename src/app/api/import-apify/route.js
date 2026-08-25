@@ -36,8 +36,65 @@ function pickBestEmail(emails, domain) {
   return { email: pool[0].email, isRole: pool[0].isRole };
 }
 
+import { kv } from '@vercel/kv';
+
+const LEADS_KEY = 'leads';
+
+/**
+ * Repair leads that were imported with a status/score the sender ignores.
+ * getUnsent() only accepts pending|new|qualified AND requires an effective
+ * score >= 8, so leads written as {status:'qualified', ai_score:6} were
+ * stranded forever. Normalises them in place. Idempotent.
+ */
+async function repairStrandedLeads(sourcePrefix) {
+  const all = (await kv.hgetall(LEADS_KEY)) || {};
+  const patch = {};
+  let scanned = 0, fixed = 0;
+
+  for (const [email, lead] of Object.entries(all)) {
+    if (!lead || typeof lead !== 'object') continue;
+    const src = String(lead.source || '').toLowerCase();
+    if (sourcePrefix && !src.startsWith(sourcePrefix.toLowerCase())) continue;
+    scanned++;
+
+    const status = String(lead.status || '').toLowerCase();
+    const score = Number(lead.quality_score) || Number(lead.ai_score) || 0;
+    // Only touch leads that have never been contacted.
+    const untouched = !lead.sent_at && !lead.account_used && (!lead.send_count || lead.send_count === 0);
+    const badStatus = status === 'qualified';
+    const badScore = score < 8;
+    if (!untouched || (!badStatus && !badScore)) continue;
+
+    patch[email] = {
+      ...lead,
+      status: 'pending',
+      quality_score: Math.max(score, 8),
+      quality_engine: lead.quality_engine || 'import-repair',
+      updatedAt: new Date().toISOString(),
+    };
+    fixed++;
+  }
+
+  const entries = Object.entries(patch);
+  for (let i = 0; i < entries.length; i += 100) {
+    await kv.hset(LEADS_KEY, Object.fromEntries(entries.slice(i, i + 100)));
+  }
+  return { scanned, fixed };
+}
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
+
+  // Maintenance mode: fix leads already in the DB that can never be sent.
+  if (searchParams.get('repair') === '1') {
+    try {
+      const res = await repairStrandedLeads(searchParams.get('source') || '');
+      return Response.json({ success: true, mode: 'repair', ...res });
+    } catch (err) {
+      return Response.json({ error: 'Repair failed: ' + err.message }, { status: 500 });
+    }
+  }
+
   const datasetId = searchParams.get('datasetId');
   const dryRun = searchParams.get('dryRun') === '1';
   const industry = searchParams.get('industry') || 'Managed IT Services';
@@ -77,8 +134,13 @@ export async function GET(request) {
       company_name: companyFromDomain(domain),
       website: domain ? `https://${String(domain).replace(/^https?:\/\//, '')}` : null,
       industry, phone, linkedin, source,
-      status: 'qualified',
-      ai_score: best.isRole ? 6 : 8,
+      // MUST be a status getUnsent/claimLead accept, and MUST carry a score at
+      // or above QUALITY_THRESHOLD (8) or the lead is silently never sent.
+      status: 'pending',
+      ai_score: best.isRole ? 8 : 9,
+      quality_score: best.isRole ? 8 : 9,
+      quality_reason: best.isRole ? 'Imported: role inbox on company domain' : 'Imported: named contact on company domain',
+      quality_engine: 'import',
       qualified_at: new Date().toISOString(),
     });
   }
