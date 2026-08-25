@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import UploadPanel from './UploadPanel';
 
 // A lead is "real" if it isn't scraper junk (skipped/bounced).
 function isReal(l) {
@@ -37,14 +38,15 @@ export default function LeadsPage() {
   const [view, setView] = useState('all'); // all | new | sent | replied
   const [q, setQ] = useState('');
 
-  useEffect(() => {
-    let alive = true;
-    fetch('/api/leads?action=list&limit=100000&page=1')
+  const load = useCallback(() => {
+    setLoading(true);
+    return fetch('/api/leads?action=list&limit=100000&page=1&t=' + Date.now())
       .then((r) => r.json())
-      .then((d) => { if (alive) { setLeads(Array.isArray(d) ? d : (d.leads || [])); setLoading(false); } })
-      .catch(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
+      .then((d) => { setLeads(Array.isArray(d) ? d : (d.leads || [])); setLoading(false); })
+      .catch(() => setLoading(false));
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   // Every real lead — no US-only or score gate. All leads live here now.
   const base = leads.filter(isReal);
@@ -84,6 +86,8 @@ export default function LeadsPage() {
       <p style={{ color: 'var(--fg-muted)', fontSize: 14, marginBottom: 16 }}>
         Every lead in your system, in one place. Leads already emailed move to Sent and are never contacted again.
       </p>
+
+      <UploadPanel onImported={load} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginBottom: 18 }}>
         <div style={card}><div style={{ color: 'var(--fg-muted)', fontSize: 13 }}>Total leads</div><div style={{ fontSize: 30, fontWeight: 700 }}>{loading ? '—' : stat.total}</div></div>
