@@ -46,11 +46,11 @@ export async function GET(request) {
   if (!datasetId) return Response.json({ error: 'Missing ?datasetId=' }, { status: 400 });
 
   const token = process.env.APIFY_TOKEN;
-  if (!token) return Response.json({ error: 'APIFY_TOKEN not set. Add it in Vercel > Settings > Environment Variables.' }, { status: 500 });
+  const authHeaders = token ? { Authorization: 'Bearer ' + token } : {};
 
   let items;
   try {
-    const res = await fetch(`https://api.apify.com/v2/datasets/${encodeURIComponent(datasetId)}/items?format=json&clean=true&limit=5000`, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(`https://api.apify.com/v2/datasets/${encodeURIComponent(datasetId)}/items?format=json&clean=true&limit=5000`, { headers: authHeaders });
     if (!res.ok) {
       const body = await res.text();
       return Response.json({ error: `Apify returned ${res.status}`, detail: body.slice(0, 300) }, { status: 502 });
