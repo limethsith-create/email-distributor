@@ -11,6 +11,7 @@ import { kv } from '@vercel/kv';
 import { sendEmail } from '@/lib/mailer';
 import { getSmtpAccounts } from '@/lib/smtp-accounts';
 import { proposeSlotsForLead } from '@/lib/calendar';
+import { addToSuppression } from '@/lib/leads-db';
 
 const LEADS_KEY = 'leads';
 const CONVERSATIONS_KEY = 'conversations';
@@ -22,7 +23,7 @@ const BLOCKED_SENDER_PATTERNS = ['no-reply', 'noreply', 'mailer-daemon', 'postma
 const AUTO_ACK_RE = /auto[- ]?reply|out of office|ticket received|autoreply|automatic reply|delivery status/i;
 
 // Negative-sentiment detection for the polite opt-out variant
-const NEGATIVE_RE = /not interested|unsubscribe|remove/i;
+const NEGATIVE_RE = /not interested|unsubscribe|\bremove\b|\bstop\b|opt[- ]?out|take me off|do not (contact|email)|don'?t (contact|email)/i;
 
 const BUSINESS_CONTEXT =
   "Aviance (aviance.online) does done-for-you cold email that books qualified sales calls on the client's calendar, live in ~3 weeks, pay per call that shows, guarantee: 20 booked calls in a month or full refund.";
@@ -268,6 +269,10 @@ export async function maybeAutoReply(reply, lead) {
     const isNegative = NEGATIVE_RE.test(haystack);
     let body;
     if (isNegative) {
+      // We advertise 'reply STOP' in every email - honour it. Suppression is
+      // permanent and survives re-imports, so this contact can never be
+      // re-added by a future scrape.
+      try { await addToSuppression(leadEmail); } catch {}
       body = FALLBACK_NEGATIVE;
     } else {
       let slots = [];
