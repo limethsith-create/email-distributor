@@ -304,8 +304,8 @@ async function claimLead(email) {
     const existing = await kv.hget(LEADS_KEY, email.toLowerCase());
     if (!existing) return false;
     const status = (existing.status || '').toLowerCase();
-    // Only claim if still pending/new
-    if (status !== 'pending' && status !== 'new') return false;
+    // Only claim if still pending/new/qualified (imports arrive as 'qualified')
+    if (status !== 'pending' && status !== 'new' && status !== 'qualified') return false;
     // Mark as "sending" immediately
     await kv.hset(LEADS_KEY, {
       [email.toLowerCase()]: { ...existing, status: 'sending', updatedAt: new Date().toISOString() }
@@ -338,9 +338,13 @@ async function getUnsent(limit = 75) {
     const unsent = Object.values(allLeads)
       .filter(lead => {
         const status = (lead.status || '').toLowerCase();
-        const fresh = (status === 'pending' || status === 'new') && lead.email && !lead.account_used && !lead.sent_at;
-        // Scout gate: only high-scored, US leads are eligible to send.
-        const qualified = (Number(lead.quality_score) || 0) >= QUALITY_THRESHOLD;
+        const sendableStatus = status === 'pending' || status === 'new' || status === 'qualified';
+        const fresh = sendableStatus && lead.email && !lead.account_used && !lead.sent_at;
+        // Scout gate: only high-scored, US leads are eligible to send. Leads that
+        // arrived via import carry ai_score instead of quality_score - honour it
+        // so an import isn't silently stranded waiting on a manual Scout run.
+        const score = Number(lead.quality_score) || Number(lead.ai_score) || 0;
+        const qualified = score >= QUALITY_THRESHOLD;
         return fresh && qualified && isUSALead(lead);
       });
 
@@ -349,7 +353,7 @@ async function getUnsent(limit = 75) {
     // varies between runs without ever letting a lower-rated lead jump ahead.
     for (const l of unsent) l.__jitter = Math.random();
     unsent.sort((a, b) => {
-      const diff = (Number(b.quality_score) || 0) - (Number(a.quality_score) || 0);
+      const diff = ((Number(b.quality_score) || Number(b.ai_score) || 0)) - ((Number(a.quality_score) || Number(a.ai_score) || 0));
       return diff !== 0 ? diff : a.__jitter - b.__jitter;
     });
     for (const l of unsent) delete l.__jitter;
@@ -687,7 +691,7 @@ export async function GET(request) {
     // POSTER PRIORITY (all modes): due follow-ups (day-3 flyer / day-7 nudge)
     // go out first — one per cycle — so every lead gets the poster on
     // schedule even when the heartbeat calls ?batch=N.
-    if (batchSize !== 0) {
+    {
       const fuToday = await getFollowupCountToday();
       if (fuToday < FOLLOWUP_DAILY_CAP && !(await tooSoonToSend())) {
         const fu = await sendOneDueFollowUp(accounts);
@@ -762,9 +766,9 @@ export async function GET(request) {
       // personalized flyer on day 3) instead of a fresh email. Keeps the
       // one-email-per-cycle drip; fresh outreach resumes once follow-ups
       // are caught up or the cap is reached.
-      const dueNow = await getFollowUpLeads(6);
-      const fuCountToday = await getFollowupCountToday();
-      const preferFollowUp = dueNow.length > 0 && fuCountToday < FOLLOWUP_DAILY_CAP;
+      // Follow-ups already got first refusal in the preflight above; if one
+      // was due and sendable it returned already. Never blank the fresh loop.
+      const preferFollowUp = false;
 
       for (const { account, stat } of (preferFollowUp ? [] : readyAccounts)) {
         let sentFromThisAccount = false;
