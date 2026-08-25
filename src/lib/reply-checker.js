@@ -138,6 +138,11 @@ async function checkRepliesForAccount(account) {
       secure: true,
       auth: { user: account.email, pass: account.appPassword },
       logger: false,
+      // Bound every phase: a hung IMAP socket otherwise stalls the whole
+      // serverless invocation and kills the send heartbeat with it.
+      connectionTimeout: 12000,
+      greetingTimeout: 8000,
+      socketTimeout: 25000,
     });
 
     await client.connect();
