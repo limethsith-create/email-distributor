@@ -57,6 +57,11 @@ export function createTransporter(email, password) {
     tls: {
       rejectUnauthorized: true,
     },
+    // Serverless has a hard wall-clock budget. Without these, nodemailer waits
+    // up to 10 minutes on a stalled socket and the whole run dies mid-send.
+    connectionTimeout: 10000,
+    greetingTimeout: 8000,
+    socketTimeout: 20000,
     // Generate Message-IDs using the sender's domain for alignment
     name: domain,
   });
