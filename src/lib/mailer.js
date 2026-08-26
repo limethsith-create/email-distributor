@@ -120,7 +120,12 @@ export async function sendEmail(account, mailOptions) {
 
     // Wrap HTML content in a minimal personal-style template, embedding an
     // invisible open-tracking pixel keyed to the recipient (unless disabled).
-        const trackingPixel = (process.env.OPEN_TRACKING === 'on' && !mailOptions.noTrack) ? buildTrackingPixel(mailOptions.to) : '';
+        // Open tracking is ON unless explicitly switched off. It used to require
+        // OPEN_TRACKING === 'on', and when that var went missing every email
+        // silently shipped without a pixel - so opens simply stopped recording
+        // while the dashboard kept showing the old numbers. Fail open, not shut.
+        const trackingDisabled = String(process.env.OPEN_TRACKING || '').toLowerCase() === 'off';
+        const trackingPixel = (!trackingDisabled && !mailOptions.noTrack) ? buildTrackingPixel(mailOptions.to) : '';
     const wrappedHtml = wrapInHtmlTemplate(mailOptions.html, trackingPixel);
 
     // Generate a proper Message-ID using the sender's domain
