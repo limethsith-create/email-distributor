@@ -12,6 +12,22 @@ const C = {
 // Fresh start: only count sends recorded on/after the campaign start.
 const CAMPAIGN_START = '2026-08-01T09:30:00Z';
 function afterStart(ts) { return ts && String(ts) >= CAMPAIGN_START; }
+
+// ── Open-tracking blackout ──────────────────────────────────────────────
+// The tracking pixel was gated behind OPEN_TRACKING === 'on'. When that env
+// var went missing, every email shipped WITHOUT a pixel, so opens could not be
+// recorded at all — the recipients may well have opened, we simply have no
+// signal. Counting those sends in the open-rate denominator understates the
+// real rate, so they're excluded from the RATE only. They still count fully
+// toward "Emails sent". Restored 2026-08-26 (pixel now on by default).
+const TRACKING_GAP_START = '2026-08-21T00:00:00Z';
+const TRACKING_GAP_END = '2026-08-26T04:20:00Z';
+function isTrackable(l) {
+  const t = l.sent_at;
+  if (!afterStart(t)) return false;
+  const ts = String(t);
+  return !(ts >= TRACKING_GAP_START && ts < TRACKING_GAP_END);
+}
 function isReal(l) {
   const s = (l.status || '');
   return !s.startsWith('skipped') && s !== 'bounced';
@@ -97,7 +113,12 @@ export default function Dashboard() {
   const openedLeads = real.filter(isOpened);
   const newLeads = real.filter((l) => !isSent(l));
   const emailsSent = sentLeads.length;
-  const openRate = emailsSent ? Math.round((openedLeads.length / emailsSent) * 100) : 0;
+  // Rate is measured only against mail that actually carried a pixel.
+  const trackableLeads = sentLeads.filter(isTrackable);
+  const untracked = emailsSent - trackableLeads.length;
+  const openRate = trackableLeads.length
+    ? Math.round((openedLeads.length / trackableLeads.length) * 100)
+    : 0;
   const pts = buildSentSeries(real);
 
   return (
@@ -122,7 +143,7 @@ export default function Dashboard() {
         <KPI idx="02" label="Inboxes live" value={inboxes.length ? inboxes.filter((i) => i.enabled).length : '—'}
           sub={inboxes.length ? inboxes.map((i) => i.cap + '/day').join(' · ') : 'loading'} />
         <KPI idx="03" label="Emails sent" value={loading ? '—' : emailsSent} sub="this campaign" />
-        <KPI idx="04" label="Opened" value={loading ? '—' : openedLeads.length} sub={loading ? '' : `${openRate}% open rate`} />
+        <KPI idx="04" label="Opened" value={loading ? '—' : openedLeads.length} sub={loading ? '' : (untracked > 0 ? `${openRate}% open rate · ${untracked} untracked excluded` : `${openRate}% open rate`)} />
         <KPI idx="05" label="Replied" value={loading ? '—' : repliedLeads.length} sub="recorded" />
       </div>
 
