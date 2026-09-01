@@ -26,17 +26,24 @@ const AUTO_ACK_RE = /auto[- ]?reply|out of office|ticket received|autoreply|auto
 const NEGATIVE_RE = /not interested|unsubscribe|\bremove\b|\bstop\b|opt[- ]?out|take me off|do not (contact|email)|don'?t (contact|email)/i;
 
 const BUSINESS_CONTEXT =
-  "Aviance (aviance.online) does done-for-you cold email that books qualified sales calls on the client's calendar, live in ~3 weeks, pay per call that shows, guarantee: 20 booked calls in a month or full refund.";
+  "Aviance (aviance.online) sells guaranteed booked sales calls, not emails: a done-for-you cold email engine (domains, inboxes, verified prospect lists, copywriting, sending, reply handling) that books qualified discovery calls straight onto the client's calendar. Live within 3 weeks or the next month is free. No-shows are replaced free. If a month falls short of the guaranteed call count, the missing calls roll over and never expire, and only calls matching the agreed ideal customer profile count. No setup fee, month-to-month. Plans: Starter $2,497/mo for 10 guaranteed calls, Growth $3,997/mo for 20, Scale $8,497/mo for 50.";
 
 // ---------------------------------------------------------------------------
 // Rule-based fallback templates (used when Gemini is unavailable or fails)
 // ---------------------------------------------------------------------------
 
-const FALLBACK_POSITIVE = `Thanks for getting back to us — happy to explain.
+const FALLBACK_POSITIVE = `Thanks for getting back to us — here are the exact details so you know precisely what you'd be getting.
 
-In short: Aviance runs done-for-you cold email that books qualified sales calls straight onto your calendar, live in about 3 weeks, and you only pay per call that actually shows. If we don't book 20 calls in a month, you get a full refund.
+What we do: we don't sell emails, we sell guaranteed booked sales calls — on your calendar. We build and run the entire engine (domains, inboxes, verified lists, copy, sending, reply handling); you just show up and take the calls.
 
-Would a quick 15-minute call work to see if it's a fit? Let us know what time suits you — more at aviance.online.
+The deal:
+- Live within 3 weeks — or your next month is free
+- Guaranteed booked calls every month, no-shows replaced free
+- Fall short and the missing calls roll over — they never expire
+- Only calls matching your ideal customer profile count
+- No setup fee, month-to-month — Starter is $2,497/month for 10 guaranteed calls
+
+The fastest way to see if it fits is a 15-minute call. What time works for you this week? Full breakdown at aviance.online.
 
 — Aviance Team`;
 
@@ -47,12 +54,20 @@ Would a quick 15-minute call work to see if it's a fit? Let us know what time su
  */
 function buildPositiveWithSlots(slots) {
   const lines = slots.map((s) => `  • ${s.usDate}, ${s.usTime} ET`).join('\n');
-  return `Thanks for getting back to us — glad this could be a fit.
+  return `Thanks for getting back to us — here are the exact details so you know precisely what you'd be getting.
+
+What we do: we don't sell emails, we sell guaranteed booked sales calls — on your calendar. We build and run the entire engine (domains, inboxes, verified lists, copy, sending, reply handling); you just show up and take the calls.
+
+The deal:
+- Live within 3 weeks — or your next month is free
+- Guaranteed booked calls every month, no-shows replaced free
+- Fall short and the missing calls roll over — they never expire
+- No setup fee, month-to-month — Starter is $2,497/month for 10 guaranteed calls
 
 To keep it quick, here are a few times for a 15-minute call (all US Eastern):
 ${lines}
 
-Just reply with whichever works best and we'll lock it in and send an invite. More at aviance.online.
+Reply with whichever works and we'll lock it in and send the invite — or name a better time. Full breakdown at aviance.online.
 
 — Aviance Team`;
 }
@@ -121,12 +136,13 @@ PROSPECT COMPANY: ${company}
 THEIR MESSAGE: "${(reply.preview || reply.subject || '').substring(0, 500)}"
 
 Write the reply email body. Rules:
-- Under 90 words, plain text only (no HTML, no markdown)
-- Warm and professional, no exclamation-mark spam, no hype
-- Directly acknowledge what they said and answer simply
-- Propose a quick 15-minute call and ask what time works for them
+- Under 140 words, plain text only (no HTML, no markdown)
+- Confident and direct — this is a sales reply, so sell: state clearly that we deliver guaranteed booked sales calls on their calendar, live within 3 weeks or the next month is free, with no-shows replaced free
+- Include one price anchor: Starter is $2,497/month for 10 guaranteed calls
+- Open by acknowledging what they said, in one sentence
+- Close by proposing a quick 15-minute call and asking what time works this week
 - Include the link aviance.online exactly once
-- Do NOT use any personal names
+- No exclamation marks, no invented facts, no personal names
 - Sign off as "— Aviance Team"
 
 Return ONLY the reply body.`;
@@ -150,7 +166,7 @@ Return ONLY the reply body.`;
     if (
       generated &&
       generated.length > 30 &&
-      generated.split(/\s+/).length <= 120
+      generated.split(/\s+/).length <= 170
     ) {
       return generated;
     }
