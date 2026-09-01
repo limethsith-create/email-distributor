@@ -1,27 +1,36 @@
 /**
- * Replies API — serves reply data to the dashboard
+ * Replies API - serves reply data to the dashboard.
+ * Junk (bounce / DSN / out-of-office / raw-MIME) entries that predate the
+ * reply-checker's bounce filter are stripped here so the Replies tab only
+ * ever shows real prospect conversations.
  */
 
 import { getAllReplies } from '@/lib/reply-checker';
+import { isJunkReply, isJunkConversation } from '@/lib/junk-filter';
 import { kv } from '@vercel/kv';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const replies = await getAllReplies();
+    const allReplies = await getAllReplies();
+    const replies = allReplies.filter(function (r) { return !isJunkReply(r); });
 
-    // Also get reply count from stats
     let replyCount = 0;
     try {
       replyCount = await kv.hget('stats', 'totalReplied') || 0;
     } catch {}
 
-    // Full two-way conversations (auto-reply bot log) for the UI
-    let conversations = {};
+    let rawConversations = {};
     try {
-      conversations = (await kv.hgetall('conversations')) || {};
+      rawConversations = (await kv.hgetall('conversations')) || {};
     } catch {}
+    const conversations = {};
+    for (const key of Object.keys(rawConversations)) {
+      if (!isJunkConversation(rawConversations[key])) {
+        conversations[key] = rawConversations[key];
+      }
+    }
 
     return Response.json({
       success: true,
