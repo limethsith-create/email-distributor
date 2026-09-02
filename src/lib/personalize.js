@@ -13,9 +13,18 @@
  *                          one-word reply ("SEND IT"). Proves the targeting
  *                          before any pitch.
  *
- * Voice rules (finalized Sep 2026): official and composed — a firm writing,
- * not a hustler. Short paragraphs, zero hype, the guarantee stated as terms
- * rather than promises. Sign-off is always "— The Aviance Team".
+ * Voice rules (rewritten from outreach research, Sep 2026):
+ *  · Subjects: 1–5 words, lowercase, specific to the company — never a pitch,
+ *    never "free"/"guaranteed"/salesy words (spam + reply-rate killers).
+ *    Question subjects lift opens; benefit-claiming numbers hurt replies.
+ *  · Bodies: 70–110 words. Open with THEM, never with who we are. Loss-framed
+ *    pain beats gain-framing. Two-sentence paragraphs, one question, one CTA.
+ *  · CTA: interest/permission-based ("want it?", "worth me sending it?") —
+ *    beats calendar asks ~3:1 on first touch (Gong, 304k emails). The bot
+ *    delivers the full terms AFTER they reply, which is where pitching works.
+ *  · Day 3: new angle + proof, never "just following up". Day 7: breakup with
+ *    an easy out — a stated guess plus "no reply needed if wrong".
+ *  · Sign-off is always "— The Aviance Team".
  */
 
 import { geminiGenerate } from '@/lib/gemini';
@@ -31,78 +40,80 @@ export function campaignFor(lead) {
 }
 
 // ---------------------------------------------------------------------------
-// Subject pools — short, specific, stated like a document title, not a hook.
+// Subject pools — short, lowercase, specific. They read like a colleague's
+// note, not a marketing blast. No pitch, no "free", no claims.
 // ---------------------------------------------------------------------------
 
 const OFFER_SUBJECTS_NAMED = [
-  '{{first_name}} — booked sales calls, in writing',
-  '{{first_name}} — a written guarantee on your pipeline',
-  '{{first_name}} — guaranteed calls for {{company_name}}',
+  '{{first_name}}, outbound at {{company_name}}?',
+  '{{first_name}}, new clients at {{company_name}}?',
+  "{{company_name}}'s pipeline next quarter",
 ];
 const OFFER_SUBJECTS_COMPANY = [
-  '{{company_name}} — booked sales calls, in writing',
-  'a written pipeline guarantee for {{company_name}}',
+  'outbound at {{company_name}}?',
+  'new clients at {{company_name}}?',
+  "{{company_name}}'s pipeline next quarter",
 ];
 const OFFER_SUBJECTS_NEUTRAL = [
-  'booked sales calls — in writing',
-  'a written guarantee on your pipeline',
+  'who owns outbound?',
+  'your pipeline next quarter',
 ];
 
 const FREE_SUBJECTS_NAMED = [
-  '{{first_name}} — 5 qualified leads for {{company_name}}, on us',
-  '{{first_name}} — 5 ready buyers for {{company_name}}',
+  '{{first_name}}, made you a list',
+  '5 buyers for {{company_name}}?',
 ];
 const FREE_SUBJECTS_COMPANY = [
-  '5 qualified leads for {{company_name}} — free',
-  '{{company_name}} — 5 ready buyers, on us',
+  'a list for {{company_name}}',
+  '5 buyers for {{company_name}}?',
 ];
 const FREE_SUBJECTS_NEUTRAL = [
-  '5 qualified leads — on us',
+  'made you a list',
 ];
 
 // ---------------------------------------------------------------------------
 // Per-industry angle for the OFFER campaign
-//   pain  = the pipeline pain that opens day 0
+//   pain  = the loss-framed pipeline pain that opens day 0
 //   proof = the one-line peer proof used on day 3
 // ---------------------------------------------------------------------------
 
 const INDUSTRY_TEMPLATES = {
   msp: {
-    pain: 'Every MSP knows the quarter where referrals dry up and the pipeline goes quiet.',
+    pain: 'Most MSPs hit a quarter where referrals dry up — and every quiet week is contracts a competitor signs instead.',
     proof: 'the last MSP we ran this for went from referral-only to a full calendar of booked discovery calls',
   },
   'it services': {
-    pain: 'IT firms grow on word of mouth — until the month it stalls and new-client flow goes flat.',
+    pain: 'IT firms grow on word of mouth — until the month it stalls, and the gap in the pipeline shows up 90 days later as flat revenue.',
     proof: 'an IT services firm we work with took 14 qualified calls in their first month',
   },
   technology: {
-    pain: 'Strong product, quiet pipeline — outbound is the function that never quite gets built.',
+    pain: 'Strong product, quiet pipeline — and every month outbound stays unbuilt, deals that should be yours close somewhere else.',
     proof: "we filled a technology team's calendar with 15 qualified demos in a single month",
   },
   saas: {
-    pain: 'Growth stalls the moment outbound slows, and an SDR team is slow and expensive to build.',
+    pain: 'When outbound slows, growth stalls a quarter later — and hiring SDRs takes months you may not want to spend.',
     proof: 'a SaaS client takes 18 booked demos a month from us, with no internal SDRs',
   },
   finance: {
-    pain: 'The right buyers exist; nobody inside the firm has the hours to prospect them consistently.',
+    pain: 'The right clients for your firm exist right now — but nobody inside has the hours to prospect them, so they get signed elsewhere.',
     proof: 'we booked a finance firm 11 calls in a month, every one matching their client profile',
   },
   consulting: {
-    pain: 'Consulting pipelines run feast-or-famine — you are either delivering or hunting, never both.',
+    pain: 'Consulting runs feast-or-famine: while you are delivering, nobody is hunting — and next quarter pays the price.',
     proof: 'we booked a consulting firm 12 discovery calls in a month, fully hands-off',
   },
   agency: {
-    pain: 'You sell growth to clients while your own new-business pipeline runs dry between referrals.',
+    pain: 'You sell growth to clients while your own new-business pipeline sits empty between referrals — the classic agency trap.',
     proof: "we filled an agency's calendar with 15 booked calls in a month",
   },
   marketing: {
-    pain: 'You sell growth to clients while your own new-business pipeline runs dry between referrals.',
+    pain: 'You sell growth to clients while your own new-business pipeline sits empty between referrals — the classic agency trap.',
     proof: 'we booked an agency 15 qualified calls in a month with in-market prospects',
   },
 };
 
 const DEFAULT_TEMPLATE = {
-  pain: 'A steady flow of new-business calls is hard to sustain when no one owns outbound.',
+  pain: 'When nobody owns outbound, the pipeline runs on luck — and slow months cost more than any vendor ever would.',
   proof: "we recently filled a B2B company's calendar with 15 qualified sales calls in one month",
 };
 
@@ -139,6 +150,8 @@ const SIGNATURE = '— The Aviance Team\nGuaranteed booked sales calls · avianc
 
 // ---------------------------------------------------------------------------
 // CAMPAIGN 'offer' — the direct pitch
+// Day 0 stays light on purpose: pain → one line on what we do → interest CTA.
+// The full terms live in the one-pager below the email and in the bot's reply.
 // ---------------------------------------------------------------------------
 
 function offerDay0(lead) {
@@ -156,11 +169,9 @@ function offerDay0(lead) {
 
 ${t.pain}
 
-Aviance exists for exactly that problem. We build and operate your entire outbound engine — domains, warmed inboxes, verified prospect lists, copywriting, sending and reply handling — and we put the result in writing: a guaranteed number of booked sales calls on ${company}'s calendar, live within 3 weeks, or your next month is free.
+We run the whole outbound engine for B2B firms like ${company} — and we put the result in writing: a set number of booked sales calls on your calendar, or the next month costs you nothing. The one-pager below carries the terms.
 
-The terms are deliberately simple. No-shows are replaced at no charge. Any monthly shortfall rolls over until delivered. There is no setup fee, and the engagement is month-to-month. The one-pager below carries the full terms and current founding-client rates.
-
-If a predictable calendar matters to ${company} this quarter, reply to this email — or take 15 minutes with us via ${SITE}.
+Worth me sending the exact numbers for ${company}? A one-word reply — "details" — is enough.
 
 ${SIGNATURE}`;
 
@@ -174,15 +185,15 @@ function offerDay3(lead) {
 
   const body = `Hi${name},
 
-A short follow-up, with proof in hand: ${t.proof}.
+One data point since my last note: ${t.proof}.
 
-The same written commitment is on the table for ${company} — a guaranteed number of booked calls each month, live within 3 weeks or your next month is free, no-shows replaced, shortfalls rolled over until delivered. One founding-client rate, locked for life, remains open.
+The same structure is open for ${company} — a set number of booked calls each month, in writing, and if we miss, the next month costs nothing.
 
-The full terms are in the one-pager below. Reply here and we will walk you through it in 15 minutes.
+Would the exact numbers be useful, or is this off base for the quarter?
 
 ${SIGNATURE}`;
 
-  return { subject: `Re: booked sales calls for ${company}`, body };
+  return { subject: `Re: outbound at ${company}`, body };
 }
 
 function offerDay7(lead) {
@@ -191,17 +202,19 @@ function offerDay7(lead) {
 
   const body = `Hi${name},
 
-Closing the loop so we do not clutter your inbox. If a guaranteed pipeline is not a priority for ${company} this quarter, we will not follow up again.
+Closing the loop. My guess: ${company} could use a fuller calendar, but nobody owns outbound right now. If that is wrong, no reply needed — this is my last note.
 
-When it becomes one, the offer stands: booked sales calls, in writing — live in 3 weeks, no setup fee, month-to-month. ${SITE}
+If it is close, the written commitment stands: booked calls on your calendar or the month costs nothing. Reply any time and I will send the terms. ${SITE}
 
 ${SIGNATURE}`;
 
-  return { subject: `Re: booked sales calls for ${company}`, body };
+  return { subject: `Re: outbound at ${company}`, body };
 }
 
 // ---------------------------------------------------------------------------
 // CAMPAIGN 'free-leads' — the goodwill hook
+// Built on the highest-tested pattern in cold email: a made-for-you gift plus
+// a permission CTA ("want it?"). No pitch until they reply.
 // ---------------------------------------------------------------------------
 
 function freeLeadsDay0(lead) {
@@ -216,13 +229,11 @@ function freeLeadsDay0(lead) {
 
   const body = `${hi}
 
-We are Aviance — the cold-email firm that books guaranteed sales calls for B2B companies. Before we ask for a minute of your time, we would rather prove that our targeting works.
+We researched ${company}'s market this week and found five businesses showing clear buying signals right now. For each one: the company, why the timing is right, the decision-maker to ask for, and their direct contact.
 
-Our research desk has identified five businesses in ${company}'s market showing clear signs they are ready to buy right now. For each one you receive the company, the specific reason the timing is right, the decision-maker to ask for, and their direct contact details. The list is yours, free — no strings and no obligation.
+The list took real hours to build, and it is yours at no cost. It is how we prove our targeting before ever asking for your time.
 
-Reply "SEND IT" and it is in your inbox the same day.
-
-This is the exact targeting we run at scale for clients — with the results guaranteed in writing. Details at ${SITE}.
+Want it? Reply "SEND IT" and it is in your inbox the same day.
 
 ${SIGNATURE}`;
 
@@ -235,13 +246,13 @@ function freeLeadsDay3(lead) {
 
   const body = `Hi${name},
 
-Your five leads are still set aside for ${company} — each with the reason they are ready now and the person to call. One word — "SEND IT" — and they are yours the same day.
+The five companies we set aside for ${company} are still holding — each with the reason they are ready now and the person to ask for.
 
-There is no catch. It is simply how we prove our targeting before we ever talk business. ${SITE}
+Buying signals fade, so I would rather this reach you while the timing holds. One word — "SEND IT" — and the list is yours today.
 
 ${SIGNATURE}`;
 
-  return { subject: `Re: 5 qualified leads for ${company}`, body };
+  return { subject: `Re: a list for ${company}`, body };
 }
 
 function freeLeadsDay7(lead) {
@@ -250,13 +261,13 @@ function freeLeadsDay7(lead) {
 
   const body = `Hi${name},
 
-A last note from us. The five researched leads stay reserved for ${company} — whenever you want them, a one-word reply does it.
+Last note from me. If new clients are not the focus right now, no reply needed — I will close the file.
 
-And if you would rather skip straight to the part where booked calls land on your calendar, guaranteed in writing: ${SITE}.
+If they are, the five researched leads are still yours for a one-word reply. And when you want this running at scale — booked calls on your calendar, in writing — that is exactly what we do: ${SITE}
 
 ${SIGNATURE}`;
 
-  return { subject: `Re: 5 qualified leads for ${company}`, body };
+  return { subject: `Re: a list for ${company}`, body };
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +301,7 @@ export async function enhanceWithAI(lead, baseEmail) {
 
 We sell done-for-you cold email with the result guaranteed in writing: booked sales calls on the client's calendar, live within 3 weeks or the next month is free, no-shows replaced, shortfalls rolled over.
 
-Rewrite ONLY the opening pain sentence so it feels specific to this company and its industry. Keep every other sentence exactly as it is. Keep it plain text, composed and official in tone, no exclamation marks, no invented facts, no personal sender names. Return ONLY the email body.
+Rewrite ONLY the opening pain sentence so it feels specific to this company and its industry. Frame it as a loss (what quiet pipeline is costing them), keep it under 25 words, plain and conversational, no exclamation marks, no invented facts, no personal sender names. Keep every other sentence exactly as it is. Return ONLY the email body.
 
 Original:
 ${baseEmail.body}`;
