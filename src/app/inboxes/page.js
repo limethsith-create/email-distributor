@@ -20,6 +20,38 @@ function Toggle({ on, busy, onClick }) {
   );
 }
 
+// Which campaign this inbox sends — two segmented buttons.
+const CAMPAIGN_LABELS = {
+  'free-leads': { name: 'Free Leads', short: '00 · FREE LEADS', color: '#0a7a3d' },
+  'offer': { name: 'Guaranteed Calls', short: '01 · GUARANTEED CALLS', color: '#e0290f' },
+};
+
+function CampaignPicker({ value, busy, onChange }) {
+  return (
+    <div style={{ display: 'flex', gap: 6 }}>
+      {['free-leads', 'offer'].map((c) => {
+        const on = value === c;
+        const meta = CAMPAIGN_LABELS[c];
+        return (
+          <button key={c} disabled={busy} onClick={() => !on && onChange(c)}
+            className="mono"
+            style={{
+              fontFamily: 'inherit', cursor: busy || on ? 'default' : 'pointer',
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+              padding: '7px 12px', borderRadius: 2,
+              border: '1px solid ' + (on ? meta.color : 'var(--border-strong)'),
+              background: on ? meta.color : 'transparent',
+              color: on ? '#fff' : 'var(--fg-muted)',
+              opacity: busy ? 0.6 : 1, transition: 'all .15s',
+            }}>
+            {meta.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // Stepper for the per-inbox daily send limit.
 function CapStepper({ value, max, busy, onChange }) {
   const step = (delta) => onChange(Math.max(0, Math.min(max, value + delta)));
@@ -74,6 +106,18 @@ export default function InboxesPage() {
     setBusy('');
   };
 
+  const setCampaign = async (ib, campaign) => {
+    setBusy(ib.email + ':campaign');
+    const prev = ib.campaign;
+    setInboxes((arr) => arr.map((x) => x.email === ib.email ? { ...x, campaign } : x));
+    try {
+      await fetch('/api/inboxes-control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: ib.email, campaign }) });
+    } catch {
+      setInboxes((arr) => arr.map((x) => x.email === ib.email ? { ...x, campaign: prev } : x));
+    }
+    setBusy('');
+  };
+
   const anyOn = (inboxes || []).some((i) => i.enabled);
 
   return (
@@ -116,11 +160,31 @@ export default function InboxesPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+                    <span className="mono" style={{
+                      fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                      color: (CAMPAIGN_LABELS[ib.campaign] || CAMPAIGN_LABELS.offer).color,
+                      border: '1px solid ' + (CAMPAIGN_LABELS[ib.campaign] || CAMPAIGN_LABELS.offer).color,
+                      padding: '4px 9px',
+                    }}>
+                      {(CAMPAIGN_LABELS[ib.campaign] || CAMPAIGN_LABELS.offer).short}
+                    </span>
                     <span style={{ fontSize: 12.5, fontWeight: 600, color: ib.enabled ? '#15803d' : 'var(--fg-dim)' }}>
                       {ib.enabled ? `On · ${ib.cap}/day` : 'Off'}
                     </span>
                     <Toggle on={ib.enabled} busy={busy === ib.email} onClick={() => toggle(ib)} />
                   </div>
+                </div>
+
+                {/* campaign assignment */}
+                <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+                  padding: '12px 14px', borderRadius: 12, background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}>
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>Campaign</div>
+                    <div style={{ fontSize: 12, color: 'var(--fg-dim)' }}>
+                      This inbox only sends {(CAMPAIGN_LABELS[ib.campaign] || CAMPAIGN_LABELS.offer).name} emails.
+                    </div>
+                  </div>
+                  <CampaignPicker value={ib.campaign || 'offer'} busy={busy === ib.email + ':campaign'} onChange={(c) => setCampaign(ib, c)} />
                 </div>
 
                 {/* daily limit control */}
@@ -152,6 +216,7 @@ export default function InboxesPage() {
         <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>How the switch works</div>
         <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--fg-muted)', fontSize: 13.5, lineHeight: 1.9 }}>
           <li>Off by default — the system sends nothing until you switch an inbox on.</li>
+          <li>Each inbox is assigned to exactly one campaign — it only sends that campaign&rsquo;s emails, so Free Leads and Guaranteed Calls never mix in one inbox.</li>
           <li>Switched on, that inbox sends up to its daily limit, spaced with random gaps between 9 AM and 8 PM.</li>
           <li>Ramp gradually: start the limit low (e.g. 8), raise it every few days as deliverability holds.</li>
           <li>Turn it back off any time and it stops sending immediately.</li>
