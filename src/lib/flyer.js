@@ -17,7 +17,37 @@ const SITE_URL = 'https://www.aviance.online';
 const HEAD = "font-family:'Archivo Black','Arial Black',Arial,sans-serif;";
 const MONO = "font-family:'Space Mono','Courier New',monospace;";
 
+/** Campaign-aware entry point: the sender calls this for every touch. */
 export function flyerHtml(lead) {
+  const isFreeLeads = String(lead?.campaign || '').toLowerCase() === 'free-leads';
+  return isFreeLeads ? freeLeadsFlyerHtml(lead) : offerFlyerHtml(lead);
+}
+
+/**
+ * FREE-LEADS campaign one-pager — the goodwill hook. Same brand system as the
+ * offer poster (black / red / mono), but the entire card sells one action:
+ * reply "SEND IT" and receive 5 researched leads, free.
+ */
+function freeLeadsFlyerHtml(lead) {
+  const name = (lead.first_name || '').trim();
+  const company = lead.company_name || lead.company || 'your company';
+  const hi = name ? `Hi ${name},` : 'Hello,';
+
+  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#222;line-height:1.6;">${hi}<br><br>We're Aviance — we book guaranteed sales calls for B2B firms. Before asking for any of your time, we'd rather prove our targeting. Below is exactly what we've prepared for ${escapeHtml(company)}, free.<br><br></div>
+<div style="background:#EFEDE8;padding:14px 0;"><table role="presentation" width="620" cellpadding="0" cellspacing="0" align="center" style="max-width:620px;width:100%;background:#FFFFFF;">
+<tbody>
+<tr><td style="padding:24px 28px 20px 28px;background:#FFFFFF;border-bottom:4px solid #141414;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td style="vertical-align:middle;"><img src="${LOGO_URL}" alt="Aviance" width="48" height="48" style="vertical-align:middle;margin-right:12px;"><span style="${HEAD}font-size:27px;letter-spacing:2px;color:#141414;vertical-align:middle;">AVIANCE</span></td><td align="right" style="${MONO}font-size:10px;font-weight:700;letter-spacing:1px;color:#8A8A85;">PREPARED&nbsp;FOR<br><span style="color:#E0290F;">${escapeHtml(String(company).toUpperCase())}</span></td></tr></tbody></table></td></tr>
+<tr><td style="background:#E0290F;padding:9px 28px;"><span style="${MONO}font-size:11px;font-weight:700;letter-spacing:3px;color:#FFFFFF;">5&nbsp;QUALIFIED&nbsp;LEADS&nbsp;—&nbsp;RESEARCHED&nbsp;·&nbsp;FREE&nbsp;·&nbsp;NO&nbsp;STRINGS</span></td></tr>
+<tr><td style="padding:30px 28px 4px 28px;background:#FFFFFF;"><div style="${MONO}font-size:11px;font-weight:700;letter-spacing:3px;color:#E0290F;margin-bottom:12px;">00&nbsp;/&nbsp;WHAT&nbsp;WE&nbsp;PREPARED</div><div style="${HEAD}font-size:30px;line-height:1.15;color:#141414;text-transform:uppercase;">Five buyers in<br>your market —<br><span style="color:#E0290F;">ready now.</span></div><p style="font-size:15px;line-height:1.7;color:#3A3A3A;margin:14px 0 6px 0;">Our research desk has identified 5 businesses in ${escapeHtml(company)}'s market showing clear buying signals this month. The full sheet is prepared and waiting.</p></td></tr>
+<tr><td style="padding:20px 28px 4px 28px;background:#FFFFFF;"><div style="${MONO}font-size:11px;font-weight:700;letter-spacing:3px;color:#E0290F;margin-bottom:12px;">01&nbsp;/&nbsp;EVERY&nbsp;LEAD&nbsp;INCLUDES</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;line-height:1.55;color:#141414;"><tbody><tr><td style="padding:8px 0;border-bottom:2px solid #141414;"><span style="color:#E0290F;font-weight:800;">✓</span>&nbsp;&nbsp;The company — and the specific reason the timing is right</td></tr><tr><td style="padding:8px 0;border-bottom:2px solid #141414;"><span style="color:#E0290F;font-weight:800;">✓</span>&nbsp;&nbsp;The decision-maker to ask for, by name or role</td></tr><tr><td style="padding:8px 0;border-bottom:2px solid #141414;"><span style="color:#E0290F;font-weight:800;">✓</span>&nbsp;&nbsp;Direct contact details — phone and website</td></tr><tr><td style="padding:8px 0;"><span style="color:#E0290F;font-weight:800;">✓</span>&nbsp;&nbsp;Ranked hottest-first, delivered the same day you reply</td></tr></tbody></table><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:16px;"><tbody><tr><td width="33%" style="background:#141414;padding:14px 8px;text-align:center;"><div style="${HEAD}font-size:25px;color:#FFFFFF;">5</div><div style="${MONO}font-size:9px;font-weight:700;letter-spacing:1px;color:#B9B9B4;margin-top:4px;">RESEARCHED&nbsp;LEADS</div></td><td width="5"></td><td width="33%" style="background:#E0290F;padding:14px 8px;text-align:center;"><div style="${HEAD}font-size:25px;color:#FFFFFF;">$0</div><div style="${MONO}font-size:9px;font-weight:700;letter-spacing:1px;color:#FFD9D2;margin-top:4px;">COST&nbsp;·&nbsp;NO&nbsp;STRINGS</div></td><td width="5"></td><td width="33%" style="background:#141414;padding:14px 8px;text-align:center;"><div style="${HEAD}font-size:25px;color:#FFFFFF;">1</div><div style="${MONO}font-size:9px;font-weight:700;letter-spacing:1px;color:#B9B9B4;margin-top:4px;">WORD&nbsp;TO&nbsp;CLAIM&nbsp;THEM</div></td></tr></tbody></table></td></tr>
+<tr><td style="padding:24px 28px 10px 28px;background:#FFFFFF;"><div style="${MONO}font-size:11px;font-weight:700;letter-spacing:3px;color:#E0290F;margin-bottom:12px;">02&nbsp;/&nbsp;WHY&nbsp;FREE</div><p style="font-size:14px;line-height:1.7;color:#3A3A3A;margin:0;">This is the exact targeting we run at scale for clients — where the results come <strong style="color:#141414;">guaranteed in writing</strong>: booked sales calls on your calendar, live within 3 weeks or the next month is free. The 5 leads are how we prove it before we ever talk business.</p></td></tr>
+<tr><td style="padding:22px 28px 28px 28px;background:#FFFFFF;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td align="center" style="background:#E0290F;padding:17px 0;"><span style="color:#FFFFFF;${HEAD}font-size:16px;letter-spacing:2px;">REPLY&nbsp;&ldquo;SEND&nbsp;IT&rdquo;&nbsp;—&nbsp;THEY'RE&nbsp;YOURS</span></td></tr></tbody></table><p style="font-size:12px;line-height:1.6;color:#8A8A85;text-align:center;margin:12px 0 0 0;">Delivered to this inbox the same day. No call required, no follow-up obligation.<br>More about us at <a href="${SITE_URL}" style="color:#E0290F;">www.aviance.online</a>.</p></td></tr>
+<tr><td style="padding:16px 28px;background:#141414;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td style="${MONO}font-size:9px;font-weight:700;letter-spacing:2px;color:#B9B9B4;">AVIANCE&nbsp;—&nbsp;GUARANTEED&nbsp;BOOKED&nbsp;SALES&nbsp;CALLS</td><td align="right" style="${MONO}font-size:10px;font-weight:700;"><a href="${SITE_URL}" style="color:#E0290F;text-decoration:underline;">www.aviance.online</a></td></tr></tbody></table><div style="font-size:9px;color:#7A7A75;margin-top:6px;">Not the right fit? Just reply STOP and we won't email you again.</div></td></tr>
+</tbody></table></div>`;
+}
+
+/** OFFER campaign one-pager — the original founding-client poster. */
+function offerFlyerHtml(lead) {
   const name = (lead.first_name || '').trim();
   const company = lead.company_name || lead.company || 'your company';
   const hi = name ? `Hi ${name},` : 'Hi,';
