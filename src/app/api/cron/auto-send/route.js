@@ -646,6 +646,18 @@ export async function GET(request) {
       });
     }
 
+    // ── INBOX ↔ CAMPAIGN ROUTING ──
+    // Each inbox belongs to one campaign ('offer' by default, or 'free-leads'
+    // when assigned on the Inboxes page). An inbox only sends day-0 emails to
+    // leads of ITS campaign, so the two campaigns run side by side, one per
+    // inbox group. Follow-ups always stay on the thread's original inbox.
+    let inboxCampaignMap = {};
+    try { inboxCampaignMap = (await kv.hgetall('inbox_campaigns')) || {}; } catch {}
+    const campaignOfLead = (l) =>
+      String(l?.campaign || '').toLowerCase() === 'free-leads' ? 'free-leads' : 'offer';
+    const campaignOfInbox = (em) =>
+      String(inboxCampaignMap[(em || '').toLowerCase()] || '').toLowerCase() === 'free-leads' ? 'free-leads' : 'offer';
+
     const { searchParams: params } = new URL(request.url);
     const batchSize = parseInt(params.get('batch') || '0') || 0;
 
@@ -752,7 +764,10 @@ export async function GET(request) {
         });
       }
 
-      const unsent = await getUnsent(readyAccounts.length * 5);
+      // Pool is deliberately deep so BOTH campaigns are represented in it —
+      // a shallow pool could contain only one campaign's leads and starve the
+      // other campaign's inbox.
+      const unsent = await getUnsent(readyAccounts.length * 30);
       if (unsent.length === 0) {
         await releaseLock();
         return Response.json({
@@ -768,6 +783,7 @@ export async function GET(request) {
 
       const results = { sent: 0, failed: 0, skipped: 0, details: [] };
       let leadIdx = 0;
+      const usedLeadEmails = new Set(); // a lead is offered to at most one inbox per cycle
 
       // POSTER PRIORITY: when day-3/day-7 follow-ups are due and the daily
       // follow-up cap isn't hit, this cycle sends a follow-up (the
@@ -780,9 +796,16 @@ export async function GET(request) {
 
       for (const { account, stat } of (preferFollowUp ? [] : readyAccounts)) {
         let sentFromThisAccount = false;
+        const wantCampaign = campaignOfInbox(account.email);
 
-        while (leadIdx < unsent.length && !sentFromThisAccount) {
-          const lead = unsent[leadIdx++];
+        let scanIdx = 0;
+        while (scanIdx < unsent.length && !sentFromThisAccount) {
+          const lead = unsent[scanIdx++];
+          const leadKey = (lead.email || '').toLowerCase();
+          if (usedLeadEmails.has(leadKey)) continue;
+          // Campaign routing: this inbox only takes its own campaign's leads.
+          if (campaignOfLead(lead) !== wantCampaign) continue;
+          usedLeadEmails.add(leadKey);
 
           const claimed = await claimLead(lead.email);
           if (!claimed) { results.skipped++; continue; }
@@ -983,12 +1006,20 @@ export async function GET(request) {
 
       let found = false;
       let attempts = 0;
+      let fallbackIdx = -1;
       while (attempts < accounts.length) {
-        const accStat = accountStatus[accountIndex % accounts.length];
-        if (accStat.remaining > 0) { found = true; break; }
+        const idx = accountIndex % accounts.length;
+        const accStat = accountStatus[idx];
+        if (accStat.remaining > 0) {
+          // Prefer an inbox assigned to this lead's campaign; remember any
+          // free inbox as a soft fallback so batch mode never stalls.
+          if (campaignOfInbox(accounts[idx].email) === campaignOfLead(lead)) { found = true; break; }
+          if (fallbackIdx === -1) fallbackIdx = idx;
+        }
         accountIndex++;
         attempts++;
       }
+      if (!found && fallbackIdx !== -1) { accountIndex = fallbackIdx; found = true; }
       if (!found) break;
 
       const accIdx = accountIndex % accounts.length;
