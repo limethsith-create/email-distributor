@@ -29,11 +29,12 @@ function Stat({ label, value, accent }) {
   );
 }
 
-function CampaignCard({ id, stats, preview, onAssign, busy }) {
+function CampaignCard({ id, stats, inboxes, preview, onAssign, busy }) {
   const meta = CAMPAIGN_META[id];
   const [showCopy, setShowCopy] = useState(false);
   const [count, setCount] = useState(25);
-  const s = stats || { total: 0, queued: 0, contacted: 0, replied: 0 };
+  const s = stats || { total: 0, queued: 0, contacted: 0, replied: 0, opened: 0, openRate: 0, replyRate: 0 };
+  const ibs = inboxes || [];
 
   return (
     <div style={{ ...card, padding: '22px 24px', flex: 1, minWidth: 320, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -56,6 +57,38 @@ function CampaignCard({ id, stats, preview, onAssign, busy }) {
         <Stat label="Queued" value={s.queued} />
         <Stat label="Contacted" value={s.contacted} />
         <Stat label="Replied" value={s.replied} accent />
+      </div>
+
+      <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+        <Stat label="Opened" value={s.opened} />
+        <Stat label="Open rate" value={`${s.openRate}%`} />
+        <Stat label="Reply rate" value={`${s.replyRate}%`} accent />
+      </div>
+
+      <div className="rule-soft" />
+
+      <div>
+        <div className="mono" style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--fg-dim)', marginBottom: 8 }}>
+          Sending inboxes
+        </div>
+        {ibs.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: 'var(--fg-dim)' }}>
+            No inbox assigned — pick one on the <a href="/inboxes" style={{ color: ACCENT, textDecoration: 'underline' }}>Inboxes</a> tab.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {ibs.map((ib) => (
+              <span key={ib.email} className="mono" style={{
+                fontSize: 11.5, padding: '5px 10px', border: '1px solid var(--border-strong)',
+                display: 'inline-flex', alignItems: 'center', gap: 7, color: 'var(--fg)',
+              }}>
+                <span style={{ width: 7, height: 7, borderRadius: 999, background: ib.enabled ? '#0a7a3d' : 'var(--fg-dim)', flexShrink: 0 }} />
+                {ib.email}
+                <span style={{ color: 'var(--fg-dim)' }}>{ib.enabled ? 'on' : 'off'}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="rule-soft" />
@@ -144,8 +177,8 @@ export default function CampaignsPage() {
         <div style={{ ...card, padding: 40, textAlign: 'center', color: 'var(--fg-muted)' }}>Loading…</div>
       ) : (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
-          <CampaignCard id="free-leads" stats={data?.stats?.['free-leads']} preview={data?.previews?.['free-leads']} onAssign={assign} busy={busy} />
-          <CampaignCard id="offer" stats={data?.stats?.['offer']} preview={data?.previews?.['offer']} onAssign={assign} busy={busy} />
+          <CampaignCard id="free-leads" stats={data?.stats?.['free-leads']} inboxes={data?.inboxes?.['free-leads']} preview={data?.previews?.['free-leads']} onAssign={assign} busy={busy} />
+          <CampaignCard id="offer" stats={data?.stats?.['offer']} inboxes={data?.inboxes?.['offer']} preview={data?.previews?.['offer']} onAssign={assign} busy={busy} />
         </div>
       )}
     </div>
