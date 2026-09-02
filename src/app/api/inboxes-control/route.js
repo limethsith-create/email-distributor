@@ -14,8 +14,10 @@ export const dynamic = 'force-dynamic';
 
 const INBOX_ENABLED_KEY = 'inbox_enabled';
 const INBOX_CAP_KEY = 'inbox_caps';
+const INBOX_CAMPAIGN_KEY = 'inbox_campaigns'; // email -> 'free-leads' | 'offer'
 const DAILY_SEND_KEY = 'daily_sends';
 const SEND_CAP = 25; // hard daily maximum per inbox
+const CAMPAIGNS = ['free-leads', 'offer'];
 
 function getTodayKey() {
   // US Eastern calendar day (DST-aware) — matches the US send window.
@@ -43,8 +45,10 @@ export async function GET() {
   const accounts = getSmtpAccounts();
   let enabledMap = {};
   let capMap = {};
+  let campaignMap = {};
   try { enabledMap = (await kv.hgetall(INBOX_ENABLED_KEY)) || {}; } catch {}
   try { capMap = (await kv.hgetall(INBOX_CAP_KEY)) || {}; } catch {}
+  try { campaignMap = (await kv.hgetall(INBOX_CAMPAIGN_KEY)) || {}; } catch {}
 
   // Fallback list so the page still shows the two inboxes even before env is read
   const list = accounts.length ? accounts : [
@@ -56,6 +60,7 @@ export async function GET() {
   for (const a of list) {
     const key = (a.email || '').toLowerCase();
     const on = enabledMap[key] === '1' || enabledMap[key] === 1 || enabledMap[key] === true;
+    const rawCampaign = String(campaignMap[key] || '').toLowerCase();
     inboxes.push({
       email: a.email,
       displayName: a.displayName || (a.email || '').split('@')[0],
@@ -63,6 +68,7 @@ export async function GET() {
       sentToday: await sentToday(a.email),
       cap: capFromMap(capMap, a.email),
       maxCap: SEND_CAP,
+      campaign: rawCampaign === 'free-leads' ? 'free-leads' : 'offer',
     });
   }
   return Response.json({ inboxes, cap: SEND_CAP, maxCap: SEND_CAP });
@@ -97,6 +103,16 @@ export async function POST(request) {
       n = Math.max(0, Math.min(SEND_CAP, n));
       await kv.hset(INBOX_CAP_KEY, { [key]: String(n) });
       return Response.json({ success: true, email: key, cap: n });
+    }
+
+    // Assign this inbox to a campaign ('free-leads' or 'offer').
+    if (body.campaign !== undefined) {
+      const c = String(body.campaign || '').toLowerCase();
+      if (!CAMPAIGNS.includes(c)) {
+        return Response.json({ success: false, error: 'campaign must be free-leads or offer' }, { status: 400 });
+      }
+      await kv.hset(INBOX_CAMPAIGN_KEY, { [key]: c });
+      return Response.json({ success: true, email: key, campaign: c });
     }
 
     // Flip the on/off switch.
