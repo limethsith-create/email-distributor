@@ -11,6 +11,7 @@
 
 import { kv } from '@vercel/kv';
 import { generateEmailSequence } from '@/lib/personalize';
+import { getSmtpAccounts } from '@/lib/smtp-accounts';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -33,8 +34,8 @@ export async function GET() {
     try { leads = (await kv.hgetall(LEADS_KEY)) || {}; } catch {}
 
     const stats = {
-      'free-leads': { total: 0, queued: 0, contacted: 0, replied: 0 },
-      'offer': { total: 0, queued: 0, contacted: 0, replied: 0 },
+      'free-leads': { total: 0, queued: 0, contacted: 0, replied: 0, opened: 0, openRate: 0, replyRate: 0 },
+      'offer': { total: 0, queued: 0, contacted: 0, replied: 0, opened: 0, openRate: 0, replyRate: 0 },
     };
 
     for (const lead of Object.values(leads)) {
@@ -45,7 +46,30 @@ export async function GET() {
       if (isUnsent(lead)) stats[c].queued++;
       if (lead.sent_at || st === 'sent' || st === 'sequence_complete' || st === 'replied') stats[c].contacted++;
       if (st === 'replied') stats[c].replied++;
+      if (lead.opened_at) stats[c].opened++;
     }
+
+    // Rates over contacted leads (a lead can't open or reply before it's emailed).
+    for (const c of CAMPAIGNS) {
+      const s = stats[c];
+      s.openRate = s.contacted ? Math.round((s.opened / s.contacted) * 1000) / 10 : 0;
+      s.replyRate = s.contacted ? Math.round((s.replied / s.contacted) * 1000) / 10 : 0;
+    }
+
+    // Which inboxes send each campaign (an unassigned inbox defaults to 'offer').
+    const inboxesByCampaign = { 'free-leads': [], 'offer': [] };
+    try {
+      let campaignMap = {};
+      let enabledMap = {};
+      try { campaignMap = (await kv.hgetall('inbox_campaigns')) || {}; } catch {}
+      try { enabledMap = (await kv.hgetall('inbox_enabled')) || {}; } catch {}
+      for (const a of getSmtpAccounts()) {
+        const key = (a.email || '').toLowerCase();
+        const c = String(campaignMap[key] || '').toLowerCase() === 'free-leads' ? 'free-leads' : 'offer';
+        const on = enabledMap[key] === '1' || enabledMap[key] === 1 || enabledMap[key] === true;
+        inboxesByCampaign[c].push({ email: a.email, enabled: !!on });
+      }
+    } catch {}
 
     // Live day-0 previews straight from the engine, so what you read here is
     // exactly what a lead receives.
@@ -55,7 +79,7 @@ export async function GET() {
       'offer': generateEmailSequence({ ...sample, campaign: 'offer' }).day0,
     };
 
-    return Response.json({ success: true, stats, previews, timestamp: new Date().toISOString() });
+    return Response.json({ success: true, stats, inboxes: inboxesByCampaign, previews, timestamp: new Date().toISOString() });
   } catch (err) {
     return Response.json({ success: false, error: err.message }, { status: 500 });
   }
