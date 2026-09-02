@@ -98,7 +98,8 @@ function escapeHtml(str) {
  * - bare "aviance.online" mentions → linked
  */
 export function bodyToHtml(body) {
-  return String(body)
+  const paragraphs = String(body)
+    .replace(/\n?— Aviance Team\s*$/,'') // the signature is rendered as a styled block below
     .split(/\n\s*\n/)
     .map((para) => para.trim())
     .filter(Boolean)
@@ -107,12 +108,21 @@ export function bodyToHtml(body) {
       // Linkify bare aviance.online (not when part of www./https:// or a longer path)
       t = t.replace(
         /(^|[^/.\w])(aviance\.online)/gi,
-        '$1<a href="https://www.aviance.online">aviance.online</a>'
+        '$1<a href="https://www.aviance.online" style="color:#E0290F;text-decoration:underline;">aviance.online</a>'
       );
       t = t.replace(/\n/g, '<br>');
-      return `<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">${t}</p>`;
+      return `<p style="margin:0 0 14px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#26282B;line-height:1.65;">${t}</p>`;
     })
     .join('\n');
+
+  // Official signature block — every reply leaves the desk looking the same.
+  const signature = `
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:22px;border-top:3px solid #141414;width:100%;max-width:520px;"><tbody>
+<tr><td style="padding:12px 0 2px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;letter-spacing:0.04em;color:#141414;">AVIANCE&nbsp;<span style="color:#E0290F;">TEAM</span></td></tr>
+<tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#6B7075;line-height:1.6;">Guaranteed booked sales calls — in writing<br><a href="https://www.aviance.online" style="color:#E0290F;text-decoration:none;">www.aviance.online</a></td></tr>
+</tbody></table>`;
+
+  return paragraphs + signature;
 }
 
 /**
