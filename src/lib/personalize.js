@@ -1,188 +1,277 @@
 /**
  * Email Personalization Engine — Aviance
  *
- * What we sell (aviance.online):
- *   Done-for-you cold email that books QUALIFIED SALES CALLS onto the
- *   client's calendar. 20 booked calls in 4 weeks — or you don't pay a cent.
+ * TWO campaigns run simultaneously; every lead carries a `campaign` field
+ * ('offer' by default) and the engine returns that campaign's sequence:
  *
- * Offer rules (finalized Aug 2026):
- * - SHORT. Two or three sentences. No walls of text.
- * - PAIN FIRST — open on the recipient's specific pipeline pain.
- * - GUARANTEE UP FRONT — the "don't pay a cent" sits in the promise sentence,
- *   not buried at the end.
- * - Four factors baked in: Promise (calls booked) · Result (20) · Time (4 weeks)
- *   · Guarantee (miss it, pay nothing).
- * - No personal sender name in the body (brand-only sign-off added by sender).
- * - A clickable aviance.online link sits in the body (linkified by the sender).
- * - Personalized by industry (pain) + company (name).
+ *  CAMPAIGN 'offer'      — the direct pitch: guaranteed booked sales calls,
+ *                          in writing. Live in 3 weeks or the next month is
+ *                          free · no-shows replaced · shortfalls roll over ·
+ *                          no setup fee · month-to-month.
+ *  CAMPAIGN 'free-leads' — the goodwill hook: 5 qualified, researched leads
+ *                          for the prospect's market, free, delivered on a
+ *                          one-word reply ("SEND IT"). Proves the targeting
+ *                          before any pitch.
+ *
+ * Voice rules (finalized Sep 2026): official and composed — a firm writing,
+ * not a hustler. Short paragraphs, zero hype, the guarantee stated as terms
+ * rather than promises. Sign-off is always "— The Aviance Team".
  */
 
 import { geminiGenerate } from '@/lib/gemini';
 
 const SITE = 'aviance.online';
 
-// The promise sentence — carries Result (20) + Time (4 weeks) + Guarantee up front.
-// `co` is the company name.
-function promise(co) {
-  return `We'll book 20 sales calls for ${co} in the next 4 weeks — and if we don't hit 20, you don't pay a cent.`;
+// ---------------------------------------------------------------------------
+// Campaign selection
+// ---------------------------------------------------------------------------
+
+export function campaignFor(lead) {
+  return String(lead?.campaign || '').toLowerCase() === 'free-leads' ? 'free-leads' : 'offer';
 }
 
-// Subject lines drive opens more than anything else in the email. Research on
-// millions of cold sends is consistent: SHORT (2-4 words), lowercase, a touch
-// of curiosity, and a first-name token beat long "salesy" subjects by a wide
-// margin. We keep three pools and pick by what data we have, so the subject
-// degrades gracefully when a first name is missing.
-const SUBJECTS_NAMED = [
-  '{{first_name}} + dry referral months + 20 on the calendar',
-  '{{first_name}} + referrals gone quiet + a written guarantee',
-  '{{first_name}} + empty pipeline weeks + 20 booked calls',
+// ---------------------------------------------------------------------------
+// Subject pools — short, specific, stated like a document title, not a hook.
+// ---------------------------------------------------------------------------
+
+const OFFER_SUBJECTS_NAMED = [
+  '{{first_name}} — booked sales calls, in writing',
+  '{{first_name}} — a written guarantee on your pipeline',
+  '{{first_name}} — guaranteed calls for {{company_name}}',
 ];
-const SUBJECTS_COMPANY = [
-  '{{company_name}} + dry referral months + 20 on the calendar',
-  '{{company_name}} + referrals gone quiet + a written guarantee',
-  '{{company_name}} + empty pipeline weeks + 20 booked calls',
+const OFFER_SUBJECTS_COMPANY = [
+  '{{company_name}} — booked sales calls, in writing',
+  'a written pipeline guarantee for {{company_name}}',
 ];
-const SUBJECTS_NEUTRAL = [
-  'dry referral months + 20 on the calendar',
-  'referrals gone quiet + a written guarantee',
+const OFFER_SUBJECTS_NEUTRAL = [
+  'booked sales calls — in writing',
+  'a written guarantee on your pipeline',
 ];
 
-// Per-industry angle:
-//   pain  = the short, specific pipeline pain that OPENS the day-0 email
-//   proof = the one-line peer proof used on the day-3 nudge
+const FREE_SUBJECTS_NAMED = [
+  '{{first_name}} — 5 qualified leads for {{company_name}}, on us',
+  '{{first_name}} — 5 ready buyers for {{company_name}}',
+];
+const FREE_SUBJECTS_COMPANY = [
+  '5 qualified leads for {{company_name}} — free',
+  '{{company_name}} — 5 ready buyers, on us',
+];
+const FREE_SUBJECTS_NEUTRAL = [
+  '5 qualified leads — on us',
+];
+
+// ---------------------------------------------------------------------------
+// Per-industry angle for the OFFER campaign
+//   pain  = the pipeline pain that opens day 0
+//   proof = the one-line peer proof used on day 3
+// ---------------------------------------------------------------------------
+
 const INDUSTRY_TEMPLATES = {
   msp: {
-    pain: 'Referrals dry up and the pipeline goes quiet — every MSP knows the feeling.',
-    proof: 'the last MSP we ran this for went from referral-only to a full calendar of booked calls',
+    pain: 'Every MSP knows the quarter where referrals dry up and the pipeline goes quiet.',
+    proof: 'the last MSP we ran this for went from referral-only to a full calendar of booked discovery calls',
   },
   'it services': {
-    pain: 'IT firms grow on word-of-mouth — right up until it stalls and the new-client flow goes flat.',
-    proof: 'an IT services firm we work with booked 14 qualified calls in their first month',
+    pain: 'IT firms grow on word of mouth — until the month it stalls and new-client flow goes flat.',
+    proof: 'an IT services firm we work with took 14 qualified calls in their first month',
   },
   technology: {
-    pain: 'Great tech, quiet pipeline — the outbound never quite gets built.',
-    proof: "we filled a tech team's calendar with 15 qualified demos last month",
+    pain: 'Strong product, quiet pipeline — outbound is the function that never quite gets built.',
+    proof: "we filled a technology team's calendar with 15 qualified demos in a single month",
   },
   saas: {
-    pain: 'Growth stalls the moment outbound slows, and SDRs are slow and expensive to build.',
-    proof: 'a SaaS client is getting 18 booked demos a month from us — no SDRs',
+    pain: 'Growth stalls the moment outbound slows, and an SDR team is slow and expensive to build.',
+    proof: 'a SaaS client takes 18 booked demos a month from us, with no internal SDRs',
   },
   finance: {
-    pain: 'The right buyers are out there, but nobody has time to prospect them consistently.',
-    proof: 'we booked a finance firm 11 calls last month with buyers who fit their profile',
+    pain: 'The right buyers exist; nobody inside the firm has the hours to prospect them consistently.',
+    proof: 'we booked a finance firm 11 calls in a month, every one matching their client profile',
   },
   consulting: {
-    pain: 'Feast-or-famine pipeline — you\'re either delivering or hunting, never both.',
-    proof: 'we booked a consulting firm 12 discovery calls last month, fully hands-off',
+    pain: 'Consulting pipelines run feast-or-famine — you are either delivering or hunting, never both.',
+    proof: 'we booked a consulting firm 12 discovery calls in a month, fully hands-off',
   },
   agency: {
-    pain: 'You sell growth for clients, but your own new-business pipeline runs dry between referrals.',
-    proof: "we filled an agency's calendar with 15 booked calls last month",
+    pain: 'You sell growth to clients while your own new-business pipeline runs dry between referrals.',
+    proof: "we filled an agency's calendar with 15 booked calls in a month",
   },
   marketing: {
-    pain: 'You sell growth for clients, but your own new-business pipeline runs dry between referrals.',
+    pain: 'You sell growth to clients while your own new-business pipeline runs dry between referrals.',
     proof: 'we booked an agency 15 qualified calls in a month with in-market prospects',
   },
 };
 
 const DEFAULT_TEMPLATE = {
-  pain: 'Steady new-business calls are hard to keep flowing when nobody owns outbound.',
-  proof: "we recently filled a B2B company's calendar with 15 qualified sales calls in a single month",
+  pain: 'A steady flow of new-business calls is hard to sustain when no one owns outbound.',
+  proof: "we recently filled a B2B company's calendar with 15 qualified sales calls in one month",
 };
 
 function pickRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-/**
- * Map a lead's industry to a template. MSPs and every IT-adjacent industry
- * (managed IT, network security, computer networking, telecom, cloud) all
- * resolve to the MSP angle.
- */
 function templateFor(lead) {
   const key = (lead.industry || '').toLowerCase().trim();
   if (INDUSTRY_TEMPLATES[key]) return INDUSTRY_TEMPLATES[key];
-
-  // IT / MSP family → msp angle
   if (/\bmsp\b|managed\s*it|managed\s*service|it\s*support|it\s*service|network|cyber|security|computer|telecom|cloud|\bit\b|information\s*technology/i.test(key)) {
     return INDUSTRY_TEMPLATES.msp;
   }
-  // fall back to any partial keyword match
   for (const k of Object.keys(INDUSTRY_TEMPLATES)) {
     if (key.includes(k)) return INDUSTRY_TEMPLATES[k];
   }
   return DEFAULT_TEMPLATE;
 }
 
-/** Day 0 — pain first, promise + guarantee up front. Short, plain, link-free. */
-function generateInitialEmail(lead) {
+function subjectFrom(pool, lead, company) {
+  return pickRandom(pool)
+    .replace(/{{company_name}}/g, company)
+    .replace(/{{first_name}}/g, (lead.first_name || '').trim());
+}
+
+function pickPool(lead, named, companyPool, neutral) {
+  const name = (lead.first_name || '').trim();
+  if (name) return named;
+  if (lead.company_name || lead.company) return companyPool;
+  return neutral;
+}
+
+const SIGNATURE = '— The Aviance Team\nGuaranteed booked sales calls · aviance.online';
+
+// ---------------------------------------------------------------------------
+// CAMPAIGN 'offer' — the direct pitch
+// ---------------------------------------------------------------------------
+
+function offerDay0(lead) {
   const t = templateFor(lead);
   const company = lead.company_name || lead.company || 'your company';
   const name = (lead.first_name || '').trim();
-  const hi = name ? `Hi ${name},` : 'Hi,';
+  const hi = name ? `Hi ${name},` : 'Hello,';
 
-  // Pick the subject pool by the data we actually have.
-  const pool = name ? SUBJECTS_NAMED : (lead.company_name ? SUBJECTS_COMPANY : SUBJECTS_NEUTRAL);
-  const subject = pickRandom(pool)
-    .replace(/{{company_name}}/g, company)
-    .replace(/{{first_name}}/g, name);
+  const subject = subjectFrom(
+    pickPool(lead, OFFER_SUBJECTS_NAMED, OFFER_SUBJECTS_COMPANY, OFFER_SUBJECTS_NEUTRAL),
+    lead, company
+  );
 
-  // Day 0 is deliberately plain and LINK-FREE: no URL and no image on the first
-  // touch keeps it out of spam and makes it read like a real 1:1 note, which
-  // lifts inbox placement (and therefore opens). The CTA is a soft reply-ask;
-  // the aviance.online link appears only on the follow-ups (day 3 / day 7).
   const body = `${hi}
 
-We have yet to be properly introduced — we're Aviance, and we fix the one problem referrals can't: the pipeline goes quiet the month your network does.
+${t.pain}
 
-${t.pain} ${promise(company)} We handle it end-to-end — domains, lists, copy, sending — and the calls just land on your calendar.
+Aviance exists for exactly that problem. We build and operate your entire outbound engine — domains, warmed inboxes, verified prospect lists, copywriting, sending and reply handling — and we put the result in writing: a guaranteed number of booked sales calls on ${company}'s calendar, live within 3 weeks, or your next month is free.
 
-And we know the usual worry: "cold outreach doesn't work in our space", or "we've been burned by an agency before". That's exactly why the risk sits on our side — we hit the number, or we keep working free until we do.
+The terms are deliberately simple. No-shows are replaced at no charge. Any monthly shortfall rolls over until delivered. There is no setup fee, and the engagement is month-to-month. The one-pager below carries the full terms and current founding-client rates.
 
-One thing worth knowing: we're onboarding three founding clients at a permanently reduced founding rate. Once those slots fill, that rate is gone for good.
+If a predictable calendar matters to ${company} this quarter, reply to this email — or take 15 minutes with us via ${SITE}.
 
-Do you have time over the next week or two to hear how it'd work? Just reply here and we'll take it from there.`;
+${SIGNATURE}`;
 
   return { subject, body };
 }
 
-/** Day 3 — proof nudge. Short, keeps the guarantee in the promise. */
-function generateFollowUp1(lead) {
+function offerDay3(lead) {
   const t = templateFor(lead);
   const company = lead.company_name || lead.company || 'your company';
   const name = lead.first_name ? ' ' + lead.first_name : '';
 
   const body = `Hi${name},
 
-Quick nudge — ${t.proof}. Same deal for ${company}: 20 booked calls in 4 weeks, or you don't pay a cent — and one of our three founding-client slots (permanently reduced rate) is still open.
+A short follow-up, with proof in hand: ${t.proof}.
 
-${SITE}`;
+The same written commitment is on the table for ${company} — a guaranteed number of booked calls each month, live within 3 weeks or your next month is free, no-shows replaced, shortfalls rolled over until delivered. One founding-client rate, locked for life, remains open.
 
-  return { subject: `Re: ${company}`, body };
+The full terms are in the one-pager below. Reply here and we will walk you through it in 15 minutes.
+
+${SIGNATURE}`;
+
+  return { subject: `Re: booked sales calls for ${company}`, body };
 }
 
-/** Day 7 — breakup. Short, guarantee restated once. */
-function generateFollowUp2(lead) {
+function offerDay7(lead) {
   const company = lead.company_name || lead.company || 'your company';
   const name = lead.first_name ? ' ' + lead.first_name : '';
 
   const body = `Hi${name},
 
-Last note — if a steady flow of booked calls isn't a priority for ${company} right now, no worries. If that changes: ${SITE} — 20 calls in 4 weeks, or you don't pay a cent.`;
+Closing the loop so we do not clutter your inbox. If a guaranteed pipeline is not a priority for ${company} this quarter, we will not follow up again.
 
-  return { subject: `Re: ${company}`, body };
+When it becomes one, the offer stands: booked sales calls, in writing — live in 3 weeks, no setup fee, month-to-month. ${SITE}
+
+${SIGNATURE}`;
+
+  return { subject: `Re: booked sales calls for ${company}`, body };
 }
 
-/** Build all three sequence emails for a lead */
+// ---------------------------------------------------------------------------
+// CAMPAIGN 'free-leads' — the goodwill hook
+// ---------------------------------------------------------------------------
+
+function freeLeadsDay0(lead) {
+  const company = lead.company_name || lead.company || 'your company';
+  const name = (lead.first_name || '').trim();
+  const hi = name ? `Hi ${name},` : 'Hello,';
+
+  const subject = subjectFrom(
+    pickPool(lead, FREE_SUBJECTS_NAMED, FREE_SUBJECTS_COMPANY, FREE_SUBJECTS_NEUTRAL),
+    lead, company
+  );
+
+  const body = `${hi}
+
+We are Aviance — the cold-email firm that books guaranteed sales calls for B2B companies. Before we ask for a minute of your time, we would rather prove that our targeting works.
+
+Our research desk has identified five businesses in ${company}'s market showing clear signs they are ready to buy right now. For each one you receive the company, the specific reason the timing is right, the decision-maker to ask for, and their direct contact details. The list is yours, free — no strings and no obligation.
+
+Reply "SEND IT" and it is in your inbox the same day.
+
+This is the exact targeting we run at scale for clients — with the results guaranteed in writing. Details at ${SITE}.
+
+${SIGNATURE}`;
+
+  return { subject, body };
+}
+
+function freeLeadsDay3(lead) {
+  const company = lead.company_name || lead.company || 'your company';
+  const name = lead.first_name ? ' ' + lead.first_name : '';
+
+  const body = `Hi${name},
+
+Your five leads are still set aside for ${company} — each with the reason they are ready now and the person to call. One word — "SEND IT" — and they are yours the same day.
+
+There is no catch. It is simply how we prove our targeting before we ever talk business. ${SITE}
+
+${SIGNATURE}`;
+
+  return { subject: `Re: 5 qualified leads for ${company}`, body };
+}
+
+function freeLeadsDay7(lead) {
+  const company = lead.company_name || lead.company || 'your company';
+  const name = lead.first_name ? ' ' + lead.first_name : '';
+
+  const body = `Hi${name},
+
+A last note from us. The five researched leads stay reserved for ${company} — whenever you want them, a one-word reply does it.
+
+And if you would rather skip straight to the part where booked calls land on your calendar, guaranteed in writing: ${SITE}.
+
+${SIGNATURE}`;
+
+  return { subject: `Re: 5 qualified leads for ${company}`, body };
+}
+
+// ---------------------------------------------------------------------------
+// Public API (same shape the sender has always used)
+// ---------------------------------------------------------------------------
+
+/** Build all three sequence emails for a lead, per its campaign. */
 export function generateEmailSequence(lead) {
-  return {
-    day0: generateInitialEmail(lead),
-    day3: generateFollowUp1(lead),
-    day7: generateFollowUp2(lead),
-  };
+  if (campaignFor(lead) === 'free-leads') {
+    return { day0: freeLeadsDay0(lead), day3: freeLeadsDay3(lead), day7: freeLeadsDay7(lead) };
+  }
+  return { day0: offerDay0(lead), day3: offerDay3(lead), day7: offerDay7(lead) };
 }
 
-/** Return the right email for a lead based on their sequence day */
+/** Return the right email for a lead based on its sequence day. */
 export function getEmailForSequenceDay(lead, sequenceDay) {
   const sequence = generateEmailSequence(lead);
   if (sequenceDay === 3) return sequence.day3;
@@ -190,23 +279,24 @@ export function getEmailForSequenceDay(lead, sequenceDay) {
   return sequence.day0;
 }
 
-/** Optional Gemini polish — tiny tweaks only; keeps it short, offer + guarantee + link intact */
+/** Optional Gemini polish — offer campaign only; tweaks the opening pain line. */
 export async function enhanceWithAI(lead, baseEmail) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return baseEmail;
+  if (campaignFor(lead) === 'free-leads') return baseEmail; // copy is fixed by design
 
   try {
     const prompt = `You are lightly editing a B2B cold email for "${lead.company_name}"${lead.industry ? ` (industry: ${lead.industry})` : ''}.
 
-We sell done-for-you cold email that books qualified sales calls onto the recipient's calendar: 20 booked calls in 4 weeks or they don't pay a cent.
+We sell done-for-you cold email with the result guaranteed in writing: booked sales calls on the client's calendar, live within 3 weeks or the next month is free, no-shows replaced, shortfalls rolled over.
 
-Rewrite ONLY the opening pain sentence so it feels specific to this company and its industry. Keep every other sentence exactly as it is. Keep it plain text, no links, no exclamation marks, no invented facts, no personal sender name. Return ONLY the email body.
+Rewrite ONLY the opening pain sentence so it feels specific to this company and its industry. Keep every other sentence exactly as it is. Keep it plain text, composed and official in tone, no exclamation marks, no invented facts, no personal sender names. Return ONLY the email body.
 
 Original:
 ${baseEmail.body}`;
 
     const enhanced = await geminiGenerate(apiKey, prompt, { temperature: 0.7, maxOutputTokens: 2048 });
-    if (enhanced && enhanced.length > 100 && enhanced.length < 1600) {
+    if (enhanced && enhanced.length > 100 && enhanced.length < 1800) {
       return { subject: baseEmail.subject, body: enhanced };
     }
     return baseEmail;
