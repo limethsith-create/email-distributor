@@ -11,7 +11,7 @@ const NAV = [
   { href: '/leads', label: 'Leads' },
   { href: '/replies', label: 'Replies' },
   { href: '/calendar', label: 'Calendar' },
-  { href: '/offer', label: 'Offer' },
+  { href: '/campaigns', label: 'Campaigns' },
 ];
 
 function Brand() {
