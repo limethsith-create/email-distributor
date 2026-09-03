@@ -5,105 +5,93 @@
  * Skips duplicates and suppressed emails.
  *
  * POST body: { leads: [{ email, company, industry, name, status? }] }
+ * Response:  { success, added, skipped, invalid, total, duplicatesInFile, sendable }
  */
 
 import { kv } from '@vercel/kv';
+import { bulkUpsertLeads, newLeadRecord, getLeadsByEmail } from '@/lib/leads-db';
+import { isValidEmail, normalizeEmail, isSendable, UNSENT_STATUSES } from '@/lib/metrics';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
-const LEADS_KEY = 'leads';
 const SUPPRESSION_KEY = 'suppression';
-const STATS_KEY = 'stats';
+
+/** Which of these records are new inserts (not stored, not suppressed)? */
+async function newInserts(records) {
+  const emails = [...new Set(records.map((r) => r.email))];
+  if (!emails.length) return [];
+  const existing = await getLeadsByEmail(emails);
+  const suppressed = new Set();
+  for (let i = 0; i < emails.length; i += 400) {
+    const part = emails.slice(i, i + 400);
+    try {
+      const flags = (await kv.smismember(SUPPRESSION_KEY, part)) || [];
+      part.forEach((e, j) => { if (flags[j] === 1 || flags[j] === true) suppressed.add(e); });
+    } catch {}
+  }
+  return records.filter((r) => !existing[r.email] && !suppressed.has(r.email));
+}
 
 export async function POST(request) {
   try {
-    const { leads = [] } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    const leads = Array.isArray(body?.leads) ? body.leads : [];
 
     if (!leads.length) {
       return Response.json({ error: 'No leads provided' }, { status: 400 });
     }
 
-    // Get existing leads and suppression list in bulk
-    const [existingLeads, suppressionList] = await Promise.all([
-      kv.hgetall(LEADS_KEY).catch(() => ({})),
-      kv.smembers(SUPPRESSION_KEY).catch(() => []),
-    ]);
-
-    const existing = existingLeads || {};
-    const suppressed = new Set(suppressionList || []);
-
-    // Filter and prepare new leads
-    const toInsert = {};
-    let added = 0;
-    let skipped = 0;
+    const now = new Date().toISOString();
+    const seen = new Set();
+    const records = [];
     let invalid = 0;
+    let duplicatesInFile = 0;
 
-    for (const lead of leads) {
-      const email = (lead.email || '').toLowerCase().trim();
+    for (const row of leads) {
+      if (!row || typeof row !== 'object' || !isValidEmail(row.email)) { invalid++; continue; }
+      const email = normalizeEmail(row.email);
+      if (seen.has(email)) { duplicatesInFile++; continue; }
+      seen.add(email);
 
-      // Validate email
-      if (!email || !email.includes('@')) {
-        invalid++;
-        continue;
-      }
+      // An upload can only ever create a not-yet-sent lead.
+      const st = String(row.status || '').toLowerCase();
+      const status = UNSENT_STATUSES.has(st) && st ? st : 'pending';
 
-      // Skip suppressed
-      if (suppressed.has(email)) {
-        skipped++;
-        continue;
-      }
-
-      // Skip existing
-      if (existing[email]) {
-        skipped++;
-        continue;
-      }
-
-      // Skip if already in this batch
-      if (toInsert[email]) {
-        skipped++;
-        continue;
-      }
-
-      toInsert[email] = {
+      records.push(newLeadRecord({
+        ...row,
         email,
-        company: lead.company || lead.company_name || '',
-        company_name: lead.company || lead.company_name || '',
-        industry: lead.industry || 'business',
-        name: lead.name || '',
-        title: lead.title || '',
-        city: lead.city || '',
-        country: lead.country || '',
-        status: lead.status || 'pending',
-        send_count: 0,
-        sequence_day: -1,
-        source: lead.source || 'bulk-upload',
-        createdAt: new Date().toISOString(),
+        status,
+        industry: row.industry || 'business',
         // pre-computed Scout enrichment (if provided)
-        ...(lead.quality_score != null ? {
-          quality_score: lead.quality_score,
-          quality_reason: lead.quality_reason || '',
-          quality_engine: lead.quality_engine || 'icp',
-          verified_at: new Date().toISOString(),
+        ...(row.quality_score != null ? {
+          quality_score: row.quality_score,
+          quality_reason: row.quality_reason || '',
+          quality_engine: row.quality_engine || 'icp',
+          verified_at: row.verified_at || now,
         } : {}),
-      };
-      added++;
+      }, 'upload'));
     }
 
-    // Batch insert all at once
-    if (added > 0) {
-      await kv.hset(LEADS_KEY, toInsert);
-      await kv.hincrby(STATS_KEY, 'totalScraped', added);
-    }
+    // How many of the new rows the sender will actually pick up.
+    const inserts = records.length ? await newInserts(records) : [];
+    const sendable = inserts.filter(isSendable).length;
+
+    // Dedupes against the store + suppression set and writes in pipelined
+    // chunks — no full hgetall of the leads hash.
+    const result = records.length
+      ? await bulkUpsertLeads(records, { source: 'upload' })
+      : { added: 0, skipped: 0, invalid: 0, total: 0 };
 
     return Response.json({
       success: true,
-      timestamp: new Date().toISOString(),
-      added,
-      skipped,
-      invalid,
+      timestamp: now,
+      added: result.added,
+      skipped: result.skipped + duplicatesInFile,
+      invalid: invalid + result.invalid,
       total: leads.length,
+      duplicatesInFile,
+      sendable,
     });
   } catch (error) {
     return Response.json({
