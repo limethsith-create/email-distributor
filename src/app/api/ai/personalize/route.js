@@ -1,6 +1,7 @@
 // AI personalization agent — runs on Google Gemini (free tier), independent of Claude.
 // Reads the CURRENT base offer (editable + saved in KV) and tailors it per company.
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 import { kv } from '@vercel/kv';
 import { getWorkingModel } from '@/lib/gemini';
@@ -29,9 +30,14 @@ async function getOffer() {
   return DEFAULT_OFFER;
 }
 
-function firstNameFromEmail(email = '') {
-  const local = (email.split('@')[0] || '').split(/[._+\-0-9]/)[0] || '';
-  return local ? local.charAt(0).toUpperCase() + local.slice(1) : 'there';
+/**
+ * Greet by first name only — never the full "Jane Q. Doe", and never a guess
+ * carved out of the email address ("Info", "Jdoe").
+ */
+function firstNameOf(lead) {
+  const first = String(lead.first_name || '').trim().split(/\s+/)[0];
+  if (first) return first;
+  return String(lead.name || '').trim().split(/\s+/)[0] || 'there';
 }
 
 function fill(t, name, company) {
@@ -101,10 +107,9 @@ Rules:
 
 async function handle(lead) {
   const offer = await getOffer();
-  const email = lead.email || '';
   const company = lead.company_name || lead.company || 'your company';
   const industry = lead.industry || '';
-  const name = lead.name || firstNameFromEmail(email);
+  const name = firstNameOf(lead);
   const subject = fill(offer.subject, name, company);
   const key = process.env.GEMINI_API_KEY;
   if (key) {
