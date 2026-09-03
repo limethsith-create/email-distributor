@@ -1,13 +1,44 @@
 /**
- * Autonomous Email Sender — Zero Claude Dependency
+ * Autonomous Email Sender — heartbeat endpoint (v3)
  *
- * FIXES applied:
- * - Persistent account rotation (KV counter, not resetting to 0)
- * - Lead claiming with atomic status check (no duplicate sends)
- * - Clean HTML body (strip plain-text sig before adding HTML sig)
- * - Concurrency lock to prevent overlapping triggers
+ * An external heartbeat hits GET /api/cron/auto-send about once a minute.
+ * Each hit sends AT MOST ONE email (a due follow-up or a fresh day-0 touch),
+ * so volume is a steady drip across the US workday, never a burst.
  *
- * Trigger via n8n every hour with ?batch=1
+ * v3 — what changed and why:
+ *  - PER-INBOX PACING. Every inbox keeps its own `nextSendAt` (KV `pacing`),
+ *    computed after each send as (workday minutes left ÷ emails that inbox
+ *    still has today) with ±15% jitter, clamped to 10–60 min. Adding an inbox
+ *    now adds volume linearly (the old global 6-minute floor capped the whole
+ *    system at ~110 emails/day no matter how many inboxes existed), the jitter
+ *    is real (rolled once per send, not re-rolled every heartbeat), and the
+ *    dashboard can show "next send at 10:42".
+ *  - CHEAP IDLE PATH. Outside the window: 0 KV commands. Inside it, a paced
+ *    heartbeat costs one HGETALL (`pacing`) before the lock is even taken —
+ *    the full leads scan happens only on a heartbeat that will actually send.
+ *  - FOLLOW-UPS FIXED. The global "6 follow-ups per day" cap and the random
+ *    shuffle are gone: due follow-ups (day 3 = 3 days after day 0, day 7 =
+ *    4 days after day 3) go oldest-first, only for inboxes that can send now,
+ *    under the same pacing as fresh sends. They reuse the ORIGINAL subject
+ *    ("Re: <original>") so Gmail threads the sequence, respect out-of-office
+ *    holds, and never go to a suppressed address.
+ *  - INBOX HEALTH. Every SMTP result is classified (auth / transient /
+ *    recipient / content). Auth failures disable the inbox and are visible
+ *    on the Inboxes API; 5xx recipient rejects mark the lead bounced instead
+ *    of retrying it forever; a connection failure ends the inbox's turn
+ *    instead of burning the whole lead pool; an inbox with 3 consecutive
+ *    failures is skipped for 30 min.
+ *  - DUPLICATE-PROOF BOOKKEEPING. The lead is claimed with SET NX, the lead
+ *    record is written FIRST (with retries) after a successful send, counters
+ *    go in one pipeline, and the lock is released with a compare-and-delete
+ *    so an overrunning invocation can never delete a newer lock.
+ *  - MORE INFORMATION. Each send records touch, campaign, subject variant,
+ *    inbox, SMTP response, send time and ET hour; `daily_sends` carries
+ *    per-touch / per-campaign / total breakdowns; every Message-ID is indexed
+ *    so replies resolve without scanning the leads hash.
+ *  - Reply scanning and name enrichment run AFTER the send and outside the
+ *    lock (reply scan every 10 min in the window, every 20 min outside it, so
+ *    replies are seen overnight too).
  */
 
 import { kv } from '@vercel/kv';
@@ -16,1146 +47,660 @@ import { getEmailForSequenceDay, enhanceWithAI } from '@/lib/personalize';
 import { maybeEnrichNames } from '@/lib/enrich-names';
 import { flyerHtml } from '@/lib/flyer';
 import { checkAllReplies } from '@/lib/reply-checker';
-import { logSentEmail } from '@/lib/leads-db';
+import { logSentEmail, patchLead, markLeadBounced, indexMessageIds, getLeadsMap } from '@/lib/leads-db';
 import { verifyEmail } from '@/lib/email-verify';
 import { getSmtpAccounts } from '@/lib/smtp-accounts';
+import { isWithinSendingHours, minutesLeftInWindow } from '@/lib/warmup';
+import { getInboxHealth, recordSendSuccess, recordSendFailure, updateInboxHealth, shouldSkipInbox } from '@/lib/inbox-health';
 import {
-  isWithinSendingHours,
-  computeNextSendDelayMs,
-  computeEvenGapMs,
-} from '@/lib/warmup';
+  getTodayKey, etParts, campaignOf, normalizeCampaign, normalizeCompanyName, isRoleEmail,
+  isSendable, leadScore, SEND_CAP, UNSENT_STATUSES,
+} from '@/lib/metrics';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-// Warmup ramp + 9am-8pm randomized scheduling now live in src/lib/warmup.js
 const LEADS_KEY = 'leads';
 const DAILY_SEND_KEY = 'daily_sends';
 const LOCK_KEY = 'auto_send_lock';
-const LOCK_TTL_SECONDS = 300; // 5 minute lock — matches maxDuration
+const LOCK_TTL_SECONDS = 120;
 const COMPANY_SENT_KEY = 'company_sent';
-
-// ── GLOBAL ANTI-BURST PACING ──
-// The hard guard that guarantees emails drip out across the day instead of
-// firing in a burst. No two emails may go out closer than MIN_SEND_GAP_MS
-// apart, no matter how often the heartbeat pings or how many follow-ups
-// are due. Each successful send stamps `last_global_send`; every send path
-// checks it first.
-const LAST_GLOBAL_SEND_KEY = 'last_global_send';
-const MIN_SEND_GAP_MS = 12 * 60 * 1000; // hard floor: never two emails within 12 min
-
-// The gap is DYNAMIC and even: it's computed from how much of the workday is
-// left divided by how many emails remain (see computeEvenGapMs). We pass that
-// in as `gapMs`. It falls back to the 12-min floor when no gap is supplied.
-async function tooSoonToSend(gapMs = MIN_SEND_GAP_MS) {
-  try {
-    const last = await kv.get(LAST_GLOBAL_SEND_KEY);
-    if (!last) return false;
-    return (Date.now() - new Date(last).getTime()) < gapMs;
-  } catch {
-    return false;
-  }
-}
-
-async function recordGlobalSend() {
-  try {
-    await kv.set(LAST_GLOBAL_SEND_KEY, new Date().toISOString());
-  } catch {}
-}
-
-function isGenericEmail(email) {
-  const genericPrefixes = [
-    'info@', 'contact@', 'sales@', 'admin@', 'support@', 'hello@',
-    'reservations@', 'marketing@', 'hr@', 'careers@', 'jobs@',
-    'billing@', 'accounts@', 'enquiries@', 'enquiry@', 'reception@',
-    'office@', 'general@', 'noreply@', 'no-reply@', 'webmaster@',
-  ];
-  const genericDomains = ['ac.lk', 'edu.lk', 'gov.lk', 'mrt.ac.lk', 'cmb.ac.lk'];
-  const lower = email.toLowerCase();
-  if (genericPrefixes.some(p => lower.startsWith(p))) return true;
-  if (genericDomains.some(d => lower.endsWith(d))) return true;
-  return false;
-}
-
-function normalizeCompanyName(name) {
-  if (!name) return '';
-  return name.toLowerCase().trim()
-    .replace(/\s*(pvt\.?\s*ltd\.?|ltd\.?|plc|llc|inc\.?|private\s+limited|limited)\s*$/i, '')
-    .replace(/\s+/g, ' ').trim();
-}
-
-async function isCompanyAlreadySent(companyName) {
-  if (!companyName) return false;
-  const normalized = normalizeCompanyName(companyName);
-  if (!normalized) return false;
-  try {
-    return await kv.sismember(COMPANY_SENT_KEY, normalized);
-  } catch { return false; }
-}
-
-async function markCompanySent(companyName) {
-  if (!companyName) return;
-  const normalized = normalizeCompanyName(companyName);
-  if (normalized) {
-    try { await kv.sadd(COMPANY_SENT_KEY, normalized); } catch {}
-  }
-}
-
-// ============================================================
-// Per-account randomized scheduling — removes Claude dependency
-// Each account gets its own "next send time" stored in Redis.
-// GitHub Actions pings every 30 min; this code decides who's ready.
-// ============================================================
-const ACCOUNT_SCHEDULE_KEY = 'account_next_send';
-
-// ── Per-inbox physical ON/OFF switch (default OFF = no sending) ──
+const SUPPRESSION_KEY = 'suppression';
+const PACING_KEY = 'pacing';
 const INBOX_ENABLED_KEY = 'inbox_enabled';
-// Daily cap per inbox once its switch is ON.
-const SEND_CAP = 25;
-// Optional per-inbox daily cap (<= SEND_CAP) so volume can be ramped gradually.
 const INBOX_CAP_KEY = 'inbox_caps';
-async function getInboxCap(email) {
-  try {
-    const v = await kv.hget(INBOX_CAP_KEY, (email || '').toLowerCase());
-    if (v === null || v === undefined || v === '') return SEND_CAP;
-    const n = parseInt(v);
-    if (isNaN(n)) return SEND_CAP;
-    return Math.max(0, Math.min(SEND_CAP, n));
-  } catch {
-    return SEND_CAP;
-  }
-}
-// Only leads Scout has scored this high are ever sent.
-const QUALITY_THRESHOLD = 8;
-// Target-industry gate. Broadened to the full B2B target set — the lead list is
-// already requalified to clean US targets, so the old narrow "USA -"/"marketing
-// & advertising" test was silently blocking IT/MSP, agencies, SaaS, financial
-// and other perfect-fit leads from ever sending.
-function isUSALead(l) {
-  const ind = (l.industry || '').trim();
-  if (/^\s*usa\s*-/i.test(ind)) return true;
-  return /(marketing|advert|agenc|consult|professional\s*service|technolog|software|saas|\bit\b|it\s*service|managed\s*service|\bmsp\b|finance|financial|fintech|\bb2b\b|logistic|revenue|growth|outbound|lead\s*gen)/i.test(ind);
-}
-
-async function getEnabledInboxes() {
-  // Returns a Set of inbox emails that are switched ON. Fail-safe: on any
-  // error we return an EMPTY set, so sending never happens by accident.
-  try {
-    const map = await kv.hgetall(INBOX_ENABLED_KEY);
-    if (!map) return new Set();
-    return new Set(Object.entries(map).filter(([, v]) => v === '1' || v === 1 || v === true).map(([k]) => k.toLowerCase()));
-  } catch {
-    return new Set();
-  }
-}
-
-async function isAccountReady(accountEmail) {
-  try {
-    const nextSendTime = await kv.hget(ACCOUNT_SCHEDULE_KEY, accountEmail);
-    if (!nextSendTime) return true; // First time — ready immediately
-    return Date.now() >= new Date(nextSendTime).getTime();
-  } catch {
-    return true;
-  }
-}
-
-async function scheduleNextSend(accountEmail, remainingToday = 1) {
-  // Randomized spacing across the remaining 9am-8pm window (see lib/warmup.js).
-  // Spreads the day's sends with heavy jitter so cadence looks human.
-  const delayMs = computeNextSendDelayMs(remainingToday);
-  const nextTime = new Date(Date.now() + delayMs);
-  try {
-    await kv.hset(ACCOUNT_SCHEDULE_KEY, { [accountEmail]: nextTime.toISOString() });
-  } catch {}
-}
-
-async function getAccountScheduleStatus(accounts) {
-  const status = [];
-  for (const acc of accounts) {
-    try {
-      const nextTime = await kv.hget(ACCOUNT_SCHEDULE_KEY, acc.email);
-      status.push({
-        email: acc.email,
-        nextSendAt: nextTime || 'ready now',
-        ready: !nextTime || Date.now() >= new Date(nextTime).getTime(),
-      });
-    } catch {
-      status.push({ email: acc.email, nextSendAt: 'unknown', ready: true });
-    }
-  }
-  return status;
-}
-
-// Account loading delegated to shared smtp-accounts lib
-const getAccounts = getSmtpAccounts;
-
-function getTodayKey() {
-  // US Eastern calendar day (DST-aware) — matches the US send window.
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
-}
-
-function randomDelay(min = 3000, max = 15000) {
-  return min + Math.random() * (max - min);
-}
-
-async function getDailySendCount(accountEmail) {
-  const key = `${accountEmail}:${getTodayKey()}`;
-  try {
-    const count = await kv.hget(DAILY_SEND_KEY, key);
-    return parseInt(count || '0');
-  } catch {
-    return 0;
-  }
-}
-
-async function incrementDailySend(accountEmail) {
-  const key = `${accountEmail}:${getTodayKey()}`;
-  await kv.hincrby(DAILY_SEND_KEY, key, 1);
-}
-
-// --- Follow-up daily cap -------------------------------------------------
-// New (day-0) outreach is always sent first; follow-ups only run when a cycle
-// had no fresh lead. This cap makes sure follow-ups can never eat more than a
-// small slice of the day's volume, so a big fresh pool (e.g. new MSP leads)
-// always gets the bulk of sends. Counted separately from per-inbox caps.
-const FOLLOWUP_DAILY_CAP = 6;
-
-async function getFollowupCountToday() {
-  // Stored on the same daily_sends hash under a synthetic key that can never
-  // collide with a real inbox email address.
-  const key = `__followups__:${getTodayKey()}`;
-  try {
-    return parseInt((await kv.hget(DAILY_SEND_KEY, key)) || '0');
-  } catch {
-    return 0;
-  }
-}
-
-async function incrementFollowupToday() {
-  const key = `__followups__:${getTodayKey()}`;
-  try { await kv.hincrby(DAILY_SEND_KEY, key, 1); } catch {}
-}
-
-// --- Reply check piggyback ----------------------------------------------
-// vercel.json defines NO cron for /api/cron/check-replies, so on its own the
-// reply scanner never runs (that's why the Replies tab stays at 0). The
-// auto-send heartbeat IS pinged regularly, so we run the reply scan from here
-// at most once per throttle window: it detects genuine lead replies (strict
-// thread match), logs them to the Replies tab, updates lead status to
-// "replied", and fires exactly one auto-reply per lead. Fully self-guarded so
-// it can never break or delay a send beyond its own time.
-const REPLY_CHECK_THROTTLE_MS = 40 * 60 * 1000; // ~40 min
+const INBOX_CAMPAIGN_KEY = 'inbox_campaigns';
 const REPLY_CHECK_KEY = 'reply_check_last_run';
 
-async function maybeRunReplyCheck() {
-  try {
-    const now = Date.now();
-    const last = Number(await kv.get(REPLY_CHECK_KEY)) || 0;
-    if (now - last < REPLY_CHECK_THROTTLE_MS) return;
-    // Claim the slot before the (slow) IMAP scan so overlapping heartbeats
-    // don't both run it. The scan itself is idempotent, so a rare overlap is
-    // harmless anyway.
-    await kv.set(REPLY_CHECK_KEY, now);
-    await checkAllReplies();
-  } catch {
-    // Never let reply-checking break the send heartbeat.
-  }
+// Pacing bounds (minutes between two sends from the SAME inbox).
+const MIN_GAP_MIN = 10;
+const MAX_GAP_MIN = 60;
+// Two different inboxes never fire within this many seconds of each other.
+const GLOBAL_SPACING_MS = 75 * 1000;
+const LAST_GLOBAL_SEND_KEY = 'last_global_send';
+
+// Sequence timing.
+const D3_AFTER_MS = 3 * 24 * 60 * 60 * 1000;   // day 3 = 3 days after day 0
+const D7_AFTER_MS = 4 * 24 * 60 * 60 * 1000;   // day 7 = 4 days after day 3
+const STALE_CLAIM_MS = 30 * 60 * 1000;
+
+// Reply-scan piggyback cadence.
+const REPLY_CHECK_IN_WINDOW_MS = 10 * 60 * 1000;
+const REPLY_CHECK_OFF_HOURS_MS = 20 * 60 * 1000;
+
+// ─── Small helpers ────────────────────────────────────────────────────────────
+
+const lower = (s) => String(s || '').trim().toLowerCase();
+
+function jsonOk(body) {
+  return Response.json({ success: true, timestamp: new Date().toISOString(), ...body });
 }
 
-/**
- * Get the next account index using a persistent KV counter.
- * Each invocation increments and gets the next account in rotation.
- */
-async function getNextAccountIndex(numAccounts) {
-  try {
-    const counter = await kv.hincrby('stats', 'rotationIndex', 1);
-    return (counter - 1) % numAccounts; // -1 because hincrby returns AFTER increment
-  } catch {
-    return 0;
+async function withRetries(fn, attempts = 3) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn(); } catch (err) { lastErr = err; await new Promise((r) => setTimeout(r, 200 * (i + 1) * (i + 1))); }
   }
+  throw lastErr;
 }
 
-/**
- * Acquire a simple distributed lock to prevent concurrent sends.
- * Returns true if lock acquired, false if another invocation is running.
- */
-async function acquireLock() {
+function isAuthorized(request) {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) return true;
+  const authHeader = request.headers.get('authorization');
+  const tokenParam = new URL(request.url).searchParams.get('token');
+  return authHeader === `Bearer ${cronSecret}` || tokenParam === cronSecret;
+}
+
+// ─── Lock ─────────────────────────────────────────────────────────────────────
+
+async function acquireLock(token) {
   try {
-    // SET NX = only set if not exists, EX = expire after TTL
-    const result = await kv.set(LOCK_KEY, Date.now(), { nx: true, ex: LOCK_TTL_SECONDS });
+    const result = await kv.set(LOCK_KEY, token, { nx: true, ex: LOCK_TTL_SECONDS });
     return result === 'OK';
   } catch {
     return false;
   }
 }
 
-async function releaseLock() {
+async function releaseLock(token) {
   try {
-    await kv.del(LOCK_KEY);
+    await kv.eval(
+      "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end return 0",
+      [LOCK_KEY],
+      [token]
+    );
   } catch {}
 }
 
-/**
- * Claim a lead atomically — set status to "sending" so no other
- * concurrent request can pick it up. Returns true if claimed.
- */
-async function claimLead(email) {
+// ─── Inbox config ─────────────────────────────────────────────────────────────
+
+async function loadInboxConfig() {
+  const KV_ERROR = Symbol('kv-error');
+  const [enabledMap, capMap, campaignMap, pacingMap, health] = await Promise.all([
+    kv.hgetall(INBOX_ENABLED_KEY).catch(() => KV_ERROR),
+    kv.hgetall(INBOX_CAP_KEY).catch(() => ({})),
+    kv.hgetall(INBOX_CAMPAIGN_KEY).catch(() => ({})),
+    kv.hgetall(PACING_KEY).catch(() => ({})),
+    getInboxHealth(),
+  ]);
+  return {
+    enabledMap: enabledMap && enabledMap !== KV_ERROR ? enabledMap : {},
+    enabledUnavailable: enabledMap === KV_ERROR,
+    capMap: capMap || {},
+    campaignMap: campaignMap || {},
+    pacingMap: pacingMap || {},
+    health: health || {},
+  };
+}
+
+function capFor(capMap, email) {
+  const raw = capMap[lower(email)];
+  if (raw === null || raw === undefined || raw === '') return SEND_CAP;
+  const n = parseInt(raw, 10);
+  if (isNaN(n)) return SEND_CAP;
+  return Math.max(0, Math.min(SEND_CAP, n));
+}
+
+function pacingFor(pacingMap, email) {
+  let p = pacingMap[lower(email)];
+  if (typeof p === 'string') { try { p = JSON.parse(p); } catch { p = null; } }
+  return p && typeof p === 'object' ? p : null;
+}
+
+/** Per-inbox counters for today in ONE command. */
+async function loadTodayCounts(accounts, today) {
+  const keys = accounts.map((a) => `${a.email}:${today}`);
+  const counts = {};
   try {
-    const existing = await kv.hget(LEADS_KEY, email.toLowerCase());
-    if (!existing) return false;
-    const status = (existing.status || '').toLowerCase();
-    // Only claim if still pending/new/qualified (imports arrive as 'qualified')
-    if (status !== 'pending' && status !== 'new' && status !== 'qualified') return false;
-    // Mark as "sending" immediately
-    await kv.hset(LEADS_KEY, {
-      [email.toLowerCase()]: { ...existing, status: 'sending', updatedAt: new Date().toISOString() }
+    const res = await kv.hmget(DAILY_SEND_KEY, ...keys);
+    for (const a of accounts) counts[a.email] = parseInt((res && res[`${a.email}:${today}`]) || '0', 10) || 0;
+  } catch {
+    for (const a of accounts) counts[a.email] = 0;
+  }
+  return counts;
+}
+
+/** Next-send time for an inbox after it just sent (or was just enabled). */
+function computeNextSendAt(remainingAfter, now = new Date()) {
+  const left = minutesLeftInWindow(now);
+  if (left <= 0) return null;
+  const base = left / Math.max(1, remainingAfter);
+  const jitter = 0.85 + Math.random() * 0.3;
+  const gapMin = Math.max(MIN_GAP_MIN, Math.min(MAX_GAP_MIN, base * jitter));
+  return { at: new Date(now.getTime() + gapMin * 60 * 1000), gapMin: Math.round(gapMin * 10) / 10 };
+}
+
+// ─── Lead selection ───────────────────────────────────────────────────────────
+
+/**
+ * From one leads scan, derive both the fresh pool (per campaign, best score
+ * first) and the due follow-ups (oldest due first), plus stuck claims.
+ */
+function partitionLeads(leadsMap, now) {
+  const fresh = { 'free-leads': [], offer: [] };
+  const followUps = [];
+  const stuck = [];
+  const nowMs = now.getTime();
+  for (const lead of Object.values(leadsMap)) {
+    if (!lead || !lead.email) continue;
+    const status = lower(lead.status);
+
+    if (status === 'sending') {
+      const ts = lead.updatedAt ? new Date(lead.updatedAt).getTime() : 0;
+      if (!ts || nowMs - ts > STALE_CLAIM_MS) stuck.push(lead);
+      continue;
+    }
+
+    if (isSendable(lead)) {
+      fresh[campaignOf(lead)].push(lead);
+      continue;
+    }
+
+    if (!lead.sent_at) continue;
+    const hold = lead.followup_hold_until ? new Date(lead.followup_hold_until).getTime() : 0;
+    if (hold && hold > nowMs) continue;
+    if (status === 'sent-d0') {
+      const due = new Date(lead.sent_at).getTime() + D3_AFTER_MS;
+      if (nowMs >= due) followUps.push({ lead, day: 3, dueAt: due });
+    } else if (status === 'sent-d3') {
+      const base = lead.d3_sent_at ? new Date(lead.d3_sent_at).getTime() : new Date(lead.sent_at).getTime() + D3_AFTER_MS;
+      const due = base + D7_AFTER_MS;
+      if (nowMs >= due) followUps.push({ lead, day: 7, dueAt: due });
+    }
+  }
+  for (const c of Object.keys(fresh)) {
+    for (const l of fresh[c]) l.__jitter = Math.random();
+    fresh[c].sort((a, b) => (leadScore(b) - leadScore(a)) || (a.__jitter - b.__jitter));
+    for (const l of fresh[c]) delete l.__jitter;
+  }
+  followUps.sort((a, b) => a.dueAt - b.dueAt);
+  return { fresh, followUps, stuck };
+}
+
+/** Claim a lead atomically (SET NX marker + status flip). */
+async function claimLead(email) {
+  const key = lower(email);
+  try {
+    const got = await kv.set(`claim:${key}`, Date.now(), { nx: true, ex: 1800 });
+    if (got !== 'OK') return false;
+    const lead = await patchLead(key, (existing) => {
+      const st = lower(existing.status);
+      if (!UNSENT_STATUSES.has(st) || existing.sent_at) return null;
+      return { status: 'sending', claimed_at: new Date().toISOString() };
     });
+    if (!lead || lower(lead.status) !== 'sending') { await kv.del(`claim:${key}`).catch(() => {}); return false; }
     return true;
   } catch {
     return false;
   }
 }
 
-async function getUnsent(limit = 75) {
-  try {
-    const allLeads = await kv.hgetall(LEADS_KEY);
-    if (!allLeads) return [];
+async function releaseClaim(email, status = 'pending', extra = {}) {
+  const key = lower(email);
+  try { await patchLead(key, { status, ...extra }); } catch {}
+  try { await kv.del(`claim:${key}`); } catch {}
+}
 
-    // Reaper: a lead stuck in 'sending' for >30 min means a previous run
-    // died mid-send (timeout/crash). Flip it back to 'pending' so it can
-    // be picked up again instead of being stranded forever.
-    const STALE_MS = 30 * 60 * 1000;
-    for (const lead of Object.values(allLeads)) {
-      if ((lead.status || '').toLowerCase() === 'sending' && lead.email) {
-        const ts = lead.updatedAt ? new Date(lead.updatedAt).getTime() : 0;
-        if (!ts || Date.now() - ts > STALE_MS) {
-          lead.status = 'pending';
-          try { await kv.hset(LEADS_KEY, { [lead.email.toLowerCase()]: { ...lead, status: 'pending', updatedAt: new Date().toISOString() } }); } catch {}
-        }
-      }
-    }
+// ─── Email assembly ───────────────────────────────────────────────────────────
 
-    const unsent = Object.values(allLeads)
-      .filter(lead => {
-        const status = (lead.status || '').toLowerCase();
-        const sendableStatus = status === 'pending' || status === 'new' || status === 'qualified';
-        const fresh = sendableStatus && lead.email && !lead.account_used && !lead.sent_at;
-        // Scout gate: only high-scored, US leads are eligible to send. Leads that
-        // arrived via import carry ai_score instead of quality_score - honour it
-        // so an import isn't silently stranded waiting on a manual Scout run.
-        const score = Number(lead.quality_score) || Number(lead.ai_score) || 0;
-        const qualified = score >= QUALITY_THRESHOLD;
-        return fresh && qualified && isUSALead(lead);
-      });
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
-    // BEST CUSTOMERS FIRST: highest-rated leads get emailed before anyone else.
-    // Random jitter only breaks ties within the same score, so order still
-    // varies between runs without ever letting a lower-rated lead jump ahead.
-    for (const l of unsent) l.__jitter = Math.random();
-    unsent.sort((a, b) => {
-      const diff = ((Number(b.quality_score) || Number(b.ai_score) || 0)) - ((Number(a.quality_score) || Number(a.ai_score) || 0));
-      return diff !== 0 ? diff : a.__jitter - b.__jitter;
-    });
-    for (const l of unsent) delete l.__jitter;
+/** Build subject/html/text/headers for one touch of one lead. */
+async function buildTouch(lead, day) {
+  const qualified = {
+    ...lead,
+    email: lower(lead.email),
+    industry: lead.industry || 'business',
+    company_name: lead.company || lead.company_name || null,
+    city: lead.city || 'USA',
+    first_name: lead.first_name || lead.name?.split(/[\s,]/)[0] || null,
+  };
+  let content = getEmailForSequenceDay(qualified, day);
+  if (day === 0) content = await enhanceWithAI(qualified, content);
 
-    return unsent.slice(0, limit);
-  } catch {
-    return [];
+  // Follow-ups keep the ORIGINAL subject so Gmail groups the thread.
+  let subject = content.subject;
+  if (day !== 0 && lead.original_subject) {
+    subject = `Re: ${String(lead.original_subject).replace(/^\s*re:\s*/i, '').trim()}`;
   }
-}
 
-/**
- * Get leads due for follow-up emails (Day 3 or Day 7)
- * - sent-d0 leads that were sent 3+ days ago → Day 3 follow-up
- * - sent-d3 leads that were sent 3+ days after d3 (6+ days total) → Day 7 follow-up
- * Excludes leads that have replied or bounced
- */
-async function getFollowUpLeads(limit = 10) {
-  try {
-    const allLeads = await kv.hgetall(LEADS_KEY);
-    if (!allLeads) return [];
+  const [rawBody, unsubNote] = String(content.body).split('---');
+  const note = (unsubNote || "Not the right fit? Just reply STOP and I will not email you again.").trim();
+  const htmlUnsubscribe = `<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">${escapeHtml(note)}</p>`;
+  const html = flyerHtml(qualified) + htmlUnsubscribe;
 
-    const now = Date.now();
-    const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
-    const followUps = [];
-
-    for (const lead of Object.values(allLeads)) {
-      if (!lead.email || !lead.sent_at) continue;
-      const status = (lead.status || '').toLowerCase();
-      const sentAt = new Date(lead.sent_at).getTime();
-      const daysSinceSent = now - sentAt;
-
-      // Day 3 follow-up: sent-d0, 3+ days ago, not replied/bounced
-      if (status === 'sent-d0' && daysSinceSent >= THREE_DAYS) {
-        followUps.push({ ...lead, nextSequenceDay: 3 });
-      }
-      // Day 7 follow-up: sent-d3, 3+ days after d3 send
-      else if (status === 'sent-d3') {
-        const d3SentAt = lead.d3_sent_at ? new Date(lead.d3_sent_at).getTime() : sentAt + THREE_DAYS;
-        if (now - d3SentAt >= THREE_DAYS) {
-          followUps.push({ ...lead, nextSequenceDay: 7 });
-        }
-      }
-    }
-
-    // Shuffle and limit
-    for (let i = followUps.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [followUps[i], followUps[j]] = [followUps[j], followUps[i]];
-    }
-
-    return followUps.slice(0, limit);
-  } catch {
-    return [];
+  const headers = {};
+  if (day === 3 && lead.original_message_id) {
+    headers.inReplyTo = lead.original_message_id;
+    headers.references = [lead.original_message_id];
+  } else if (day === 7 && lead.original_message_id) {
+    headers.inReplyTo = lead.d3_message_id || lead.original_message_id;
+    headers.references = [lead.original_message_id, lead.d3_message_id].filter(Boolean);
   }
-}
-async function markFollowUpSent(email, sequenceDay, messageId) {
-  try {
-    const existing = await kv.hget(LEADS_KEY, email.toLowerCase());
-    if (!existing) return;
-    const updated = {
-      ...existing,
-      status: `sent-d${sequenceDay}`,
-      sequence_day: sequenceDay,
-      [`d${sequenceDay}_sent_at`]: new Date().toISOString(),
-      [`d${sequenceDay}_message_id`]: messageId || null,
-      send_count: (existing.send_count || 0) + 1,
-      updatedAt: new Date().toISOString(),
-    };
-    // Mark as completed after Day 7
-    if (sequenceDay === 7) {
-      updated.status = 'sequence_complete';
-    }
-    await kv.hset(LEADS_KEY, { [email.toLowerCase()]: updated });
-  } catch {}
+
+  return {
+    lead: qualified,
+    subject,
+    html,
+    text: rawBody.trim() + (note ? `\n\n${note}` : ''),
+    headers,
+    variant: content.variant || null,
+    template: content.template || null,
+    aiEnhanced: Boolean(content.aiEnhanced),
+    touch: day === 0 ? 'd0' : `d${day}`,
+  };
 }
 
-async function markLeadAsSent(email, accountEmail, subject, messageId) {
-  try {
-    const existing = await kv.hget(LEADS_KEY, email.toLowerCase());
-    const updated = {
-      ...existing,
-      email: email.toLowerCase(),
-      status: 'sent-d0',
-      account_used: accountEmail,
-      sent_at: new Date().toISOString(),
-      send_count: (existing?.send_count || 0) + 1,
-      sequence_day: 0,
-      original_subject: subject,
-      original_message_id: messageId || null,
-      updatedAt: new Date().toISOString(),
+// ─── Post-send bookkeeping ────────────────────────────────────────────────────
+
+async function recordSend({ account, touch, day, lead, sendResult, today, startedAt }) {
+  const now = new Date().toISOString();
+  const campaign = campaignOf(lead);
+  const et = etParts();
+
+  // 1) The lead record first, with retries — this is the write that prevents
+  //    a duplicate send if anything below fails.
+  await withRetries(() => patchLead(lead.email, (existing) => {
+    const base = {
+      account_used: account.email,
+      send_count: (Number(existing.send_count) || 0) + 1,
+      last_touch_at: now,
+      last_touch: touch.touch,
+      updatedAt: now,
     };
-    await kv.hset(LEADS_KEY, { [email.toLowerCase()]: updated });
+    if (day === 0) {
+      return {
+        ...base,
+        status: 'sent-d0',
+        sent_at: now,
+        sequence_day: 0,
+        original_subject: touch.subject,
+        original_message_id: sendResult.messageId || null,
+        subject_variant: touch.variant,
+        template_key: touch.template,
+        ai_enhanced: touch.aiEnhanced,
+        claimed_at: null,
+      };
+    }
+    return {
+      ...base,
+      status: day === 7 ? 'sequence_complete' : `sent-d${day}`,
+      sequence_day: day,
+      [`d${day}_sent_at`]: now,
+      [`d${day}_message_id`]: sendResult.messageId || null,
+      [`d${day}_subject`]: touch.subject,
+    };
+  }));
+
+  // 2) Counters + indexes in one pipeline.
+  try {
+    const p = kv.pipeline();
+    p.hincrby(DAILY_SEND_KEY, `${account.email}:${today}`, 1);
+    p.hincrby(DAILY_SEND_KEY, `${account.email}:${today}:${touch.touch}`, 1);
+    p.hincrby(DAILY_SEND_KEY, `campaign:${campaign}:${today}`, 1);
+    p.hincrby(DAILY_SEND_KEY, `__total__:${today}`, 1);
+    if (day !== 0) p.hincrby(DAILY_SEND_KEY, `__followups__:${today}`, 1);
+    p.set(LAST_GLOBAL_SEND_KEY, now);
+    if (day === 0) {
+      const company = normalizeCompanyName(lead.company_name || lead.company);
+      if (company) p.sadd(COMPANY_SENT_KEY, company);
+      p.del(`claim:${lead.email}`);
+    }
+    await p.exec();
   } catch (err) {
-    console.error('[auto-send] markLeadAsSent error:', err.message);
+    console.error('[auto-send] counters failed:', err.message);
   }
+  try { await indexMessageIds(lead.email, sendResult.messageId); } catch {}
+
+  // 3) Log + health (best effort).
+  try {
+    await logSentEmail({
+      to: lead.email, from: account.email,
+      company: lead.company_name, industry: lead.industry,
+      subject: touch.subject, bodyPreview: touch.text.substring(0, 200),
+      status: 'sent', messageId: sendResult.messageId,
+      sequenceDay: day, touch: touch.touch, campaign,
+      source: day === 0 ? 'auto-send-scheduled' : `follow-up-d${day}`,
+      subjectVariant: touch.variant, template: touch.template, aiEnhanced: touch.aiEnhanced,
+      provider: account.provider, inboxDisplayName: account.displayName,
+      smtpResponse: sendResult.response, messageSize: sendResult.messageSize,
+      sendMs: sendResult.ms, attempts: sendResult.attempts,
+      etHour: et.hour, etWeekday: et.weekday, tracked: sendResult.tracked,
+      totalMs: Date.now() - startedAt,
+    });
+  } catch {}
+  await recordSendSuccess(account.email, { ms: sendResult.ms, response: sendResult.response, messageId: sendResult.messageId });
 }
 
-/**
- * Strip the plain-text signature block from the email body.
- * The personalize templates include "Limethsith\nAviance..." in the body,
- * but we add a proper HTML signature separately, so remove it to avoid duplication.
- */
-function stripPlainTextSignature(body) {
-  // Remove lines starting from the standalone "Limethsith" line through the sig
-  const lines = body.split('\n');
-  let cutIndex = lines.length;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    const trimmed = lines[i].trim();
-    if (trimmed === 'Limethsith') {
-      cutIndex = i;
-      break;
-    }
+/** Failure handling: classify, keep/bounce/skip the lead, record health. */
+async function recordFailure({ account, touch, day, lead, sendResult, today }) {
+  const kind = sendResult.kind || 'other';
+  await recordSendFailure(account.email, sendResult);
+  try {
+    const p = kv.pipeline();
+    p.hincrby(DAILY_SEND_KEY, `${account.email}:${today}:failed`, 1);
+    p.hincrby(DAILY_SEND_KEY, `__failed__:${today}`, 1);
+    await p.exec();
+  } catch {}
+  try {
+    await logSentEmail({
+      to: lead.email, from: account.email, company: lead.company_name, industry: lead.industry,
+      subject: touch ? touch.subject : null, status: 'failed', sequenceDay: day, touch: touch ? touch.touch : null,
+      campaign: campaignOf(lead), error: sendResult.error, errorKind: kind, errorCode: sendResult.code || sendResult.responseCode || null,
+      smtpResponse: sendResult.response || null, sendMs: sendResult.ms, source: day === 0 ? 'auto-send-scheduled' : `follow-up-d${day}`,
+    });
+  } catch {}
+
+  if (kind === 'recipient') {
+    // The receiving server rejected the address: it's dead, stop retrying it.
+    await markLeadBounced(lead.email, sendResult.response || sendResult.error, { source: 'smtp-reject', account: account.email });
+    if (day === 0) { try { await kv.del(`claim:${lead.email}`); } catch {} }
+    return 'bounced';
   }
-  // Remove trailing empty lines before the signature
-  let end = cutIndex;
-  while (end > 0 && lines[end - 1].trim() === '') end--;
-  return lines.slice(0, end).join('\n');
+  if (kind === 'content') {
+    // Our message was refused (552/554) — a reputation signal, not a dead lead.
+    if (day === 0) await releaseClaim(lead.email, 'skipped_rejected', { skip_reason: sendResult.response || sendResult.error });
+    else await patchLead(lead.email, { last_error: sendResult.response || sendResult.error, last_error_at: new Date().toISOString() });
+    return 'rejected';
+  }
+  if (kind === 'auth') {
+    await updateInboxHealth(account.email, { disabledReason: `Login failed (${sendResult.responseCode || sendResult.code || 'EAUTH'}): check the app password`, disabledAt: new Date().toISOString() });
+    try { await kv.hset(INBOX_ENABLED_KEY, { [account.email]: '0' }); } catch {}
+  }
+  // Transient / auth / other: the lead goes back to the pool.
+  if (day === 0) await releaseClaim(lead.email, 'pending', { last_error: sendResult.error, last_error_at: new Date().toISOString() });
+  else await patchLead(lead.email, { last_error: sendResult.error, last_error_at: new Date().toISOString() });
+  return kind;
 }
 
-// ============================================================
-// SHARED FOLLOW-UP SENDER — used by every mode (scheduled AND batch).
-// Sends at most ONE due follow-up (day-3 = personalized flyer, day-7 =
-// nudge) on the same account/thread as the original. Returns
-// { sent: bool, detail } so callers can report it.
-// ============================================================
-async function sendOneDueFollowUp(accounts) {
-  let sentInfo = null;
-  const followUpLeads = await getFollowUpLeads(6);
-  console.log('[diag] follow-up scan: due=' + followUpLeads.length);
-        for (const fuLead of followUpLeads) {
-    // Use the same account that sent the original
-    const originalAccount = accounts.find(a => a.email === fuLead.account_used);
-    if (!originalAccount) continue;
+/** Send one touch; returns { ok, detail, stop } (stop = end this inbox's turn). */
+async function sendTouch({ account, lead, day, today, startedAt }) {
+  let touch;
+  try {
+    touch = await buildTouch(lead, day);
+  } catch (err) {
+    if (day === 0) await releaseClaim(lead.email, 'pending', { last_error: `build: ${err.message}` });
+    return { ok: false, stop: false, detail: { to: lead.email, status: 'error', error: `build: ${err.message}` } };
+  }
 
-    // Check daily limit for this account
-    const fuSent = await getDailySendCount(originalAccount.email);
-    const fuCap = await getInboxCap(originalAccount.email);
-    if (fuSent >= fuCap) continue;
+  const sendResult = await sendEmail(account, {
+    to: touch.lead.email,
+    subject: touch.subject,
+    html: touch.html,
+    text: touch.text,
+    touch: touch.touch,
+    ...touch.headers,
+  });
 
-    const qualifiedLead = {
-      ...fuLead,
-      email: fuLead.email.toLowerCase().trim(),
-      industry: fuLead.industry || 'business',
-      company_name: fuLead.company || fuLead.company_name || 'your company',
-      city: fuLead.city || 'USA',
-      first_name: fuLead.first_name || fuLead.name?.split(/[\s,]/)[0] || null,
+  if (sendResult.success) {
+    await recordSend({ account, touch, day, lead: touch.lead, sendResult, today, startedAt });
+    return {
+      ok: true,
+      stop: true,
+      detail: {
+        to: touch.lead.email, from: account.email, company: touch.lead.company_name, campaign: campaignOf(lead),
+        status: day === 0 ? 'sent' : 'follow-up-sent', day, touch: touch.touch, subject: touch.subject,
+        messageId: sendResult.messageId, ms: sendResult.ms, response: sendResult.response,
+      },
     };
-
-    const emailContent = getEmailForSequenceDay(qualifiedLead, fuLead.nextSequenceDay);
-    const cleanBody = stripPlainTextSignature(emailContent.body);
-
-    const htmlParagraphs = cleanBody
-      .split(/\n\n+/)
-      .filter(p => p.trim().length > 0)
-      .map(p => {
-        let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); escaped = escaped.replace(/aviance\.online/g, '<a href=\"https://www.aviance.online\" style=\"color:#0a0a0a;\">aviance.online</a>');
-        return `<p style=\"margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;\">${escaped}</p>`;
-      })
-      .join('\n');
-
-    const htmlSignature = `
-    <div style=\"margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;\">
-                Aviance — Guaranteed booked sales calls<br>
-      <a href=\"https://www.aviance.online\" style=\"color:#555;text-decoration:none;\">aviance.online</a>
-    </div>`;
-
-    // Every touch carries the personalised one-pager, not just day 0. The
-    // poster is re-rendered with THIS lead's first name and company, so day 3
-    // and day 7 look identical in quality to the first email. The plain-text
-    // alternative below still differs per sequence day.
-    const htmlUnsubscribe =
-      '<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">' +
-      'Not a fit? Reply STOP and I won\'t contact you again.</p>';
-
-    const htmlBody = flyerHtml(qualifiedLead) + htmlUnsubscribe;
-
-    // Build threading headers from the stored original messageId
-    // For Day 3: reference the original (d0) messageId
-    // For Day 7: reference the original + d3 messageId for full thread chain
-    const threadingHeaders = {};
-    const originalMsgId = fuLead.original_message_id;
-    if (originalMsgId) {
-      if (fuLead.nextSequenceDay === 3) {
-        threadingHeaders.inReplyTo = originalMsgId;
-        threadingHeaders.references = originalMsgId;
-      } else if (fuLead.nextSequenceDay === 7) {
-        const d3MsgId = fuLead.d3_message_id;
-        threadingHeaders.inReplyTo = d3MsgId || originalMsgId;
-        threadingHeaders.references = d3MsgId
-          ? `${originalMsgId} ${d3MsgId}`
-          : originalMsgId;
-      }
-    }
-
-    try {
-      const sendResult = await sendEmail(originalAccount, {
-        to: qualifiedLead.email,
-        subject: emailContent.subject,
-        html: htmlBody,
-        text: emailContent.body,
-        ...threadingHeaders,
-      });
-
-      if (sendResult.success) {
-        sentInfo = { to: qualifiedLead.email, from: originalAccount.email, status: "follow-up-sent", day: fuLead.nextSequenceDay };
-        await incrementDailySend(originalAccount.email);
-        await incrementFollowupToday();
-        await markFollowUpSent(qualifiedLead.email, fuLead.nextSequenceDay, sendResult.messageId);
-        try {
-          await logSentEmail({
-            to: qualifiedLead.email, from: originalAccount.email,
-            company: qualifiedLead.company_name, industry: qualifiedLead.industry,
-            subject: emailContent.subject, bodyPreview: emailContent.body.substring(0, 200),
-            status: 'sent', messageId: sendResult.messageId,
-            sequenceDay: fuLead.nextSequenceDay,
-            source: `follow-up-d${fuLead.nextSequenceDay}`,
-          });
-        } catch {}
-        
-        await recordGlobalSend();
-        break; // one follow-up per run — keep sends spaced out
-      }
-    } catch (e) { console.log("[diag] follow-up send error " + fuLead.email + ": " + e.message); }
   }
-  return { sent: !!sentInfo, detail: sentInfo };
+
+  const outcome = await recordFailure({ account, touch, day, lead: touch.lead, sendResult, today });
+  // Connection/auth problems belong to the inbox, not the lead: end its turn.
+  const stop = outcome === 'auth' || outcome === 'transient' || outcome === 'other';
+  return {
+    ok: false,
+    stop,
+    detail: { to: touch.lead.email, from: account.email, status: 'failed', outcome, error: sendResult.error, code: sendResult.code || sendResult.responseCode || null },
+  };
 }
+
+// ─── Reply check + enrichment piggybacks (outside the lock) ──────────────────
+
+async function maybeRunReplyCheck(inWindow, deadlineMs) {
+  try {
+    const now = Date.now();
+    const raw = await kv.get(REPLY_CHECK_KEY);
+    const last = typeof raw === 'number' ? raw : Number(raw?.ts) || 0;
+    const throttle = inWindow ? REPLY_CHECK_IN_WINDOW_MS : REPLY_CHECK_OFF_HOURS_MS;
+    if (now - last < throttle) return { ran: false, nextInMs: throttle - (now - last) };
+    const result = await checkAllReplies({ deadlineMs });
+    if (result.skipped === 'locked') return { ran: false, skipped: 'locked' };
+    return { ran: true, newReplies: result.matchedLeads, autoReplies: result.autoReplies.filter((a) => a.sent).length, bounces: result.bounces.length, errors: result.errors.length, ms: result.durationMs };
+  } catch (err) {
+    return { ran: false, error: err.message };
+  }
+}
+
+// ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function GET(request) {
-  // Auth check
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
+  const startedAt = Date.now();
+  const deadlineMs = startedAt + (maxDuration - 20) * 1000;
+  if (!isAuthorized(request)) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-  if (cronSecret) {
-    const { searchParams } = new URL(request.url);
-    const tokenParam = searchParams.get('token');
-    if (authHeader !== `Bearer ${cronSecret}` && tokenParam !== cronSecret) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+  const params = new URL(request.url).searchParams;
+  const inWindow = isWithinSendingHours();
+  const today = getTodayKey();
+
+  // ── Outside the window: no sending, but still look for replies (throttled). ──
+  if (!inWindow) {
+    const replyCheck = params.get('skipReplies') ? { ran: false } : await maybeRunReplyCheck(false, deadlineMs);
+    return jsonOk({ sent: 0, message: 'Outside sending hours (8 AM - 7 PM US Eastern, Mon-Fri)', today, replyCheck });
   }
 
-  // Business hours check — only send 8 AM to 7 PM US Eastern
-  if (!isWithinSendingHours()) {
-    return Response.json({
-      success: true,
-      message: 'Outside sending hours (8 AM - 7 PM US Eastern)',
-      timestamp: new Date().toISOString(),
-      sent: 0,
-    });
+  // ── Cheap gates before the lock: inbox switches, caps, pacing. ──
+  const accountsAll = getSmtpAccounts();
+  if (!accountsAll.length) return Response.json({ error: 'No SMTP accounts configured' }, { status: 500 });
+
+  const cfg = await loadInboxConfig();
+  if (cfg.enabledUnavailable) {
+    return jsonOk({ sent: 0, kvError: true, message: 'Could not read inbox switches — sending paused for this heartbeat.', today });
+  }
+  const enabled = accountsAll.filter((a) => { const v = cfg.enabledMap[a.email]; return v === '1' || v === 1 || v === true; });
+  if (!enabled.length) {
+    return jsonOk({ sent: 0, disabled: true, message: 'No inboxes are switched on — sending is off. Turn on an inbox toggle to start.', today });
   }
 
-  // Concurrency lock — prevent overlapping sends from multiple triggers
-  const lockAcquired = await acquireLock();
-  if (!lockAcquired) {
-    return Response.json({
-      success: true,
-      message: 'Another send is already in progress — skipping',
-      timestamp: new Date().toISOString(),
-      sent: 0,
-    });
+  const counts = await loadTodayCounts(enabled, today);
+  const now = new Date();
+  const accountStatus = enabled.map((a) => {
+    const cap = capFor(cfg.capMap, a.email);
+    const sentToday = counts[a.email] || 0;
+    const pacing = pacingFor(cfg.pacingMap, a.email);
+    const nextAt = pacing && pacing.nextSendAt ? new Date(pacing.nextSendAt).getTime() : 0;
+    const health = cfg.health[a.email] || {};
+    const skip = shouldSkipInbox(health, now.getTime());
+    return {
+      email: a.email,
+      campaign: normalizeCampaign(cfg.campaignMap[a.email]),
+      sentToday,
+      cap,
+      remaining: Math.max(0, cap - sentToday),
+      nextSendAt: nextAt ? new Date(nextAt).toISOString() : null,
+      ready: !nextAt || nextAt <= now.getTime(),
+      skipped: skip.skip ? skip.reason : null,
+      health: health.lastError && health.lastErrorAt > (health.lastSuccessAt || '') ? 'warning' : 'ok',
+    };
+  });
+  const totalRemaining = accountStatus.reduce((n, s) => n + s.remaining, 0);
+  if (totalRemaining === 0) {
+    return jsonOk({ sent: 0, message: 'Daily limit reached for all accounts', today, accountStatus });
+  }
+  const readyStatus = accountStatus.filter((s) => s.remaining > 0 && s.ready && !s.skipped);
+  if (!readyStatus.length) {
+    const soonest = accountStatus.filter((s) => s.remaining > 0 && !s.skipped).map((s) => s.nextSendAt).filter(Boolean).sort()[0] || null;
+    const replyCheck = await maybeRunReplyCheck(true, deadlineMs);
+    return jsonOk({ sent: 0, paced: true, message: soonest ? `Paced — next send at ${soonest}` : 'All eligible inboxes are cooling down', nextSendAt: soonest, today, accountStatus, replyCheck });
   }
 
+  // Global spacing so two inboxes never fire in the same minute.
   try {
-    // Detect + handle any lead replies first (throttled). Populates the
-    // Replies tab and sends the one-time auto-reply. Non-fatal.
-    await maybeRunReplyCheck();
+    const lastGlobal = await kv.get(LAST_GLOBAL_SEND_KEY);
+    if (lastGlobal && Date.now() - new Date(lastGlobal).getTime() < GLOBAL_SPACING_MS) {
+      return jsonOk({ sent: 0, paced: true, message: 'Spacing sends between inboxes', today, accountStatus });
+    }
+  } catch {}
 
-    // Name-enrichment bot (throttled, capped, no-op without GEMINI_API_KEY).
-    // Finds owner first names for unsent leads so sends switch to named copy.
-    await maybeEnrichNames();
+  // ── Lock, then ONE leads scan, then at most one send. ──
+  const lockToken = `${startedAt}-${Math.random().toString(36).slice(2)}`;
+  if (!(await acquireLock(lockToken))) {
+    return jsonOk({ sent: 0, message: 'Another send is already in progress — skipping', today });
+  }
 
-    let accounts = getAccounts();
-    if (!accounts.length) {
-      await releaseLock();
-      return Response.json({ error: 'No SMTP accounts configured' }, { status: 500 });
+  const results = { sent: 0, failed: 0, skipped: 0, bounced: 0, followUpsSent: 0, details: [] };
+  let sentDetail = null;
+  try {
+    const leadsMap = await getLeadsMap();
+    const { fresh, followUps, stuck } = partitionLeads(leadsMap, now);
+
+    // Reaper: claims that died mid-send go back to the pool.
+    for (const lead of stuck.slice(0, 20)) {
+      await releaseClaim(lead.email, 'pending', { reaped_at: new Date().toISOString() });
     }
 
-    // ── PHYSICAL SWITCH GATE ──
-    // Only inboxes whose toggle is switched ON may send. If none are on,
-    // we stop here and send nothing. This is the master safety.
-    const enabledInboxes = await getEnabledInboxes();
-    accounts = accounts.filter((a) => enabledInboxes.has((a.email || '').toLowerCase()));
-    if (!accounts.length) {
-      await releaseLock();
-      return Response.json({
-        success: true,
-        disabled: true,
-        sent: 0,
-        message: 'No inboxes are switched on — sending is off. Turn on an inbox toggle to start.',
-        timestamp: new Date().toISOString(),
-      });
+    // Most-behind inbox first (random tie-break) so inboxes take turns.
+    const order = readyStatus
+      .map((s) => ({ s, account: enabled.find((a) => a.email === s.email), r: Math.random() }))
+      .sort((a, b) => (b.s.remaining - a.s.remaining) || (a.r - b.r));
+
+    let suppressed = new Set();
+    const candidateEmails = [
+      ...followUps.slice(0, 60).map((f) => f.lead.email),
+      ...fresh['free-leads'].slice(0, 40).map((l) => l.email),
+      ...fresh.offer.slice(0, 40).map((l) => l.email),
+    ].map(lower);
+    if (candidateEmails.length) {
+      try {
+        const flags = await kv.smismember(SUPPRESSION_KEY, candidateEmails);
+        suppressed = new Set(candidateEmails.filter((_, i) => flags[i] === 1 || flags[i] === true));
+      } catch {}
     }
 
-    // ── INBOX ↔ CAMPAIGN ROUTING ──
-    // Each inbox belongs to one campaign ('offer' by default, or 'free-leads'
-    // when assigned on the Inboxes page). An inbox only sends day-0 emails to
-    // leads of ITS campaign, so the two campaigns run side by side, one per
-    // inbox group. Follow-ups always stay on the thread's original inbox.
-    let inboxCampaignMap = {};
-    try { inboxCampaignMap = (await kv.hgetall('inbox_campaigns')) || {}; } catch {}
-    const campaignOfLead = (l) =>
-      String(l?.campaign || '').toLowerCase() === 'free-leads' ? 'free-leads' : 'offer';
-    const campaignOfInbox = (em) =>
-      String(inboxCampaignMap[(em || '').toLowerCase()] || '').toLowerCase() === 'free-leads' ? 'free-leads' : 'offer';
+    const blockedFollowUps = { byDisabledInbox: 0, byCap: 0, byHold: 0, suppressed: 0 };
+    let usedInbox = null;
 
-    const { searchParams: params } = new URL(request.url);
-    const batchSize = parseInt(params.get('batch') || '0') || 0;
-
-    // Check daily limits for each account
-    const accountStatus = [];
-    let totalRemaining = 0;
-
-    for (const acc of accounts) {
-      const sent = await getDailySendCount(acc.email);
-      const cap = await getInboxCap(acc.email);
-      const remaining = Math.max(0, cap - sent);
-      accountStatus.push({ email: acc.email, sentToday: sent, remaining });
-      totalRemaining += remaining;
-    }
-
-    if (totalRemaining === 0) {
-      await releaseLock();
-      return Response.json({
-        success: true,
-        message: 'Daily limit reached for all accounts',
-        timestamp: new Date().toISOString(),
-        sent: 0,
-        accountStatus,
-      });
-    }
-
-    // ── ANTI-BURST GATE (applies to every mode) ──
-    // DYNAMIC EVEN SPACING: the gap between any two sends is the workday time
-    // remaining divided by the emails remaining, so the day's emails land in
-    // equal steps instead of a burst. e.g. 24 left over 8 h → ~20 min apart;
-    // with two inboxes taking turns that's ~40 min per inbox.
-    const evenGapMs = computeEvenGapMs(totalRemaining);
-    if (await tooSoonToSend(evenGapMs)) {
-      await releaseLock();
-      return Response.json({
-        success: true,
-        paced: true,
-        sent: 0,
-        message: `Spacing sends evenly across the workday — ~${Math.round(evenGapMs / 60000)} min between emails right now.`,
-        timestamp: new Date().toISOString(),
-        accountStatus,
-      });
-    }
-
-    // ============================================================
-    // SCHEDULED MODE (default): ONE email per heartbeat
-    // The heartbeat pings every ~10 min; each account also has its own
-    // randomized timer, and the anti-burst gate above keeps every send
-    // at least MIN_SEND_GAP_MS apart. Net effect: a steady drip.
-    // ============================================================
-    // POSTER PRIORITY (all modes): due follow-ups (day-3 flyer / day-7 nudge)
-    // go out first — one per cycle — so every lead gets the poster on
-    // schedule even when the heartbeat calls ?batch=N.
-    {
-      const fuToday = await getFollowupCountToday();
-      if (fuToday < FOLLOWUP_DAILY_CAP && !(await tooSoonToSend())) {
-        const fu = await sendOneDueFollowUp(accounts);
-        if (fu.sent) {
-          await releaseLock();
-          return Response.json({
-            success: true,
-            mode: 'follow-up',
-            sent: 0,
-            followUpsSent: 1,
-            detail: fu.detail,
-            timestamp: new Date().toISOString(),
-            accountStatus,
-          });
-        }
+    // 1) FOLLOW-UPS FIRST (oldest due), on the thread's original inbox.
+    for (const fu of followUps) {
+      if (sentDetail) break;
+      const email = lower(fu.lead.email);
+      const inbox = lower(fu.lead.account_used);
+      const status = accountStatus.find((s) => s.email === inbox);
+      if (!status) { blockedFollowUps.byDisabledInbox++; continue; }
+      if (status.remaining <= 0) { blockedFollowUps.byCap++; continue; }
+      if (!status.ready || status.skipped) { blockedFollowUps.byHold++; continue; }
+      if (suppressed.has(email)) {
+        blockedFollowUps.suppressed++;
+        await patchLead(email, { status: 'unsubscribed', suppressed: true });
+        continue;
       }
+      const account = enabled.find((a) => a.email === inbox);
+      const r = await sendTouch({ account, lead: fu.lead, day: fu.day, today, startedAt });
+      results.details.push(r.detail);
+      if (r.ok) { results.followUpsSent++; sentDetail = r.detail; usedInbox = account; }
+      else { results.failed++; if (r.stop) { status.skipped = 'failed this heartbeat'; } }
+      if (r.ok || r.stop) break;
     }
 
-    if (batchSize === 0) {
-      const scheduleStatus = await getAccountScheduleStatus(accounts);
+    // 2) FRESH DAY-0 on the most-behind ready inbox, its own campaign only.
+    if (!sentDetail) {
+      for (const { s, account } of order) {
+        if (sentDetail || s.skipped) continue;
+        const pool = fresh[s.campaign];
+        let scanned = 0;
+        for (const lead of pool) {
+          if (scanned++ >= 40) break;
+          const email = lower(lead.email);
+          if (suppressed.has(email)) { results.skipped++; await patchLead(email, { status: 'unsubscribed', suppressed: true }); continue; }
+          if (isRoleEmail(email)) { results.skipped++; await patchLead(email, { status: 'skipped_generic' }); continue; }
+          const companyName = lead.company || lead.company_name || '';
+          if (!companyName || companyName === 'your business') { results.skipped++; await patchLead(email, { status: 'skipped_no_company' }); continue; }
+          const company = normalizeCompanyName(companyName);
+          let dup = false;
+          try { dup = company ? (await kv.sismember(COMPANY_SENT_KEY, company)) === 1 : false; } catch {}
+          if (dup) { results.skipped++; await patchLead(email, { status: 'skipped_dedup' }); continue; }
 
-      // ── SELF-BALANCING INBOX SELECTION ──
-      // Every eligible inbox (switch on, cap not hit) is a candidate. We sort
-      // so the inbox that is FURTHEST BEHIND today (most remaining) goes first;
-      // ties are broken at random. Because each send decrements that inbox's
-      // remaining, the two inboxes automatically take turns — neither can race
-      // ahead of the other, and both end the day at the same count. This is the
-      // fix for "only one Gmail is sending": selection is by workload now, not
-      // by fixed list order.
-      const readyAccounts = [];
-      for (let i = 0; i < accounts.length; i++) {
-        if (accountStatus[i].remaining <= 0) continue;
-        readyAccounts.push({ account: accounts[i], stat: accountStatus[i], __r: Math.random() });
-      }
-      readyAccounts.sort((a, b) => {
-        const diff = b.stat.remaining - a.stat.remaining; // most-behind first
-        return diff !== 0 ? diff : a.__r - b.__r;         // random tie-break
-      });
+          if (!(await claimLead(email))) { results.skipped++; continue; }
 
-      if (readyAccounts.length === 0) {
-        await releaseLock();
-        return Response.json({
-          success: true,
-          mode: 'scheduled',
-          message: 'No accounts ready to send right now',
-          timestamp: new Date().toISOString(),
-          sent: 0,
-          accountStatus,
-          scheduleStatus,
-        });
-      }
-
-      // Pool is deliberately deep so BOTH campaigns are represented in it —
-      // a shallow pool could contain only one campaign's leads and starve the
-      // other campaign's inbox.
-      const unsent = await getUnsent(readyAccounts.length * 30);
-      if (unsent.length === 0) {
-        await releaseLock();
-        return Response.json({
-          success: true,
-          mode: 'scheduled',
-          message: 'No unsent leads available',
-          timestamp: new Date().toISOString(),
-          sent: 0,
-          accountStatus,
-          scheduleStatus,
-        });
-      }
-
-      const results = { sent: 0, failed: 0, skipped: 0, details: [] };
-      let leadIdx = 0;
-      const usedLeadEmails = new Set(); // a lead is offered to at most one inbox per cycle
-
-      // POSTER PRIORITY: when day-3/day-7 follow-ups are due and the daily
-      // follow-up cap isn't hit, this cycle sends a follow-up (the
-      // personalized flyer on day 3) instead of a fresh email. Keeps the
-      // one-email-per-cycle drip; fresh outreach resumes once follow-ups
-      // are caught up or the cap is reached.
-      // Follow-ups already got first refusal in the preflight above; if one
-      // was due and sendable it returned already. Never blank the fresh loop.
-      const preferFollowUp = false;
-
-      for (const { account, stat } of (preferFollowUp ? [] : readyAccounts)) {
-        let sentFromThisAccount = false;
-        const wantCampaign = campaignOfInbox(account.email);
-
-        let scanIdx = 0;
-        while (scanIdx < unsent.length && !sentFromThisAccount) {
-          const lead = unsent[scanIdx++];
-          const leadKey = (lead.email || '').toLowerCase();
-          if (usedLeadEmails.has(leadKey)) continue;
-          // Campaign routing: this inbox only takes its own campaign's leads.
-          if (campaignOfLead(lead) !== wantCampaign) continue;
-          usedLeadEmails.add(leadKey);
-
-          const claimed = await claimLead(lead.email);
-          if (!claimed) { results.skipped++; continue; }
-
-          if (isGenericEmail(lead.email)) {
-            results.skipped++;
-            try {
-              const existing = await kv.hget(LEADS_KEY, lead.email.toLowerCase());
-              if (existing) await kv.hset(LEADS_KEY, { [lead.email.toLowerCase()]: { ...existing, status: 'skipped_generic', updatedAt: new Date().toISOString() } });
-            } catch {}
-            continue;
-          }
-
-          const qualifiedLead = {
-            ...lead,
-            email: lead.email.toLowerCase().trim(),
-            industry: lead.industry || 'business',
-            company_name: lead.company || lead.company_name || null,
-            city: lead.city || 'USA',
-            first_name: lead.first_name || lead.name?.split(/[\s,]/)[0] || null,
-          };
-
-          if (!qualifiedLead.company_name || qualifiedLead.company_name === 'your business') {
-            results.skipped++;
-            try {
-              const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-              if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_no_company', updatedAt: new Date().toISOString() } });
-            } catch {}
-            continue;
-          }
-
-          const companyAlreadySent = await isCompanyAlreadySent(qualifiedLead.company_name);
-          if (companyAlreadySent) {
-            results.skipped++;
-            try {
-              const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-              if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_dedup', updatedAt: new Date().toISOString() } });
-            } catch {}
-            continue;
-          }
-
-          // Email verification — MX + SMTP check before sending
-          const verification = await verifyEmail(qualifiedLead.email);
+          const verification = await verifyEmail(email);
           if (!verification.valid) {
             results.skipped++;
-            results.details.push({ to: qualifiedLead.email, status: 'skipped', reason: `verification failed: ${verification.reason}` });
-            try {
-              const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-              if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_unverified', verify_reason: verification.reason, updatedAt: new Date().toISOString() } });
-            } catch {}
+            results.details.push({ to: email, status: 'skipped', reason: `verification failed: ${verification.reason}` });
+            await releaseClaim(email, 'skipped_unverified', { verify_reason: verification.reason });
             continue;
           }
 
-          const emailContent = await enhanceWithAI(qualifiedLead, getEmailForSequenceDay(qualifiedLead, 0));
-          const bodyParts = emailContent.body.split('---');
-          const rawBody = bodyParts[0];
-                    const unsubNote = bodyParts[1] || "Not the right fit? Just reply STOP and I will not email you again.";
-          const cleanBody = stripPlainTextSignature(rawBody);
-
-          const htmlParagraphs = cleanBody
-            .split(/\n\n+/)
-            .filter(p => p.trim().length > 0)
-            .map(p => {
-              let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); escaped = escaped.replace(/aviance\.online/g, '<a href="https://www.aviance.online" style="color:#0a0a0a;">aviance.online</a>');
-              return `<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">${escaped}</p>`;
-            })
-            .join('\n');
-
-          const htmlSignature = `
-          <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
-                        Aviance — Guaranteed booked sales calls<br>
-            <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
-          </div>`;
-
-          const htmlUnsubscribe = unsubNote
-            ? `<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">${unsubNote.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
-            : '';
-
-          const htmlBody = flyerHtml(qualifiedLead) + htmlUnsubscribe;
-
-          try {
-            const sendResult = await sendEmail(account, {
-              to: qualifiedLead.email,
-              subject: emailContent.subject,
-              html: htmlBody,
-              text: emailContent.body,
-            });
-
-            if (sendResult.success) {
-              results.sent++;
-              stat.remaining--;
-              stat.sentToday++;
-              sentFromThisAccount = true;
-
-              await incrementDailySend(account.email);
-              await markLeadAsSent(qualifiedLead.email, account.email, emailContent.subject, sendResult.messageId);
-              await markCompanySent(qualifiedLead.company_name);
-              await scheduleNextSend(account.email, Math.max(1, stat.remaining));
-              await recordGlobalSend();
-
-              try {
-                await logSentEmail({
-                  to: qualifiedLead.email, from: account.email,
-                  company: qualifiedLead.company_name, industry: qualifiedLead.industry,
-                  subject: emailContent.subject, bodyPreview: emailContent.body.substring(0, 200),
-                  status: 'sent', messageId: sendResult.messageId,
-                  sequenceDay: 0, source: 'auto-send-scheduled',
-                });
-              } catch {}
-
-              results.details.push({ to: qualifiedLead.email, from: account.email, company: qualifiedLead.company_name, status: 'sent' });
-            } else {
-              results.failed++;
-              try {
-                const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-                if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'pending', updatedAt: new Date().toISOString() } });
-              } catch {}
-              results.details.push({ to: qualifiedLead.email, from: account.email, status: 'failed', error: sendResult.error });
-            }
-          } catch (err) {
-            results.failed++;
-            try {
-              const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-              if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'pending', updatedAt: new Date().toISOString() } });
-            } catch {}
-            results.details.push({ to: qualifiedLead.email, status: 'error', error: err.message });
-          }
-
-        }
-        // ONE email per heartbeat: stop after the first successful send so
-        // sends stay evenly spread through the day (never a burst).
-        if (sentFromThisAccount) break;
-      }
-      // FOLLOW-UP SENDING (scheduled mode): one due follow-up per cycle via
-      // the shared sender — day-3 sends the personalized flyer.
-      const followupsToday = await getFollowupCountToday();
-      let followUpsSent = 0;
-      console.log('[diag] followup gate: freshSent=' + results.sent + ' fuToday=' + followupsToday + ' tooSoon=' + (await tooSoonToSend()));
-      if (results.sent === 0 && followupsToday < FOLLOWUP_DAILY_CAP && !(await tooSoonToSend())) {
-        const fu = await sendOneDueFollowUp(accounts);
-        if (fu.sent) { followUpsSent = 1; results.details.push(fu.detail); }
-      }
-
-      // NOTE: totalSent is already incremented by logSentEmail() — no hincrby here
-
-      await releaseLock();
-      return Response.json({
-        success: true,
-        mode: 'scheduled',
-        timestamp: new Date().toISOString(),
-        today: getTodayKey(),
-        ...results,
-        followUpsSent,
-        accountStatus,
-        scheduleStatus,
-      });
-    }
-    // ============================================================
-    // BATCH MODE: Original behavior when ?batch=N is specified
-    // ============================================================
-    const effectiveLimit = Math.min(batchSize, totalRemaining);
-    const unsent = await getUnsent(effectiveLimit);
-
-    if (unsent.length === 0) {
-      await releaseLock();
-      return Response.json({
-        success: true,
-        mode: 'batch',
-        message: 'No unsent leads available',
-        timestamp: new Date().toISOString(),
-        sent: 0,
-        accountStatus,
-      });
-    }
-
-    const startAccountIdx = await getNextAccountIndex(accounts.length);
-    let accountIndex = startAccountIdx;
-    const results = { sent: 0, failed: 0, skipped: 0, details: [] };
-
-    for (const lead of unsent) {
-      // Anti-burst: even in batch mode, never send two emails within the gap.
-      if (await tooSoonToSend()) break;
-      const claimed = await claimLead(lead.email);
-      if (!claimed) {
-        results.skipped++;
-        results.details.push({ to: lead.email, status: 'skipped', reason: 'already claimed or sent' });
-        continue;
-      }
-
-      if (isGenericEmail(lead.email)) {
-        results.skipped++;
-        try {
-          const existing = await kv.hget(LEADS_KEY, lead.email.toLowerCase());
-          if (existing) await kv.hset(LEADS_KEY, { [lead.email.toLowerCase()]: { ...existing, status: 'skipped_generic', updatedAt: new Date().toISOString() } });
-        } catch {}
-        continue;
-      }
-
-      let found = false;
-      let attempts = 0;
-      let fallbackIdx = -1;
-      while (attempts < accounts.length) {
-        const idx = accountIndex % accounts.length;
-        const accStat = accountStatus[idx];
-        if (accStat.remaining > 0) {
-          // Prefer an inbox assigned to this lead's campaign; remember any
-          // free inbox as a soft fallback so batch mode never stalls.
-          if (campaignOfInbox(accounts[idx].email) === campaignOfLead(lead)) { found = true; break; }
-          if (fallbackIdx === -1) fallbackIdx = idx;
-        }
-        accountIndex++;
-        attempts++;
-      }
-      if (!found && fallbackIdx !== -1) { accountIndex = fallbackIdx; found = true; }
-      if (!found) break;
-
-      const accIdx = accountIndex % accounts.length;
-      const account = accounts[accIdx];
-      const accStat = accountStatus[accIdx];
-
-      const qualifiedLead = {
-        ...lead,
-        email: lead.email.toLowerCase().trim(),
-        industry: lead.industry || 'business',
-        company_name: lead.company || lead.company_name || null,
-        city: lead.city || 'USA',
-        first_name: lead.first_name || lead.name?.split(/[\s,]/)[0] || null,
-      };
-
-      if (!qualifiedLead.company_name || qualifiedLead.company_name === 'your business') {
-        results.skipped++;
-        try {
-          const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-          if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_no_company', updatedAt: new Date().toISOString() } });
-        } catch {}
-        continue;
-      }
-
-      const companyAlreadySent = await isCompanyAlreadySent(qualifiedLead.company_name);
-      if (companyAlreadySent) {
-        results.skipped++;
-        try {
-          const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-          if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_dedup', updatedAt: new Date().toISOString() } });
-        } catch {}
-        continue;
-      }
-
-      // Email verification — MX + SMTP check before sending
-      const verification = await verifyEmail(qualifiedLead.email);
-      if (!verification.valid) {
-        results.skipped++;
-        results.details.push({ to: qualifiedLead.email, status: 'skipped', reason: `verification failed: ${verification.reason}` });
-        try {
-          const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-          if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'skipped_unverified', verify_reason: verification.reason, updatedAt: new Date().toISOString() } });
-        } catch {}
-        continue;
-      }
-
-      const emailContent = await enhanceWithAI(qualifiedLead, getEmailForSequenceDay(qualifiedLead, 0));
-      const bodyParts = emailContent.body.split('---');
-      const rawBody = bodyParts[0];
-            const unsubNote = bodyParts[1] || "Not the right fit? Just reply STOP and I will not email you again.";
-      const cleanBody = stripPlainTextSignature(rawBody);
-
-      const htmlParagraphs = cleanBody
-        .split(/\n\n+/)
-        .filter(p => p.trim().length > 0)
-        .map(p => {
-          let escaped = p.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); escaped = escaped.replace(/aviance\.online/g, '<a href="https://www.aviance.online" style="color:#0a0a0a;">aviance.online</a>');
-          return `<p style="margin:0 0 14px 0;font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">${escaped}</p>`;
-        })
-        .join('\n');
-
-      const htmlSignature = `
-      <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:13px;color:#555;">
-                Aviance — Guaranteed booked sales calls<br>
-        <a href="https://www.aviance.online" style="color:#555;text-decoration:none;">aviance.online</a>
-      </div>`;
-
-      const htmlUnsubscribe = unsubNote
-        ? `<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">${unsubNote.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
-        : '';
-
-      const htmlBody = flyerHtml(qualifiedLead) + htmlUnsubscribe;
-
-      try {
-        const sendResult = await sendEmail(account, {
-          to: qualifiedLead.email,
-          subject: emailContent.subject,
-          html: htmlBody,
-          text: emailContent.body,
-        });
-
-        if (sendResult.success) {
-          results.sent++;
-          accStat.remaining--;
-          accStat.sentToday++;
-          await incrementDailySend(account.email);
-          await markLeadAsSent(qualifiedLead.email, account.email, emailContent.subject, sendResult.messageId);
-          await markCompanySent(qualifiedLead.company_name);
-          await recordGlobalSend();
-          try {
-            await logSentEmail({
-              to: qualifiedLead.email, from: account.email,
-              company: qualifiedLead.company_name, industry: qualifiedLead.industry,
-              subject: emailContent.subject, bodyPreview: emailContent.body.substring(0, 200),
-              status: 'sent', messageId: sendResult.messageId,
-              sequenceDay: 0, source: 'auto-send-batch',
-            });
-          } catch {}
-          results.details.push({ to: qualifiedLead.email, from: account.email, company: qualifiedLead.company_name, status: 'sent' });
-        } else {
+          const r = await sendTouch({ account, lead, day: 0, today, startedAt });
+          results.details.push(r.detail);
+          if (r.ok) { results.sent++; sentDetail = r.detail; usedInbox = account; break; }
           results.failed++;
-          try {
-            const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-            if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'pending', updatedAt: new Date().toISOString() } });
-          } catch {}
-          results.details.push({ to: qualifiedLead.email, from: account.email, status: 'failed', error: sendResult.error });
+          if (r.detail.outcome === 'bounced') results.bounced++;
+          if (r.stop) { s.skipped = 'failed this heartbeat'; break; }
         }
-      } catch (err) {
-        results.failed++;
-        try {
-          const existing = await kv.hget(LEADS_KEY, qualifiedLead.email);
-          if (existing) await kv.hset(LEADS_KEY, { [qualifiedLead.email]: { ...existing, status: 'pending', updatedAt: new Date().toISOString() } });
-        } catch {}
-        results.details.push({ to: qualifiedLead.email, status: 'error', error: err.message });
-      }
-
-      accountIndex++;
-      if (results.sent + results.failed < unsent.length) {
-        await new Promise(r => setTimeout(r, randomDelay()));
       }
     }
 
-    // NOTE: totalSent is already incremented by logSentEmail() — no hincrby here
+    // 3) Pace the inbox that just sent.
+    if (sentDetail && usedInbox) {
+      const st = accountStatus.find((s) => s.email === usedInbox.email);
+      const remainingAfter = Math.max(0, (st ? st.remaining : 1) - 1);
+      const next = computeNextSendAt(remainingAfter, new Date());
+      const pacing = {
+        nextSendAt: next ? next.at.toISOString() : null,
+        gapMin: next ? next.gapMin : null,
+        lastSendAt: new Date().toISOString(),
+        remaining: remainingAfter,
+      };
+      try { await kv.hset(PACING_KEY, { [usedInbox.email]: pacing }); } catch {}
+      if (st) { st.sentToday++; st.remaining = remainingAfter; st.nextSendAt = pacing.nextSendAt; st.ready = false; }
+    }
 
-    await releaseLock();
-    return Response.json({
-      success: true,
-      mode: 'batch',
-      timestamp: new Date().toISOString(),
-      today: getTodayKey(),
-      accountUsed: accounts[startAccountIdx % accounts.length]?.email,
-      ...results,
-      accountStatus,
-    });
+    results.blockedFollowUps = blockedFollowUps;
+    results.pools = { followUpsDue: followUps.length, freshFreeLeads: fresh['free-leads'].length, freshOffer: fresh.offer.length, stuckReaped: Math.min(stuck.length, 20) };
   } catch (err) {
-    await releaseLock();
-    return Response.json({ error: err.message }, { status: 500 });
+    await releaseLock(lockToken);
+    return Response.json({ error: err.message, timestamp: new Date().toISOString() }, { status: 500 });
   }
+  await releaseLock(lockToken);
+
+  // ── After the send, outside the lock: replies, then names (budgeted). ──
+  const replyCheck = await maybeRunReplyCheck(true, deadlineMs);
+  let enrich = null;
+  if (Date.now() < deadlineMs - 30000) {
+    try { enrich = await maybeEnrichNames(); } catch (err) { enrich = { error: err.message }; }
+  }
+
+  return jsonOk({
+    mode: 'scheduled',
+    today,
+    ...results,
+    detail: sentDetail,
+    accountStatus,
+    replyCheck,
+    enrich,
+    durationMs: Date.now() - startedAt,
+  });
 }
