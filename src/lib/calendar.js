@@ -147,31 +147,97 @@ export async function getBookings() {
 }
 
 /** Create or overwrite a booking at a slot instant. */
-export async function setBooking(iso, data) {
-  const entry = {
+/** How long a bot-proposed hold stays reserved before the slot frees itself. */
+export const PROPOSAL_TTL_MS = 72 * 60 * 60 * 1000;
+
+/** Minimum notice before a proposed slot (never "10:00 today" for a 9:30 reply). */
+export const MIN_LEAD_TIME_MS = 20 * 60 * 60 * 1000;
+
+function buildEntry(iso, data) {
+  const status = data.status === 'confirmed' ? 'confirmed' : 'proposed';
+  return {
     start: iso,
     prospectEmail: data.prospectEmail || '',
     company: data.company || '',
     leadEmail: (data.leadEmail || data.prospectEmail || '').toLowerCase(),
-    status: data.status === 'confirmed' ? 'confirmed' : 'proposed',
+    status,
     note: data.note || '',
     createdAt: data.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    // Proposals expire so unanswered replies can't hold the calendar forever.
+    expiresAt: status === 'proposed'
+      ? (data.expiresAt || new Date(Date.now() + PROPOSAL_TTL_MS).toISOString())
+      : null,
   };
+}
+
+/** A 'proposed' hold whose expiry has passed no longer blocks the slot. */
+export function isExpiredHold(entry, now = Date.now()) {
+  return Boolean(entry && entry.status === 'proposed' && entry.expiresAt && new Date(entry.expiresAt).getTime() < now);
+}
+
+/** Create or overwrite a booking at a slot instant. */
+export async function setBooking(iso, data) {
+  const entry = buildEntry(iso, data);
   await kv.hset(BOOKINGS_KEY, { [iso]: entry });
   return entry;
+}
+
+/**
+ * Hold a slot only if nobody else holds it (atomic HSETNX). An expired
+ * proposal is treated as free. Returns the entry, or null when taken.
+ */
+export async function holdSlot(iso, data) {
+  const entry = buildEntry(iso, { ...data, status: 'proposed' });
+  const ok = await kv.hsetnx(BOOKINGS_KEY, iso, entry);
+  if (ok === 1 || ok === true) return entry;
+  const existing = await kv.hget(BOOKINGS_KEY, iso);
+  if (isExpiredHold(existing)) {
+    await kv.hset(BOOKINGS_KEY, { [iso]: entry });
+    return entry;
+  }
+  return null;
 }
 
 export async function updateBookingStatus(iso, status) {
   const existing = await kv.hget(BOOKINGS_KEY, iso);
   if (!existing) return null;
   const entry = { ...existing, status, updatedAt: new Date().toISOString() };
+  if (status === 'confirmed') {
+    entry.expiresAt = null;
+    entry.confirmedAt = entry.confirmedAt || new Date().toISOString();
+  }
   await kv.hset(BOOKINGS_KEY, { [iso]: entry });
+  // Confirming one of a lead's proposed times frees the others automatically.
+  if (status === 'confirmed' && entry.leadEmail) {
+    await releaseProposals(entry.leadEmail, [iso]);
+  }
   return entry;
 }
 
 export async function removeBooking(iso) {
   try { await kv.hdel(BOOKINGS_KEY, iso); return true; } catch { return false; }
+}
+
+/** Drop every 'proposed' hold for a lead except the ones in `keep`. */
+export async function releaseProposals(leadEmail, keep = []) {
+  const key = String(leadEmail || '').toLowerCase();
+  if (!key) return 0;
+  const bookings = await getBookings();
+  const keepSet = new Set(keep);
+  const drop = Object.entries(bookings)
+    .filter(([iso, b]) => b && b.status === 'proposed' && String(b.leadEmail || '').toLowerCase() === key && !keepSet.has(iso))
+    .map(([iso]) => iso);
+  if (drop.length) { try { await kv.hdel(BOOKINGS_KEY, ...drop); } catch {} }
+  return drop.length;
+}
+
+/** Existing (unexpired) proposals for a lead, soonest first. */
+export function proposalsFor(bookings, leadEmail, now = Date.now()) {
+  const key = String(leadEmail || '').toLowerCase();
+  return Object.values(bookings || {})
+    .filter((b) => b && b.status === 'proposed' && String(b.leadEmail || '').toLowerCase() === key && !isExpiredHold(b, now) && new Date(b.start).getTime() > now)
+    .sort((a, b) => a.start.localeCompare(b.start));
 }
 
 // ---------------------------------------------------------------------------
@@ -193,14 +259,23 @@ export function computeOpenSlots(availability, bookings, opts = {}) {
   const days = opts.days || 14;
   const limit = opts.limit || 60;
   const slotMin = availability.slotMinutes || 30;
-  const taken = new Set(Object.keys(bookings || {}));
+  const minStart = now.getTime() + (opts.minLeadMs || 0);
+  const taken = new Set(
+    Object.entries(bookings || {})
+      .filter(([, b]) => !isExpiredHold(b, now.getTime()))
+      .map(([iso]) => iso)
+  );
   const out = [];
 
+  // Iterate ET calendar days by date arithmetic (not +24h steps) so a DST
+  // change day can never be skipped or visited twice.
+  const today = tzDateParts(now, US_TZ);
   for (let i = 0; i < days && out.length < limit; i++) {
-    // The ET calendar date `i` days ahead of now.
-    const probe = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
-    const { y, m, d } = tzDateParts(probe, US_TZ);
-    const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    const probe = new Date(Date.UTC(today.y, today.m - 1, today.d + i, 12));
+    const y = probe.getUTCFullYear();
+    const m = probe.getUTCMonth() + 1;
+    const d = probe.getUTCDate();
+    const weekday = probe.getUTCDay();
     const windows = availability.windows?.[weekday] || [];
 
     for (const [startStr, endStr] of windows) {
@@ -213,7 +288,7 @@ export function computeOpenSlots(availability, bookings, opts = {}) {
         const hh = Math.floor(t / 60);
         const mm = t % 60;
         const inst = zonedWallToUtc(y, m, d, hh, mm, US_TZ);
-        if (inst.getTime() <= now.getTime()) continue; // no past slots
+        if (inst.getTime() < minStart) continue;        // no past / too-soon slots
         const iso = inst.toISOString();
         if (taken.has(iso)) continue;                  // already booked/held
         out.push({ ...labelInstant(inst), durationMin: slotMin });
@@ -232,18 +307,67 @@ export function computeOpenSlots(availability, bookings, opts = {}) {
  * HOLD them (mark as 'proposed') for a given lead so they can't be offered to
  * anyone else. Returns the labelled slots it proposed.
  */
+/**
+ * Pick `count` open slots spread across different days and dayparts (a lead
+ * choosing between "Tue 10:00, Thu 2:00, next Mon 11:00" converts better than
+ * three consecutive half-hours), each at least MIN_LEAD_TIME_MS out.
+ */
+export function pickSpreadSlots(open, count = 3) {
+  const chosen = [];
+  const usedDays = new Set();
+  const usedDayparts = new Set();
+  const daypart = (s) => `${s.usDate}|${/AM/i.test(s.usTime) ? 'am' : 'pm'}`;
+  // Pass 1: different days, alternating dayparts.
+  for (const s of open) {
+    if (chosen.length >= count) break;
+    if (usedDays.has(s.usDate)) continue;
+    const wantPm = chosen.length % 2 === 1;
+    const isPm = /PM/i.test(s.usTime);
+    if (isPm !== wantPm && open.some((o) => !usedDays.has(o.usDate) && o.usDate === s.usDate && /PM/i.test(o.usTime) === wantPm)) continue;
+    chosen.push(s); usedDays.add(s.usDate); usedDayparts.add(daypart(s));
+  }
+  // Pass 2: fill from any remaining daypart, then anything left.
+  for (const s of open) {
+    if (chosen.length >= count) break;
+    if (chosen.includes(s) || usedDayparts.has(daypart(s))) continue;
+    chosen.push(s); usedDayparts.add(daypart(s));
+  }
+  for (const s of open) {
+    if (chosen.length >= count) break;
+    if (!chosen.includes(s)) chosen.push(s);
+  }
+  return chosen.sort((a, b) => a.iso.localeCompare(b.iso));
+}
+
+/**
+ * Convenience for the bot: fetch `count` open slots and HOLD them (status
+ * 'proposed') for a lead so they can't be offered to anyone else. Holds are
+ * atomic (HSETNX) so two bots in flight never offer the same time. If the lead
+ * already has live proposals they are re-used instead of holding more.
+ * Returns the labelled slots it proposed.
+ */
 export async function proposeSlotsForLead(leadEmail, company, count = 3) {
   const [availability, bookings] = await Promise.all([getAvailability(), getBookings()]);
-  const open = computeOpenSlots(availability, bookings, { days: 14, limit: count });
-  const chosen = open.slice(0, count);
-  for (const slot of chosen) {
-    await setBooking(slot.iso, {
+  const existing = proposalsFor(bookings, leadEmail);
+  if (existing.length >= Math.min(count, 2)) {
+    return existing.slice(0, count).map((b) => ({ ...labelInstant(new Date(b.start)), durationMin: availability.slotMinutes || 30 }));
+  }
+  const open = computeOpenSlots(availability, bookings, { days: 14, limit: 60, minLeadMs: MIN_LEAD_TIME_MS });
+  const wanted = pickSpreadSlots(open, count);
+  const held = [];
+  const tried = new Set();
+  const candidates = [...wanted, ...open.filter((s) => !wanted.includes(s))];
+  for (const slot of candidates) {
+    if (held.length >= count) break;
+    if (tried.has(slot.iso)) continue;
+    tried.add(slot.iso);
+    const ok = await holdSlot(slot.iso, {
       prospectEmail: leadEmail,
       leadEmail,
       company,
-      status: 'proposed',
       note: 'Auto-proposed by reply bot',
     });
+    if (ok) held.push(slot);
   }
-  return chosen;
+  return held.sort((a, b) => a.iso.localeCompare(b.iso));
 }

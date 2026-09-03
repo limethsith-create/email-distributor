@@ -123,27 +123,30 @@ function pickRandom(arr) {
 
 function templateFor(lead) {
   const key = (lead.industry || '').toLowerCase().trim();
-  if (INDUSTRY_TEMPLATES[key]) return INDUSTRY_TEMPLATES[key];
+  if (INDUSTRY_TEMPLATES[key]) return { ...INDUSTRY_TEMPLATES[key], key };
   if (/\bmsp\b|managed\s*it|managed\s*service|it\s*support|it\s*service|network|cyber|security|computer|telecom|cloud|\bit\b|information\s*technology/i.test(key)) {
-    return INDUSTRY_TEMPLATES.msp;
+    return { ...INDUSTRY_TEMPLATES.msp, key: 'msp' };
   }
   for (const k of Object.keys(INDUSTRY_TEMPLATES)) {
-    if (key.includes(k)) return INDUSTRY_TEMPLATES[k];
+    if (key.includes(k)) return { ...INDUSTRY_TEMPLATES[k], key: k };
   }
-  return DEFAULT_TEMPLATE;
+  return { ...DEFAULT_TEMPLATE, key: 'default' };
 }
 
-function subjectFrom(pool, lead, company) {
-  return pickRandom(pool)
+/** Pick a subject variant; returns { subject, variant } so sends can record which line went out. */
+function subjectFrom(pool, lead, company, poolName) {
+  const idx = Math.floor(Math.random() * pool.length);
+  const subject = pool[idx]
     .replace(/{{company_name}}/g, company)
     .replace(/{{first_name}}/g, (lead.first_name || '').trim());
+  return { subject, variant: `${poolName}#${idx}` };
 }
 
 function pickPool(lead, named, companyPool, neutral) {
   const name = (lead.first_name || '').trim();
-  if (name) return named;
-  if (lead.company_name || lead.company) return companyPool;
-  return neutral;
+  if (name) return { pool: named, name: 'named' };
+  if (lead.company_name || lead.company) return { pool: companyPool, name: 'company' };
+  return { pool: neutral, name: 'neutral' };
 }
 
 const SIGNATURE = '— The Aviance Team\nGuaranteed booked sales calls · aviance.online';
@@ -160,10 +163,8 @@ function offerDay0(lead) {
   const name = (lead.first_name || '').trim();
   const hi = name ? `Hi ${name},` : 'Hello,';
 
-  const subject = subjectFrom(
-    pickPool(lead, OFFER_SUBJECTS_NAMED, OFFER_SUBJECTS_COMPANY, OFFER_SUBJECTS_NEUTRAL),
-    lead, company
-  );
+  const picked = pickPool(lead, OFFER_SUBJECTS_NAMED, OFFER_SUBJECTS_COMPANY, OFFER_SUBJECTS_NEUTRAL);
+  const { subject, variant } = subjectFrom(picked.pool, lead, company, `offer-${picked.name}`);
 
   const body = `${hi}
 
@@ -175,7 +176,7 @@ Worth me sending the exact numbers for ${company}? A one-word reply — "details
 
 ${SIGNATURE}`;
 
-  return { subject, body };
+  return { subject, body, variant, template: t.key || 'default' };
 }
 
 function offerDay3(lead) {
@@ -222,10 +223,8 @@ function freeLeadsDay0(lead) {
   const name = (lead.first_name || '').trim();
   const hi = name ? `Hi ${name},` : 'Hello,';
 
-  const subject = subjectFrom(
-    pickPool(lead, FREE_SUBJECTS_NAMED, FREE_SUBJECTS_COMPANY, FREE_SUBJECTS_NEUTRAL),
-    lead, company
-  );
+  const picked = pickPool(lead, FREE_SUBJECTS_NAMED, FREE_SUBJECTS_COMPANY, FREE_SUBJECTS_NEUTRAL);
+  const { subject, variant } = subjectFrom(picked.pool, lead, company, `free-${picked.name}`);
 
   const body = `${hi}
 
@@ -237,7 +236,7 @@ Want it? Reply "SEND IT" and it is in your inbox the same day.
 
 ${SIGNATURE}`;
 
-  return { subject, body };
+  return { subject, body, variant, template: 'free-leads' };
 }
 
 function freeLeadsDay3(lead) {
@@ -306,9 +305,9 @@ Rewrite ONLY the opening pain sentence so it feels specific to this company and 
 Original:
 ${baseEmail.body}`;
 
-    const enhanced = await geminiGenerate(apiKey, prompt, { temperature: 0.7, maxOutputTokens: 2048 });
-    if (enhanced && enhanced.length > 100 && enhanced.length < 1800) {
-      return { subject: baseEmail.subject, body: enhanced };
+    const enhanced = await geminiGenerate(apiKey, prompt, { temperature: 0.7, maxOutputTokens: 1024, timeoutMs: 12000 });
+    if (enhanced && enhanced.length > 100 && enhanced.length < 1800 && /STOP/i.test(enhanced) === /STOP/i.test(baseEmail.body)) {
+      return { ...baseEmail, body: enhanced, aiEnhanced: true };
     }
     return baseEmail;
   } catch {

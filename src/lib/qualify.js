@@ -1,96 +1,79 @@
 /**
  * Lead Qualification & Scoring Engine
- * Rule-based scoring — $0 cost, no AI needed
- * Scores industries 0-10 based on AI automation potential
+ * Rule-based scoring — $0 cost, no AI needed.
+ *
+ * Industries are scored 0-10 in line with `isTargetIndustry` (lib/metrics):
+ * target verticals (the B2B service sellers who live on booked calls) score
+ * 8-10, everything else scores 6 or below so it can never pass the send gate
+ * (SEND_SCORE_THRESHOLD). Email hygiene uses the shared role / free-mail
+ * predicates so every importer agrees on what a usable address is.
  */
 
-// Industry AI-readiness scores (0-10)
-const INDUSTRY_SCORES = {
-  logistics: 9,
-  transport: 9,
-  manufacturing: 9,
-  finance: 9,
-  banking: 9,
-  insurance: 8,
-  retail: 8,
-  hotel: 8,
-  hospitality: 8,
-  healthcare: 8,
-  hospital: 8,
-  legal: 8,
-  law: 8,
-  clinic: 7,
-  'real estate': 7,
-  property: 7,
-  restaurant: 7,
-  food: 7,
-  education: 7,
-  school: 6,
-  'it services': 6,
-  technology: 5,
-};
+import { isValidEmail, isRoleEmail, isFreeMailDomain, isTargetIndustry, normalizeEmail } from '@/lib/metrics';
 
-// Skip these email patterns (low reply rate)
-const SKIP_EMAIL_PATTERNS = [
-  'noreply@', 'no-reply@', 'donotreply@',
-  'postmaster@', 'mailer@', 'bounce@',
-  'spam@', 'abuse@', 'security@',
-  'webmaster@', 'hostmaster@', 'root@',
+// Ordered: the first key found in the raw industry string wins, so the more
+// specific labels come before the broad ones.
+const TARGET_SCORES = [
+  ['lead gen', 9], ['outbound', 9], ['advertising', 10], ['marketing', 10], ['agency', 10],
+  ['professional services', 9], ['consulting', 9], ['consultancy', 9], ['saas', 9], ['software', 9],
+  ['managed services', 8], ['msp', 8], ['it services', 8], ['technology', 8], ['fintech', 8],
+  ['financial', 8], ['finance', 8], ['logistics', 8], ['revenue', 8], ['growth', 8], ['b2b', 8],
 ];
 
-// Skip personal email domains (we want business emails)
-const SKIP_DOMAINS = [
-  'yahoo.com', 'hotmail.com',
-  'outlook.com', 'live.com', 'aol.com',
-  'icloud.com', 'mail.com', 'protonmail.com',
+const OTHER_SCORES = [
+  ['staffing', 6], ['recruiting', 6], ['insurance', 5], ['legal', 5], ['law', 5], ['manufacturing', 5],
+  ['real estate', 4], ['property', 4], ['construction', 4], ['retail', 3], ['hotel', 3], ['hospitality', 3],
+  ['restaurant', 3], ['food', 3], ['healthcare', 3], ['hospital', 3], ['clinic', 3], ['education', 3],
+  ['school', 3], ['government', 1],
 ];
 
-// Skip known enterprise/gov domains
-const SKIP_COMPANY_PATTERNS = [
-  'government', 'gov.lk', 'police', 'army',
-  'ceylon petroleum', 'ceylon electricity',
-];
+const TARGET_DEFAULT = 8;   // a target industry we have no finer score for
+const OTHER_DEFAULT = 5;    // an unknown / off-target industry
+const MAX_OTHER = 6;        // off-target can never reach the send gate
+
+// Government / military / example domains are never prospects.
+const EXCLUDE_EMAIL_RE = /(\.gov(\.[a-z]{2})?$|\.mil$|@(example|test)\.(com|org|net)$)/i;
+const EXCLUDE_COMPANY_RE = /\b(government|ministry|municipal|police|army|navy)\b/i;
+
+const HONORIFIC_RE = /^(dr|mr|mrs|ms|miss|mx|prof|professor|sir|madam|rev|hon)\.?$/i;
 
 /**
  * Normalize industry string to a scoring category
  */
 function normalizeIndustry(raw) {
   if (!raw) return 'other';
-  const lower = raw.toLowerCase().trim();
-  for (const key of Object.keys(INDUSTRY_SCORES)) {
+  const lower = String(raw).toLowerCase().trim();
+  const table = isTargetIndustry({ industry: lower }) ? TARGET_SCORES : OTHER_SCORES;
+  for (const [key] of table) {
     if (lower.includes(key)) return key;
   }
-  return 'other';
+  return isTargetIndustry({ industry: lower }) ? 'b2b' : 'other';
 }
 
 /**
- * Get AI-readiness score for an industry
+ * Score for an industry (raw string or category). Target verticals score
+ * 8-10, everything else at most 6.
  */
 function getIndustryScore(industry) {
-  return INDUSTRY_SCORES[industry] || 5;
+  const lower = String(industry || '').toLowerCase().trim();
+  if (!lower) return OTHER_DEFAULT;
+  if (isTargetIndustry({ industry: lower })) {
+    const hit = TARGET_SCORES.find(([key]) => lower.includes(key));
+    return hit ? hit[1] : TARGET_DEFAULT;
+  }
+  const hit = OTHER_SCORES.find(([key]) => lower.includes(key));
+  return Math.min(MAX_OTHER, hit ? hit[1] : OTHER_DEFAULT);
 }
 
 /**
- * Validate an email address
+ * A usable prospect address: well-formed, on a company domain, not a shared inbox.
  */
-function isValidEmail(email) {
+function isUsableEmail(email) {
   if (!email || typeof email !== 'string') return false;
-  if (!email.includes('@')) return false;
-  if (email.length < 5 || email.length > 254) return false;
-
-  const domain = email.split('@')[1]?.toLowerCase();
-  if (!domain || !domain.includes('.')) return false;
-
-  // Skip personal emails
-  if (SKIP_DOMAINS.includes(domain)) return false;
-
-  // Skip system/noreply emails
-  const localPart = email.split('@')[0].toLowerCase();
-  if (SKIP_EMAIL_PATTERNS.some(p => localPart.startsWith(p.replace('@', '')))) return false;
-
-  // Basic format check
-  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  return emailRegex.test(email);
+  if (!isValidEmail(email)) return false;
+  if (isFreeMailDomain(email)) return false;
+  if (isRoleEmail(email)) return false;
+  return true;
 }
 
 /**
@@ -98,37 +81,32 @@ function isValidEmail(email) {
  */
 function cleanCompanyName(name) {
   if (!name) return '';
-  return name
-    .replace(/\s*(Pvt\.?\s*Ltd\.?|Ltd\.?|LLC|PLC|Inc\.?|Co\.?\s*Ltd\.?|Private\s+Limited)\s*$/i, '')
+  return String(name)
+    .replace(/\s*(Pvt\.?\s*Ltd\.?|Ltd\.?|LLC|L\.L\.C\.|PLC|Inc\.?|Corp\.?|Co\.?\s*Ltd\.?|Private\s+Limited|Limited)\s*$/i, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 /**
- * Extract first name from a contact name
+ * Extract first name from a contact name, skipping honorifics
+ * ("Dr. John Smith" → "John").
  */
 function extractFirstName(contactName) {
   if (!contactName) return null;
-  return contactName.split(/[\s,]/)[0].trim();
+  const tokens = String(contactName).trim().split(/[\s,]+/).filter(Boolean);
+  while (tokens.length && HONORIFIC_RE.test(tokens[0])) tokens.shift();
+  const first = (tokens[0] || '').replace(/^[^\p{L}]+|[^\p{L}'’-]+$/gu, '');
+  return first || null;
 }
 
 /**
  * Check if a company should be excluded
  */
 function shouldExclude(lead) {
-  const name = (lead.company_name || '').toLowerCase();
-  const email = (lead.email || '').toLowerCase();
-
-  // Exclude government/SOE
-  if (SKIP_COMPANY_PATTERNS.some(p => name.includes(p) || email.includes(p))) {
-    return true;
-  }
-
-  // Exclude if email is clearly an example
-  if (email.includes('example.com') || email.includes('test.com')) {
-    return true;
-  }
-
+  const name = String(lead.company_name || lead.company || '');
+  const email = normalizeEmail(lead.email);
+  if (EXCLUDE_COMPANY_RE.test(name)) return true;
+  if (EXCLUDE_EMAIL_RE.test(email)) return true;
   return false;
 }
 
@@ -137,34 +115,39 @@ function shouldExclude(lead) {
  * @param {Array} leads - Raw scraped leads
  * @param {object} options
  * @param {number} options.minScore - Minimum AI score to qualify (default 7)
- * @param {number} options.maxLeads - Max leads to return (default 50)
+ * @param {number} options.maxLeads - Max leads to return (default: all of them)
  * @returns {Array} Qualified leads sorted by score (highest first)
  */
 export function qualifyLeads(leads, options = {}) {
-  const { minScore = 7, maxLeads = 50 } = options;
+  const list = Array.isArray(leads) ? leads : [];
+  const { minScore = 7, maxLeads = list.length } = options;
   const qualified = [];
 
-  for (const lead of leads) {
-    // Skip invalid emails
-    if (!isValidEmail(lead.email)) continue;
+  for (const lead of list) {
+    if (!lead || typeof lead !== 'object') continue;
+
+    // Skip unusable emails (malformed, free-mail, shared inboxes)
+    if (!isUsableEmail(lead.email)) continue;
 
     // Skip excluded companies
     if (shouldExclude(lead)) continue;
 
     // Normalize and score
-    const industry = normalizeIndustry(lead.industry);
-    const aiScore = getIndustryScore(industry);
+    const rawIndustry = String(lead.industry || '').trim();
+    const industry = normalizeIndustry(rawIndustry);
+    const aiScore = getIndustryScore(rawIndustry || industry);
 
     // Only keep high-potential leads
     if (aiScore < minScore) continue;
 
     qualified.push({
       ...lead,
-      company_name: cleanCompanyName(lead.company_name),
-      email: lead.email.toLowerCase().trim(),
+      company_name: cleanCompanyName(lead.company_name || lead.company),
+      email: normalizeEmail(lead.email),
       industry,
+      industry_raw: rawIndustry || undefined,
       ai_score: aiScore,
-      first_name: extractFirstName(lead.contact_name),
+      first_name: extractFirstName(lead.first_name || lead.contact_name || lead.name),
       status: 'qualified',
       qualified_at: new Date().toISOString(),
     });
@@ -173,18 +156,19 @@ export function qualifyLeads(leads, options = {}) {
   // Sort by score descending — best leads first
   qualified.sort((a, b) => b.ai_score - a.ai_score);
 
-  return qualified.slice(0, maxLeads);
+  return qualified.slice(0, Math.max(0, Number(maxLeads) || 0));
 }
 
 /**
  * Quick score check for a single lead
  */
 export function scoreLead(lead) {
-  const industry = normalizeIndustry(lead.industry);
+  const rawIndustry = String((lead && lead.industry) || '').trim();
+  const industry = normalizeIndustry(rawIndustry);
   return {
     industry,
-    score: getIndustryScore(industry),
-    valid: isValidEmail(lead.email),
-    excluded: shouldExclude(lead),
+    score: getIndustryScore(rawIndustry || industry),
+    valid: isUsableEmail(lead && lead.email),
+    excluded: shouldExclude(lead || {}),
   };
 }

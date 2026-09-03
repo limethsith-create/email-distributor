@@ -29,7 +29,7 @@ export const CAMPAIGN_START = '2026-08-01T09:30:00Z';
 export const TRACKING_GAP_START = '2026-08-21T00:00:00Z';
 export const TRACKING_GAP_END = '2026-08-26T04:20:00Z';
 
-// ─── Dates (US Eastern, DST-aware) ────────────────────────────────────────
+// ─── Dates (US Eastern, DST-aware) ───────────────────────────────────────────
 
 /** 'YYYY-MM-DD' for `date` in US Eastern. */
 export function getTodayKey(date = new Date()) {
@@ -155,7 +155,7 @@ export function isSendable(lead) {
   return leadScore(lead) >= SEND_SCORE_THRESHOLD && isTargetIndustry(lead);
 }
 
-// ─── Metric predicates (identical to the dashboard's) ─────────────────────────
+// ─── Metric predicates (identical to the dashboard's) ────────────────────────
 
 export function afterStart(ts) {
   return Boolean(ts) && String(ts) >= CAMPAIGN_START;
