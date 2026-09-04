@@ -45,7 +45,7 @@ import { kv } from '@vercel/kv';
 import { sendEmail } from '@/lib/mailer';
 import { getEmailForSequenceDay, enhanceWithAI } from '@/lib/personalize';
 import { maybeEnrichNames } from '@/lib/enrich-names';
-import { flyerHtml } from '@/lib/flyer';
+import { flyerHtml, textBodyHtml } from '@/lib/flyer';
 import { checkAllReplies } from '@/lib/reply-checker';
 import { logSentEmail, patchLead, markLeadBounced, indexMessageIds, getLeadsMap } from '@/lib/leads-db';
 import { verifyEmail } from '@/lib/email-verify';
@@ -290,7 +290,11 @@ async function buildTouch(lead, day) {
   const [rawBody, unsubNote] = String(content.body).split('---');
   const note = (unsubNote || "Not the right fit? Just reply STOP and I will not email you again.").trim();
   const htmlUnsubscribe = `<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">${escapeHtml(note)}</p>`;
-  const html = flyerHtml(qualified) + htmlUnsubscribe;
+  // Day 0 must land in the inbox and earn a reply, and day 7 is a breakup note:
+  // both send the SAME personalized copy in the HTML part as in the text part.
+  // The designed poster is the day-3 follow-up only (see lib/flyer.js).
+  const bodyText = rawBody.trim();
+  const html = (day === 3 ? flyerHtml(qualified) : textBodyHtml(bodyText)) + htmlUnsubscribe;
 
   const headers = {};
   if (day === 3 && lead.original_message_id) {
@@ -305,7 +309,7 @@ async function buildTouch(lead, day) {
     lead: qualified,
     subject,
     html,
-    text: rawBody.trim() + (note ? `\n\n${note}` : ''),
+    text: bodyText + (note ? `\n\n${note}` : ''),
     headers,
     variant: content.variant || null,
     template: content.template || null,
@@ -522,7 +526,10 @@ export async function GET(request) {
   }
   const enabled = accountsAll.filter((a) => { const v = cfg.enabledMap[a.email]; return v === '1' || v === 1 || v === true; });
   if (!enabled.length) {
-    return jsonOk({ sent: 0, disabled: true, message: 'No inboxes are switched on — sending is off. Turn on an inbox toggle to start.', today });
+    // Sending is off, but prospects we already emailed still write back — and the
+    // auto-reply bot only ever runs from here. Keep scanning.
+    const replyCheck = await maybeRunReplyCheck(true, deadlineMs);
+    return jsonOk({ sent: 0, disabled: true, message: 'No inboxes are switched on — sending is off. Turn on an inbox toggle to start.', today, replyCheck });
   }
 
   const counts = await loadTodayCounts(enabled, today);
@@ -534,6 +541,14 @@ export async function GET(request) {
     const nextAt = pacing && pacing.nextSendAt ? new Date(pacing.nextSendAt).getTime() : 0;
     const health = cfg.health[a.email] || {};
     const skip = shouldSkipInbox(health, now.getTime());
+    // Bounce circuit breaker: check-bounces raises `bounceAlert` when an inbox
+    // bounces more than ~10% of what it sent today. Honour it — a bouncing
+    // inbox that keeps sending is exactly how a domain's reputation dies. The
+    // alert is scoped to today's counter, so it clears itself tomorrow, and
+    // "clear health" on the Inboxes page clears it now.
+    const bounceHold = Boolean(health.bounceAlert) && health.bouncesTodayKey === today
+      ? `paused — ${health.bounceAlertDetail || 'bounce rate too high today'}`
+      : null;
     return {
       email: a.email,
       campaign: normalizeCampaign(cfg.campaignMap[a.email]),
@@ -542,13 +557,17 @@ export async function GET(request) {
       remaining: Math.max(0, cap - sentToday),
       nextSendAt: nextAt ? new Date(nextAt).toISOString() : null,
       ready: !nextAt || nextAt <= now.getTime(),
-      skipped: skip.skip ? skip.reason : null,
+      skipped: skip.skip ? skip.reason : bounceHold,
+      bounceHold,
       health: health.lastError && health.lastErrorAt > (health.lastSuccessAt || '') ? 'warning' : 'ok',
     };
   });
   const totalRemaining = accountStatus.reduce((n, s) => n + s.remaining, 0);
   if (totalRemaining === 0) {
-    return jsonOk({ sent: 0, message: 'Daily limit reached for all accounts', today, accountStatus });
+    // Caps are hit early in the day; without this the bot would stop seeing
+    // replies until the sending window closed.
+    const replyCheck = await maybeRunReplyCheck(true, deadlineMs);
+    return jsonOk({ sent: 0, message: 'Daily limit reached for all accounts', today, accountStatus, replyCheck });
   }
   const readyStatus = accountStatus.filter((s) => s.remaining > 0 && s.ready && !s.skipped);
   if (!readyStatus.length) {

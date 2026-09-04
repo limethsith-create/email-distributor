@@ -154,7 +154,7 @@ const SIGNATURE = '— The Aviance Team\nGuaranteed booked sales calls · avianc
 // ---------------------------------------------------------------------------
 // CAMPAIGN 'offer' — the direct pitch
 // Day 0 stays light on purpose: pain → one line on what we do → interest CTA.
-// The full terms live in the one-pager below the email and in the bot's reply.
+// The full terms live in the day-3 one-pager and in the bot's reply.
 // ---------------------------------------------------------------------------
 
 function offerDay0(lead) {
@@ -170,7 +170,7 @@ function offerDay0(lead) {
 
 ${t.pain}
 
-We run the whole outbound engine for B2B firms like ${company} — and we put the result in writing: a set number of booked sales calls on your calendar, or the next month costs you nothing. The one-pager below carries the terms.
+We run the whole outbound engine for B2B firms like ${company} — and we put the result in writing: a set number of booked sales calls on your calendar, or the next month costs you nothing.
 
 Worth me sending the exact numbers for ${company}? A one-word reply — "details" — is enough.
 

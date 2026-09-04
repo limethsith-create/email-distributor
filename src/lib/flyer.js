@@ -33,7 +33,7 @@ function freeLeadsFlyerHtml(lead) {
   const company = lead.company_name || lead.company || 'your company';
   const hi = name ? `Hi ${name},` : 'Hello,';
 
-  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#222;line-height:1.6;">${hi}<br><br>We're Aviance — we book guaranteed sales calls for B2B firms. Before asking for any of your time, we'd rather prove our targeting. Below is exactly what we've prepared for ${escapeHtml(company)}, free.<br><br></div>
+  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#222;line-height:1.6;">${hi}<br><br>Following up on my note — rather than describe it again, here is exactly what we've set aside for ${escapeHtml(company)}, free.<br><br></div>
 <div style="background:#EFEDE8;padding:14px 0;"><table role="presentation" width="620" cellpadding="0" cellspacing="0" align="center" style="max-width:620px;width:100%;background:#FFFFFF;">
 <tbody>
 <tr><td style="padding:24px 28px 20px 28px;background:#FFFFFF;border-bottom:4px solid #141414;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td style="vertical-align:middle;"><img src="${LOGO_URL}" alt="Aviance" width="48" height="48" style="vertical-align:middle;margin-right:12px;"><span style="${HEAD}font-size:27px;letter-spacing:2px;color:#141414;vertical-align:middle;">AVIANCE</span></td><td align="right" style="${MONO}font-size:10px;font-weight:700;letter-spacing:1px;color:#8A8A85;">PREPARED&nbsp;FOR<br><span style="color:#E0290F;">${escapeHtml(String(company).toUpperCase())}</span></td></tr></tbody></table></td></tr>
@@ -52,7 +52,7 @@ function offerFlyerHtml(lead) {
   const company = lead.company_name || lead.company || 'your company';
   const hi = name ? `Hi ${name},` : 'Hi,';
 
-  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#222;line-height:1.6;">${hi}<br><br>We have yet to be properly introduced — we're Aviance. We book qualified sales calls straight onto the calendars of firms like ${escapeHtml(company)}. Rather than pitch you, here is exactly what we do and what we guarantee, in writing.<br><br></div>
+  return `<div style="font-family:Arial,sans-serif;font-size:15px;color:#222;line-height:1.6;">${hi}<br><br>Following up on my note. Rather than pitch you again, here is exactly what we do for firms like ${escapeHtml(company)} — and what we guarantee, in writing.<br><br></div>
 <div style="background:#EFEDE8;padding:14px 0;"><table role="presentation" width="620" cellpadding="0" cellspacing="0" align="center" style="max-width:620px;width:100%;background:#FFFFFF;">
 <tbody>
 <tr><td style="padding:24px 28px 20px 28px;background:#FFFFFF;border-bottom:4px solid #141414;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tbody><tr><td style="vertical-align:middle;"><img src="${LOGO_URL}" alt="Aviance" width="48" height="48" style="vertical-align:middle;margin-right:12px;"><span style="${HEAD}font-size:27px;letter-spacing:2px;color:#141414;vertical-align:middle;">AVIANCE</span></td><td align="right" style="${MONO}font-size:10px;font-weight:700;letter-spacing:1px;color:#8A8A85;">PREPARED&nbsp;FOR<br><span style="color:#E0290F;">${escapeHtml(String(company).toUpperCase())}</span></td></tr></tbody></table></td></tr>
@@ -72,4 +72,31 @@ function offerFlyerHtml(lead) {
 
 function escapeHtml(s) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Plain-body HTML for the touches that must NOT carry the poster.
+ *
+ * Day 0 is the one email that has to land in the inbox and earn a reply, so
+ * its HTML part is the SAME personalized copy as its text part — a heavy
+ * marketing poster on a first cold touch buries the personalization (Gmail
+ * renders the HTML part, never the text one) and reads as bulk mail. Day 7
+ * is a breakup note, so it stays plain too. The poster is day 3 only, which
+ * is what this module was written for.
+ */
+export function textBodyHtml(body) {
+  const paragraphs = String(body)
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => {
+      let t = escapeHtml(p).replace(/\n/g, '<br>');
+      t = t.replace(
+        /(^|[^/.\w])(aviance\.online)/gi,
+        '$1<a href="https://www.aviance.online" style="color:#141414;">aviance.online</a>'
+      );
+      return `<p style="margin:0 0 14px 0;">${t}</p>`;
+    })
+    .join('\n');
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;color:#222222;max-width:560px;">${paragraphs}</div>`;
 }

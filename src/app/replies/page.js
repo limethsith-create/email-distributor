@@ -95,7 +95,11 @@ function ConversationCard({ conv }) {
       <div className="rule-soft" style={{ margin: '12px 0 16px' }} />
       {msgs.map((m, i) => <Bubble key={i} msg={m} />)}
       <div style={{ marginTop: 4 }}>
-        {hasOut ? (
+        {conv.status === 'needs_list' ? (
+          <span className="mono" style={{ display: 'inline-block', fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#FFFFFF', background: 'var(--accent)', padding: '6px 10px', fontWeight: 700 }}>
+            OWES 5 FREE LEADS — promised today · send from {(msgs.filter((m) => m.dir === 'out').slice(-1)[0] || {}).account || 'the same inbox'}
+          </span>
+        ) : hasOut ? (
           <span className="mono" style={{ display: 'inline-block', fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)', border: '1px solid rgba(224,41,15,0.4)', padding: '6px 10px', background: 'rgba(224,41,15,0.04)' }}>
             BOT REPLIED · YOUR TURN — reply from your own inbox to continue
           </span>
@@ -148,7 +152,11 @@ export default function RepliesPage() {
   const total = all.length;
   const hasOut = (c) => (c.messages || []).some((m) => m.dir === 'out');
   const botReplied = all.filter(hasOut).length;
-  const awaiting = all.filter((c) => (hasOut(c) && c.status === 'awaiting_human') || !hasOut(c)).length;
+  // 'needs_list' = a free-leads prospect said SEND IT and the bot promised them
+  // five researched leads TODAY. Nothing in the system produces that list, so
+  // it is on you — and it is the most time-critical thing on this page.
+  const owesList = all.filter((c) => c.status === 'needs_list').length;
+  const awaiting = all.filter((c) => (hasOut(c) && (c.status === 'awaiting_human' || c.status === 'needs_list')) || !hasOut(c)).length;
 
   return (
     <div className="fade-up">
@@ -164,6 +172,7 @@ export default function RepliesPage() {
         <KPI idx="01" label="Total conversations" value={loading ? '—' : total} sub="prospects who wrote back" />
         <KPI idx="02" label="Bot replied" value={loading ? '—' : botReplied} sub="auto-reply sent once" />
         <KPI idx="03" label="Awaiting your reply" value={loading ? '—' : awaiting} sub="your turn to continue" accent />
+        <KPI idx="04" label="Owed 5 free leads" value={loading ? '—' : owesList} sub="promised same day — send today" accent={!loading && owesList > 0} />
       </div>
 
       {loading ? (
@@ -177,6 +186,19 @@ export default function RepliesPage() {
         </div>
       ) : (
         <div style={{ maxWidth: 780 }}>
+          {owesList > 0 && (
+            <div style={{ ...card, borderLeft: '4px solid var(--accent)', padding: '16px 20px', marginBottom: 18 }}>
+              <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent)', fontWeight: 700, marginBottom: 8 }}>
+                ACTION REQUIRED — {owesList} {owesList === 1 ? 'PERSON IS' : 'PEOPLE ARE'} OWED A LIST
+              </div>
+              <div style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--fg-muted)' }}>
+                They replied to the free-leads campaign and the bot told them their five researched
+                leads would arrive <strong style={{ color: 'var(--fg)' }}>today</strong>. The system
+                does not build that list — you do. Find them below (marked <em>OWES 5 FREE LEADS</em>),
+                pull five real matches for their market, and send it from the same inbox before the day ends.
+              </div>
+            </div>
+          )}
           {all.map((c, i) => <ConversationCard key={(c.email || '') + i} conv={c} />)}
         </div>
       )}
