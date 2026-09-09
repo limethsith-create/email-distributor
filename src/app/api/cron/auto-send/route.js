@@ -173,8 +173,14 @@ async function loadTodayCounts(accounts, today) {
   const keys = accounts.map((a) => `${a.email}:${today}`);
   const counts = {};
   try {
-    const res = await kv.hmget(DAILY_SEND_KEY, ...keys);
-    for (const a of accounts) counts[a.email] = parseInt((res && res[`${a.email}:${today}`]) || '0', 10) || 0;
+    // kv.hmget returns a POSITIONAL ARRAY ([v0, v1, ...]) in the order of the
+    // requested keys — NOT an object keyed by field name. Reading it by field
+    // name (res[`${email}:${today}`]) is always undefined, which made every
+    // inbox read 0 sent-today, so the daily cap was never enforced and inboxes
+    // sent far past their limit (24 and 28 on 2026-09-08 vs a cap of 10). Read
+    // by index instead.
+    const res = (await kv.hmget(DAILY_SEND_KEY, ...keys)) || [];
+    accounts.forEach((a, i) => { counts[a.email] = parseInt(res[i] || '0', 10) || 0; });
   } catch {
     for (const a of accounts) counts[a.email] = 0;
   }
