@@ -80,9 +80,20 @@ function Bubble({ msg }) {
   );
 }
 
-function ConversationCard({ conv }) {
+function ConversationCard({ conv, onStatus }) {
   const msgs = (conv.messages || []).slice().sort((a, b) => String(a.ts || '').localeCompare(String(b.ts || '')));
   const hasOut = msgs.some((m) => m.dir === 'out');
+  const [busy, setBusy] = useState(false);
+  const mark = async (action) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await fetch('/api/replies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: conv.email, action }) });
+      const d = await r.json();
+      if (d && d.success && onStatus) onStatus(conv.email, d.conversation);
+    } catch {}
+    setBusy(false);
+  };
   return (
     <div style={{ ...card, padding: '18px 20px', marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
@@ -96,8 +107,22 @@ function ConversationCard({ conv }) {
       {msgs.map((m, i) => <Bubble key={i} msg={m} />)}
       <div style={{ marginTop: 4 }}>
         {conv.status === 'needs_list' ? (
-          <span className="mono" style={{ display: 'inline-block', fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#FFFFFF', background: 'var(--accent)', padding: '6px 10px', fontWeight: 700 }}>
-            OWES 5 FREE LEADS — promised today · send from {(msgs.filter((m) => m.dir === 'out').slice(-1)[0] || {}).account || 'the same inbox'}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span className="mono" style={{ display: 'inline-block', fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#FFFFFF', background: 'var(--accent)', padding: '6px 10px', fontWeight: 700 }}>
+              OWES 5 FREE LEADS — within one business day · send from {(msgs.filter((m) => m.dir === 'out').slice(-1)[0] || {}).account || 'the same inbox'}
+            </span>
+            <button type="button" onClick={() => mark('list_delivered')} disabled={busy} className="mono" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '6px 10px', border: '1px solid var(--border-strong)', background: 'transparent', color: 'var(--fg)', cursor: 'pointer' }}>
+              {busy ? '…' : 'Mark delivered'}
+            </button>
+          </span>
+        ) : conv.status === 'list_delivered' ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span className="mono" style={{ display: 'inline-block', fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--fg-muted)', border: '1px solid var(--border-strong)', padding: '6px 10px' }}>
+              FREE LEADS DELIVERED{conv.list_delivered_at ? ` · ${fmtDate(conv.list_delivered_at)}` : ''}
+            </span>
+            <button type="button" onClick={() => mark('reopen')} disabled={busy} className="mono" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '6px 10px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--fg-dim)', cursor: 'pointer' }}>
+              Undo
+            </button>
           </span>
         ) : hasOut ? (
           <span className="mono" style={{ display: 'inline-block', fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)', border: '1px solid rgba(224,41,15,0.4)', padding: '6px 10px', background: 'rgba(224,41,15,0.04)' }}>
@@ -199,7 +224,7 @@ export default function RepliesPage() {
               </div>
             </div>
           )}
-          {all.map((c, i) => <ConversationCard key={(c.email || '') + i} conv={c} />)}
+          {all.map((c, i) => <ConversationCard key={(c.email || '') + i} conv={c} onStatus={(email, conv) => setData((d) => ({ ...(d || {}), conversations: { ...((d && d.conversations) || {}), [email]: conv } }))} />)}
         </div>
       )}
     </div>
