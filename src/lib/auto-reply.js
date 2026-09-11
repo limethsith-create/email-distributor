@@ -81,7 +81,7 @@ function freeLeadsPositive({ ack, company }) {
   const opener = ack || 'Great — thanks for the quick reply.';
   return `${opener}
 
-I am pulling the five together for ${company} now: each one with the reason the timing is right, the decision-maker to ask for, and their direct contact. They will be in your inbox today.
+I am pulling the five together for ${company} now: each one with the reason the timing is right, the decision-maker to ask for, and their direct contact. You will have them within one business day.
 
 One quick thing so the list is spot on: who is your ideal customer — role and type of company? If the five I picked already fit, no reply needed.
 

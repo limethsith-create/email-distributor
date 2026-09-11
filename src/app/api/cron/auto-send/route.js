@@ -5,6 +5,15 @@
  * Each hit sends AT MOST ONE email (a due follow-up or a fresh day-0 touch),
  * so volume is a steady drip across the US workday, never a burst.
  *
+ * v3.1 — queue fairness + owner notifications:
+ *  - FRESH MINIMUM per inbox (FRESH_MIN_SHARE of the cap is kept for day-0
+ *    sends whenever fresh leads exist), so follow-ups can never starve new
+ *    leads again. FOLLOW-UP EXPIRY retires touches more than
+ *    FOLLOWUP_GRACE_DAYS past due instead of sending them weeks late.
+ *  - OWNER EMAILS (lib/daily-report.js): a once-a-day "sending is OFF" alarm
+ *    from 10 AM ET when no inbox is switched on, and an end-of-day report
+ *    after 7 PM ET with per-inbox numbers, health, replies and tomorrow's queue.
+ *
  * v3 — what changed and why:
  *  - PER-INBOX PACING. Every inbox keeps its own `nextSendAt` (KV `pacing`),
  *    computed after each send as (workday minutes left ÷ emails that inbox
@@ -52,6 +61,7 @@ import { verifyEmail } from '@/lib/email-verify';
 import { getSmtpAccounts } from '@/lib/smtp-accounts';
 import { isWithinSendingHours, minutesLeftInWindow } from '@/lib/warmup';
 import { getInboxHealth, recordSendSuccess, recordSendFailure, updateInboxHealth, shouldSkipInbox } from '@/lib/inbox-health';
+import { maybeSendDailyReport, maybeSendSwitchOffAlarm } from '@/lib/daily-report';
 import {
   getTodayKey, etParts, campaignOf, normalizeCampaign, normalizeCompanyName, isRoleEmail,
   isSendable, leadScore, SEND_CAP, UNSENT_STATUSES,
@@ -83,6 +93,25 @@ const LAST_GLOBAL_SEND_KEY = 'last_global_send';
 const D3_AFTER_MS = 3 * 24 * 60 * 60 * 1000;   // day 3 = 3 days after day 0
 const D7_AFTER_MS = 4 * 24 * 60 * 60 * 1000;   // day 7 = 4 days after day 3
 const STALE_CLAIM_MS = 30 * 60 * 1000;
+
+// ─── Queue fairness (v3.1) ────────────────────────────────────────────────────
+// Follow-ups still go first (a thread already opened is worth more than a cold
+// one), but they can no longer eat the whole day. Two rules:
+//
+//  1) FRESH MINIMUM. Each inbox keeps at least FRESH_MIN_SHARE of its daily cap
+//     for fresh day-0 emails whenever fresh leads exist for its campaign. With
+//     a cap of 10 that is 4 fresh / up to 6 follow-ups; cap 20 → 8 / 12. Before
+//     this, 478 old leads owed ~800 follow-ups and the 337 new leads would not
+//     have received a single day-0 for about 40 days.
+//
+//  2) FOLLOW-UP EXPIRY. A follow-up that is more than FOLLOWUP_GRACE_DAYS past
+//     its due date is retired (status `sequence_expired`) instead of sent: a
+//     "just following up" three weeks after the opener reads as automation and
+//     hurts the domain more than it helps. Expired leads stay in the CRM with
+//     their history; they are simply not touched again.
+const FRESH_MIN_SHARE = Math.min(0.9, Math.max(0, parseFloat(process.env.FRESH_MIN_SHARE || '0.4') || 0.4));
+const FOLLOWUP_GRACE_MS = (parseInt(process.env.FOLLOWUP_GRACE_DAYS || '7', 10) || 7) * 24 * 60 * 60 * 1000;
+const EXPIRE_PER_HEARTBEAT = 40;
 
 // Reply-scan piggyback cadence.
 const REPLY_CHECK_IN_WINDOW_MS = 10 * 60 * 1000;
@@ -170,8 +199,11 @@ function pacingFor(pacingMap, email) {
 
 /** Per-inbox counters for today in ONE command. */
 async function loadTodayCounts(accounts, today) {
-  const keys = accounts.map((a) => `${a.email}:${today}`);
+  // Two fields per inbox: total sent today, and fresh (d0) sent today.
+  const keys = [];
+  for (const a of accounts) keys.push(`${a.email}:${today}`, `${a.email}:${today}:d0`);
   const counts = {};
+  const fresh = {};
   try {
     // kv.hmget returns a POSITIONAL ARRAY ([v0, v1, ...]) in the order of the
     // requested keys — NOT an object keyed by field name. Reading it by field
@@ -180,11 +212,14 @@ async function loadTodayCounts(accounts, today) {
     // sent far past their limit (24 and 28 on 2026-09-08 vs a cap of 10). Read
     // by index instead.
     const res = (await kv.hmget(DAILY_SEND_KEY, ...keys)) || [];
-    accounts.forEach((a, i) => { counts[a.email] = parseInt(res[i] || '0', 10) || 0; });
+    accounts.forEach((a, i) => {
+      counts[a.email] = parseInt(res[i * 2] || '0', 10) || 0;
+      fresh[a.email] = parseInt(res[i * 2 + 1] || '0', 10) || 0;
+    });
   } catch {
-    for (const a of accounts) counts[a.email] = 0;
+    for (const a of accounts) { counts[a.email] = 0; fresh[a.email] = 0; }
   }
-  return counts;
+  return { counts, fresh };
 }
 
 /** Next-send time for an inbox after it just sent (or was just enabled). */
@@ -207,7 +242,13 @@ function partitionLeads(leadsMap, now) {
   const fresh = { 'free-leads': [], offer: [] };
   const followUps = [];
   const stuck = [];
+  const expired = [];
   const nowMs = now.getTime();
+  const pushDue = (lead, day, due) => {
+    if (nowMs < due) return;
+    if (nowMs - due > FOLLOWUP_GRACE_MS) expired.push({ lead, day, dueAt: due });
+    else followUps.push({ lead, day, dueAt: due });
+  };
   for (const lead of Object.values(leadsMap)) {
     if (!lead || !lead.email) continue;
     const status = lower(lead.status);
@@ -227,12 +268,10 @@ function partitionLeads(leadsMap, now) {
     const hold = lead.followup_hold_until ? new Date(lead.followup_hold_until).getTime() : 0;
     if (hold && hold > nowMs) continue;
     if (status === 'sent-d0') {
-      const due = new Date(lead.sent_at).getTime() + D3_AFTER_MS;
-      if (nowMs >= due) followUps.push({ lead, day: 3, dueAt: due });
+      pushDue(lead, 3, new Date(lead.sent_at).getTime() + D3_AFTER_MS);
     } else if (status === 'sent-d3') {
       const base = lead.d3_sent_at ? new Date(lead.d3_sent_at).getTime() : new Date(lead.sent_at).getTime() + D3_AFTER_MS;
-      const due = base + D7_AFTER_MS;
-      if (nowMs >= due) followUps.push({ lead, day: 7, dueAt: due });
+      pushDue(lead, 7, base + D7_AFTER_MS);
     }
   }
   for (const c of Object.keys(fresh)) {
@@ -241,7 +280,25 @@ function partitionLeads(leadsMap, now) {
     for (const l of fresh[c]) delete l.__jitter;
   }
   followUps.sort((a, b) => a.dueAt - b.dueAt);
-  return { fresh, followUps, stuck };
+  return { fresh, followUps, stuck, expired };
+}
+
+/** Retire follow-ups that are too far past due (bounded per heartbeat). */
+async function expireFollowUps(expired) {
+  let n = 0;
+  const at = new Date().toISOString();
+  for (const { lead, day, dueAt } of expired.slice(0, EXPIRE_PER_HEARTBEAT)) {
+    try {
+      await patchLead(lead.email, {
+        status: 'sequence_expired',
+        expired_at: at,
+        expired_touch: `d${day}`,
+        expired_reason: `d${day} was due ${new Date(dueAt).toISOString().slice(0, 10)}, more than ${Math.round(FOLLOWUP_GRACE_MS / 864e5)} days ago`,
+      });
+      n++;
+    } catch {}
+  }
+  return n;
 }
 
 /** Claim a lead atomically (SET NX marker + status flip). */
@@ -519,7 +576,15 @@ export async function GET(request) {
   // ── Outside the window: no sending, but still look for replies (throttled). ──
   if (!inWindow) {
     const replyCheck = params.get('skipReplies') ? { ran: false } : await maybeRunReplyCheck(false, deadlineMs);
-    return jsonOk({ sent: 0, message: 'Outside sending hours (8 AM - 7 PM US Eastern, Mon-Fri)', today, replyCheck });
+    // End-of-day report to the owner (once per send day, right after 7 PM ET).
+    let report = { sent: false, reason: 'outside report slot' };
+    const { weekday, hour } = etParts();
+    if (['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(weekday) && hour >= 19 && hour < 22) {
+      const accountsAll = getSmtpAccounts();
+      const cfg = await loadInboxConfig();
+      report = await maybeSendDailyReport({ accountsAll, cfg, today });
+    }
+    return jsonOk({ sent: 0, message: 'Outside sending hours (8 AM - 7 PM US Eastern, Mon-Fri)', today, replyCheck, report });
   }
 
   // ── Cheap gates before the lock: inbox switches, caps, pacing. ──
@@ -535,14 +600,18 @@ export async function GET(request) {
     // Sending is off, but prospects we already emailed still write back — and the
     // auto-reply bot only ever runs from here. Keep scanning.
     const replyCheck = await maybeRunReplyCheck(true, deadlineMs);
-    return jsonOk({ sent: 0, disabled: true, message: 'No inboxes are switched on — sending is off. Turn on an inbox toggle to start.', today, replyCheck });
+    // Tell the owner, once per day from 10 AM ET, that nothing is going out.
+    const alarm = await maybeSendSwitchOffAlarm({ accountsAll, today });
+    return jsonOk({ sent: 0, disabled: true, message: 'No inboxes are switched on — sending is off. Turn on an inbox toggle to start.', today, replyCheck, alarm });
   }
 
-  const counts = await loadTodayCounts(enabled, today);
+  const { counts, fresh: freshCounts } = await loadTodayCounts(enabled, today);
   const now = new Date();
   const accountStatus = enabled.map((a) => {
     const cap = capFor(cfg.capMap, a.email);
     const sentToday = counts[a.email] || 0;
+    const freshToday = freshCounts[a.email] || 0;
+    const freshMin = Math.min(cap, Math.ceil(cap * FRESH_MIN_SHARE));
     const pacing = pacingFor(cfg.pacingMap, a.email);
     const nextAt = pacing && pacing.nextSendAt ? new Date(pacing.nextSendAt).getTime() : 0;
     const health = cfg.health[a.email] || {};
@@ -561,6 +630,11 @@ export async function GET(request) {
       sentToday,
       cap,
       remaining: Math.max(0, cap - sentToday),
+      freshToday,
+      followUpsToday: Math.max(0, sentToday - freshToday),
+      // Follow-ups may use at most (cap − freshMin) slots while fresh leads exist.
+      followUpBudget: Math.max(0, cap - freshMin),
+      freshMin,
       nextSendAt: nextAt ? new Date(nextAt).toISOString() : null,
       ready: !nextAt || nextAt <= now.getTime(),
       skipped: skip.skip ? skip.reason : bounceHold,
@@ -600,12 +674,14 @@ export async function GET(request) {
   let sentDetail = null;
   try {
     const leadsMap = await getLeadsMap();
-    const { fresh, followUps, stuck } = partitionLeads(leadsMap, now);
+    const { fresh, followUps, stuck, expired } = partitionLeads(leadsMap, now);
 
     // Reaper: claims that died mid-send go back to the pool.
     for (const lead of stuck.slice(0, 20)) {
       await releaseClaim(lead.email, 'pending', { reaped_at: new Date().toISOString() });
     }
+    // Retire follow-ups that are too far past due (see FOLLOWUP_GRACE_MS).
+    const expiredNow = expired.length ? await expireFollowUps(expired) : 0;
 
     // Most-behind inbox first (random tie-break) so inboxes take turns.
     const order = readyStatus
@@ -625,10 +701,11 @@ export async function GET(request) {
       } catch {}
     }
 
-    const blockedFollowUps = { byDisabledInbox: 0, byCap: 0, byHold: 0, suppressed: 0 };
+    const blockedFollowUps = { byDisabledInbox: 0, byCap: 0, byHold: 0, byFreshReserve: 0, suppressed: 0 };
     let usedInbox = null;
 
-    // 1) FOLLOW-UPS FIRST (oldest due), on the thread's original inbox.
+    // 1) FOLLOW-UPS FIRST (oldest due), on the thread's original inbox — but
+    //    never past the inbox's follow-up budget while it still has fresh leads.
     for (const fu of followUps) {
       if (sentDetail) break;
       const email = lower(fu.lead.email);
@@ -637,6 +714,7 @@ export async function GET(request) {
       if (!status) { blockedFollowUps.byDisabledInbox++; continue; }
       if (status.remaining <= 0) { blockedFollowUps.byCap++; continue; }
       if (!status.ready || status.skipped) { blockedFollowUps.byHold++; continue; }
+      if (status.followUpsToday >= status.followUpBudget && fresh[status.campaign].length > 0) { blockedFollowUps.byFreshReserve++; continue; }
       if (suppressed.has(email)) {
         blockedFollowUps.suppressed++;
         await patchLead(email, { status: 'unsubscribed', suppressed: true });
@@ -704,7 +782,7 @@ export async function GET(request) {
     }
 
     results.blockedFollowUps = blockedFollowUps;
-    results.pools = { followUpsDue: followUps.length, freshFreeLeads: fresh['free-leads'].length, freshOffer: fresh.offer.length, stuckReaped: Math.min(stuck.length, 20) };
+    results.pools = { followUpsDue: followUps.length, followUpsExpired: expired.length, expiredNow, freshFreeLeads: fresh['free-leads'].length, freshOffer: fresh.offer.length, stuckReaped: Math.min(stuck.length, 20) };
   } catch (err) {
     await releaseLock(lockToken);
     return Response.json({ error: err.message, timestamp: new Date().toISOString() }, { status: 500 });
