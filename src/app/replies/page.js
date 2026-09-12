@@ -80,20 +80,8 @@ function Bubble({ msg }) {
   );
 }
 
-function ConversationCard({ conv, onStatus }) {
+function ConversationCard({ conv }) {
   const msgs = (conv.messages || []).slice().sort((a, b) => String(a.ts || '').localeCompare(String(b.ts || '')));
-  const hasOut = msgs.some((m) => m.dir === 'out');
-  const [busy, setBusy] = useState(false);
-  const mark = async (action) => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const r = await fetch('/api/replies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: conv.email, action }) });
-      const d = await r.json();
-      if (d && d.success && onStatus) onStatus(conv.email, d.conversation);
-    } catch {}
-    setBusy(false);
-  };
   return (
     <div style={{ ...card, padding: '18px 20px', marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
@@ -106,33 +94,9 @@ function ConversationCard({ conv, onStatus }) {
       <div className="rule-soft" style={{ margin: '12px 0 16px' }} />
       {msgs.map((m, i) => <Bubble key={i} msg={m} />)}
       <div style={{ marginTop: 4 }}>
-        {conv.status === 'needs_list' ? (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span className="mono" style={{ display: 'inline-block', fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#FFFFFF', background: 'var(--accent)', padding: '6px 10px', fontWeight: 700 }}>
-              OWES 5 FREE LEADS — within one business day · send from {(msgs.filter((m) => m.dir === 'out').slice(-1)[0] || {}).account || 'the same inbox'}
-            </span>
-            <button type="button" onClick={() => mark('list_delivered')} disabled={busy} className="mono" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '6px 10px', border: '1px solid var(--border-strong)', background: 'transparent', color: 'var(--fg)', cursor: 'pointer' }}>
-              {busy ? '…' : 'Mark delivered'}
-            </button>
-          </span>
-        ) : conv.status === 'list_delivered' ? (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span className="mono" style={{ display: 'inline-block', fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--fg-muted)', border: '1px solid var(--border-strong)', padding: '6px 10px' }}>
-              FREE LEADS DELIVERED{conv.list_delivered_at ? ` · ${fmtDate(conv.list_delivered_at)}` : ''}
-            </span>
-            <button type="button" onClick={() => mark('reopen')} disabled={busy} className="mono" style={{ fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '6px 10px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--fg-dim)', cursor: 'pointer' }}>
-              Undo
-            </button>
-          </span>
-        ) : hasOut ? (
-          <span className="mono" style={{ display: 'inline-block', fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)', border: '1px solid rgba(224,41,15,0.4)', padding: '6px 10px', background: 'rgba(224,41,15,0.04)' }}>
-            BOT REPLIED · YOUR TURN — reply from your own inbox to continue
-          </span>
-        ) : (
-          <span className="mono" style={{ display: 'inline-block', fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--fg-muted)', border: '1px solid var(--border-strong)', padding: '6px 10px' }}>
-            AWAITING BOT / NEEDS REVIEW
-          </span>
-        )}
+        <span className="mono" style={{ display: 'inline-block', fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)', border: '1px solid rgba(224,41,15,0.4)', padding: '6px 10px', background: 'rgba(224,41,15,0.04)' }}>
+          Your turn — reply from this inbox to continue
+        </span>
       </div>
     </div>
   );
@@ -154,7 +118,7 @@ export default function RepliesPage() {
   const replies = (data && Array.isArray(data.replies)) ? data.replies : [];
   const convMap = (data && data.conversations && typeof data.conversations === 'object') ? data.conversations : {};
 
-  // Real conversation entries from the bot store.
+  // Real conversation entries from the reply store.
   const convs = Object.values(convMap).filter((c) => c && Array.isArray(c.messages));
 
   // Older replies with no matching conversation entry — render as single incoming message cards.
@@ -175,29 +139,19 @@ export default function RepliesPage() {
   const all = convs.concat(orphans).sort((a, b) => latestTs(b).localeCompare(latestTs(a)));
 
   const total = all.length;
-  const hasOut = (c) => (c.messages || []).some((m) => m.dir === 'out');
-  const botReplied = all.filter(hasOut).length;
-  // 'needs_list' = a free-leads prospect said SEND IT and the bot promised them
-  // five researched leads TODAY. Nothing in the system produces that list, so
-  // it is on you — and it is the most time-critical thing on this page.
-  const owesList = all.filter((c) => c.status === 'needs_list').length;
-  const awaiting = all.filter((c) => (hasOut(c) && (c.status === 'awaiting_human' || c.status === 'needs_list')) || !hasOut(c)).length;
 
   return (
     <div className="fade-up">
       <div className="eyebrow" style={{ marginBottom: 10 }}><span className="idx">03</span>&nbsp;/&nbsp;REPLIES</div>
       <h1 style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1 }}>Conversations</h1>
       <p style={{ color: 'var(--fg-muted)', fontSize: 14, margin: '14px 0 22px', maxWidth: 620 }}>
-        Every prospect reply and the bot&rsquo;s automatic first response. The bot answers once — after that it&rsquo;s your turn.
+        Every prospect who wrote back. Replies are handled by you — answer positives fast, from the same inbox that reached them.
       </p>
 
       <div className="rule" style={{ marginBottom: 22 }} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14, marginBottom: 22 }}>
-        <KPI idx="01" label="Total conversations" value={loading ? '—' : total} sub="prospects who wrote back" />
-        <KPI idx="02" label="Bot replied" value={loading ? '—' : botReplied} sub="auto-reply sent once" />
-        <KPI idx="03" label="Awaiting your reply" value={loading ? '—' : awaiting} sub="your turn to continue" accent />
-        <KPI idx="04" label="Owed 5 free leads" value={loading ? '—' : owesList} sub="promised same day — send today" accent={!loading && owesList > 0} />
+        <KPI idx="01" label="Total conversations" value={loading ? '—' : total} sub="prospects who wrote back" accent={!loading && total > 0} />
       </div>
 
       {loading ? (
@@ -206,25 +160,12 @@ export default function RepliesPage() {
         <div style={{ ...card, padding: '40px 32px', textAlign: 'center' }}>
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>No replies yet</div>
           <div style={{ color: 'var(--fg-muted)', fontSize: 13.5, maxWidth: 480, margin: '0 auto', lineHeight: 1.55 }}>
-            Conversations will appear here the moment a prospect writes back, along with the bot&rsquo;s automatic first response.
+            Conversations will appear here the moment a prospect writes back.
           </div>
         </div>
       ) : (
         <div style={{ maxWidth: 780 }}>
-          {owesList > 0 && (
-            <div style={{ ...card, borderLeft: '4px solid var(--accent)', padding: '16px 20px', marginBottom: 18 }}>
-              <div className="mono" style={{ fontSize: 10.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--accent)', fontWeight: 700, marginBottom: 8 }}>
-                ACTION REQUIRED — {owesList} {owesList === 1 ? 'PERSON IS' : 'PEOPLE ARE'} OWED A LIST
-              </div>
-              <div style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--fg-muted)' }}>
-                They replied to the free-leads campaign and the bot told them their five researched
-                leads would arrive <strong style={{ color: 'var(--fg)' }}>today</strong>. The system
-                does not build that list — you do. Find them below (marked <em>OWES 5 FREE LEADS</em>),
-                pull five real matches for their market, and send it from the same inbox before the day ends.
-              </div>
-            </div>
-          )}
-          {all.map((c, i) => <ConversationCard key={(c.email || '') + i} conv={c} onStatus={(email, conv) => setData((d) => ({ ...(d || {}), conversations: { ...((d && d.conversations) || {}), [email]: conv } }))} />)}
+          {all.map((c, i) => <ConversationCard key={(c.email || '') + i} conv={c} />)}
         </div>
       )}
     </div>

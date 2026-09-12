@@ -37,7 +37,6 @@
 import { ImapFlow } from 'imapflow';
 import { kv } from '@vercel/kv';
 import { getSmtpAccounts, getOwnAddresses } from '@/lib/smtp-accounts';
-import { maybeAutoReply } from '@/lib/auto-reply';
 import { getLeadsByEmail, getLeadsMap, patchLead, markLeadBounced, getAllReplies as getAllRepliesFromDb } from '@/lib/leads-db';
 import { recordImapResult } from '@/lib/inbox-health';
 import {
@@ -54,7 +53,6 @@ const MSGID_INDEX_KEY = 'msgid_index';     // Hash: normalized Message-ID -> lea
 const LOCK_KEY = 'reply_check_lock';
 const LAST_RUN_KEY = 'reply_check_last_run';
 const EVENTS_KEY = 'reply_events';         // List: non-human inbound (ooo / bounce / auto-ack) for diagnostics
-const PENDING_BOT_KEY = 'pending_auto_replies'; // Hash: leadEmail -> reply waiting for the bot
 const CONVERSATIONS_KEY = 'conversations';
 
 const FIRST_SCAN_MS = 7 * 24 * 60 * 60 * 1000;
@@ -729,36 +727,11 @@ export async function checkAllReplies(opts = {}) {
       }
     }
 
-    // ── Auto-reply bot: queued first (from a previous run that ran out of
-    //    time), then this run's new replies, within the remaining budget. ──
-    let queued = {};
-    try { queued = (await kv.hgetall(PENDING_BOT_KEY)) || {}; } catch {}
-    const botWork = [
-      ...Object.values(queued).filter((r) => r && r.leadEmail).map((r) => ({ reply: r, leadEmail: r.leadEmail, queued: true })),
-      ...forBot,
-    ];
-    for (const work of botWork) {
-      if (Date.now() > deadline - 12000) {
-        // Out of time: park it for the next run instead of dropping it.
-        try { await kv.hset(PENDING_BOT_KEY, { [work.leadEmail]: work.reply }); } catch {}
-        summary.autoReplies.push({ to: work.leadEmail, skipped: 'deferred_no_time' });
-        continue;
-      }
-      try {
-        const lead = (await getLeadsByEmail([work.leadEmail]))[work.leadEmail];
-        if (!lead) { try { await kv.hdel(PENDING_BOT_KEY, work.leadEmail); } catch {} continue; }
-        const autoResult = await maybeAutoReply(work.reply, lead);
-        summary.autoReplies.push({ to: work.leadEmail, ...autoResult });
-        if (autoResult && autoResult.retry) {
-          try { await kv.hset(PENDING_BOT_KEY, { [work.leadEmail]: work.reply }); } catch {}
-        } else {
-          try { await kv.hdel(PENDING_BOT_KEY, work.leadEmail); } catch {}
-        }
-      } catch (err) {
-        summary.autoReplies.push({ to: work.leadEmail, skipped: `error: ${err.message}` });
-        try { await kv.hdel(PENDING_BOT_KEY, work.leadEmail); } catch {}
-      }
-    }
+    // Replies are handled by a person (the 30-Day Trial model), so there is
+    // no auto-reply bot here: this scanner only records the reply, updates the
+    // lead + Replies tab, and stops the sequence. `forBot` is retained above
+    // for the run summary but nothing is auto-sent.
+    void forBot;
   } catch (err) {
     summary.errors.push({ error: err.message || String(err) });
   } finally {

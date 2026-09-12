@@ -33,13 +33,13 @@ function isReplied(l) { return afterStart(l.replied_at); }
 function isOpened(l) { return afterStart(l.opened_at); }
 
 // ── Campaigns ───────────────────────────────────────────────────────────
+// One campaign now (the 30-Day Trial model — one offer, one sequence). The
+// `campaign` field still exists on leads for back-compat but everything rolls
+// up into a single line.
 const CAMPAIGNS = [
-  { id: 'free-leads', idx: '00', name: 'Free Leads', token: 'var(--c-free)' },
-  { id: 'offer', idx: '01', name: 'Guaranteed Calls', token: 'var(--c-offer)' },
+  { id: 'offer', idx: '00', name: 'Outreach', token: 'var(--c-offer)' },
 ];
-function campaignOf(l) {
-  return String(l.campaign || '').toLowerCase() === 'free-leads' ? 'free-leads' : 'offer';
-}
+function campaignOf() { return 'offer'; }
 
 const card = { background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 3, boxShadow: 'none' };
 const pct = (n, d) => (d ? Math.round((n / d) * 1000) / 10 : 0);
@@ -250,8 +250,6 @@ function DayTable({ rows }) {
           <tr>
             <th className="mono" style={{ ...th, textAlign: 'left' }}>Day</th>
             <th className="mono" style={th}>Sent</th>
-            <th className="mono" style={th}>Free Leads</th>
-            <th className="mono" style={th}>Guaranteed Calls</th>
             <th className="mono" style={th}>Opened</th>
             <th className="mono" style={th}>Replied</th>
           </tr>
@@ -261,8 +259,6 @@ function DayTable({ rows }) {
             <tr key={r.d}>
               <td style={{ ...td, textAlign: 'left', whiteSpace: 'nowrap' }}>{longDate(r.d)}</td>
               <td style={{ ...td, fontWeight: 700 }}>{r.sent}</td>
-              <td style={td}>{r['free-leads']}</td>
-              <td style={td}>{r.offer}</td>
               <td style={td}>{r.opened}</td>
               <td style={td}>{r.replied}</td>
             </tr>
@@ -324,12 +320,6 @@ export default function Dashboard() {
     };
   });
 
-  const totalsRow = {
-    name: 'All campaigns', leads: total, queued: newLeads.length, contacted,
-    touches: emailsSent, opened: openedLeads.length, replied: repliedLeads.length,
-    openRate, replyRate,
-  };
-
   const busiest = daily.reduce((b, r) => (r.sent > (b?.sent || 0) ? r : b), null);
   const activeDays = daily.filter((r) => r.sent > 0).length;
 
@@ -367,8 +357,8 @@ export default function Dashboard() {
         </span>
       </div>
       <p style={{ color: 'var(--fg-muted)', fontSize: 14, margin: '14px 0 22px', maxWidth: 640 }}>
-        Both campaigns, combined. Every number below counts Free Leads and Guaranteed Calls together;
-        the results table splits them, and each day on the chart opens up on hover.
+        The whole outreach engine at a glance — leads, inboxes live, emails sent, opens and replies.
+        Each day on the chart opens up on hover.
       </p>
 
       <div className="rule" style={{ marginBottom: 22 }} />
@@ -386,14 +376,14 @@ export default function Dashboard() {
       {/* ── Results by campaign ─────────────────────────────────────────── */}
       <div className="viz" style={{ ...card, padding: '20px 22px', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
-          <div className="eyebrow"><span className="idx">06</span>&nbsp;/&nbsp;RESULTS BY CAMPAIGN</div>
+          <div className="eyebrow"><span className="idx">06</span>&nbsp;/&nbsp;RESULTS</div>
           <span style={{ fontSize: 12.5, color: 'var(--fg-dim)' }}>Rates are measured against leads contacted</span>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 660 }}>
             <thead>
               <tr>
-                <th className="mono" style={{ ...th, textAlign: 'left' }}>Campaign</th>
+                <th className="mono" style={{ ...th, textAlign: 'left' }}>Segment</th>
                 <th className="mono" style={th}>Leads</th>
                 <th className="mono" style={th}>Queued</th>
                 <th className="mono" style={th}>Contacted</th>
@@ -428,17 +418,6 @@ export default function Dashboard() {
                   <td style={{ ...td, fontWeight: 700 }}>{loading ? '—' : `${c.replyRate}%`}</td>
                 </tr>
               ))}
-              <tr>
-                <td style={{ ...td, textAlign: 'left', fontWeight: 700, borderTop: '2px solid var(--border-strong)' }}>{totalsRow.name}</td>
-                <td style={{ ...td, fontWeight: 700, borderTop: '2px solid var(--border-strong)' }}>{loading ? '—' : fmt(totalsRow.leads)}</td>
-                <td style={{ ...td, fontWeight: 700, borderTop: '2px solid var(--border-strong)', color: 'var(--fg-muted)' }}>{loading ? '—' : fmt(totalsRow.queued)}</td>
-                <td style={{ ...td, fontWeight: 700, borderTop: '2px solid var(--border-strong)' }}>{loading ? '—' : fmt(totalsRow.contacted)}</td>
-                <td style={{ ...td, fontWeight: 700, borderTop: '2px solid var(--border-strong)' }}>{loading ? '—' : fmt(totalsRow.touches)}</td>
-                <td style={{ ...td, fontWeight: 700, borderTop: '2px solid var(--border-strong)' }}>{loading ? '—' : fmt(totalsRow.opened)}</td>
-                <td style={{ ...td, fontWeight: 700, borderTop: '2px solid var(--border-strong)' }}>{loading ? '—' : `${totalsRow.openRate}%`}</td>
-                <td style={{ ...td, fontWeight: 700, borderTop: '2px solid var(--border-strong)' }}>{loading ? '—' : fmt(totalsRow.replied)}</td>
-                <td style={{ ...td, fontWeight: 700, borderTop: '2px solid var(--border-strong)' }}>{loading ? '—' : `${totalsRow.replyRate}%`}</td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -469,7 +448,7 @@ export default function Dashboard() {
         <div className="viz" style={{ ...card, padding: '20px 22px' }}>
           <div className="eyebrow" style={{ marginBottom: 14 }}><span className="idx">08</span>&nbsp;/&nbsp;INBOXES</div>
           {(inboxes.length ? inboxes : [{ email: 'Loading…', enabled: false, sentToday: 0, cap: 0 }]).map((b) => {
-            const c = CAMPAIGNS.find((x) => x.id === (b.campaign || 'offer')) || CAMPAIGNS[1];
+            const c = CAMPAIGNS.find((x) => x.id === (b.campaign || 'offer')) || CAMPAIGNS[0];
             return (
               <div key={b.email} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 0', borderTop: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>

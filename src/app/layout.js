@@ -10,8 +10,7 @@ const NAV = [
   { href: '/inboxes', label: 'Inboxes' },
   { href: '/leads', label: 'Leads' },
   { href: '/replies', label: 'Replies' },
-  { href: '/calendar', label: 'Calendar' },
-  { href: '/campaigns', label: 'Campaigns' },
+  { href: '/activity', label: 'Activity' },
 ];
 
 function Brand() {

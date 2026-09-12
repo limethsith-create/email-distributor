@@ -52,9 +52,7 @@
 
 import { kv } from '@vercel/kv';
 import { sendEmail } from '@/lib/mailer';
-import { getEmailForSequenceDay, enhanceWithAI } from '@/lib/personalize';
-import { maybeEnrichNames } from '@/lib/enrich-names';
-import { flyerHtml, textBodyHtml } from '@/lib/flyer';
+import { getEmailForSequenceDay } from '@/lib/personalize';
 import { checkAllReplies } from '@/lib/reply-checker';
 import { logSentEmail, patchLead, markLeadBounced, indexMessageIds, getLeadsMap } from '@/lib/leads-db';
 import { verifyEmail } from '@/lib/email-verify';
@@ -205,17 +203,21 @@ async function loadTodayCounts(accounts, today) {
   const counts = {};
   const fresh = {};
   try {
-    // kv.hmget returns a POSITIONAL ARRAY ([v0, v1, ...]) in the order of the
-    // requested keys — NOT an object keyed by field name. Reading it by field
-    // name (res[`${email}:${today}`]) is always undefined, which made every
-    // inbox read 0 sent-today, so the daily cap was never enforced and inboxes
-    // sent far past their limit (24 and 28 on 2026-09-08 vs a cap of 10). Read
-    // by index instead.
-    const res = (await kv.hmget(DAILY_SEND_KEY, ...keys)) || [];
-    accounts.forEach((a, i) => {
-      counts[a.email] = parseInt(res[i * 2] || '0', 10) || 0;
-      fresh[a.email] = parseInt(res[i * 2 + 1] || '0', 10) || 0;
-    });
+    // @vercel/kv (Upstash Redis) returns hmget as an OBJECT keyed by field
+    // name — { "a@x:2026-09-11": 5, ... } — NOT a positional array. Read it by
+    // field name. (A previous fix read it by index and always got 0, so the
+    // cap was never enforced; `inboxes-control` reads it by field name and
+    // reports the right numbers, which is the reference here.) The helper also
+    // tolerates an array shape defensively.
+    const res = (await kv.hmget(DAILY_SEND_KEY, ...keys)) || {};
+    const read = (k) => {
+      const v = Array.isArray(res) ? res[keys.indexOf(k)] : res[k];
+      return parseInt(v ?? '0', 10) || 0;
+    };
+    for (const a of accounts) {
+      counts[a.email] = read(`${a.email}:${today}`);
+      fresh[a.email] = read(`${a.email}:${today}:d0`);
+    }
   } catch {
     for (const a of accounts) { counts[a.email] = 0; fresh[a.email] = 0; }
   }
@@ -331,6 +333,23 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+/** Render a plain-text body as simple paragraph HTML that reads like a person
+ *  wrote it (no tables, no newsletter chrome — that trips cold-outreach spam
+ *  filters). Blank lines become paragraphs; aviance.online is linked. */
+function textBodyHtml(body) {
+  const paragraphs = String(body)
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => {
+      let t = escapeHtml(p).replace(/\n/g, '<br>');
+      t = t.replace(/(^|[^/.\w])(aviance\.online)/gi, '$1<a href="https://www.aviance.online" style="color:#141414;">aviance.online</a>');
+      return `<p style="margin:0 0 14px 0;">${t}</p>`;
+    })
+    .join('\n');
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;color:#222222;max-width:560px;">${paragraphs}</div>`;
+}
+
 /** Build subject/html/text/headers for one touch of one lead. */
 async function buildTouch(lead, day) {
   const qualified = {
@@ -341,8 +360,7 @@ async function buildTouch(lead, day) {
     city: lead.city || 'USA',
     first_name: lead.first_name || lead.name?.split(/[\s,]/)[0] || null,
   };
-  let content = getEmailForSequenceDay(qualified, day);
-  if (day === 0) content = await enhanceWithAI(qualified, content);
+  const content = getEmailForSequenceDay(qualified, day);
 
   // Follow-ups keep the ORIGINAL subject so Gmail groups the thread.
   let subject = content.subject;
@@ -353,11 +371,11 @@ async function buildTouch(lead, day) {
   const [rawBody, unsubNote] = String(content.body).split('---');
   const note = (unsubNote || "Not the right fit? Just reply STOP and I will not email you again.").trim();
   const htmlUnsubscribe = `<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">${escapeHtml(note)}</p>`;
-  // Day 0 must land in the inbox and earn a reply, and day 7 is a breakup note:
-  // both send the SAME personalized copy in the HTML part as in the text part.
-  // The designed poster is the day-3 follow-up only (see lib/flyer.js).
+  // Every touch sends the same personalized plain-text copy in both parts —
+  // a message that reads like a person wrote it, not a designed newsletter
+  // (which is a strong cold-outreach spam signal).
   const bodyText = rawBody.trim();
-  const html = (day === 3 ? flyerHtml(qualified) : textBodyHtml(bodyText)) + htmlUnsubscribe;
+  const html = textBodyHtml(bodyText) + htmlUnsubscribe;
 
   const headers = {};
   if (day === 3 && lead.original_message_id) {
@@ -789,12 +807,8 @@ export async function GET(request) {
   }
   await releaseLock(lockToken);
 
-  // ── After the send, outside the lock: replies, then names (budgeted). ──
+  // ── After the send, outside the lock: scan for replies. ──
   const replyCheck = await maybeRunReplyCheck(true, deadlineMs);
-  let enrich = null;
-  if (Date.now() < deadlineMs - 30000) {
-    try { enrich = await maybeEnrichNames(); } catch (err) { enrich = { error: err.message }; }
-  }
 
   return jsonOk({
     mode: 'scheduled',
@@ -803,7 +817,6 @@ export async function GET(request) {
     detail: sentDetail,
     accountStatus,
     replyCheck,
-    enrich,
     durationMs: Date.now() - startedAt,
   });
 }

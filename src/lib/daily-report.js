@@ -22,7 +22,7 @@ import { kv } from '@vercel/kv';
 import { sendEmail } from '@/lib/mailer';
 import { getAllReplies, getLeadsMap } from '@/lib/leads-db';
 import { isJunkConversation } from '@/lib/junk-filter';
-import { etParts, campaignOf, isSendable, SEND_CAP } from '@/lib/metrics';
+import { etParts, isSendable, SEND_CAP } from '@/lib/metrics';
 import { SEND_DAYS, SEND_WINDOW_END_HOUR } from '@/lib/warmup';
 
 const DAILY_SEND_KEY = 'daily_sends';
@@ -120,7 +120,6 @@ async function collect({ accountsAll, cfg, today }) {
     const h = cfg.health[e] || {};
     return {
       email: e,
-      campaign: lower(cfg.campaignMap[e]) === 'free-leads' ? 'Free Leads' : 'Guaranteed Calls',
       enabled, cap,
       sent: counts[`${e}:${today}`], d0: counts[`${e}:${today}:d0`], d3: counts[`${e}:${today}:d3`], d7: counts[`${e}:${today}:d7`],
       failed: counts[`${e}:${today}:failed`],
@@ -132,12 +131,12 @@ async function collect({ accountsAll, cfg, today }) {
 
   // Pipeline: what is queued for tomorrow.
   const nowMs = Date.now();
-  const fresh = { 'free-leads': 0, offer: 0 };
+  let freshLeads = 0;
   let dueFollowUps = 0;
   let repliedToday = 0;
   for (const lead of Object.values(leadsMap || {})) {
     if (!lead || !lead.email) continue;
-    if (isSendable(lead)) { fresh[campaignOf(lead)]++; continue; }
+    if (isSendable(lead)) { freshLeads++; continue; }
     const st = lower(lead.status);
     if (lead.sent_at && (st === 'sent-d0' || st === 'sent-d3')) {
       const base = st === 'sent-d0' ? new Date(lead.sent_at).getTime() + 3 * 864e5 : (lead.d3_sent_at ? new Date(lead.d3_sent_at).getTime() : new Date(lead.sent_at).getTime() + 3 * 864e5) + 4 * 864e5;
@@ -146,17 +145,16 @@ async function collect({ accountsAll, cfg, today }) {
     if (lead.replied_at && String(lead.replied_at).slice(0, 10) === today) repliedToday++;
   }
 
-  // Replies that need a human.
+  // Replies that need a human (all replies are handled by a person now).
   const conversations = Object.values(convRaw && typeof convRaw === 'object' ? convRaw : {}).filter((c) => c && typeof c === 'object' && !isJunkConversation(c));
-  const owesList = conversations.filter((c) => c.status === 'needs_list');
-  const awaiting = conversations.filter((c) => c.status === 'awaiting_human');
+  const awaiting = conversations.filter((c) => (c.messages || []).some((m) => m && m.dir === 'in'));
   const humanRepliesToday = (replies || []).filter((r) => r && String(r.date || '').slice(0, 10) === today && (String(r.kind || '').toLowerCase() === 'human' || !r.kind)).length;
 
   return {
     inboxes,
     totals: { sent: counts[`__total__:${today}`], followUps: counts[`__followups__:${today}`], failed: counts[`__failed__:${today}`] },
-    pipeline: { freshFreeLeads: fresh['free-leads'], freshOffer: fresh.offer, dueFollowUps },
-    replies: { today: Math.max(humanRepliesToday, repliedToday), owesList, awaiting },
+    pipeline: { freshLeads, dueFollowUps },
+    replies: { today: Math.max(humanRepliesToday, repliedToday), awaiting },
   };
 }
 
@@ -171,9 +169,8 @@ function renderReport(today, data) {
     if (i.imap !== 'ok') problems.push(`${i.email}: ${i.imap}`);
     if (i.sent && i.bounces / i.sent > 0.05) problems.push(`${i.email}: ${i.bounces} bounces on ${i.sent} sent (${Math.round((i.bounces / i.sent) * 100)}%) — above the 5% line.`);
   }
-  if (replies.owesList.length) problems.push(`${replies.owesList.length} prospect(s) replied SEND IT and are still owed their 5 free leads.`);
   if (replies.awaiting.length) problems.push(`${replies.awaiting.length} reply(ies) waiting for you to answer.`);
-  if (pipeline.freshFreeLeads + pipeline.freshOffer < 40) problems.push(`Only ${pipeline.freshFreeLeads + pipeline.freshOffer} fresh leads left in the queue — import more soon.`);
+  if (pipeline.freshLeads < 40) problems.push(`Only ${pipeline.freshLeads} fresh leads left in the queue — import more soon.`);
 
   const headline = totals.sent === 0
     ? `0 emails sent today`
@@ -187,21 +184,21 @@ function renderReport(today, data) {
   if (problems.length) { lines.push('NEEDS YOUR ATTENTION'); for (const p of problems) lines.push(`  - ${p}`); lines.push(''); }
   lines.push('INBOXES');
   for (const i of inboxes) {
-    lines.push(`  ${i.email} (${i.campaign}) — ${i.enabled ? 'ON' : 'OFF'} · ${i.sent}/${i.cap} sent (fresh ${i.d0}, day-3 ${i.d3}, day-7 ${i.d7})${i.failed ? ` · ${i.failed} failed` : ''}${i.bounces ? ` · ${i.bounces} bounced` : ''} · health ${i.health}`);
+    lines.push(`  ${i.email} — ${i.enabled ? 'ON' : 'OFF'} · ${i.sent}/${i.cap} sent (fresh ${i.d0}, day-3 ${i.d3}, day-7 ${i.d7})${i.failed ? ` · ${i.failed} failed` : ''}${i.bounces ? ` · ${i.bounces} bounced` : ''} · health ${i.health}`);
   }
   lines.push('');
   lines.push('REPLIES');
-  lines.push(`  ${replies.today} human reply(ies) today · ${replies.awaiting.length} waiting for you · ${replies.owesList.length} owed a free-leads list`);
+  lines.push(`  ${replies.today} reply(ies) today · ${replies.awaiting.length} waiting for you`);
   lines.push('');
   lines.push('QUEUED FOR TOMORROW');
-  lines.push(`  ${pipeline.dueFollowUps} follow-ups due · ${pipeline.freshOffer} fresh Guaranteed-Calls leads · ${pipeline.freshFreeLeads} fresh Free-Leads leads`);
+  lines.push(`  ${pipeline.dueFollowUps} follow-ups due · ${pipeline.freshLeads} fresh leads`);
   lines.push('');
   lines.push(`Dashboard: ${DASHBOARD}   Inboxes: ${DASHBOARD}/inboxes   Replies: ${DASHBOARD}/replies`);
   lines.push('— Aviance Outreach (automatic report, sent once per day after 7 PM ET)');
   const text = lines.join('\n');
 
   const row = (i) => `<tr>
-<td style="padding:8px 10px;border-bottom:1px solid #eee;"><b>${esc(i.email)}</b><br><span style="color:#8A8A85;font-size:12px;">${esc(i.campaign)}</span></td>
+<td style="padding:8px 10px;border-bottom:1px solid #eee;"><b>${esc(i.email)}</b></td>
 <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;color:${i.enabled ? '#1a7f37' : '#E0290F'};font-weight:bold;">${i.enabled ? 'ON' : 'OFF'}</td>
 <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;"><b>${i.sent}</b> / ${i.cap}<br><span style="color:#8A8A85;font-size:12px;">fresh ${i.d0} · d3 ${i.d3} · d7 ${i.d7}</span></td>
 <td style="padding:8px 10px;border-bottom:1px solid #eee;text-align:center;">${i.failed}${i.bounces ? ` <span style="color:#E0290F;">(${i.bounces} bounced)</span>` : ''}</td>
@@ -216,8 +213,8 @@ ${problems.length ? `<div style="background:#FFF3F1;border-left:4px solid #E0290
 <thead><tr style="background:#141414;color:#fff;font-size:11px;letter-spacing:1px;"><th style="padding:8px 10px;text-align:left;">INBOX</th><th style="padding:8px 10px;">SWITCH</th><th style="padding:8px 10px;">SENT / CAP</th><th style="padding:8px 10px;">FAILED</th><th style="padding:8px 10px;text-align:left;">HEALTH</th></tr></thead>
 <tbody>${inboxes.map(row).join('')}</tbody></table>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px;font-size:14px;">
-<tr><td style="padding:6px 0;width:50%;vertical-align:top;"><b>Replies</b><br>${replies.today} human reply(ies) today<br>${replies.awaiting.length} waiting for you<br>${replies.owesList.length} owed a free-leads list</td>
-<td style="padding:6px 0;vertical-align:top;"><b>Queued for tomorrow</b><br>${pipeline.dueFollowUps} follow-ups due<br>${pipeline.freshOffer} fresh Guaranteed-Calls leads<br>${pipeline.freshFreeLeads} fresh Free-Leads leads</td></tr></table>
+<tr><td style="padding:6px 0;width:50%;vertical-align:top;"><b>Replies</b><br>${replies.today} reply(ies) today<br>${replies.awaiting.length} waiting for you</td>
+<td style="padding:6px 0;vertical-align:top;"><b>Queued for tomorrow</b><br>${pipeline.dueFollowUps} follow-ups due<br>${pipeline.freshLeads} fresh leads</td></tr></table>
 <p style="margin-top:18px;"><a href="${DASHBOARD}">Dashboard</a> · <a href="${DASHBOARD}/inboxes">Inboxes</a> · <a href="${DASHBOARD}/replies">Replies</a></p>
 <p style="color:#8A8A85;font-size:12px;">Automatic report, sent once per day after 7 PM ET.</p></div>`;
 

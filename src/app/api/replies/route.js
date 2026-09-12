@@ -81,30 +81,3 @@ export async function GET() {
     }, { status: 500 });
   }
 }
-
-/**
- * POST { email, action: 'list_delivered' | 'reopen' }
- * Lets the owner clear the "OWES 5 FREE LEADS" flag from the Replies page
- * once the list has been sent from their inbox (the scanner only reads
- * inbound mail, so nothing else would ever clear it).
- */
-export async function POST(request) {
-  try {
-    const body = await request.json().catch(function () { return {}; });
-    const email = String(body.email || '').trim().toLowerCase();
-    const action = String(body.action || '').trim();
-    if (!email) return Response.json({ success: false, error: 'email required' }, { status: 400 });
-    const existing = await kv.hget('conversations', email);
-    if (!existing || typeof existing !== 'object') return Response.json({ success: false, error: 'conversation not found' }, { status: 404 });
-    const now = new Date().toISOString();
-    let patch;
-    if (action === 'list_delivered') patch = { status: 'list_delivered', list_delivered_at: now };
-    else if (action === 'reopen') patch = { status: 'needs_list', list_delivered_at: null };
-    else return Response.json({ success: false, error: 'unknown action' }, { status: 400 });
-    const entry = { ...existing, ...patch, updatedAt: now };
-    await kv.hset('conversations', { [email]: entry });
-    return Response.json({ success: true, conversation: entry });
-  } catch (err) {
-    return Response.json({ success: false, error: err.message }, { status: 500 });
-  }
-}

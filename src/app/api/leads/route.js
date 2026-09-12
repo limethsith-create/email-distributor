@@ -4,7 +4,6 @@
 
 import { kv } from '@vercel/kv';
 import { getAllLeads, getStats, getSentLog, bulkUpsertLeads, getLeadsByEmail, newLeadRecord } from '@/lib/leads-db';
-import { qualifyLeads } from '@/lib/qualify';
 import { mergeOpens, isSendable, isValidEmail, normalizeEmail, campaignOf } from '@/lib/metrics';
 
 export const dynamic = 'force-dynamic';
@@ -178,13 +177,6 @@ export async function POST(request) {
         const sendable = inserts.filter(isSendable).length;
         const result = await bulkUpsertLeads(toAdd, { source: 'manual' });
         return Response.json({ success: true, ...result, sendable });
-      }
-
-      case 'qualify_and_add': {
-        const leads = Array.isArray(body.leads) ? body.leads : [body];
-        const qualified = qualifyLeads(leads, { minScore: body.minScore || 5, maxLeads: leads.length });
-        const result = await bulkUpsertLeads(qualified, { source: 'manual' });
-        return Response.json({ success: true, qualified: qualified.length, ...result });
       }
 
       default:
