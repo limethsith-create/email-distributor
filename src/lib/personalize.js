@@ -112,6 +112,23 @@ export function generateEmailSequence(lead) {
   return { day0: day0(lead), day3: day3(lead), day7: day7(lead) };
 }
 
+/**
+ * True while the scaffold above is still the live copy.
+ *
+ * The bodies ship as literal "[PLACEHOLDER — …]" markers, so sending in this
+ * state would put that text in front of real prospects and burn the sending
+ * domain. The heartbeat checks this and refuses to send until Sequence T is
+ * written in. Deleting every PLACEHOLDER marker is what switches sending back
+ * on — there is no flag to remember to flip.
+ */
+export function isPlaceholderCopy() {
+  const probe = { email: 'probe@example.com', company: 'Example', first_name: 'Probe' };
+  const seq = generateEmailSequence(probe);
+  return Object.values(seq).some(
+    (e) => e.template === 'placeholder' || /\[PLACEHOLDER/i.test(String(e.body)),
+  );
+}
+
 /** Return the right email for a lead based on its sequence day (0 / 3 / 7). */
 export function getEmailForSequenceDay(lead, sequenceDay) {
   const sequence = generateEmailSequence(lead);

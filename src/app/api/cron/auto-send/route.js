@@ -52,7 +52,7 @@
 
 import { kv } from '@vercel/kv';
 import { sendEmail } from '@/lib/mailer';
-import { getEmailForSequenceDay } from '@/lib/personalize';
+import { getEmailForSequenceDay, isPlaceholderCopy } from '@/lib/personalize';
 import { checkAllReplies } from '@/lib/reply-checker';
 import { logSentEmail, patchLead, markLeadBounced, indexMessageIds, getLeadsMap } from '@/lib/leads-db';
 import { verifyEmail } from '@/lib/email-verify';
@@ -608,6 +608,22 @@ export async function GET(request) {
   // ── Cheap gates before the lock: inbox switches, caps, pacing. ──
   const accountsAll = getSmtpAccounts();
   if (!accountsAll.length) return Response.json({ error: 'No SMTP accounts configured' }, { status: 500 });
+
+  // ── Never send the placeholder scaffold. ──
+  // personalize.js ships with "[PLACEHOLDER — replace with Sequence T]" bodies.
+  // Deploying that copy with an inbox switched on would send the markers to real
+  // prospects, so refuse to send while they are still there. Replies are still
+  // scanned, and the gate lifts on its own once the real copy replaces them.
+  if (isPlaceholderCopy()) {
+    const replyCheck = await maybeRunReplyCheck(true, deadlineMs);
+    return jsonOk({
+      sent: 0,
+      blocked: 'placeholder_copy',
+      message: 'Email copy is still the PLACEHOLDER scaffold — sending is blocked until Sequence T is written into src/lib/personalize.js.',
+      today,
+      replyCheck,
+    });
+  }
 
   const cfg = await loadInboxConfig();
   if (cfg.enabledUnavailable) {
