@@ -62,6 +62,10 @@ export const ALERTS = {
   monday_digest: { urgent: false, title: 'Monday KPIs — {date}' },
   test: { urgent: true, title: 'Test alert from Mission Control' },
   // ── Stage A additions ──
+  market_unavailable: { urgent: true, title: 'Market count could not run: {clientId}' },
+  autorenew_on: { urgent: true, title: 'Auto-renew is not confirmed off for {domain}' },
+  promo_expired: { urgent: false, title: 'Promo expired: {registrar} {code}' },
+  booking_link_broken: { urgent: false, title: 'Booking link problem: {clientId}' },
   // ── end Stage A ──
   // ── Stage B additions ──
   // ── end Stage B ──

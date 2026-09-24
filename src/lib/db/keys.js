@@ -84,6 +84,17 @@ export const K = {
   migrations: () => 'system:migrations',
 
   // ── Stage A additions (intake) ── add new key builders only inside this block
+  application: (id) => `${c(id)}:application`,
+  market: (id) => `${c(id)}:market`,
+  dmarcDays: (id) => `${c(id)}:dmarc`,
+  mainDomainIndex: () => 'intake:maindomains',
+  applyClaim: (domain) => `intake:applyclaim:${String(domain || '').toLowerCase()}`,
+  applyRate: (ipHash, hour) => `intake:applyrate:${hour}:${ipHash}`,
+  priceCache: () => 'intake:pricecache',
+  promoFlags: () => 'intake:promoflags',
+  dmarcSeen: () => 'intake:dmarc:seen',
+  dmarcState: () => 'intake:dmarc:state',
+  onceClaim: (what, id, key) => `intake:once:${what}:${assertClientId(id)}:${key}`,
   // ── end Stage A ──
 
   // ── Stage B additions (build) ──

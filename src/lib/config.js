@@ -87,6 +87,61 @@ export const DEFAULTS = {
   },
   PAYMENT: { paypalMe: null, wiseDetails: null },
   // ── Stage A additions ── (new defaults only inside this block)
+  INTAKE: {
+    // Lead-gen / outbound / SDR agencies are not trial clients (trial doc §2).
+    agencyKeywords: ['lead gen', 'lead-gen', 'leadgen', 'lead generation', 'outbound agency', 'outbound sales agency',
+      'sdr agency', 'sdr as a service', 'sdr-as-a-service', 'sales development agency', 'appointment setting',
+      'appointment setters', 'cold email agency', 'cold outreach agency', 'demand generation agency'],
+    applyPerHourPerIp: 5,
+    applyClaimSeconds: 600,
+  },
+  QUEUE: { expectedExtraDays: 16 },
+  MARKET: { queriesMin: 3, queriesMax: 5, maxPerQuery: 60, pageSize: 20, coverageFactor: 3, overpassFactor: 1, retryHours: 1 },
+  PRICE: {
+    candidatePatterns: ['{b}-team', 'get{b}', '{b}hq', 'try{b}', '{b}-co', '{b}mail', 'hello-{b}', '{b}-us'],
+    backups: 2,
+    inboxesPerTrial: 2,
+    autoBuyMarginUsd: 2,
+  },
+  // Registrar first-year .com prices. Porkbun is read live from its public
+  // pricing API (static value below is only the fallback, marked unconfirmed);
+  // Cloudflare sells at cost. Source: Inbox Provider Research, 10 Sep 2026
+  // ("a .com renews at $10.44 (Cloudflare) to $10.99 (Porkbun)"). null = unknown,
+  // never guessed — the owner fills it in /mc/config.
+  registrars: {
+    porkbun: { name: 'Porkbun', live: true, prices: { com: 10.99, net: null, co: null }, seenAt: '2026-09-10' },
+    cloudflare: { name: 'Cloudflare', live: false, prices: { com: 10.44, net: null, co: null }, seenAt: '2026-09-10' },
+    spaceship: { name: 'Spaceship', live: false, prices: { com: null, net: null, co: null }, seenAt: null },
+  },
+  // Promo Hunter table, edited by the owner: {registrar, tld, code, firstYearPrice, expiresAt: 'YYYY-MM-DD'}.
+  promos: [],
+  // Inbox providers (Inbox Provider Research, prices verified 10 Sep 2026, USD per inbox per month).
+  // allowsAppPasswords null = not stated by the vendor → filtered out.
+  inboxProviders: [
+    { id: 'premiuminboxes', name: 'Premium Inboxes', url: 'https://premiuminboxes.com/pricing-page', pricePerMonth: 3.5, minOrder: null, allowsAppPasswords: true, rank: 1, seenAt: '2026-09-10' },
+    { id: 'inboxkit', name: 'InboxKit', url: 'https://www.inboxkit.com/pricing', pricePerMonth: 3.5, minOrder: null, allowsAppPasswords: true, rank: 2, seenAt: '2026-09-10' },
+    { id: 'cheapinboxes', name: 'CheapInboxes', url: 'https://www.cheapinboxes.com/', pricePerMonth: 3.5, minOrder: null, allowsAppPasswords: true, rank: 3, seenAt: '2026-09-10' },
+    { id: 'zapmail', name: 'Zapmail', url: 'https://zapmail.ai/', pricePerMonth: 3.9, minOrder: 10, allowsAppPasswords: true, rank: 4, seenAt: '2026-09-10' },
+    { id: 'coldinfra', name: 'ColdInfra', url: 'https://www.coldinfra.com/pricing', pricePerMonth: 3.0, minOrder: 10, allowsAppPasswords: null, rank: 5, seenAt: '2026-09-10' },
+    { id: 'hypertide', name: 'Hypertide (Google)', url: 'https://www.hypertide.io/', pricePerMonth: 3.3, minOrder: null, allowsAppPasswords: null, rank: 6, seenAt: '2026-09-10' },
+  ],
+  SETUP: {
+    loopbackWaitMin: 3,
+    spfInclude: '_spf.google.com',
+    dkimSelector: 'google',
+    googleMx: ['aspmx.l.google.com', 'smtp.google.com'],
+    dnsbl: ['bl.spamcop.net', 'b.barracudacentral.org', 'dnsbl.sorbs.net', 'spam.dnsbl.sorbs.net'],
+    dnsTimeoutMs: 4000,
+  },
+  AUTH: { dmarcWarn: 0.95, dmarcPause: 0.80, dmarcCollector: null, dmarcMaxMessages: 25, dmarcLookbackDays: 8 },
+  BOOKTEST: {
+    day: -4,
+    firstSlotMaxBusinessDays: 5,
+    minSlots7d: 10,
+    lengthMin: 15,
+    lengthMax: 30,
+    hosts: ['calendly.com', 'cal.com', 'calendar.google.com', 'calendar.app.google', 'tidycal.com', 'zoho.com', 'zohobookings.com', 'bookings.zoho.com'],
+  },
   // ── end Stage A ──
   // ── Stage B additions ──
   // ── end Stage B ──
