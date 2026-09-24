@@ -1,7 +1,7 @@
 # Build progress (SPEC §15)
 
-Branch `trial-machine` (not merged to `main`). Updated 2026-09-24 after the
-integration pass. `npm test` (145 tests, including the full simulated trial)
+Merged to `main` and deployed on 2026-09-25 (the Aviance Hub's Trials tab
+runs it — `docs/HUB-API.md`). Updated after the integration pass. `npm test` (145 tests, including the full simulated trial)
 and `npm run build` pass.
 
 | Phase | Code | Acceptance |
