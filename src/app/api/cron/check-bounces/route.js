@@ -24,7 +24,7 @@
 
 import { ImapFlow } from 'imapflow';
 import { kv } from '@vercel/kv';
-import { getSmtpAccounts, getOwnAddresses } from '@/lib/smtp-accounts';
+import { getSmtpAccounts, getOwnAddresses, loadAccounts } from '@/lib/smtp-accounts';
 import { getLeadsByEmail, markLeadBounced } from '@/lib/leads-db';
 import { recordImapResult, updateInboxHealth } from '@/lib/inbox-health';
 import {
@@ -378,6 +378,7 @@ async function checkAllBounces() {
     timestamp: new Date().toISOString(),
   };
 
+  await loadAccounts();
   const accounts = getSmtpAccounts();
   if (!accounts.length) {
     summary.error = 'No SMTP accounts configured';

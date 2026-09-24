@@ -23,34 +23,9 @@
  *             smtp: { host, port, secure }, imap: { host, port }, spamFolder }]
  */
 
-const GLOBAL_SMTP_HOST = (process.env.SMTP_HOST || '').trim();
-const GLOBAL_SMTP_PORT = parseInt(process.env.SMTP_PORT || '465', 10) || 465;
-const GLOBAL_IMAP_HOST = (process.env.IMAP_HOST || '').trim();
+import { PROVIDERS, GLOBAL_SMTP_HOST } from '@/lib/smtp-providers';
 
-export const PROVIDERS = {
-  google: {
-    smtp: { host: 'smtp.gmail.com', port: 465, secure: true },
-    imap: { host: 'imap.gmail.com', port: 993 },
-    spamFolder: '[Gmail]/Spam',
-  },
-  namecheap: {
-    smtp: { host: 'mail.privateemail.com', port: 465, secure: true },
-    imap: { host: 'mail.privateemail.com', port: 993 },
-    spamFolder: 'Junk',
-  },
-  custom: {
-    smtp: {
-      host: GLOBAL_SMTP_HOST || 'mail.privateemail.com',
-      port: GLOBAL_SMTP_PORT,
-      secure: GLOBAL_SMTP_PORT === 465,
-    },
-    imap: {
-      host: GLOBAL_IMAP_HOST || GLOBAL_SMTP_HOST.replace(/^smtp\./i, 'imap.') || 'mail.privateemail.com',
-      port: 993,
-    },
-    spamFolder: 'Junk',
-  },
-};
+export { PROVIDERS };
 
 function detectProvider(email, explicit) {
   const wanted = String(explicit || '').trim().toLowerCase();
@@ -61,7 +36,7 @@ function detectProvider(email, explicit) {
   return 'namecheap';
 }
 
-function parseAccount(raw, index) {
+export function parseAccount(raw, index = 0) {
   const value = String(raw || '').trim();
   if (!value) return null;
   const [emailRaw, password, ...rest] = value.split(':');
@@ -84,17 +59,45 @@ function parseAccount(raw, index) {
 }
 
 let cache = null;
+// Inboxes stored in Redis for client `aviance` (SPEC §2: "smtp-accounts.js reads
+// inboxes from Redis"). Filled by loadAccounts(); a Redis record wins over an
+// env line for the same address.
+let redisAccounts = [];
+
+function envAccounts() {
+  if (!cache) {
+    const accounts = [];
+    for (let i = 1; i <= 10; i++) {
+      const envVar = process.env[`SMTP_ACCOUNT_${i}`] || process.env[`GMAIL_ACCOUNT_${i}`];
+      const account = parseAccount(envVar, i);
+      if (account) accounts.push({ ...account, clientId: 'aviance', source: 'env' });
+    }
+    cache = accounts;
+  }
+  return cache;
+}
+
+/**
+ * Refresh the Redis-stored inboxes for the aviance client. Call once at the
+ * start of any route that sends or reads mail; getSmtpAccounts() stays sync.
+ * A Redis failure keeps the last good list (env accounts always remain).
+ */
+export async function loadAccounts() {
+  try {
+    const { getInboxRecords, toAccount } = await import('@/lib/db/inboxes');
+    const recs = await getInboxRecords('aviance');
+    redisAccounts = recs.map(toAccount).filter(Boolean);
+  } catch (err) {
+    console.error('[smtp-accounts] redis inbox load failed:', err?.message);
+  }
+  return getSmtpAccounts();
+}
 
 export function getSmtpAccounts() {
-  if (cache) return cache.map((a) => ({ ...a, smtp: { ...a.smtp }, imap: { ...a.imap } }));
-  const accounts = [];
-  for (let i = 1; i <= 10; i++) {
-    const envVar = process.env[`SMTP_ACCOUNT_${i}`] || process.env[`GMAIL_ACCOUNT_${i}`];
-    const account = parseAccount(envVar, i);
-    if (account) accounts.push(account);
-  }
-  cache = accounts;
-  return getSmtpAccounts();
+  const byEmail = new Map();
+  for (const a of envAccounts()) byEmail.set(a.email, a);
+  for (const a of redisAccounts) byEmail.set(a.email, a);
+  return [...byEmail.values()].map((a) => ({ ...a, smtp: { ...a.smtp }, imap: { ...a.imap } }));
 }
 
 /** Look up one configured account by address (case-insensitive). */

@@ -1,0 +1,45 @@
+name: nightly-backup
+
+# Nightly snapshot of the database (SPEC §10.3). Passwords and tokens are
+# never in the export. Pushes to the private aviance-backups repo with a
+# deploy key and keeps the last 30 days of files.
+on:
+  schedule:
+    - cron: '30 6 * * *'   # 06:30 UTC (02:30 ET, 12:00 Colombo)
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Export
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'https://email-distributor.vercel.app' }}
+        run: |
+          code=$(curl -sS -m 90 -o snapshot.json -w '%{http_code}' \
+            -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/admin/export")
+          test "$code" = "200"
+          python3 -c "import json;d=json.load(open('snapshot.json'));print('keys:',d['count'])"
+      - name: Commit to aviance-backups
+        env:
+          DEPLOY_KEY: ${{ secrets.BACKUP_DEPLOY_KEY }}
+          BACKUP_REPO: ${{ vars.BACKUP_REPO || 'limethsith-create/aviance-backups' }}
+        run: |
+          mkdir -p ~/.ssh && echo "$DEPLOY_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          git clone --depth 1 "git@github.com:$BACKUP_REPO.git" backups
+          cd backups
+          day=$(date -u +%F)
+          mv ../snapshot.json "snapshot-$day.json"
+          find . -maxdepth 1 -name 'snapshot-*.json' -mtime +30 -delete || true
+          ls snapshot-*.json | sort | head -n -30 | xargs -r git rm -q
+          git config user.name "aviance-backup-bot"
+          git config user.email "backup-bot@users.noreply.github.com"
+          git add -A && git commit -qm "snapshot $day" && git push -q
+      - name: Ping Healthchecks
+        if: success()
+        env:
+          HC: ${{ secrets.HC_BACKUP_PING_URL }}
+        run: test -z "$HC" || curl -fsS -m 10 -X POST "$HC"

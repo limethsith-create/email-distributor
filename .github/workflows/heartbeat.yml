@@ -1,14 +1,23 @@
-name: sender-heartbeat
+name: heartbeat-backup
 
+# Backup heartbeat (SPEC §2 "Heartbeat B"). cron-job.org is the primary
+# pinger (every minute); this one keeps the machine ticking if it stops.
 on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
-  ping:
+  tick:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
-      - name: Ring the sender
-        run: curl -sS -m 30 "https://email-distributor.vercel.app/api/cron/auto-send" || true
-        
+      - name: Tick
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'https://email-distributor.vercel.app' }}
+        run: |
+          code=$(curl -sS -m 40 -o /tmp/tick.json -w '%{http_code}' \
+            -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/tick?source=github")
+          head -c 2000 /tmp/tick.json; echo
+          test "$code" = "200"

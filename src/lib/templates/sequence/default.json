@@ -1,0 +1,34 @@
+{
+  "name": "Sequence T — the trial as the hook",
+  "source": "The 30-Day Trial.docx, Section 10 (verbatim; {{Slot}} renamed to {Slot})",
+  "version": 1,
+  "footer": "{SenderName}\n{postalAddress}\n\nNot the right fit? Just reply STOP and I will not email you again.",
+  "touches": [
+    {
+      "touch": "d0",
+      "day": 0,
+      "thread": "new",
+      "subject": "30-day trial for {Company}",
+      "body": "Hi {FirstName},\n\nI run Aviance — we book sales calls for {niche} through cold email.\n\nThe offer: we run it for {Company} for 30 days, free. Two inboxes, a verified list of {ICP}, emails written and sent in your name, replies handled, calls booked onto your calendar. If we don’t book you at least one qualified call in 30 days, we keep going free until we do.\n\nThe catch is small: an honest review when it’s over.\n\nWorth a 10-minute call to see if {Company} qualifies?"
+    },
+    {
+      "touch": "d3",
+      "day": 3,
+      "thread": "d0",
+      "body": "{FirstName} — one thing I should have said: this costs us about seven dollars a month in inboxes and a few hours’ work. We do it because we’re new, we’re good at this, and we don’t have public reviews yet. A trial that ends in an honest review is the fastest way to fix that.\n\nWe run three at a time. Want one of the slots?"
+    },
+    {
+      "touch": "d7",
+      "day": 7,
+      "thread": "new",
+      "subject": "{Count} companies in {City}",
+      "body": "{FirstName} — I pulled the list: {Count} businesses with {size} staff within 30 miles of {City} that look like your kind of customer.\n\nThe trial emails four hundred of them for you, free, for 30 days. If a new customer is worth ${dealValue} to you, one call out of that pays for a year of anything we’d ever charge.\n\nWant the slot?"
+    },
+    {
+      "touch": "d10",
+      "day": 10,
+      "thread": "d7",
+      "body": "{FirstName} — I’ll assume booked calls aren’t the priority right now and close the file on {Company}.\n\nIf that changes, reply any time and I’ll reopen a trial slot."
+    }
+  ]
+}

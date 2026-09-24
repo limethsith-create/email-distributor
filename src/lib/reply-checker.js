@@ -36,7 +36,7 @@
 
 import { ImapFlow } from 'imapflow';
 import { kv } from '@vercel/kv';
-import { getSmtpAccounts, getOwnAddresses } from '@/lib/smtp-accounts';
+import { getSmtpAccounts, getOwnAddresses, loadAccounts } from '@/lib/smtp-accounts';
 import { getLeadsByEmail, getLeadsMap, patchLead, markLeadBounced, getAllReplies as getAllRepliesFromDb } from '@/lib/leads-db';
 import { recordImapResult } from '@/lib/inbox-health';
 import {
@@ -604,6 +604,7 @@ export async function checkAllReplies(opts = {}) {
     timestamp: new Date().toISOString(),
   };
 
+  await loadAccounts();
   const accounts = getSmtpAccounts();
   if (!accounts.length) {
     console.log('[reply-scan] NO SMTP accounts configured — env SMTP_ACCOUNT_1.. missing');

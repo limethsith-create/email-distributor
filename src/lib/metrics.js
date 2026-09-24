@@ -191,6 +191,7 @@ export function touchesOf(lead) {
   if (afterStart(lead?.sent_at)) out.push({ touch: 'd0', at: lead.sent_at });
   if (afterStart(lead?.d3_sent_at)) out.push({ touch: 'd3', at: lead.d3_sent_at });
   if (afterStart(lead?.d7_sent_at)) out.push({ touch: 'd7', at: lead.d7_sent_at });
+  if (afterStart(lead?.d10_sent_at)) out.push({ touch: 'd10', at: lead.d10_sent_at });
   return out;
 }
 

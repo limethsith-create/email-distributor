@@ -17,7 +17,7 @@
 
 import { kv } from '@vercel/kv';
 import { ImapFlow } from 'imapflow';
-import { getSmtpAccounts, findSmtpAccount } from '@/lib/smtp-accounts';
+import { getSmtpAccounts, findSmtpAccount, loadAccounts } from '@/lib/smtp-accounts';
 import { getTodayKey, dayKeys, normalizeCampaign, SEND_CAP, CAMPAIGNS } from '@/lib/metrics';
 import { describeHealth, updateInboxHealth, INBOX_HEALTH_KEY } from '@/lib/inbox-health';
 import { getLastReplyCheck } from '@/lib/reply-checker';
@@ -99,6 +99,7 @@ function trimLastReplyCheck(rec) {
 }
 
 export async function GET() {
+  await loadAccounts();
   const accounts = getSmtpAccounts();
   const list = accounts.length ? accounts : FALLBACK_INBOXES;
   const today = getTodayKey();
@@ -295,6 +296,7 @@ async function resetTodayCounts(accounts, today) {
 }
 
 export async function POST(request) {
+  await loadAccounts();
   try {
     const body = await request.json();
 

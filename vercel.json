@@ -1,5 +1,6 @@
 {
   "framework": "nextjs",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':(exclude).keepalive'",
   "crons": [
     {
       "path": "/api/cron/check-bounces",

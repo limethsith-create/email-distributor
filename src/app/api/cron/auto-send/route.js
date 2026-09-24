@@ -52,11 +52,13 @@
 
 import { kv } from '@vercel/kv';
 import { sendEmail } from '@/lib/mailer';
-import { getEmailForSequenceDay, isPlaceholderCopy } from '@/lib/personalize';
+import { getSequence, varsFor, renderTouch, sequenceReady, TemplateError } from '@/lib/systems/sequence';
+import { getProfile } from '@/lib/db/client';
+import { alertOwner } from '@/lib/notify';
 import { checkAllReplies } from '@/lib/reply-checker';
 import { logSentEmail, patchLead, markLeadBounced, indexMessageIds, getLeadsMap } from '@/lib/leads-db';
 import { verifyEmail } from '@/lib/email-verify';
-import { getSmtpAccounts } from '@/lib/smtp-accounts';
+import { getSmtpAccounts, loadAccounts } from '@/lib/smtp-accounts';
 import { isWithinSendingHours, minutesLeftInWindow } from '@/lib/warmup';
 import { getInboxHealth, recordSendSuccess, recordSendFailure, updateInboxHealth, shouldSkipInbox } from '@/lib/inbox-health';
 import { maybeSendDailyReport, maybeSendSwitchOffAlarm } from '@/lib/daily-report';
@@ -90,6 +92,7 @@ const LAST_GLOBAL_SEND_KEY = 'last_global_send';
 // Sequence timing.
 const D3_AFTER_MS = 3 * 24 * 60 * 60 * 1000;   // day 3 = 3 days after day 0
 const D7_AFTER_MS = 4 * 24 * 60 * 60 * 1000;   // day 7 = 4 days after day 3
+const D10_AFTER_MS = 3 * 24 * 60 * 60 * 1000;  // day 10 = 3 days after day 7 (SPEC SEQUENCE.gaps)
 const STALE_CLAIM_MS = 30 * 60 * 1000;
 
 // ─── Queue fairness (v3.1) ────────────────────────────────────────────────────
@@ -274,6 +277,10 @@ function partitionLeads(leadsMap, now) {
     } else if (status === 'sent-d3') {
       const base = lead.d3_sent_at ? new Date(lead.d3_sent_at).getTime() : new Date(lead.sent_at).getTime() + D3_AFTER_MS;
       pushDue(lead, 7, base + D7_AFTER_MS);
+    } else if (status === 'sent-d7') {
+      const d7At = lead.d7_sent_at || lead.d7_skipped_at;
+      const base = d7At ? new Date(d7At).getTime() : new Date(lead.sent_at).getTime() + D3_AFTER_MS + D7_AFTER_MS;
+      pushDue(lead, 10, base + D10_AFTER_MS);
     }
   }
   for (const c of Object.keys(fresh)) {
@@ -350,52 +357,48 @@ function textBodyHtml(body) {
   return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.65;color:#222222;max-width:560px;">${paragraphs}</div>`;
 }
 
-/** Build subject/html/text/headers for one touch of one lead. */
-async function buildTouch(lead, day) {
-  const qualified = {
-    ...lead,
-    email: lower(lead.email),
-    industry: lead.industry || 'business',
-    company_name: lead.company || lead.company_name || null,
-    city: lead.city || 'USA',
-    first_name: lead.first_name || lead.name?.split(/[\s,]/)[0] || null,
-  };
-  const content = getEmailForSequenceDay(qualified, day);
+/**
+ * Build subject/html/text/headers for one touch of one lead from the client's
+ * sequence (Sequence T). Throws TemplateError when a slot has no value.
+ *
+ * Threading (SPEC §7.5 / trial doc): d3 replies in the d0 thread; d7 starts a
+ * new thread with its own subject; d10 replies in the d7 thread (or the d0
+ * thread when d7 was skipped).
+ */
+async function buildTouch(lead, day, ctx) {
+  const touchName = `d${day}`;
+  const vars = varsFor(lead, { profile: ctx.profile, account: ctx.account, ownerAddress: ctx.ownerAddress });
+  const content = renderTouch(ctx.seq, touchName, vars);
 
-  // Follow-ups keep the ORIGINAL subject so Gmail groups the thread.
+  const reSubject = (s) => `Re: ${String(s).replace(/^\s*re:\s*/i, '').trim()}`;
   let subject = content.subject;
-  if (day !== 0 && lead.original_subject) {
-    subject = `Re: ${String(lead.original_subject).replace(/^\s*re:\s*/i, '').trim()}`;
+  const headers = {};
+  if (content.thread === 'd0' || (content.thread === 'd7' && !lead.d7_message_id)) {
+    subject = reSubject(lead.original_subject || subject || '');
+    const refs = [lead.original_message_id, lead.d3_message_id].filter(Boolean);
+    if (refs.length) { headers.inReplyTo = refs[refs.length - 1]; headers.references = refs; }
+  } else if (content.thread === 'd7') {
+    subject = reSubject(lead.d7_subject || '');
+    headers.inReplyTo = lead.d7_message_id;
+    headers.references = [lead.d7_message_id];
   }
+  if (!subject) throw new TemplateError(`sequence:${touchName}`, ['subject']);
 
-  const [rawBody, unsubNote] = String(content.body).split('---');
-  const note = (unsubNote || "Not the right fit? Just reply STOP and I will not email you again.").trim();
-  const htmlUnsubscribe = `<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">${escapeHtml(note)}</p>`;
-  // Every touch sends the same personalized plain-text copy in both parts —
-  // a message that reads like a person wrote it, not a designed newsletter
-  // (which is a strong cold-outreach spam signal).
-  const bodyText = rawBody.trim();
+  const note = content.footer ? content.footer.split(/\n\s*\n/).pop().trim() : '';
+  const bodyText = content.footer ? `${content.body}\n\n${content.footer.slice(0, content.footer.length - note.length).trim()}` : content.body;
+  const htmlUnsubscribe = note ? `<p style="margin-top:24px;font-size:11px;color:#9ca3af;font-family:Arial,sans-serif;">${escapeHtml(note)}</p>` : '';
   const html = textBodyHtml(bodyText) + htmlUnsubscribe;
 
-  const headers = {};
-  if (day === 3 && lead.original_message_id) {
-    headers.inReplyTo = lead.original_message_id;
-    headers.references = [lead.original_message_id];
-  } else if (day === 7 && lead.original_message_id) {
-    headers.inReplyTo = lead.d3_message_id || lead.original_message_id;
-    headers.references = [lead.original_message_id, lead.d3_message_id].filter(Boolean);
-  }
-
   return {
-    lead: qualified,
+    lead: { ...lead, email: lower(lead.email), company_name: lead.company || lead.company_name || null },
     subject,
     html,
-    text: bodyText + (note ? `\n\n${note}` : ''),
+    text: content.text,
     headers,
-    variant: content.variant || null,
-    template: content.template || null,
-    aiEnhanced: Boolean(content.aiEnhanced),
-    touch: day === 0 ? 'd0' : `d${day}`,
+    variant: `${ctx.seq.version ? `v${ctx.seq.version}-` : ''}${touchName}`,
+    template: 'sequence-t',
+    aiEnhanced: false,
+    touch: touchName,
   };
 }
 
@@ -432,7 +435,7 @@ async function recordSend({ account, touch, day, lead, sendResult, today, starte
     }
     return {
       ...base,
-      status: day === 7 ? 'sequence_complete' : `sent-d${day}`,
+      status: day === 10 ? 'sequence_complete' : `sent-d${day}`,
       sequence_day: day,
       [`d${day}_sent_at`]: now,
       [`d${day}_message_id`]: sendResult.messageId || null,
@@ -522,13 +525,26 @@ async function recordFailure({ account, touch, day, lead, sendResult, today }) {
 }
 
 /** Send one touch; returns { ok, detail, stop } (stop = end this inbox's turn). */
-async function sendTouch({ account, lead, day, today, startedAt }) {
+async function sendTouch({ account, lead, day, today, startedAt, ctx }) {
   let touch;
   try {
-    touch = await buildTouch(lead, day);
+    touch = await buildTouch(lead, day, { ...ctx, account });
   } catch (err) {
-    if (day === 0) await releaseClaim(lead.email, 'pending', { last_error: `build: ${err.message}` });
-    return { ok: false, stop: false, detail: { to: lead.email, status: 'error', error: `build: ${err.message}` } };
+    const missing = err instanceof TemplateError ? err.missing.join(', ') : null;
+    const reason = missing ? `copy slot missing: ${missing}` : `build: ${err.message}`;
+    const at = new Date().toISOString();
+    if (day === 0) {
+      // No blank is ever sent (rule 4): the lead waits until its data is filled in.
+      await releaseClaim(lead.email, missing ? 'skipped_copy' : 'pending', { last_error: reason, skip_reason: reason });
+    } else if (missing) {
+      // A follow-up that cannot be filled is skipped, and the sequence moves on.
+      await patchLead(lead.email, day === 10
+        ? { status: 'sequence_complete', d10_skipped_at: at, d10_skip_reason: reason }
+        : { status: `sent-d${day}`, [`d${day}_skipped_at`]: at, [`d${day}_skip_reason`]: reason, sequence_day: day });
+    } else {
+      await patchLead(lead.email, { last_error: reason, last_error_at: at });
+    }
+    return { ok: false, stop: false, detail: { to: lead.email, status: 'skipped', touch: `d${day}`, error: reason } };
   }
 
   const sendResult = await sendEmail(account, {
@@ -587,13 +603,16 @@ export async function GET(request) {
   const deadlineMs = startedAt + (maxDuration - 20) * 1000;
   if (!isAuthorized(request)) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
+  await loadAccounts();
   const params = new URL(request.url).searchParams;
+  // The tick runs the reply scan as its own job; it calls this with skipReplies.
+  const replyCheckFn = params.get('skipReplies') ? async () => ({ ran: false, skipped: 'handled by tick' }) : maybeRunReplyCheck;
   const inWindow = isWithinSendingHours();
   const today = getTodayKey();
 
   // ── Outside the window: no sending, but still look for replies (throttled). ──
   if (!inWindow) {
-    const replyCheck = params.get('skipReplies') ? { ran: false } : await maybeRunReplyCheck(false, deadlineMs);
+    const replyCheck = params.get('skipReplies') ? { ran: false } : await replyCheckFn(false, deadlineMs);
     // End-of-day report to the owner (once per send day, right after 7 PM ET).
     let report = { sent: false, reason: 'outside report slot' };
     const { weekday, hour } = etParts();
@@ -609,21 +628,23 @@ export async function GET(request) {
   const accountsAll = getSmtpAccounts();
   if (!accountsAll.length) return Response.json({ error: 'No SMTP accounts configured' }, { status: 500 });
 
-  // ── Never send the placeholder scaffold. ──
-  // personalize.js ships with "[PLACEHOLDER — replace with Sequence T]" bodies.
-  // Deploying that copy with an inbox switched on would send the markers to real
-  // prospects, so refuse to send while they are still there. Replies are still
-  // scanned, and the gate lifts on its own once the real copy replaces them.
-  if (isPlaceholderCopy()) {
-    const replyCheck = await maybeRunReplyCheck(true, deadlineMs);
-    return jsonOk({
-      sent: 0,
-      blocked: 'placeholder_copy',
-      message: 'Email copy is still the PLACEHOLDER scaffold — sending is blocked until Sequence T is written into src/lib/personalize.js.',
-      today,
-      replyCheck,
-    });
+  // ── Never send a hole. ──
+  // Sequence T needs the sender name and the postal address in every footer
+  // (CAN-SPAM). If either is not filled in, hold sending and tell the owner
+  // once a day; replies are still scanned.
+  const profile = await getProfile('aviance');
+  const ready = await sequenceReady('aviance', { profile, account: accountsAll[0] });
+  if (!ready.ok) {
+    await alertOwner('config_missing', {
+      clientId: 'aviance',
+      vars: { key: ready.missing.join(', ') },
+      body: `Aviance outreach cannot send: the email footer needs ${ready.missing.join(' and ')}. Fill it in on the Aviance client page (postal address is legally required on every cold email).`,
+      did: 'Sending is held. Replies are still being read.',
+    }).catch(() => {});
+    const replyCheck = await replyCheckFn(true, deadlineMs);
+    return jsonOk({ sent: 0, blocked: 'copy_config_missing', missing: ready.missing, today, replyCheck });
   }
+  const seqCtx = { seq: ready.seq, profile, ownerAddress: ready.ownerAddress };
 
   const cfg = await loadInboxConfig();
   if (cfg.enabledUnavailable) {
@@ -633,7 +654,7 @@ export async function GET(request) {
   if (!enabled.length) {
     // Sending is off, but prospects we already emailed still write back — and the
     // auto-reply bot only ever runs from here. Keep scanning.
-    const replyCheck = await maybeRunReplyCheck(true, deadlineMs);
+    const replyCheck = await replyCheckFn(true, deadlineMs);
     // Tell the owner, once per day from 10 AM ET, that nothing is going out.
     const alarm = await maybeSendSwitchOffAlarm({ accountsAll, today });
     return jsonOk({ sent: 0, disabled: true, message: 'No inboxes are switched on — sending is off. Turn on an inbox toggle to start.', today, replyCheck, alarm });
@@ -680,13 +701,13 @@ export async function GET(request) {
   if (totalRemaining === 0) {
     // Caps are hit early in the day; without this the bot would stop seeing
     // replies until the sending window closed.
-    const replyCheck = await maybeRunReplyCheck(true, deadlineMs);
+    const replyCheck = await replyCheckFn(true, deadlineMs);
     return jsonOk({ sent: 0, message: 'Daily limit reached for all accounts', today, accountStatus, replyCheck });
   }
   const readyStatus = accountStatus.filter((s) => s.remaining > 0 && s.ready && !s.skipped);
   if (!readyStatus.length) {
     const soonest = accountStatus.filter((s) => s.remaining > 0 && !s.skipped).map((s) => s.nextSendAt).filter(Boolean).sort()[0] || null;
-    const replyCheck = await maybeRunReplyCheck(true, deadlineMs);
+    const replyCheck = await replyCheckFn(true, deadlineMs);
     return jsonOk({ sent: 0, paced: true, message: soonest ? `Paced — next send at ${soonest}` : 'All eligible inboxes are cooling down', nextSendAt: soonest, today, accountStatus, replyCheck });
   }
 
@@ -755,7 +776,7 @@ export async function GET(request) {
         continue;
       }
       const account = enabled.find((a) => a.email === inbox);
-      const r = await sendTouch({ account, lead: fu.lead, day: fu.day, today, startedAt });
+      const r = await sendTouch({ account, lead: fu.lead, day: fu.day, today, startedAt, ctx: seqCtx });
       results.details.push(r.detail);
       if (r.ok) { results.followUpsSent++; sentDetail = r.detail; usedInbox = account; }
       else { results.failed++; if (r.stop) { status.skipped = 'failed this heartbeat'; } }
@@ -790,7 +811,7 @@ export async function GET(request) {
             continue;
           }
 
-          const r = await sendTouch({ account, lead, day: 0, today, startedAt });
+          const r = await sendTouch({ account, lead, day: 0, today, startedAt, ctx: seqCtx });
           results.details.push(r.detail);
           if (r.ok) { results.sent++; sentDetail = r.detail; usedInbox = account; break; }
           results.failed++;
@@ -824,7 +845,7 @@ export async function GET(request) {
   await releaseLock(lockToken);
 
   // ── After the send, outside the lock: scan for replies. ──
-  const replyCheck = await maybeRunReplyCheck(true, deadlineMs);
+  const replyCheck = await replyCheckFn(true, deadlineMs);
 
   return jsonOk({
     mode: 'scheduled',
