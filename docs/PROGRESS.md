@@ -35,6 +35,18 @@ Per-stage decisions: `docs/assumptions/stage-a.md` … `stage-d.md`.
 11. **Clutch** profile (for the review link) · **PayPal.me** link and/or **Wise** details.
 12. Optional: **Porkbun** API key + secret and account credit (`PORKBUN_API_KEY`, `PORKBUN_SECRET`, then `AUTO_BUY=true`); a **DMARC collector** inbox (`DMARC_INBOX`, else `OWNER_INBOX` is used); **Upstash management API** (`UPSTASH_EMAIL`, `UPSTASH_API_KEY`, `UPSTASH_DB_ID`) so the Usage Meter shows real Redis numbers.
 
+### 1b. The short way (owner, ~10 minutes)
+
+1. GitHub → Settings → Billing: clear the billing lock (Actions runs say
+   "account is locked due to a billing issue"; until then no workflow runs —
+   no backup heartbeat, no nightly backup, no Lead Finder).
+2. In the repo folder run `scripts/setup-secrets.sh` once: it makes every
+   internal secret, stores the GitHub ones, and prints the lines to paste.
+3. Paste the printed lines into Vercel → email-distributor → Settings →
+   Environment Variables, then Redeploy.
+4. cron-job.org: one job every minute (the script prints the exact URL and
+   header). Until GitHub is unlocked this is the only heartbeat.
+
 ### 2. Vercel environment variables
 
 Everything in `.env.example`, grouped there with one line each. The required
