@@ -151,4 +151,6 @@ test('POST /api/apply takes the website form as-is', async () => {
   assert.equal((await hp.json()).ok, true); // honeypot: silently accepted, nothing stored
   const bad = await POST(new Request('http://x/api/apply', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(site({ email: 'nope', website: 'x.com' })) }));
   assert.equal(bad.status, 400);
+  const noSiteRes = await POST(new Request('http://x/api/apply', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(site({ website: 'not-a-website' })) }));
+  assert.deepEqual(Object.keys((await noSiteRes.json()).errors), ['website'], 'only the website is reported — the site has no company field');
 });

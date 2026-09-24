@@ -83,7 +83,8 @@ export function mapWebsiteForm(raw = {}) {
   const calendar = lc(raw.calendar);
   const strangers = lc(raw.strangers);
   const fields = {
-    companyName: companyFromDomain(mainDomain) || pick(raw.company).slice(0, 120),
+    // The site never asks for a company name; an unreadable website is reported once, as the website.
+    companyName: companyFromDomain(mainDomain) || pick(raw.company).slice(0, 120) || website || pick(raw.name).slice(0, 120),
     contactName: pick(raw.name).slice(0, 120),
     contactEmail: lc(raw.email).slice(0, 200),
     website,
