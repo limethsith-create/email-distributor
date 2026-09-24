@@ -2,6 +2,7 @@
 // src/**/*.js treated as ES modules, and .json imported as a default export.
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
+import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -11,7 +12,7 @@ export async function resolve(specifier, context, next) {
   if (specifier === '@vercel/kv') return { url: pathToFileURL(path.join(root, 'tests/fake-kv.mjs')).href, shortCircuit: true };
   if (specifier.startsWith('@/')) {
     let p = path.join(src, specifier.slice(2));
-    if (!path.extname(p)) p += '.js';
+    if (!path.extname(p)) p = existsSync(p) && statSync(p).isDirectory() ? path.join(p, 'index.js') : `${p}.js`;
     return { url: pathToFileURL(p).href, shortCircuit: true };
   }
   if ((specifier.startsWith('./') || specifier.startsWith('../')) && !path.extname(specifier) && context.parentURL?.startsWith(pathToFileURL(src).href)) {

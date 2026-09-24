@@ -8,6 +8,8 @@
 import { runTick } from '@/lib/scheduler';
 import { pingHealthcheck } from '@/lib/systems/watchdog';
 import { safeEqual } from '@/lib/crypto';
+import { kv } from '@vercel/kv';
+import { K } from '@/lib/db/keys';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -25,7 +27,9 @@ export async function GET(request) {
   const source = (url.searchParams.get('source') || request.headers.get('x-tick-source') || 'unknown').slice(0, 20);
   try {
     const result = await runTick({ source });
-    const hc = await pingHealthcheck(process.env.HC_PING_URL);
+    // Test Mode "simulate heartbeat loss" suppresses the dead-man ping so Healthchecks fires.
+    const skip = await kv.get(K.testSkipPings()).catch(() => null);
+    const hc = skip ? { ok: false, skipped: 'test: heartbeat loss' } : await pingHealthcheck(process.env.HC_PING_URL);
     return Response.json({ ok: true, source, ...result, healthcheck: hc.ok ? 'pinged' : hc.skipped || hc.error || 'failed' });
   } catch (err) {
     console.error('[tick] failed', err);
