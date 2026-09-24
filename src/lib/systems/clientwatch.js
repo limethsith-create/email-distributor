@@ -16,7 +16,7 @@
 
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
-import { getClient, getProfile, getTrial, setState, SENDING_STATES } from '@/lib/db/client';
+import { getClient, getProfile, getTrial, setState, PAUSABLE_STATES } from '@/lib/db/client';
 import { getLead, saveLead, addToBlocklist, hostOf } from '@/lib/db/leads';
 import { logEvent } from '@/lib/db/events';
 import { mintToken, readToken, pageUrl, TTL } from '@/lib/pagetokens';
@@ -60,7 +60,7 @@ export async function runClientWatch(clientId, { now = new Date() } = {}) {
     out.warned = true;
   }
 
-  if (pending.length && quietDays >= pauseDays && SENDING_STATES.has(client.state)) {
+  if (pending.length && quietDays >= pauseDays && PAUSABLE_STATES.has(client.state)) {
     const from = client.state;
     if (await setState(clientId, 'paused', 'client quiet')) {
       await kv.hset(K.client(clientId), { pausedReason: 'client_quiet', pausedAt: now.toISOString(), pausedFrom: from });
@@ -85,6 +85,12 @@ export async function runClientWatch(clientId, { now = new Date() } = {}) {
 export async function clientButtonLinks(clientId) {
   const token = await mintToken(clientId, 'buttons', { ttl: TTL.long });
   return { customerUrl: pageUrl(token, 'customer'), stopUrl: pageUrl(token, 'stop'), awayUrl: pageUrl(token, 'away') };
+}
+
+/** The three client buttons as a short block for the Day 1 notice and the Friday update. */
+export async function clientButtonsText(clientId) {
+  const l = await clientButtonLinks(clientId);
+  return `If you ever need them:\n• We emailed one of your customers: ${l.customerUrl}\n• You're away (we halve the volume those days): ${l.awayUrl}\n• Stop the trial: ${l.stopUrl}`;
 }
 
 /** "You emailed my customer": apology, blocklist, alert with how it slipped. */
@@ -115,7 +121,7 @@ export async function stopTrial(clientId, { now = new Date() } = {}) {
   if (trial.stoppedAt) return { ok: true, already: true };
   const at = now.toISOString();
   await kv.hset(K.trial(clientId), { stoppedAt: at, endedAt: trial.endedAt || at, endReason: 'client_stopped', retireAt: addDays(at.slice(0, 10), 7) });
-  if (SENDING_STATES.has(client.state)) {
+  if (PAUSABLE_STATES.has(client.state)) {
     if (await setState(clientId, 'paused', 'client pressed Stop the trial')) await kv.hset(K.client(clientId), { pausedReason: 'client_stopped', pausedAt: at, pausedFrom: client.state });
   }
   await logEvent(clientId, 'clientwatch', 'trial_stopped_by_client', { at });

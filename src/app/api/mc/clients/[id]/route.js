@@ -85,11 +85,16 @@ export async function POST(request, { params }) {
       case 'markPaid':
         return Response.json({ ok: true, ...(await markPaid(id)) });
       case 'clearLegalHold': {
-        await kv.hdel(K.client(id), 'legalHold');
+        // Stage C's legal hold is a flag (legalHoldAt) the Sender honours; the
+        // state is not changed by the hold, so clearing it does not change state either.
+        await kv.hset(K.client(id), { legalHoldAt: '', legalHoldReply: '', legalHoldClearedAt: new Date().toISOString() });
         await logEvent(id, 'mc', 'legal_hold_cleared', { by: 'owner' });
-        let changed = false;
-        if (client.state === 'paused') changed = await setState(id, 'sending', 'legal hold cleared by owner');
-        return Response.json({ ok: true, resumed: changed });
+        return Response.json({ ok: true });
+      }
+      case 'clearSendHold': {
+        await kv.hset(K.client(id), { sendHold: '', sendHoldClearedAt: new Date().toISOString() });
+        await logEvent(id, 'mc', 'send_hold_cleared', { by: 'owner' });
+        return Response.json({ ok: true });
       }
       case 'reviewCaptured': {
         const at = new Date().toISOString();

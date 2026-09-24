@@ -2,6 +2,7 @@
  * Stage C holds for Mission Control. Admin session required (middleware).
  *   GET                                 → { legalHoldAt, emergency, smoke, pace, clientButtons? }
  *   POST { action: 'clearLegalHold' }   → owner clears a legal hold (SPEC §8.3)
+ *   POST { action: 'clearSendHold' }   → owner clears an Auth Guard hold on a converted client
  *   POST { action: 'clientButtons' }    → mint the client-button links (customer / stop / away)
  */
 
@@ -18,7 +19,7 @@ export async function GET(_req, { params }) {
   const client = await getClient(id);
   if (!client) return Response.json({ error: 'not found' }, { status: 404 });
   const [emergency, run, pace] = await Promise.all([kv.hgetall(K.emergency(id)), kv.hgetall(K.sendState(id)), kv.hgetall(K.pace(id))]);
-  return Response.json({ legalHoldAt: client.legalHoldAt || null, emergencyActive: client.emergencyActive || '0', emergencyHalved: client.emergencyHalved || '0', emergency: emergency || {}, run: run || {}, pace: pace || {} });
+  return Response.json({ legalHoldAt: client.legalHoldAt || null, sendHold: client.sendHold || null, emergencyActive: client.emergencyActive || '0', emergencyHalved: client.emergencyHalved || '0', emergency: emergency || {}, run: run || {}, pace: pace || {} });
 }
 
 export async function POST(request, { params }) {
@@ -28,6 +29,11 @@ export async function POST(request, { params }) {
   if (body.action === 'clearLegalHold') {
     await kv.hset(K.client(id), { legalHoldAt: '', legalHoldClearedAt: new Date().toISOString() });
     await logEvent(id, 'mc', 'legal_hold_cleared', {});
+    return Response.json({ ok: true });
+  }
+  if (body.action === 'clearSendHold') {
+    await kv.hset(K.client(id), { sendHold: '', sendHoldClearedAt: new Date().toISOString() });
+    await logEvent(id, 'mc', 'send_hold_cleared', {});
     return Response.json({ ok: true });
   }
   if (body.action === 'clientButtons') return Response.json({ ok: true, links: await clientButtonLinks(id) });

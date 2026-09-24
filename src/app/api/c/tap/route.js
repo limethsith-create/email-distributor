@@ -13,8 +13,10 @@ export const dynamic = 'force-dynamic';
 
 async function resolve(t) {
   const tok = await readToken(t, { purpose: 'tap' });
-  if (!tok || !tok.data?.bookingId) return null;
-  const booking = (await getBookings(tok.clientId))[tok.data.bookingId];
+  // Purpose is tap:{bookingId}; data.bookingId is the same id (both minters set it).
+  const bookingId = tok?.data?.bookingId || (String(tok?.purpose || '').startsWith('tap:') ? String(tok.purpose).slice(4) : null);
+  if (!tok || !bookingId) return null;
+  const booking = (await getBookings(tok.clientId))[bookingId];
   return booking ? { ...tok, booking } : null;
 }
 

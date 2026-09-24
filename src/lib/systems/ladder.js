@@ -102,8 +102,20 @@ export async function runLadder(clientId, { ladderDay, now = new Date() }) {
         const url = await requireSetting(clientId, 'REVIEW.clutchUrl', 'The exit interview');
         const sig = url && (await ownerName(clientId, 'The exit interview'));
         if (url && sig) {
-          const res = await notifyClient(clientId, 'exit_interview', { clutchUrl: url, ownerName: sig }, { dedupe: 'exit_interview' });
-          await patchTrial(clientId, { exitInterviewSentAt: now.toISOString(), exitInterviewMessageId: res.messageId || '' });
+          // From the trial inbox so the answer lands where the Reply Handler reads it (kind `exit` → trial.exitReason).
+          let res;
+          let via = 'trial';
+          try {
+            res = await notifyClient(clientId, 'exit_interview', { clutchUrl: url, ownerName: sig }, { dedupe: 'exit_interview', from: 'trial' });
+          } catch (err) {
+            if (!/no trial inbox/.test(String(err.message))) throw err;
+            // No usable trial inbox (e.g. password not stored): the owner inbox still asks the
+            // questions; the answer then reaches the owner directly instead of trial.exitReason.
+            via = 'owner';
+            res = await notifyClient(clientId, 'exit_interview', { clutchUrl: url, ownerName: sig }, { dedupe: 'exit_interview' });
+            await logEvent(clientId, 'ladder', 'exit_interview_owner_inbox', { reason: err.message });
+          }
+          await patchTrial(clientId, { exitInterviewSentAt: now.toISOString(), exitInterviewMessageId: res.messageId || '', exitInterviewVia: via });
           out.push({ sent: 'exit_interview' });
         }
       }

@@ -36,6 +36,7 @@ import { runLadder, runWinback, ladderDayOf } from '@/lib/systems/ladder';
 import { retireClient } from '@/lib/systems/wrapup';
 import { getBookings, patchTrial, ownerName, fmtDay, cfgTree } from '@/lib/systems/dshared';
 import { getLead } from '@/lib/db/leads';
+import { clientButtonsText } from '@/lib/systems/clientwatch';
 
 export const DAYJOB_STATES = new Set(['warming', 'ready', 'sending', 'paused', 'extension', 'deciding', 'converted', 'not_now', 'retired', 'deleted']);
 
@@ -84,7 +85,7 @@ export async function sendDay1Notice(clientId, now = new Date()) {
   const sender = inboxes.find((i) => i.enabled === '1' || i.enabled === 1 || i.enabled === true)?.email || inboxes[0]?.email;
   const day1 = trial.day1Date || dayKeyIn(ET, new Date(trial.firstSendAt));
   if (!sender) return { held: 'no inbox record' };
-  await notifyClient(clientId, 'day1_started', { senderAddress: sender, day30Date: fmtDay(trial.day30Date || addDays(day1, 29)), ownerName: sig }, { dedupe: 'day1_started' });
+  await notifyClient(clientId, 'day1_started', { senderAddress: sender, day30Date: fmtDay(trial.day30Date || addDays(day1, 29)), buttons: await clientButtonsText(clientId), ownerName: sig }, { dedupe: 'day1_started' });
   await patchTrial(clientId, { day1NoticeAt: now.toISOString() });
   return { sent: 'day1_started' };
 }
@@ -104,7 +105,7 @@ export async function sendDisposition(clientId, now) {
   for (const b of bookings.sort((a, c) => String(a.scheduledAt).localeCompare(String(c.scheduledAt)))) {
     const lead = b.leadEmail ? await getLead(clientId, b.leadEmail) : null;
     // Stage C's tap page (/c/[token]/tap) reads purpose tap:{bookingId}.
-    const token = await mintToken(clientId, `tap:${b.id}`, { ttl: 6 * 86400 });
+    const token = await mintToken(clientId, `tap:${b.id}`, { ttl: 6 * 86400, data: { bookingId: b.id } });
     const showed = b.status === 'held' ? 'yes' : b.status === 'noshow' ? 'no' : b.attendedTapAt ? 'tapped' : 'not tapped yet';
     const fit = b.status === 'wrongfit' ? 'no' : b.qualified === true || b.qualified === 'true' ? 'yes' : '—';
     rows.push(`• ${lead?.company || b.leadEmail || 'Unmatched booking'} — ${b.scheduledAt ? fmtDay(String(b.scheduledAt).slice(0, 10)) : 'date unknown'} — showed: ${showed} — right fit: ${fit} — outcome: ${b.status || 'booked'}\n  Tap: ${pageUrl(token, 'tap')}`);
@@ -153,7 +154,10 @@ async function earlyEnd(clientId, trial, now) {
   const out = {};
   if (!trial.handoverSentAt) out.handover = await sendHandover(clientId, 'early_stop', { now });
   const days = await cfg(clientId, 'DAYJOBS.stopRetireDays');
-  if (trial.endedAt && daysBetween(dayKeyIn(ET, new Date(trial.endedAt)), dayKeyIn(ET, now)) >= days) out.retire = await retireClient(clientId, { now, reason: trial.endReason || 'early_stop' });
+  const today = dayKeyIn(ET, now);
+  // Stop the trial sets trial.retireAt (+7 days); Client Watch's quiet end only endedAt.
+  const due = trial.retireAt ? today >= String(trial.retireAt).slice(0, 10) : Boolean(trial.endedAt) && daysBetween(dayKeyIn(ET, new Date(trial.endedAt)), today) >= days;
+  if (due) out.retire = await retireClient(clientId, { now, reason: trial.endReason || 'early_stop' });
   return out;
 }
 

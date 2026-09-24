@@ -22,7 +22,7 @@
 
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
-import { getClient, getDomain, setState, SENDING_STATES } from '@/lib/db/client';
+import { getClient, getDomain, setState, SENDING_STATES, PAUSABLE_STATES } from '@/lib/db/client';
 import { getInboxRecords, patchInbox } from '@/lib/db/inboxes';
 import { getLeadsByStatus, getLead, saveLead } from '@/lib/db/leads';
 import { getTotals, getDay } from '@/lib/db/counters';
@@ -108,7 +108,8 @@ export async function detectTrigger(clientId, client, now = new Date()) {
 
 async function step1Pause(clientId, client, trigger, now) {
   const from = SENDING_STATES.has(client.state) ? client.state : (client.pausedFrom || 'sending');
-  if (SENDING_STATES.has(client.state)) await setState(clientId, 'paused', `emergency: ${trigger.code}`);
+  // A converted client stays converted; emergencyActive = 1 stops its sender.
+  if (PAUSABLE_STATES.has(client.state)) await setState(clientId, 'paused', `emergency: ${trigger.code}`);
   await kv.hset(K.client(clientId), { emergencyActive: '1', pausedReason: client.state === 'paused' ? (client.pausedReason || 'emergency') : 'emergency', pausedAt: now.toISOString(), pausedFrom: from, emergencyRequested: '', emergencyRequestedAt: '' });
   await patchEmergency(clientId, { active: '1', trigger: trigger.code, detail: trigger.detail, startedAt: now.toISOString(), step: '1', pausedFrom: from, verifyIndex: 0, verified: 0, dropped: 0, burned: '', resumedAt: '', greenStreak: 0 });
   await logEvent(clientId, 'emergency', 'step1_paused', trigger);
@@ -212,7 +213,7 @@ async function step4Burned(clientId, client, em, now) {
 
 async function step5Resume(clientId, client, em, now) {
   if (client.state === 'paused' && ['emergency'].includes(client.pausedReason)) {
-    const to = em.pausedFrom === 'extension' ? 'extension' : 'sending';
+    const to = ['extension', 'sending'].includes(em.pausedFrom) ? em.pausedFrom : 'sending';
     await setState(clientId, to, 'emergency: resumed at half volume');
   }
   await kv.hset(K.client(clientId), { emergencyActive: '0', emergencyHalved: '1', pausedReason: client.pausedReason === 'emergency' ? '' : (client.pausedReason || '') });

@@ -45,9 +45,9 @@ export default function ClientPage({ params }) {
   }
 
   async function dispute(bookingId, decision) {
-    // Stage C owns disputes (SPEC §8.5); this calls its Mission Control API.
+    // Stage C owns disputes (SPEC §8.5): POST /api/mc/clients/[id]/bookings {bookingId, action}.
     setMsg('Working…');
-    try { await api(`/api/mc/clients/${id}/dispute`, { bookingId, decision }); setMsg(`Dispute ${decision}`); await load(); } catch (e) { setMsg(`Dispute API: ${e.message}`); }
+    try { await api(`/api/mc/clients/${id}/bookings`, { bookingId, action: decision }); setMsg(`Dispute ${decision === 'uphold' ? 'upheld' : 'overturned'}`); await load(); } catch (e) { setMsg(`Dispute: ${e.message}`); }
   }
 
   if (!d) return <p>{msg || 'Loading…'}</p>;
@@ -58,6 +58,7 @@ export default function ClientPage({ params }) {
       <div>
         <Eyebrow>Mission Control / {id}</Eyebrow>
         <h1 style={{ fontSize: 26, fontWeight: 800, margin: 0 }}><Dot color={COLOUR[d.health.colour]} />{d.client.name || id}</h1>
+        {d.client.legalHoldAt && <p style={{ color: 'var(--danger)', margin: 0, fontSize: 13 }}>Legal hold since {dt(d.client.legalHoldAt)} — cold sending is stopped until you clear it.</p>}
         <p className="mono" style={{ fontSize: 12 }}>
           state: {d.client.state} · plan: {d.client.plan} · day {d.trialDay ?? '—'} · since {ago(d.client.createdAt)}{d.virtualNow ? ` · test clock ${dt(d.virtualNow)}` : ''}
         </p>
@@ -70,7 +71,10 @@ export default function ClientPage({ params }) {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {d.client.state === 'retired' && !t.inboxesCancelledAt && <button style={btn} onClick={() => post({ action: 'inboxesCancelled' }, 'Inboxes marked cancelled — the daily reminder stops')}>Inboxes cancelled ✓</button>}
           {inv && inv.status !== 'paid' && inv.plan && <button style={btn} onClick={async () => { const r = await post({ action: 'markPaid' }, 'Marked paid'); if (r?.shopping) setMsg(`Paid. Plan-mode shopping list: ${JSON.stringify(r.shopping)}`); }}>Mark paid</button>}
-          {d.client.legalHold && <button style={btn} onClick={() => confirm('Clear the legal hold and resume sending?') && post({ action: 'clearLegalHold' }, 'Legal hold cleared')}>Clear legal hold</button>}
+          {d.client.legalHoldAt && <button style={btn} onClick={() => confirm('A legal reply put sending on hold. Clear the hold and let sending continue?') && post({ action: 'clearLegalHold' }, 'Legal hold cleared')}>Clear legal hold</button>}
+          {d.client.sendHold && <button style={btn} onClick={() => confirm(`Sending is held: ${d.client.sendHold}. Clear it?`) && post({ action: 'clearSendHold' }, 'Send hold cleared')}>Clear send hold</button>}
+          <a style={{ ...btnGhost, textDecoration: 'none' }} href={`/mc/clients/${id}/purchase`}>Purchase + setup</a>
+          <a style={{ ...btnGhost, textDecoration: 'none' }} href={`/mc/clients/${id}/sequence`}>Sequence (copy)</a>
           {!t.reviewCapturedAt && ['deciding', 'converted', 'not_now', 'retired'].includes(d.client.state) && <button style={btnGhost} onClick={() => post({ action: 'reviewCaptured' }, 'Review recorded')}>Review captured</button>}
           {['sending', 'paused'].includes(d.client.state) && <button style={btnGhost} onClick={() => post({ action: 'setState', to: d.client.state === 'paused' ? 'sending' : 'paused' }, 'State changed')}>{d.client.state === 'paused' ? 'Resume' : 'Pause'}</button>}
         </div>

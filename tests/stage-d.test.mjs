@@ -7,6 +7,8 @@ import nodemailer from 'nodemailer';
 import { __reset, kv } from '@vercel/kv';
 import { setOverride } from '@/lib/config';
 import { createClient, getClient, setState } from '@/lib/db/client';
+import { saveInbox } from '@/lib/db/inboxes';
+import crypto from 'node:crypto';
 import { renderReport, recommendPlan } from '@/lib/systems/reports';
 import { composeFriday, runFriday } from '@/lib/systems/friday';
 import { runDayJobs } from '@/lib/systems/trialmanager';
@@ -32,6 +34,7 @@ const mail = [];
 nodemailer.createTransport = () => ({ sendMail: async (m) => { mail.push(m); return { messageId: `<${mail.length}@test>` }; }, close() {}, verify: async () => true });
 process.env.OWNER_INBOX = 'owner@aviance.test:app-pw:Owner';
 process.env.OWNER_EMAIL = 'owner@aviance.test';
+process.env.ENC_KEY = process.env.ENC_KEY || crypto.randomBytes(32).toString('base64');
 delete process.env.TELEGRAM_BOT_TOKEN;
 globalThis.fetch = async () => { throw new Error('network disabled in tests'); };
 
@@ -57,8 +60,8 @@ async function setup({ state = 'sending', totals = TOTALS, trial = {}, settings 
   await kv.hset(`client:${CLIENT}`, { state });
   await kv.hset(`client:${CLIENT}:profile`, { capacityPerWeek: '5', niche: 'msp' });
   await kv.hset(`client:${CLIENT}:trial`, { signedDay: '2026-09-17', day1Date: DAY1, firstSendAt: `${DAY1}T13:00:00Z`, day1NoticeAt: `${DAY1}T14:00:00Z`, agreementAcceptedAt: '2026-09-17T12:00:00Z', ...trial });
-  await kv.hset(`inbox:${CLIENT}:sam@acme-team.test`, { email: 'sam@acme-team.test', clientId: CLIENT, enabled: '1', warmupStartedAt: '2026-09-17T12:00:00Z', inboxRate7d: '0.95' });
-  await kv.sadd(`client:${CLIENT}:inboxes`, 'sam@acme-team.test');
+  await saveInbox(CLIENT, { email: 'sam@acme-team.test', password: 'app-pw', displayName: 'Sam', enabled: true });
+  await kv.hset(`inbox:${CLIENT}:sam@acme-team.test`, { warmupStartedAt: '2026-09-17T12:00:00Z', inboxRate7d: '0.95' });
   if (totals) await kv.hset(`client:${CLIENT}:counters:total`, totals);
 }
 
@@ -233,6 +236,8 @@ test('ladder: review request Day 31, ladder 33/37/44, exit interview, Day 45 ret
   await runDayJobs(CLIENT, { now: onDay(33) });
   assert.ok(subjects().includes('The review link, once more'));
   assert.ok(subjects().includes('Three questions, ten minutes'));
+  // The exit interview goes from the trial inbox so the Reply Handler can store the answer.
+  assert.match(String(toClient().find((m) => m.subject === 'Three questions, ten minutes').from), /sam@acme-team\.test/);
   await runDayJobs(CLIENT, { now: onDay(37) });
   const d37 = toClient().find((m) => m.subject === 'Conversations still open from your trial');
   assert.match(d37.text, /bo@bolt\.test/);

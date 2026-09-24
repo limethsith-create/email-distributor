@@ -18,7 +18,7 @@ import { kv } from '@vercel/kv';
 import zlib from 'node:zlib';
 import { K } from '@/lib/db/keys';
 import { cfg } from '@/lib/config';
-import { getAllClients, getClient, getDomain, setState, SENDING_STATES, WARMUP_STATES } from '@/lib/db/client';
+import { getAllClients, getClient, getDomain, holdSending, WARMUP_STATES } from '@/lib/db/client';
 import { logEvent } from '@/lib/db/events';
 import { parseAccount } from '@/lib/smtp-accounts';
 import { dayKeyIn, addDays, ET } from '@/lib/time';
@@ -35,12 +35,7 @@ async function collector(clientId) {
 }
 
 async function pauseSending(clientId, reason) {
-  const client = await getClient(clientId);
-  if (client && SENDING_STATES.has(client.state)) {
-    await setState(clientId, 'paused', reason);
-    return true;
-  }
-  return false;
+  return Boolean(await holdSending(clientId, reason));
 }
 
 /** Daily DNS re-check for one client. */

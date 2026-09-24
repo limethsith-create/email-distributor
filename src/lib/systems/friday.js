@@ -22,6 +22,7 @@ import { countByStatus, getLead } from '@/lib/db/leads';
 import { getInboxRecords } from '@/lib/db/inboxes';
 import { logEvent } from '@/lib/db/events';
 import { notifyClient, alertOwner } from '@/lib/notify';
+import { clientButtonsText } from '@/lib/systems/clientwatch';
 import { fill } from '@/lib/templates/render';
 import { FRIDAY_TRIAL_LINES, FRIDAY_BUILD_LINES } from '@/lib/templates/client/stage-d';
 import { addDays, dayKeyIn, daysBetween, ET, trialDay } from '@/lib/time';
@@ -202,7 +203,9 @@ export async function runFriday(clientId, { now: realNow = new Date() } = {}) {
   if (!sig) return { sent: false, blockedReason: 'OWNER.signerName not set' };
   await kv.hset(K.report(clientId, name), { renderedAt: new Date().toISOString(), html: '', text: c.text, blockedReason: '' });
   await markReportRendered(clientId, name);
-  const res = await notifyClient(clientId, 'friday_update', { title: c.title, body: c.text, ownerName: sig }, { dedupe: `friday_update:${date}` });
+  // The client buttons (customer hit / away / stop) ride under trial-week updates; they are not part of the 120-word update.
+  const buttons = c.variant === 'trial' && ['sending', 'paused', 'extension'].includes(client.state) ? `\n\n${await clientButtonsText(clientId)}` : '';
+  const res = await notifyClient(clientId, 'friday_update', { title: c.title, body: `${c.text}${buttons}`, ownerName: sig }, { dedupe: `friday_update:${date}` });
   if (res.sent) {
     await kv.hincrby(K.trial(clientId), 'fridayCount', 1);
     await patchTrial(clientId, { lastFridayAt: realNow.toISOString() });

@@ -90,7 +90,7 @@ export const TEMPLATES = {
   // Day 1 — verbatim ("Your trial started today", Section 10).
   day1_started: {
     subject: 'Day 1',
-    body: '{contactName} — the first emails went out this morning from {senderAddress}. Day 30 is {day30Date}.\n\nI handle every reply. Anything hot lands in your inbox the same day with a note on what to do. Friday update as usual.\n\n{ownerName}',
+    body: '{contactName} — the first emails went out this morning from {senderAddress}. Day 30 is {day30Date}.\n\nI handle every reply. Anything hot lands in your inbox the same day with a note on what to do. Friday update as usual.\n\n{buttons}\n\n{ownerName}',
   },
 
   friday_update: { subject: '{title}', body: '{body}\n\n{ownerName}' },

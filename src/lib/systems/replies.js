@@ -384,7 +384,9 @@ async function handleBounce(clientId, meta, ctx, now) {
 
 async function handleClientMessage(clientId, meta, ctx, now) {
   const at = now.toISOString();
-  await kv.hset(K.trial(clientId), { lastClientActivityAt: meta.date > (ctx.trial.lastClientActivityAt || '') ? meta.date : ctx.trial.lastClientActivityAt });
+  const latest = (prev) => (meta.date > (prev || '') ? meta.date : prev);
+  // lastClientEmailAt: the client wrote to us (Stage D health colour); lastClientActivityAt also counts taps/buttons.
+  await kv.hset(K.trial(clientId), { lastClientActivityAt: latest(ctx.trial.lastClientActivityAt), lastClientEmailAt: latest(ctx.trial.lastClientEmailAt) });
   const ids = new Set((meta.threadIds || []).map(normId));
   const out = { client: true };
 
@@ -416,7 +418,7 @@ async function handleClientMessage(clientId, meta, ctx, now) {
   const bookings = (await kv.hgetall(K.bookings(clientId))) || {};
   for (const [bid, b] of Object.entries(bookings)) {
     if (!b || b.quote || !b.quoteRequestMessageId || !ids.has(normId(b.quoteRequestMessageId))) continue;
-    await kv.hset(K.bookings(clientId), { [bid]: { ...b, quote: stripQuotedReply(meta.text || '').slice(0, 1000), quoteReceivedAt: at } });
+    await kv.hset(K.bookings(clientId), { [bid]: { ...b, quote: stripQuotedReply(meta.text || '').slice(0, 1000), quoteReceivedAt: at, quoteAt: meta.date || at } });
     out.quote = bid;
   }
   return out;

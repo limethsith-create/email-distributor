@@ -570,6 +570,8 @@ export async function runSender(clientId, { now = new Date(), deadline = Date.no
   }
   if (!SENDING_STATES.has(client.state)) return { skipped: `state ${client.state}` };
   if (client.legalHoldAt) return { skipped: 'legal hold — owner must clear it' };
+  if (client.emergencyActive === '1') return { skipped: 'emergency running' };
+  if (client.sendHold) return { skipped: `sending held: ${client.sendHold}` };
 
   const p = partsIn(ET, now);
   const inboxWin = await ccfg(clientId, 'SEND.windowInboxEt');

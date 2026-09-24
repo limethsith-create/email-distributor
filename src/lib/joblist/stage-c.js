@@ -15,8 +15,12 @@ const trial = (client) => isTrialClient(client?.id);
 const inStates = (client, states) => trial(client) && states.includes(client.state);
 const hourKey = (p) => `${p.dayKey}T${String(p.hour).padStart(2, '0')}`;
 
-const SEND_STATES = ['ready', 'sending', 'extension'];
+// `converted` keeps sending on the trial pair (SPEC §9.8), so the send job,
+// bounce scans and the Emergency Runner still run for it; the trial-only
+// jobs (client watch, pace) do not.
+const SEND_STATES = ['ready', 'sending', 'extension', 'converted'];
 const RUN_STATES = ['sending', 'paused', 'extension'];
+const DELIVERY_STATES = ['sending', 'paused', 'extension', 'converted'];
 const REPLY_STATES = ['sending', 'paused', 'extension', 'deciding', 'converted', 'not_now'];
 const BOOKING_STATES = ['sending', 'paused', 'extension', 'deciding', 'converted', 'not_now'];
 
@@ -61,7 +65,7 @@ const bounces = {
   minBudgetMs: 8_000,
   claimTtl: 600,
   async due({ client, now }) {
-    if (!inStates(client, RUN_STATES)) return null;
+    if (!inStates(client, DELIVERY_STATES)) return null;
     // Flags live on the client hash, which the tick has already loaded (no extra reads).
     const u = partsIn('UTC', now);
     const dailyDue = u.hour >= 13 && client.bounceDailyDay !== u.dayKey;
@@ -80,7 +84,7 @@ const emergency = {
   cost: 1,
   claimTtl: 600,
   async due({ client, now }) {
-    if (!inStates(client, RUN_STATES)) return null;
+    if (!inStates(client, DELIVERY_STATES)) return null;
     const p = partsIn(ET, now);
     // Every tick while a request is waiting or an emergency is running (read
     // from the client hash the tick already loaded); a full trigger scan of
