@@ -45,6 +45,14 @@ ones: `CRON_SECRET`, `ADMIN_SECRET`, `ENC_KEY` (32 random bytes, base64),
 `ENC_KEY` after inboxes are stored (passwords would no longer decrypt), nor
 `TRACKING_SECRET`/`CRON_SECRET` lightly (old unsubscribe links stop working).
 
+### 2b. Aviance Hub bridge (docs/HUB-API.md)
+
+The hub at https://aviance.store runs the machine from its **Trials** tab.
+Defaults already point at the right Supabase project and the owner's email;
+set `HUB_ADMIN_EMAILS` (comma-separated) to let more hub admins in and
+`HUB_ORIGINS` if the hub ever moves. "Open in Mission Control" from the hub
+needs `ADMIN_SECRET` on the machine.
+
 ### 3. GitHub repository secrets and variables
 
 | Name | Kind | Used by |
