@@ -19,6 +19,8 @@ const PUBLIC = [
   /^\/mc\/login$/, /^\/api\/mc\/login$/, /^\/api\/mc\/logout$/,
   /^\/api\/unsubscribe(\/|$)/, /^\/api\/track\//, /^\/api\/webhooks\//, /^\/api\/apply$/,
   /^\/api\/c\//, /^\/c\//, /^\/api\/logo$/, /^\/apply$/,
+  // Lead Finder job: the route checks LEADFINDER_TOKEN itself.
+  /^\/api\/clients\/[^/]+\/profile$/,
 ];
 const MACHINE = [/^\/api\/cron\//, /^\/api\/admin\/(export|import)$/];
 
