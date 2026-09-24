@@ -41,16 +41,21 @@ export async function getPaceLog(clientId, limit = 50) {
   try { return (await kv.lrange(K.pacelog(clientId), 0, limit - 1)) || []; } catch { return []; }
 }
 
-/** Load a backup sequence for the niche (Stage B file templates/sequence/{niche}.backup.json). */
-export async function loadBackupSequence(niche) {
-  for (const name of [niche, 'default']) {
-    if (!/^[a-z0-9-]+$/.test(name)) continue;
-    try {
-      const mod = await import(`@/lib/templates/sequence/${name}.backup.json`);
-      if (mod && mod.default) return mod.default;
-    } catch {}
+/**
+ * The backup copy for this client (Stage B: templates/sequence/{niche}.backup.json,
+ * client slots filled from the profile by `buildBackupVariants`). Returns
+ * { variantA, variantB } or { error } — a missing profile value is reported,
+ * never filled with a guess.
+ */
+export async function loadBackupVariants(clientId) {
+  try {
+    const { buildBackupVariants } = await import('@/lib/systems/copy');
+    const r = await buildBackupVariants(clientId);
+    if (!r || !r.variantA) return { error: 'no backup copy for this niche' };
+    return r;
+  } catch (err) {
+    return { error: err.missing ? `the profile has no ${err.missing.join(', ')}` : String(err.message || err) };
   }
-  return null;
 }
 
 /** The four questions of the trial doc §7, first failing one, in plain words. */
@@ -96,13 +101,13 @@ export async function runPace(clientId, { now = new Date(), day: forced = null }
   if (day === 7) {
     const min = await ccfg(clientId, 'PACE.replyMin');
     if (rate(t.replies) >= min) return { day, test: 'pass' };
-    const backup = await loadBackupSequence(nicheOf(client || {}, profile));
-    if (!backup) {
-      await alert('copy_blocked', { clientId, scope: `${clientId}:backup`, vars: { clientId, rule: 'no backup copy file' }, body: `Pace Day 7: reply rate ${pct(rate(t.replies))} is under ${pct(min)}, but there is no templates/sequence/{niche}.backup.json to switch to.`, did: 'Nothing changed. Add the backup copy file.' });
+    const backup = await loadBackupVariants(clientId);
+    if (backup.error) {
+      await alert('copy_blocked', { clientId, scope: `${clientId}:backup`, vars: { clientId, rule: `backup copy: ${backup.error}` }, body: `Pace Day 7: reply rate ${pct(rate(t.replies))} is under ${pct(min)}, but the backup copy cannot be built (${backup.error}).`, did: 'Nothing changed. Fix the profile in Mission Control; the current copy keeps sending.' });
       return { day, test: `reply rate ${pct(rate(t.replies))}`, fix: null };
     }
     const cur = (await kv.hgetall(K.sequence(clientId))) || {};
-    const a = backup.variantA || (backup.touches ? backup : null);
+    const a = backup.variantA;
     const b = backup.variantB || a;
     const fields = { variantA: JSON.stringify(a), variantB: JSON.stringify(b), version: 2, versionChangedAt: now.toISOString(), versionChangedBy: 'pace_day7' };
     if (cur.variantA) fields.variantA_v1 = typeof cur.variantA === 'string' ? cur.variantA : JSON.stringify(cur.variantA);

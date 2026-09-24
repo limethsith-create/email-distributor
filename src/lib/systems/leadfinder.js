@@ -330,3 +330,37 @@ export async function refillDue(clientId, now = new Date()) {
   const below = await cfg(clientId, 'LIST.refillBelow');
   return { due: unsent < below, unsent };
 }
+
+/**
+ * Ask for a refill now (Emergency Runner step 3, SPEC §8.10). Skipped when a
+ * run is already going (dispatched in the last BUILD.refillMinHoursBetween
+ * hours and not reported done) so two emergencies never start two runs.
+ */
+export async function requestRefill(clientId, { reason = 'manual', now = new Date() } = {}, deps = {}) {
+  const st = await getState(clientId);
+  const minHours = await cfg(clientId, 'BUILD.refillMinHoursBetween');
+  if (st.status === 'running' && st.dispatchedAt && now.getTime() - Date.parse(st.dispatchedAt) < minHours * 3600e3) {
+    return { ok: true, skipped: 'a Lead Finder run is already going' };
+  }
+  const r = await dispatchLeadFinder(clientId, { mode: 'refill' }, deps);
+  await logEvent(clientId, 'leadfinder', 'refill_requested', { reason, ok: r.ok });
+  return r;
+}
+
+/**
+ * Deep check of one address with Reoon (SPEC §7.2 step 4), inside today's
+ * free credits (REOON.dailyFree, shared with the Lead Finder job). Returns
+ * { valid: true|false|null, reason }; null when no credit or no answer.
+ */
+export async function deepVerify(email, { now = new Date(), verify = null } = {}) {
+  const key = K.usage('reoon-day', dayKeyIn(ET, now));
+  const daily = await cfg(null, 'REOON.dailyFree');
+  const used = Number(await kv.hget(key, 'checks')) || 0;
+  if (used >= daily) return { valid: null, reason: 'no Reoon credits left today' };
+  if (!verify && !process.env.REOON_API_KEY) return { valid: null, reason: 'REOON_API_KEY is not set' };
+  await kv.hincrby(key, 'checks', 1);
+  await kv.expire(key, 3 * 86400);
+  const fn = verify || (await import('@/lib/ext/reoon')).reoonVerify;
+  const r = await fn(email);
+  return { valid: r.valid, reason: `reoon ${r.status}${r.raw ? ` (${r.raw})` : ''}` };
+}

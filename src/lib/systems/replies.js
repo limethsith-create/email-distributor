@@ -28,7 +28,7 @@ import { logEvent } from '@/lib/db/events';
 import { recordImapResult } from '@/lib/inbox-health';
 import { normId, stripQuotedReply, snippet, parseOooUntil, extractBouncedAddress, dsnSeverity, bounceReason } from '@/lib/mail-utils';
 import { partsIn, ET, addDays, dayKeyIn } from '@/lib/time';
-import { isWarmup } from '@/lib/systems/copycheck-adapter';
+import { isWarmupMessage, MARKER_HEADER } from '@/lib/systems/warmup';
 import { recordLearning } from '@/lib/systems/learning';
 import { sendToProspect, notifyClientSafe, clientAddresses } from '@/lib/systems/outbound';
 import { evaluateSmoke, loadPace } from '@/lib/systems/sender';
@@ -441,10 +441,21 @@ async function matchLead(clientId, meta) {
   return { lead: null };
 }
 
+/**
+ * Warm-up / canary mail is never a reply (SPEC §7.1 isolation). A valid
+ * marker is the normal case; a marker header signed with an older secret is
+ * still warm-up traffic, so its presence alone also skips the message.
+ */
+function isWarmupMark(headers) {
+  if (isWarmupMessage(headers)) return true;
+  const want = MARKER_HEADER.toLowerCase();
+  return Object.keys(headers || {}).some((k) => k.toLowerCase() === want);
+}
+
 /** Route one scanned message. Exported for tests. */
 export async function processMessage(clientId, meta, ctx, now = new Date()) {
   if (ctx.inboxEmails.includes(lower(meta.from))) return { skipped: 'own' };
-  if (await isWarmup(meta.headers || {})) return { skipped: 'warm-up' };
+  if (isWarmupMark(meta.headers || {})) return { skipped: 'warm-up' };
   if (meta.kind === 'dsn') return handleBounce(clientId, meta, ctx, now);
   if (['mdn', 'bulk', 'auto_ack'].includes(meta.kind)) return { skipped: meta.kind };
   const fromHost = hostOf(meta.from);

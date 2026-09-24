@@ -32,7 +32,11 @@ export const deps = {
 const DEFAULT_DEPS = { ...deps };
 
 export function setDeps(overrides = {}) { Object.assign(deps, overrides); }
-export function resetDeps() { Object.assign(deps, DEFAULT_DEPS); cfgCache.clear(); }
+export function resetDeps() {
+  for (const k of Object.keys(deps)) if (!(k in DEFAULT_DEPS)) delete deps[k];
+  Object.assign(deps, DEFAULT_DEPS);
+  cfgCache.clear();
+}
 
 // ─── Settings with a short memo ──────────────────────────────────────────────
 

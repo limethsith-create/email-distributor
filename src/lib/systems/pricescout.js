@@ -206,19 +206,15 @@ function shoppingText(client, list, { autoBought = null, link }) {
 }
 
 /**
- * Build and send the shopping list for a client in awaiting_purchase.
- * Idempotent: once shopping.sentAt is set nothing is re-sent.
+ * Domain availability + registrar and inbox quotes for a client → the list
+ * (no side effects beyond the price cache). `exclude` drops names (e.g. a
+ * burned domain) from the candidates.
  */
-export async function runPriceScout(clientId, { deadline = Date.now() + 15000, now = io.now() } = {}) {
-  const client = await getClient(clientId);
-  if (!client || client.state !== 'awaiting_purchase') return { skipped: `state ${client?.state}` };
-  const existing = (await kv.hgetall(K.shopping(clientId))) || {};
-  if (existing.sentAt) { await updateClient(clientId, { intakeStep: '' }); return { skipped: 'already sent' }; }
-
+export async function computeShoppingList(clientId, client, { deadline = Date.now() + 15000, now = io.now(), exclude = [] } = {}) {
   const profile = await getProfile(clientId);
   const tlds = allowedTlds(await cfg(clientId, 'ALLOWED_TLDS'), await cfg(clientId, 'BANNED_TLDS'));
   const price = await cfg(clientId, 'PRICE');
-  const names = candidateDomains(client.mainDomain, price.candidatePatterns, tlds);
+  const names = candidateDomains(client.mainDomain, price.candidatePatterns, tlds).filter((n) => !exclude.includes(n));
   const availability = await checkAvailability(names, { want: 1 + price.backups, deadline });
 
   let livePorkbun = null;
@@ -230,6 +226,32 @@ export async function runPriceScout(clientId, { deadline = Date.now() + 15000, n
   for (const tld of tlds) quotesByTld[tld] = await registrarQuotes(tld, { livePorkbun, registrars, promos, today, now });
   const inboxes = inboxQuotes(await cfg(clientId, 'inboxProviders'), price.inboxesPerTrial);
   const list = buildShoppingList({ availability, quotesByTld, inboxes, profile, backups: price.backups, inboxesPerTrial: price.inboxesPerTrial });
+
+  return { profile, availability, list };
+}
+
+/**
+ * A new shopping list as text for the Emergency Runner's burned-domain alert
+ * (SPEC §8.10 step 4). Does not change state or send anything itself.
+ */
+export async function replacementShoppingList(clientId, { deadline = Date.now() + 12000, now = io.now(), exclude = [] } = {}) {
+  const client = await getClient(clientId);
+  const { list } = await computeShoppingList(clientId, client, { deadline, now, exclude });
+  return shoppingText(client, list, { link: `${baseUrl()}/mc/clients/${clientId}/purchase` });
+}
+
+/**
+ * Build and send the shopping list for a client in awaiting_purchase.
+ * Idempotent: once shopping.sentAt is set nothing is re-sent.
+ */
+export async function runPriceScout(clientId, { deadline = Date.now() + 15000, now = io.now() } = {}) {
+  const client = await getClient(clientId);
+  if (!client || client.state !== 'awaiting_purchase') return { skipped: `state ${client?.state}` };
+  const existing = (await kv.hgetall(K.shopping(clientId))) || {};
+  if (existing.sentAt) { await updateClient(clientId, { intakeStep: '' }); return { skipped: 'already sent' }; }
+
+  const { profile, availability, list } = await computeShoppingList(clientId, client, { deadline, now });
+  const price = await cfg(clientId, 'PRICE');
 
   const autoBought = await maybeAutoBuy(clientId, list, { now });
   const link = `${baseUrl()}/mc/clients/${clientId}/purchase`;

@@ -14,7 +14,7 @@ import { setDeps, resetDeps, leadWindowOpen, namedSlots, businessHoursBetween, b
 import { classifyReply, parseNotNowDate, extractReferral, guessAddresses, processMessage, runHotChaser, runReplies } from '@/lib/systems/replies';
 import { runSender, evaluateSmoke, orderFresh, rampCapForDay, isAway } from '@/lib/systems/sender';
 import { checkRules, unsubscribeHeaders } from '@/lib/systems/compliance';
-import { localCopyCheck } from '@/lib/systems/copycheck-adapter';
+import { checkEmail } from '@/lib/systems/copycheck';
 import { parseIcs, parseIcsDate, recordBookingEvent, runReminders } from '@/lib/systems/bookings';
 import { applyTap, resolveDispute, runScorekeeper, evaluateQualified } from '@/lib/systems/scorekeeper';
 import { runEmergency } from '@/lib/systems/emergency';
@@ -38,9 +38,9 @@ const seq = (tag) => ({
   footer: FOOTER,
   touches: [
     { touch: 'd0', thread: 'new', subject: `${tag} idea for {Company}`, body: 'Hi {FirstName},\n\nA short note about {Company}. Worth a chat?' },
-    { touch: 'd3', thread: 'd0', body: '{FirstName} — following up.' },
-    { touch: 'd7', thread: 'new', subject: 'Quick one, {FirstName}', body: '{FirstName} — one more idea for {Company}.' },
-    { touch: 'd10', thread: 'd7', body: '{FirstName} — closing the file.' },
+    { touch: 'd3', thread: 'd0', body: '{FirstName} — following up. Worth a chat?' },
+    { touch: 'd7', thread: 'new', subject: 'Quick one, {FirstName}', body: '{FirstName} — one more idea for {Company}. Open to it?' },
+    { touch: 'd10', thread: 'd7', body: '{FirstName} — closing the file. Should I?' },
   ],
 });
 
@@ -68,7 +68,7 @@ async function setup({ state = 'sending', leads = [], day1Date = '2026-09-28', d
   if (cleared) await kv.hset(K.sendState(ID), { smokeClearedAt: '2026-09-29T00:00:00Z' });
   if (leads.length) await insertLeads(ID, leads);
 }
-const lead = (email, extra = {}) => ({ email, first_name: email.split('@')[0].replace(/^\w/, (c) => c.toUpperCase()), company: `${email.split('@')[1]} Inc`, tz: 'America/New_York', riskLevel: 'safe', sequenceVariant: 'A', city: 'Dover', title: 'Owner', ...extra });
+const lead = (email, extra = {}) => ({ email, first_name: email.split('@')[0].replace(/^\w/, (c) => c.toUpperCase()), company: `${email.split('@')[1].split('.')[0].replace(/^\w/, (c) => c.toUpperCase())} Inc`, tz: 'America/New_York', riskLevel: 'safe', sequenceVariant: 'A', city: 'Dover', title: 'Owner', ...extra });
 
 beforeEach(() => { resetDeps(); });
 
@@ -165,8 +165,8 @@ test('compliance guard rules', () => {
   assert.equal(rule({ text: `As discussed on the phone. ${good.text}` }), 'misleading_claim');
   assert.equal(rule({ headers: {} }), 'list_unsubscribe');
   assert.equal(rule({ headers: { 'List-Unsubscribe': unsubscribeHeaders('a@x.com', INBOX)['List-Unsubscribe'] } }), 'list_unsubscribe_post');
-  assert.equal(localCopyCheck({ text: 'Hi {FirstName}' }, profile).ok, false);
-  assert.equal(localCopyCheck({ text: good.text }, profile).ok, true);
+  assert.equal(checkEmail({ text: 'Hi {FirstName}' }, profile).failures.some((f) => f.rule === 'unfilled_slot'), true);
+  assert.equal(checkEmail({ subject: 'Idea for X', body: 'Hi\n\nWorth a chat?', text: `Hi\n\nWorth a chat?\n\n${good.text}` }, profile).ok, true);
 });
 
 test('three compliance blocks in a day alert the owner', async () => {
@@ -309,7 +309,7 @@ test('reply handler: interested → two named slots in-thread + hot lead, counte
   assert.match(reply.text, /https:\/\/cal\.com\/jane/);
   const hot = notified.find((n) => n.key === 'hot_lead');
   assert.ok(hot);
-  assert.equal(fill('t', TEMPLATES.hot_lead.subject, hot.vars), 'Hot — alpha.com Inc, Ann, Owner');
+  assert.equal(fill('t', TEMPLATES.hot_lead.subject, hot.vars), 'Hot — Alpha Inc, Ann, Owner');
   const t = await getTotals(ID);
   assert.equal(t.replies, 1); assert.equal(t.positive, 1);
   const recs = Object.values(await kv.hgetall(K.replies(ID)));
@@ -552,10 +552,13 @@ test('emergency: canary request consumed; blacklisted domain is burned and stays
   assert.equal(r.started.code, 'canary');
   assert.equal((await getClient(ID)).emergencyRequested, '');
   await kv.hset(K.domain(ID), { name: 'acme-team.com', blacklist: 'listed' });
+  let excluded = null;
+  setDeps({ pricescout: { replacementShoppingList: async (_id, { exclude }) => { excluded = exclude; return 'Shopping list: acmehq.com'; } } });
   const r2 = await runEmergency(ID, { now: new Date(NOW.getTime() + 60000) });
   assert.equal(r2.burned, true);
   assert.ok((await kv.hgetall(K.domain(ID))).retiredAt);
-  assert.ok(alerts.find((a) => a.key === 'domain_burned'));
+  assert.deepEqual(excluded, ['acme-team.com']);
+  assert.match(alerts.find((a) => a.key === 'domain_burned').body, /acmehq\.com/);
   assert.equal((await getClient(ID)).state, 'paused');
   assert.equal((await runEmergency(ID, { now: new Date(NOW.getTime() + 120000) })).waiting, 'domain replacement (owner)');
 });
@@ -578,11 +581,11 @@ test('pace checks: fixes per day, logged, profile untouched', async () => {
   assert.equal((await runPace(ID, { now: NOW, day: 3 })).test.startsWith('bounce'), true);
   assert.equal((await getClient(ID)).emergencyRequested, 'pace_day3');
 
-  // Day 7 with no backup file: nothing changes, the owner is told
+  // Day 7 when the backup copy cannot be built (profile has no one-liner / ICP): nothing changes, the owner is told
   await setTotals({ sent: 300, replies: 1 });
   const d7 = await runPace(ID, { now: NOW, day: 7 });
   assert.equal(d7.fix, null);
-  assert.ok(alerts.find((a) => a.key === 'copy_blocked'));
+  assert.ok(alerts.find((a) => a.key === 'copy_blocked' && /backup copy/.test(a.vars.rule)));
 
   // Day 12: positive 0 → best variant + narrow slice
   await recordLearning(ID, 'sends', { lead: { sentVariant: 'B', sentVersion: 1, city: 'Dover', tz: 'America/New_York' }, niche: 'msp' });
@@ -617,6 +620,20 @@ test('pace checks: fixes per day, logged, profile untouched', async () => {
   const log = await getPaceLog(ID);
   assert.deepEqual(log.map((l) => l.day).sort((a, b) => a - b), [3, 12, 15, 20, 25]);
   assert.equal(JSON.stringify(await kv.hgetall(K.profile(ID))), profileBefore);
+});
+
+test('pace Day 7: Stage B backup copy becomes version 2, old variants kept', async () => {
+  await setup();
+  await kv.hset(K.profile(ID), { oneLiner: 'We run IT for small offices.', defaultIcp: 'office managers', companyName: 'Acme IT' });
+  await kv.hset(K.countersTotal(ID), { sent: 300, bounces: 2, replies: 1, positive: 0, booked: 0, held: 0, qualified: 0, wrongfit: 0, companiesContacted: 280 });
+  const d7 = await runPace(ID, { now: NOW, day: 7 });
+  assert.ok(d7.fix);
+  const s = await kv.hgetall(K.sequence(ID));
+  assert.equal(Number(s.version), 2);
+  const a = JSON.parse(s.variantA);
+  assert.ok(a.variantId && a.touches.length === 4);
+  assert.doesNotMatch(JSON.stringify(a), /\{(SenderName|ClientCompany|oneLiner|ICP|postalAddress)\}/);
+  assert.ok(s.variantA_v1);
 });
 
 test('pace check refuses to run on missing counters', async () => {

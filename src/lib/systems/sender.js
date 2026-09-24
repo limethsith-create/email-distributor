@@ -28,7 +28,8 @@ import { varsFor, renderTouch, TemplateError } from '@/lib/systems/sequence';
 import { getInboxHealth, recordSendSuccess, recordSendFailure, updateInboxHealth, shouldSkipInbox } from '@/lib/inbox-health';
 import { partsIn, dayKeyIn, ET, isWeekday, hhmmToMin, trialDay, addDays } from '@/lib/time';
 import { guardOutbound, unsubscribeHeaders } from '@/lib/systems/compliance';
-import { checkCopy } from '@/lib/systems/copycheck-adapter';
+import { checkEmail } from '@/lib/systems/copycheck';
+import { leadVars, clientVars } from '@/lib/systems/copy';
 import { recordLearning } from '@/lib/systems/learning';
 import { textToHtml, indexMessageId, renderTemplate } from '@/lib/systems/outbound';
 import {
@@ -280,17 +281,27 @@ export function dueFollowUps(inSeq, { now, gaps, graceDays, window }) {
 
 const reSubject = (s) => `Re: ${String(s || '').replace(/^\s*re:\s*/i, '').trim()}`;
 
-/** Slot values for a trial lead: sequence.varsFor + client-level slots (Copy Engine names). */
-export function trialVars(lead, { client = {}, profile = {}, account = null }) {
+/**
+ * Slot values for a trial lead. Stage B's stored variants keep only the lead
+ * slots ({FirstName} {Company} {City} {FirstLine}); `leadVars` computes them,
+ * including the personalised first line from the lead's Places types + city
+ * and the variant's first-line set. The client-level values are added too so
+ * an owner-edited variant (or referral_intro) that still names one renders.
+ */
+export function trialVars(lead, { client = {}, profile = {}, account = null, variant = null } = {}) {
   const base = varsFor(lead, { profile, account });
-  return {
+  const cv = clientVars(client, profile);
+  const lv = leadVars(lead, variant || {});
+  const out = {
     ...base,
-    SenderName: profile.senderName || base.SenderName,
-    ClientCompany: client.name || profile.companyName,
-    oneLiner: profile.oneLiner || profile.sellsTo,
-    niche: base.niche || profile.niche || listField(profile.industry)[0],
-    ICP: base.ICP || profile.icp,
+    SenderName: cv.SenderName || base.SenderName,
+    ClientCompany: cv.ClientCompany,
+    oneLiner: cv.oneLiner,
+    niche: base.niche || cv.niche || profile.niche || listField(profile.industry)[0],
+    ICP: base.ICP || cv.ICP,
   };
+  for (const [k, v] of Object.entries(lv)) if (v !== undefined && v !== null && String(v).trim() !== '') out[k] = v;
+  return out;
 }
 
 /**
@@ -401,6 +412,32 @@ async function closeLead(clientId, lead, status, reason) {
   await logEvent(clientId, 'sender', 'lead_skipped', { to: lead.email, status, reason });
 }
 
+// ─── Copy Checker gate ───────────────────────────────────────────────────────
+
+const SAMPLE_LEAD = { first_name: 'Sam', company: 'Sample Company', city: 'Dover', types: [] };
+
+/**
+ * Stage B's Copy Checker on the email about to go out. When it fails, the same
+ * touch is rendered for a plain sample lead: if that passes, the failure came
+ * from this lead's values (skip the lead); if not, the copy is at fault
+ * (systemic: hold the client).
+ */
+export async function copyGate(clientId, { built, seq, touch, lead, ctx, account, variant }) {
+  const maxWords = await ccfg(clientId, 'COPY.maxWords');
+  const check = (b) => checkEmail({ subject: b.subject, body: b.body, text: b.text, touch, fromName: account.displayName }, ctx.profile, { maxWords });
+  const res = check(built);
+  if (res.ok) return { ok: true };
+  const failures = res.failures.map((f) => f.rule);
+  const detail = res.failures.map((f) => `${f.rule} (${f.detail})`).join('; ');
+  let systemic = true;
+  try {
+    const sampleLead = { ...lead, ...SAMPLE_LEAD, original_subject: null, d7_subject: null, referrerName: lead.referrerName ? 'Sam Lee' : lead.referrerName };
+    const sample = buildTouch({ seq, touch, lead: sampleLead, vars: trialVars(sampleLead, { client: ctx.client, profile: ctx.profile, account, variant: seq }), referral: lead.source === 'referral' });
+    systemic = !check(sample).ok;
+  } catch { systemic = true; }
+  return { ok: false, systemic, failures, detail, variant };
+}
+
 // ─── One attempt ─────────────────────────────────────────────────────────────
 
 /**
@@ -434,7 +471,7 @@ async function attempt(clientId, { account, lead: candidate, touch, ctx, now }) 
   const seq = ctx.seqs[variant];
   let built;
   try {
-    built = buildTouch({ seq, touch, lead, vars: trialVars(lead, { client: ctx.client, profile: ctx.profile, account }), referral: lead.source === 'referral' });
+    built = buildTouch({ seq, touch, lead, vars: trialVars(lead, { client: ctx.client, profile: ctx.profile, account, variant: seq }), referral: lead.source === 'referral' });
   } catch (err) {
     const missing = err instanceof TemplateError ? err.missing.join(', ') : err.message;
     if (touch === 'd0') { await closeLead(clientId, lead, 'done', `copy slot missing: ${missing}`); }
@@ -448,12 +485,27 @@ async function attempt(clientId, { account, lead: candidate, touch, ctx, now }) 
     return { skipped: true, reason: `copy: ${missing}` };
   }
 
-  // Gate 3: Copy Checker (Stage B, with the local fallback).
-  const copy = await checkCopy({ subject: built.subject, body: built.body, text: built.text, touch, firstTouch: touch === 'd0', variant }, ctx.profile);
+  // Gate 3: Copy Checker (Stage B). A failure caused by this lead's own
+  // values (e.g. a company name that is a bare domain in email 1) skips the
+  // lead; a failure of the copy itself holds the client and alerts.
+  const copy = await copyGate(clientId, { built, seq, touch, lead, ctx, account, variant });
+  if (!copy.ok && !copy.systemic) {
+    const reason = `copy check: ${copy.failures.join(', ')}`;
+    if (touch === 'd0') await closeLead(clientId, lead, 'done', reason);
+    else {
+      const at = now.toISOString();
+      await saveLeadPatch(clientId, email, touch === 'd10'
+        ? { status: 'done', d10_skipped_at: at, d10_skip_reason: reason }
+        : { [`${touch}_skipped_at`]: at, [`${touch}_skip_reason`]: reason });
+      await release();
+      await logEvent(clientId, 'sender', 'touch_skipped', { to: email, touch, reason });
+    }
+    return { skipped: true, reason };
+  }
   if (!copy.ok) {
     await release();
     await logEvent(clientId, 'sender', 'copy_blocked', { touch, variant, failures: copy.failures });
-    await alert('copy_blocked', { clientId, scope: `${clientId}:${variant}:${touch}`, vars: { clientId, rule: copy.failures.join(', ') }, body: `Touch ${touch} of variant ${variant} failed the Copy Checker: ${copy.failures.join(', ')}.`, did: 'Sending for this client is held until the copy passes.' });
+    await alert('copy_blocked', { clientId, scope: `${clientId}:${variant}:${touch}`, vars: { clientId, rule: copy.failures.join(', ') }, body: `Touch ${touch} of variant ${variant} failed the Copy Checker: ${copy.detail}.`, did: 'Sending for this client is held until the copy passes.' });
     return { stopClient: true, reason: 'copy_blocked' };
   }
 

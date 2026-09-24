@@ -30,7 +30,7 @@ import { logEvent } from '@/lib/db/events';
 import { dayKeyIn, ET, addDays } from '@/lib/time';
 import { recordEmergencyCause } from '@/lib/systems/learning';
 import { notifyClientSafe } from '@/lib/systems/outbound';
-import { optionalSystem } from '@/lib/systems/copycheck-adapter';
+import * as leadfinder from '@/lib/systems/leadfinder';
 import {
   deps, alert, isTrialClient, lower, getRunState, patchRunState, businessDaysBetween, isBusinessDayKey, ccfg } from '@/lib/systems/stagec-common';
 
@@ -161,7 +161,7 @@ async function step3Reverify(clientId, em, now) {
   const unsent = (await getLeadsByStatus(clientId, 'unsent', 5000)).map((l) => l.email).sort();
   const start = Number(em.verifyIndex) || 0;
   const slice = unsent.slice(start, start + perTick);
-  const lf = await optionalSystem('leadfinder');
+  const lf = deps.leadfinder || leadfinder;
   let dropped = Number(em.dropped) || 0;
   for (const email of slice) {
     let valid = true; let reason = null;
@@ -169,7 +169,7 @@ async function step3Reverify(clientId, em, now) {
     if (v && v.valid === false) { valid = false; reason = v.reason; }
     const lead = await getLead(clientId, email);
     if (valid && lead && lower(lead.riskLevel) === 'risky' && lf && typeof lf.deepVerify === 'function') {
-      try { const d = await lf.deepVerify(email); if (d && d.valid === false) { valid = false; reason = d.reason || 'deep check invalid'; } } catch {}
+      try { const d = await lf.deepVerify(email, { now }); if (d && d.valid === false) { valid = false; reason = d.reason || 'deep check invalid'; } } catch {}
     }
     if (!valid && lead) {
       await saveLead(clientId, { ...lead, status: 'done', skipReason: `re-verify: ${reason}`, reverifiedAt: now.toISOString() }, lead.status);
@@ -183,7 +183,7 @@ async function step3Reverify(clientId, em, now) {
     await logEvent(clientId, 'emergency', 'step3_reverified', { verified: (Number(em.verified) || 0) + slice.length, dropped });
     let refill = 'the daily Lead Finder refill tops the list up';
     if (lf && typeof lf.requestRefill === 'function') {
-      try { await lf.requestRefill(clientId, { reason: 'emergency' }); refill = 'Lead Finder refill requested'; } catch (err) { refill = `refill request failed: ${err.message}`; }
+      try { const rr = await lf.requestRefill(clientId, { reason: 'emergency', now }); refill = rr.skipped ? `Lead Finder: ${rr.skipped}` : rr.ok ? 'Lead Finder refill requested' : `refill request failed: ${rr.error}`; } catch (err) { refill = `refill request failed: ${err.message}`; }
     }
     await patchEmergency(clientId, { refill });
   }
@@ -200,13 +200,10 @@ async function step4Burned(clientId, client, em, now) {
   if (!listed && !allLow) { await patchEmergency(clientId, { step: '4' }); return false; }
   await kv.hset(K.domain(clientId), { retiredAt: now.toISOString(), retiredReason: listed ? 'blacklisted' : 'canary below 50% on every inbox' });
   let listText = 'Run the Price Scout for this client from Mission Control to get a new shopping list.';
-  const ps = await optionalSystem('pricescout');
-  if (ps && typeof ps.buildShoppingList === 'function') {
-    try {
-      const list = await ps.buildShoppingList(clientId);
-      listText = typeof list === 'string' ? list : `New shopping list:\n${JSON.stringify(list, null, 2).slice(0, 1500)}`;
-    } catch (err) { listText = `The Price Scout failed (${err.message}). Run it from Mission Control.`; }
-  }
+  try {
+    const ps = deps.pricescout || (await import('@/lib/systems/pricescout'));
+    listText = await ps.replacementShoppingList(clientId, { now, exclude: domain.name ? [domain.name] : [] });
+  } catch (err) { listText = `The Price Scout failed (${err.message}). Run it from Mission Control.`; }
   await patchEmergency(clientId, { step: '4', burned: '1' });
   await logEvent(clientId, 'emergency', 'step4_domain_burned', { listed, allLow });
   await alert('domain_burned', { clientId, vars: { domain: domain.name || clientId }, body: `${domain.name || 'The trial domain'} for ${clientId} is burned (${listed ? 'blacklisted' : 'canary under 50% on every inbox'}).\n\n${listText}`, did: 'Domain marked retired. The trial stays paused until the replacement domain is set up and you resume it.' });
