@@ -7,6 +7,9 @@ import { usePathname } from 'next/navigation';
 
 const NAV = [
   { href: '/mc', label: 'Mission' },
+  { href: '/mc/alerts', label: 'Alerts' },
+  { href: '/mc/config', label: 'Config' },
+  { href: '/mc/test', label: 'Test' },
   { href: '/', label: 'Dashboard' },
   { href: '/inboxes', label: 'Inboxes' },
   { href: '/leads', label: 'Leads' },
@@ -33,9 +36,19 @@ function Brand() {
   );
 }
 
+function ClientBrand() {
+  return (
+    <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+      <span style={{ color: 'var(--fg)', fontWeight: 800, fontSize: 17, letterSpacing: '0.02em' }}>AVIANCE</span>
+    </span>
+  );
+}
+
 function TopNav() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
+  // Client pages (/c/[token]/...) are public: no admin navigation on them.
+  const clientPage = pathname?.startsWith('/c/');
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 4);
@@ -54,9 +67,10 @@ function TopNav() {
         maxWidth: 1280, margin: '0 auto', height: 62, padding: '0 24px',
         display: 'flex', alignItems: 'center', gap: 24,
       }}>
-        <Brand />
+        {clientPage ? <ClientBrand /> : <Brand />}
+        {clientPage && <span style={{ marginLeft: 'auto' }} />}
 
-        <nav style={{
+        {!clientPage && <nav style={{
           display: 'flex', alignItems: 'stretch', gap: 4, marginLeft: 'auto',
           overflowX: 'auto', height: '100%',
         }}>
@@ -81,7 +95,7 @@ function TopNav() {
               </Link>
             );
           })}
-        </nav>
+        </nav>}
 
         <a href="https://www.aviance.online" target="_blank" rel="noopener noreferrer"
           className="mono"

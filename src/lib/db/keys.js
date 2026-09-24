@@ -104,6 +104,11 @@ export const K = {
   // ── end Stage C ──
 
   // ── Stage D additions (report, close, Mission Control) ──
+  reports: (id) => `${c(id)}:reports`, // set of report names rendered (friday:{date}, day20, day29, final, market, handover)
+  invoice: (id) => `${c(id)}:invoice`, // Invoice Maker: month-one invoice
+  paceLogRead: (id) => `${c(id)}:pacelog`, // Stage C's Pace Check log (list of {at, day, test, fix}); read-only here
+  trialLedger: () => 'system:trials:ledger', // clientId -> outcome snapshot (no personal data); survives deletion for KPIs
+  testSkipPings: () => 'system:test:skippings', // Test Mode: heartbeat-loss simulation flag (TTL)
   // ── end Stage D ──
 };
 

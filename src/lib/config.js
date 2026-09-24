@@ -148,6 +148,17 @@ export const DEFAULTS = {
   // ── Stage C additions ──
   // ── end Stage C ──
   // ── Stage D additions ──
+  REVIEW: { clutchUrl: null }, // "to set": review requests block + config_missing until filled
+  FRIDAY: { maxWords: 120, personalUpdates: 4, trialWeeks: 4 },
+  DIAGNOSIS: { bounceMax: 0.02, placementMin: 0.85, replyMin: 0.015, positiveMin: 0.01, bookedShareMin: 0.5 },
+  TARGET: { promise: 1, target: 3 },
+  INVOICE: { reminderDays: [3, 7] },
+  PLAN_SHOPPING: { starter: { domains: 13, inboxes: 26 }, growth: null, scale: null },
+  KPI: { bookedShare: 0.7, reviewShare: 0.7, paidShare: 0.3, maxExtensions: 1, hoursPerTrial: 9 },
+  DIGEST: { morningAt: '08:00', mondayAt: '08:00' },
+  DAYJOBS: { at: '09:00', stopRetireDays: 7 },
+  TESTMODE: { clockScale: 24 },
+  WINBACK_TEXT: { whatsNew: null }, // "to set": what's new since they left (Offboarding SOP [X])
   // ── end Stage D ──
   // US federal holidays, observed dates. Update once a year (one line per year).
   US_HOLIDAYS: [
