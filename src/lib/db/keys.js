@@ -82,6 +82,18 @@ export const K = {
   jobLast: (job, scope) => `jobs:last:${job}:${scope}`,
   session: (sid) => `session:${sid}`,
   migrations: () => 'system:migrations',
+
+  // ── Stage A additions (intake) ── add new key builders only inside this block
+  // ── end Stage A ──
+
+  // ── Stage B additions (build) ──
+  // ── end Stage B ──
+
+  // ── Stage C additions (run) ──
+  // ── end Stage C ──
+
+  // ── Stage D additions (report, close, Mission Control) ──
+  // ── end Stage D ──
 };
 
 /**

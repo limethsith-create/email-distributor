@@ -11,16 +11,14 @@ import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { SENDING_STATES } from '@/lib/db/client';
 import { partsIn, isWeekday, ET } from '@/lib/time';
-import { isUsHoliday } from '@/lib/config';
 import { runWatchdog } from '@/lib/systems/watchdog';
 import { runUsageMeter } from '@/lib/systems/usage';
+import { JOBS as STAGE_A } from '@/lib/joblist/stage-a';
+import { JOBS as STAGE_B } from '@/lib/joblist/stage-b';
+import { JOBS as STAGE_C } from '@/lib/joblist/stage-c';
+import { JOBS as STAGE_D } from '@/lib/joblist/stage-d';
 
-const minuteKey = (p) => `${p.dayKey}T${p.hhmm}`;
-const bucketKey = (p, minutes) => {
-  const m = Math.floor(p.minuteOfDay / minutes) * minutes;
-  return `${p.dayKey}T${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-};
-const usBusinessHours = (p) => isWeekday(p.weekday) && !isUsHoliday(p.dayKey) && p.hour >= 8 && p.hour < 19;
+import { minuteKey, bucketKey, usBusinessHours } from '@/lib/joblist/helpers';
 
 function internalRequest(path) {
   const headers = {};
@@ -122,4 +120,4 @@ const usage = {
   async run(ctx) { return runUsageMeter(ctx); },
 };
 
-export const JOBS = [watchdog, usage, avianceSend, avianceReplies, avianceEodReport];
+export const JOBS = [watchdog, usage, avianceSend, avianceReplies, avianceEodReport, ...STAGE_A, ...STAGE_B, ...STAGE_C, ...STAGE_D];

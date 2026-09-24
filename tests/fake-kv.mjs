@@ -43,6 +43,29 @@ const api = {
   async lrange(k, a, b) { const l = live(k) || []; return l.slice(a, b === -1 ? undefined : b + 1); },
   async lset(k, i, v) { const l = live(k); l[i] = v; return 'OK'; },
   async scan(cursor, { match } = {}) { const re = match ? new RegExp(`^${match.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`) : null; return ['0', [...store.keys()].filter((k) => live(k) !== undefined && (!re || re.test(k)))]; },
+  async scard(k) { const s = live(k); return s ? s.size : 0; },
+  async spop(k) { const s = live(k); if (!s || !s.size) return null; const v = [...s][0]; s.delete(v); return v; },
+  async exists(...ks) { return ks.filter((k) => live(k) !== undefined).length; },
+  async incrby(k, n) { const v = (Number(live(k)) || 0) + n; store.set(k, v); return v; },
+  async decr(k) { const v = (Number(live(k)) || 0) - 1; store.set(k, v); return v; },
+  async ttl(k) { const e = ttl.get(k); return e ? Math.ceil((e - Date.now()) / 1000) : (live(k) === undefined ? -2 : -1); },
+  async mget(...ks) { return ks.flat().map((k) => { const v = live(k); return v === undefined ? null : v; }); },
+  async hkeys(k) { const h = live(k); return h ? [...h.keys()] : []; },
+  async hlen(k) { const h = live(k); return h ? h.size : 0; },
+  async hexists(k, f) { const h = live(k); return h && h.has(f) ? 1 : 0; },
+  async llen(k) { return (live(k) || []).length; },
+  async rpop(k) { const l = live(k); return l && l.length ? l.pop() : null; },
+  async lpop(k) { const l = live(k); return l && l.length ? l.shift() : null; },
+  async lrem(k, _n, v) { const l = live(k) || []; const keep = l.filter((x) => JSON.stringify(x) !== JSON.stringify(v)); store.set(k, keep); return l.length - keep.length; },
+  async zadd(k, ...items) { let z = live(k); if (!z) { z = new Map(); z.__z = true; store.set(k, z); } for (const it of items) if (it && typeof it === 'object') z.set(it.member, Number(it.score)); return items.length; },
+  async zrange(k, a, b, opts = {}) {
+    const z = live(k); if (!z) return [];
+    let rows = [...z.entries()].sort((x, y) => x[1] - y[1]);
+    if (opts.byScore) rows = rows.filter(([, s]) => s >= Number(a) && s <= Number(b));
+    else rows = rows.slice(a, b === -1 ? undefined : b + 1);
+    return opts.withScores ? rows.flat() : rows.map((r) => r[0]);
+  },
+  async zrem(k, ...ms) { const z = live(k); let n = 0; if (z) for (const m of ms) if (z.delete(m)) n++; return n; },
   // Only the compare-and-set used by setState().
   async eval(_script, keys, args) {
     const h = hash(keys[0]);

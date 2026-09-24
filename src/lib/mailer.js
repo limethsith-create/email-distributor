@@ -202,6 +202,7 @@ export async function sendEmail(account, mailOptions) {
     ...(inReplyTo ? { inReplyTo } : {}),
     ...(references.length ? { references: references.join(' ') } : {}),
     headers,
+    ...(Array.isArray(mailOptions.attachments) && mailOptions.attachments.length ? { attachments: mailOptions.attachments } : {}),
   };
 
   let attempts = 0;

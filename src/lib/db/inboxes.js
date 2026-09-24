@@ -78,3 +78,12 @@ export function toAccount(rec) {
     source: 'redis',
   };
 }
+
+/** Connection objects for a client's inboxes (enabledOnly = switched on). */
+export async function getAccounts(clientId, { enabledOnly = false } = {}) {
+  const recs = await getInboxRecords(clientId);
+  return recs
+    .filter((r) => !enabledOnly || r.enabled === '1' || r.enabled === 1 || r.enabled === true)
+    .map((r) => ({ ...toAccount(r), record: r }))
+    .filter((a) => a && a.email);
+}

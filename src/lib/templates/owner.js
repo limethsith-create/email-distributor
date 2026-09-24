@@ -61,4 +61,12 @@ export const ALERTS = {
   morning_digest: { urgent: false, title: 'Morning digest — {date}' },
   monday_digest: { urgent: false, title: 'Monday KPIs — {date}' },
   test: { urgent: true, title: 'Test alert from Mission Control' },
+  // ── Stage A additions ──
+  // ── end Stage A ──
+  // ── Stage B additions ──
+  // ── end Stage B ──
+  // ── Stage C additions ──
+  // ── end Stage C ──
+  // ── Stage D additions ──
+  // ── end Stage D ──
 };

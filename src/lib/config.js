@@ -86,6 +86,14 @@ export const DEFAULTS = {
     telegramChatId: null,
   },
   PAYMENT: { paypalMe: null, wiseDetails: null },
+  // ── Stage A additions ── (new defaults only inside this block)
+  // ── end Stage A ──
+  // ── Stage B additions ──
+  // ── end Stage B ──
+  // ── Stage C additions ──
+  // ── end Stage C ──
+  // ── Stage D additions ──
+  // ── end Stage D ──
   // US federal holidays, observed dates. Update once a year (one line per year).
   US_HOLIDAYS: [
     '2026-01-01', '2026-01-19', '2026-02-16', '2026-05-25', '2026-06-19', '2026-07-03',

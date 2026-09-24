@@ -131,3 +131,49 @@ export async function alertOwner(key, { clientId = null, vars = {}, body = '', d
 export async function getAlertLog(limit = 200) {
   try { return (await kv.lrange(K.alertLog(), 0, limit - 1)) || []; } catch { return []; }
 }
+
+/**
+ * Email a client (SPEC §10.2). Onboarding / report / decision mail comes from
+ * OWNER_INBOX so the client always has one human address; anything a
+ * prospect could see comes from the client's trial inbox. `to` defaults to
+ * the client's contactEmail. Missing slot → report_blocked alert, never a
+ * blank. Deduped per (key, dedupe) forever via a claim unless `dedupe` null.
+ */
+export async function notifyClient(clientId, key, vars = {}, { to = null, from = null, dedupe = key, attachments = null } = {}) {
+  const { renderTemplate } = await import('@/lib/templates/client');
+  const { getClient } = await import('@/lib/db/client');
+  const client = await getClient(clientId);
+  const recipient = to || client?.contactEmail;
+  if (!recipient) throw new Error(`no contact email for ${clientId}`);
+  if (dedupe) {
+    const ok = await kv.set(`notified:${clientId}:${dedupe}`, Date.now(), { nx: true, ex: 400 * 86400 });
+    if (ok !== 'OK') return { sent: false, deduped: true };
+  }
+  let msg;
+  try {
+    msg = renderTemplate(key, { clientName: client?.name, contactName: client?.contactName, ...vars });
+  } catch (err) {
+    if (dedupe) await kv.del(`notified:${clientId}:${dedupe}`);
+    await alertOwner('report_blocked', { clientId, scope: `${clientId}:${key}`, vars: { report: key, clientId }, body: `Could not render "${key}" for ${clientId}: ${err.message}`, did: 'Nothing was sent to the client.' });
+    return { sent: false, error: err.message };
+  }
+  const via = from || msg.from;
+  let account;
+  if (via === 'trial') {
+    const { getAccounts } = await import('@/lib/db/inboxes');
+    account = (await getAccounts(clientId))[0];
+  } else {
+    account = await ownerSender();
+  }
+  if (!account) {
+    if (dedupe) await kv.del(`notified:${clientId}:${dedupe}`);
+    throw new Error(`no ${via} inbox to send ${key} for ${clientId}`);
+  }
+  const res = await sendEmail(account, { to: recipient, subject: msg.subject, text: msg.text, html: `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;white-space:pre-wrap">${esc(msg.text)}</div>`, transactional: true, noTrack: true, ...(attachments ? { attachments } : {}) });
+  await logEvent(clientId, 'notify', res.success ? 'client_email_sent' : 'client_email_failed', { key, to: recipient, error: res.success ? undefined : res.error });
+  if (!res.success) {
+    if (dedupe) await kv.del(`notified:${clientId}:${dedupe}`);
+    throw new Error(`send ${key} failed: ${res.error}`);
+  }
+  return { sent: true, messageId: res.messageId };
+}
