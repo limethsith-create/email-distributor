@@ -17,6 +17,7 @@ import { WARMUP_STATES } from '@/lib/db/client';
 import { cfg } from '@/lib/config';
 import { partsIn, ET } from '@/lib/time';
 import { bucketKey, dailyAt } from '@/lib/joblist/helpers';
+import { onClientClock } from '@/lib/joblist/helpers';
 
 const SKIP = new Set(['aviance', '_helper']);
 const trialClient = (c) => c && !SKIP.has(c.id);
@@ -65,6 +66,27 @@ const warmupDaily = {
   async run(ctx) {
     const { runWarmupDaily } = await import('@/lib/systems/warmup');
     return runWarmupDaily({ now: ctx.now, clients: ctx.clients });
+  },
+};
+
+/**
+ * warmup-daily for a client on a scaled Test Mode clock: the readiness check
+ * runs once per *virtual* day (23:45 on its clock), so "two consecutive daily
+ * checks" takes two virtual days, not two real ones.
+ */
+const warmupDailyScaled = {
+  name: 'warmup-daily-scaled',
+  scope: 'client',
+  cost: 4,
+  minBudgetMs: 6000,
+  async due({ client, now }) {
+    const { hasScaledClock } = await import('@/lib/testclock');
+    if (!trialClient(client) || !hasScaledClock(client) || !WARMUP_STATES.has(client.state)) return null;
+    return dailyAt(partsIn(ET, now), '23:45');
+  },
+  async run({ client, realNow }) {
+    const { runWarmupDaily } = await import('@/lib/systems/warmup');
+    return runWarmupDaily({ now: realNow, clients: [client], scaled: true });
   },
 };
 
@@ -169,4 +191,4 @@ const readiness = {
   },
 };
 
-export const JOBS = [warmup, warmupRead, warmupDaily, canary, ramp, leadfinderStart, leadfinderRefill, approval, readiness];
+export const JOBS = [warmup, warmupRead, warmupDaily, warmupDailyScaled, canary, ramp, leadfinderStart, leadfinderRefill, approval, readiness].map(onClientClock);

@@ -1,6 +1,18 @@
 /** Period helpers shared by every job file (SPEC §5). */
 import { isWeekday } from '@/lib/time';
 import { isUsHoliday } from '@/lib/config';
+import { clientNow } from '@/lib/testclock';
+
+/**
+ * Run a client job on the client's own clock (SPEC §10.7 Test Mode): `due`
+ * and `run` get `now` = clientNow(client, now) — the scaled clock for `_test`,
+ * the real time for everyone else — and the real time as `realNow`.
+ */
+export function onClientClock(job) {
+  if (job.scope !== 'client') return job;
+  const wrap = (fn) => (ctx) => fn({ ...ctx, realNow: ctx.now, now: clientNow(ctx.client, ctx.now) });
+  return { ...job, due: wrap(job.due), run: wrap(job.run) };
+}
 
 /** 'YYYY-MM-DDTHH:mm' — one run per minute. */
 export const minuteKey = (p) => `${p.dayKey}T${p.hhmm}`;

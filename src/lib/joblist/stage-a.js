@@ -26,6 +26,7 @@ import { K } from '@/lib/db/keys';
 import { WARMUP_STATES } from '@/lib/db/client';
 import { partsIn, ET } from '@/lib/time';
 import { minuteKey, bucketKey, dailyAt } from '@/lib/joblist/helpers';
+import { onClientClock } from '@/lib/joblist/helpers';
 
 const skip = (client) => !client || client.id === 'aviance';
 const hourKey = (p) => `${p.dayKey}T${String(p.hour).padStart(2, '0')}`;
@@ -244,4 +245,4 @@ const promoCheck = {
   },
 };
 
-export const JOBS = [onboardingNudge, queuePromote, market, pricescout, purchaseNudge, setupCheck, welcome, auth, blacklist, dmarc, bookingTest, bookingReminder, promoCheck];
+export const JOBS = [onboardingNudge, queuePromote, market, pricescout, purchaseNudge, setupCheck, welcome, auth, blacklist, dmarc, bookingTest, bookingReminder, promoCheck].map(onClientClock);

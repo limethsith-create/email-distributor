@@ -9,6 +9,7 @@
 import { partsIn, ET, trialDay } from '@/lib/time';
 import { isUsHoliday } from '@/lib/config';
 import { minuteKey, bucketKey, usBusinessHours, dailyAt } from '@/lib/joblist/helpers';
+import { onClientClock } from '@/lib/joblist/helpers';
 import { isTrialClient, ccfg } from '@/lib/systems/stagec-common';
 
 const trial = (client) => isTrialClient(client?.id);
@@ -211,4 +212,4 @@ const learning = {
   },
 };
 
-export const JOBS = [emergency, send, reminders, clientWatch, noshow, notnow, pace, replies, bounces, bookings, learning];
+export const JOBS = [emergency, send, reminders, clientWatch, noshow, notnow, pace, replies, bounces, bookings, learning].map(onClientClock);

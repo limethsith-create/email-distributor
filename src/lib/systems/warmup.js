@@ -29,6 +29,7 @@ import { getAllClients, WARMUP_STATES } from '@/lib/db/client';
 import { getInboxRecords, patchInbox, toAccount } from '@/lib/db/inboxes';
 import { bump } from '@/lib/db/counters';
 import { logEvent } from '@/lib/db/events';
+import { clientNow, hasScaledClock } from '@/lib/testclock';
 import { alertOwner } from '@/lib/notify';
 import { encrypt } from '@/lib/crypto';
 import { PROVIDERS } from '@/lib/smtp-providers';
@@ -186,7 +187,7 @@ async function patchMember(member, fields) {
  * Every pool member with its quota. Keeps warmup:pool in step with client
  * states (client inboxes leave the circle when the client leaves warm-up).
  */
-export async function getPool({ now = new Date(), clients = null } = {}) {
+export async function getPool({ now = new Date(), clients = null, sync = true } = {}) {
   const quotaTable = await cfg(null, 'WARMUP.quota');
   const helperQuota = Math.min(HARD_WARMUP_CAP, await cfg(null, 'BUILD.warmupHelperQuota'));
   const all = clients || (await getAllClients());
@@ -195,16 +196,18 @@ export async function getPool({ now = new Date(), clients = null } = {}) {
     if (EXCLUDED_CLIENTS.has(c.id) || !WARMUP_STATES.has(c.state)) continue;
     for (const rec of await getInboxRecords(c.id)) {
       if (!rec.passwordEnc || rec.warmupEnabled === '0' || !rec.warmupStartedAt) continue;
-      const days = warmupDays(rec, now);
-      members.push({ key: memberKey(c.id, rec.email), clientId: c.id, email: rec.email, provider: rec.provider || 'google', domain: domainOf(rec.email), tz: rec.tz || ET, isHelper: false, days, quota: warmupQuota(days, quotaTable), record: rec });
+      // Warm-up age on the client's own clock (Test Mode runs `_test` scaled).
+      const days = warmupDays(rec, clientNow(c, now));
+      members.push({ key: memberKey(c.id, rec.email), clientId: c.id, client: c, email: rec.email, provider: rec.provider || 'google', domain: domainOf(rec.email), tz: rec.tz || ET, isHelper: false, days, quota: warmupQuota(days, quotaTable), record: rec });
     }
   }
   for (const rec of await getHelpers()) {
     if (!rec.passwordEnc || rec.enabled === '0' || rec.health === 'auth_failed') continue;
     members.push({ key: memberKey(HELPER, rec.email), clientId: HELPER, email: rec.email, provider: rec.provider || 'google', domain: domainOf(rec.email), tz: rec.tz || ET, isHelper: true, days: null, quota: helperQuota, record: rec });
   }
-  // Sync the pool set: add live client inboxes, drop client inboxes that left.
-  try {
+  // Sync the pool set: add live client inboxes, drop client inboxes that left
+  // (only when `clients` is the whole client list, never for a partial view).
+  if (sync) try {
     const current = (await kv.smembers(K.warmupPool())) || [];
     const live = new Set(members.map((m) => m.key));
     const stale = current.filter((m) => !m.startsWith(`${HELPER}|`) && !live.has(m));
@@ -621,8 +624,13 @@ export function readinessUpdate(record, { rate, day, days, readyRate = 0.9, need
   return { streak, ready, fields: { readyStreak: String(streak), readyCheckedDay: day, warmupReady: ready ? '1' : '0', inboxRate7d: rate == null ? '' : rate.toFixed(3) } };
 }
 
-export async function runWarmupDaily({ now = new Date(), clients = null } = {}) {
-  const pool = await getPool({ now, clients });
+/**
+ * Daily readiness check. `scaled` = the Test Mode run for clients on a scaled
+ * clock (their own job, once per virtual day); the normal run skips them so
+ * the two day keys never mix.
+ */
+export async function runWarmupDaily({ now = new Date(), clients = null, scaled = false } = {}) {
+  const pool = (await getPool({ now, clients, sync: !scaled })).filter((m) => (m.isHelper ? !scaled : hasScaledClock(m.client) === scaled));
   const day = dayKeyIn(ET, now);
   const readyRate = await cfg(null, 'WARMUP.readyRate');
   const needStreak = await cfg(null, 'WARMUP.readyConsecutiveDays');
@@ -635,11 +643,11 @@ export async function runWarmupDaily({ now = new Date(), clients = null } = {}) 
       if (rate != null) await patchMember(m, { inboxRate7d: rate.toFixed(3) });
       continue;
     }
-    const u = readinessUpdate(m.record, { rate, day, days: m.days, readyRate, needStreak, minDays });
+    const u = readinessUpdate(m.record, { rate, day: m.client ? dayKeyIn(ET, clientNow(m.client, now)) : day, days: m.days, readyRate, needStreak, minDays });
     if (u.fields) await patchMember(m, u.fields);
     out.push({ email: m.email, clientId: m.clientId, rate, inbox, spam, streak: u.streak, ready: u.ready });
   }
-  if (pool.length < minPool) {
+  if (!scaled && pool.length < minPool) {
     await alertOwner('warmup_pool_small', { scope: 'pool', vars: { count: pool.length, min: minPool }, body: `The warm-up circle has ${pool.length} working members; the spec needs at least ${minPool} (helpers + trial inboxes).`, did: 'Warm-up keeps running with what exists; add helper accounts on /mc/warmup.' });
   }
   return { pool: pool.length, inboxes: out };
