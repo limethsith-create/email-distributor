@@ -154,7 +154,7 @@ Everything in the row above plus:
 
 | What | Call |
 | --- | --- |
-| New client (pre-approved) | `POST /api/mc/clients/new` `{companyName, contactName, contactEmail, website, override?}` → `{ok, clientId, state}` or `400 {errors:[...]}` |
+| New client (pre-approved) | `POST /api/mc/clients/new` `{companyName, contactName, contactEmail, website, override?}` → `{ok, clientId, outcome}` or `400 {ok:false, errors:{field: message, _form?: message}}` |
 | Profile edit | `POST /api/mc/clients/{id}` `{action:'profile', fields:{senderName, senderTitle, senderPrefix, postalAddress, calendarUrl, defaultNiche, defaultIcp, sellsTo, industry, capacityPerWeek, winCondition}}` |
 | Add / remove / switch inbox | `POST /api/mc/clients/{id}` `{action:'addInbox', email, password, displayName, provider}` · `{action:'removeInbox', email}` · `{action:'inboxEnabled', email, enabled}` |
 | Pause / resume / any state move | `POST /api/mc/clients/{id}` `{action:'setState', to, reason}` |
