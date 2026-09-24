@@ -115,6 +115,15 @@ export const K = {
   approval: (id) => `${c(id)}:approval`,
   /** Cross-client fairness: host → clientId for one niche + month (hash). */
   leadHosts: (niche, month) => `leadhosts:${String(niche || 'general').toLowerCase().replace(/[^a-z0-9-]+/g, '-')}:${month}`,
+  // Deliverability v2
+  /** Warm-up pool at a glance, written by every warm-up send run (hash): pool, helpers, providers (JSON), todayPairs, at. */
+  warmupSummary: () => 'warmup:summary',
+  /** Placement results (list, newest first, capped 30): {at, day, tool: seed|mail-tester, inbox, score, inboxRate, detail[], reportUrl}. */
+  placement: (id) => `${c(id)}:placement`,
+  /** One day's spam-test run for a client (hash): phase, pending tests, results. */
+  placementRun: (id, day) => `${c(id)}:placementrun:${day}`,
+  /** Tests used today on a rate-limited tool, all clients together (string counter, INCR). */
+  placementQuota: (tool, day) => `placement:quota:${String(tool || 'tool').toLowerCase().replace(/[^a-z0-9-]+/g, '-')}:${day}`,
   // ── end Stage B ──
 
   // ── Stage C additions (run) ──

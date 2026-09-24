@@ -6,6 +6,7 @@
  *   modifiers: inboxRate7d < WARMUP.lowRate → halve (+ alert inbox_rate_low)
  *              yesterday's bounces > BOUNCE.max of sends → halve
  *              client.emergencyHalved = '1' → halve   (written by Stage C)
+ *              client.bounceHalved = '1' → halve      (bounce pause ≥ BOUNCE.pause, Emergency Runner)
  *              client.emergencyActive = '1' → 0       (written by Stage C)
  *              inbox.capOverride (owner, Inboxes page) → never above it
  *   never above 25 (HARD_COLD_CAP), whatever the config says.
@@ -15,9 +16,9 @@
  */
 
 import { cfg, HARD_COLD_CAP, isUsHoliday } from '@/lib/config';
-import { getTrial } from '@/lib/db/client';
+import { getTrial, updateClient } from '@/lib/db/client';
 import { getInboxRecords, patchInbox } from '@/lib/db/inboxes';
-import { getDay } from '@/lib/db/counters';
+import { getDay, sumDays } from '@/lib/db/counters';
 import { logEvent } from '@/lib/db/events';
 import { alertOwner } from '@/lib/notify';
 import { ET, dayKeyIn, addDays, daysBetween } from '@/lib/time';
@@ -56,7 +57,7 @@ export function baseCap(sendingDay, caps) {
  * Pure cap computation for one inbox.
  * @returns {{cap, stage, reasons: string[]}}
  */
-export function computeCap({ sendingDay, caps, coldCap = HARD_COLD_CAP, inboxRate = null, lowRate = 0.8, bounceRate = null, bounceMax = 0.02, emergencyActive = false, emergencyHalved = false, capOverride = null }) {
+export function computeCap({ sendingDay, caps, coldCap = HARD_COLD_CAP, inboxRate = null, lowRate = 0.8, bounceRate = null, bounceMax = 0.02, emergencyActive = false, emergencyHalved = false, bounceHalved = false, capOverride = null }) {
   const reasons = [];
   let cap = Math.min(baseCap(sendingDay, caps), coldCap, HARD_COLD_CAP);
   const stage = sendingDay < 1 ? 'pre-day1' : (Object.keys(caps || {}).find((r) => baseCap(sendingDay, { [r]: 1 }) === 1) || 'unknown');
@@ -64,6 +65,8 @@ export function computeCap({ sendingDay, caps, coldCap = HARD_COLD_CAP, inboxRat
   if (inboxRate != null && inboxRate < lowRate) { cap = Math.floor(cap / 2); reasons.push('inbox_rate_low'); }
   if (bounceRate != null && bounceRate > bounceMax) { cap = Math.floor(cap / 2); reasons.push('bounces_high'); }
   if (emergencyHalved) { cap = Math.floor(cap / 2); reasons.push('emergency_halved'); }
+  // Bounce pause (≥ BOUNCE.pause over the recent window, Emergency Runner).
+  if (bounceHalved) { cap = Math.floor(cap / 2); reasons.push('bounce_pause'); }
   if (capOverride != null && Number.isFinite(capOverride) && capOverride < cap) { cap = Math.max(0, Math.floor(capOverride)); reasons.push('owner_lowered'); }
   return { cap: Math.max(0, Math.min(cap, HARD_COLD_CAP)), stage, reasons };
 }
@@ -81,11 +84,18 @@ export async function runRamp({ client, now = new Date() }) {
   const bounceRate = y.sent > 0 ? (y.bounces || 0) / y.sent : null;
   const emergencyActive = client.emergencyActive === '1' || client.emergencyActive === 1;
   const emergencyHalved = client.emergencyHalved === '1' || client.emergencyHalved === 1;
+  const bounceHalved = client.bounceHalved === '1' || client.bounceHalved === 1;
+  // The 7-day bounce rate the hub shows (deliverability.bounce), stored once a
+  // day here so no page view recomputes it. null = nothing sent in 7 days.
+  if (sendingDay >= 1) {
+    const week = await sumDays(id, Array.from({ length: 7 }, (_, i) => addDays(today, -1 - i)), ['sent', 'bounces']);
+    await updateClient(id, { bounceRate7d: week.sent > 0 ? (week.bounces / week.sent).toFixed(4) : '', bounceSent7d: week.sent, bounceRateAt: now.toISOString() });
+  }
   const out = [];
   for (const rec of await getInboxRecords(id)) {
     const inboxRate = rec.inboxRate7d === '' || rec.inboxRate7d == null ? null : Number(rec.inboxRate7d);
     const capOverride = rec.capOverride === '' || rec.capOverride == null ? null : Number(rec.capOverride);
-    const r = computeCap({ sendingDay, caps, coldCap, inboxRate, lowRate, bounceRate, bounceMax, emergencyActive, emergencyHalved, capOverride });
+    const r = computeCap({ sendingDay, caps, coldCap, inboxRate, lowRate, bounceRate, bounceMax, emergencyActive, emergencyHalved, bounceHalved, capOverride });
     await patchInbox(id, rec.email, { dailyCap: String(r.cap), rampStage: r.stage, rampReasons: r.reasons.join(','), rampAt: now.toISOString() });
     if (r.reasons.includes('inbox_rate_low') && sendingDay >= 1) {
       await alertOwner('inbox_rate_low', { clientId: id, scope: `${id}:${rec.email}`, vars: { email: rec.email, rate: `${Math.round(inboxRate * 100)}%` }, body: `${rec.email} lands in the inbox ${Math.round(inboxRate * 100)}% of the time (7-day warm-up rate), under the ${Math.round(lowRate * 100)}% line.`, did: `Today's cap for this inbox was halved to ${r.cap}.` });

@@ -7,6 +7,12 @@
  *
  * No links, no images, no numbers that look like offers. `{firstName}` is the
  * recipient's first name (or "there"), `{senderFirst}` the sender's.
+ *
+ * Replies (Deliverability v2): 20 first-reply lines, 16 shorter follow-ups for
+ * later replies in a thread, and the original quoted underneath like a mail
+ * client ("On …, Name <addr> wrote:" + "> " lines). Every mail can be rebuilt
+ * from its indices (renderWarmup / renderReply), which the signed warm-up
+ * marker carries (encodeWarmMeta), so the reader never downloads bodies.
  */
 
 export const TOPICS = [
@@ -115,28 +121,109 @@ export function sentenceCount(text) {
 const firstWord = (s) => String(s || '').trim().split(/[\s,.@]+/)[0] || '';
 
 /**
- * Compose one warm-up email. `rng` is a () → [0,1) function (Math.random in
- * production, seeded in tests).
- * @returns {{subject, text, html, subjectIndex, bodyIndex}}
+ * One warm-up email from its three indices — deterministic, so the reader
+ * can quote the original in a reply without downloading the message body.
  */
-export function composeWarmup(rng = Math.random, { toName = '', fromName = '' } = {}) {
-  const subjectIndex = Math.floor(rng() * SUBJECTS.length);
-  const bodyIndex = Math.floor(rng() * BODY_COUNT);
-  const topic = TOPICS[Math.floor(subjectIndex / SUBJECT_FORMS.length)];
+export function renderWarmup({ subjectIndex, bodyIndex, closerIndex }, { toName = '', fromName = '' } = {}) {
+  const s = ((Number(subjectIndex) % SUBJECTS.length) + SUBJECTS.length) % SUBJECTS.length;
+  const topic = TOPICS[Math.floor(s / SUBJECT_FORMS.length)];
   const firstName = cap(firstWord(toName)) || 'there';
   const senderFirst = cap(firstWord(fromName)) || '';
   const body = bodyTemplate(bodyIndex).replace(/\{topic\}/g, topic);
-  const closer = CLOSERS[Math.floor(rng() * CLOSERS.length)];
+  const closer = CLOSERS[((Number(closerIndex) % CLOSERS.length) + CLOSERS.length) % CLOSERS.length];
   const text = `Hi ${firstName},\n\n${body}\n\n${closer}${senderFirst ? `\n${senderFirst}` : ''}`;
-  return { subject: SUBJECTS[subjectIndex], text, html: textToHtml(text), subjectIndex, bodyIndex };
+  return { subject: SUBJECTS[s], text, html: textToHtml(text) };
 }
 
-/** A short in-thread reply. */
-export function composeReply(rng = Math.random, { fromName = '' } = {}) {
-  const line = REPLIES[Math.floor(rng() * REPLIES.length)];
+/**
+ * Compose one warm-up email. `rng` is a () → [0,1) function (Math.random in
+ * production, seeded in tests).
+ * @returns {{subject, text, html, subjectIndex, bodyIndex, closerIndex}}
+ */
+export function composeWarmup(rng = Math.random, names = {}) {
+  const subjectIndex = Math.floor(rng() * SUBJECTS.length);
+  const bodyIndex = Math.floor(rng() * BODY_COUNT);
+  const closerIndex = Math.floor(rng() * CLOSERS.length);
+  return { ...renderWarmup({ subjectIndex, bodyIndex, closerIndex }, names), subjectIndex, bodyIndex, closerIndex };
+}
+
+// Deeper in a thread people write less: an acknowledgement or a closer.
+export const FOLLOW_UPS = [
+  'Great, speak then.',
+  'Perfect, thank you.',
+  'Brilliant, cheers.',
+  'Sounds like a plan.',
+  'Thanks again.',
+  'Will do.',
+  'All sorted then, thanks.',
+  'Good stuff, talk soon.',
+  'Lovely, thanks.',
+  'Noted, speak later.',
+  'Agreed, thanks.',
+  'Cool, see you then.',
+  'Thanks for confirming.',
+  'Appreciate it.',
+  'Fab, thanks.',
+  'Right you are, thanks.',
+];
+
+/** Reply line i for a thread depth (1 = first reply, 2+ = later replies). */
+export function replyLine(i, depth = 1) {
+  const list = depth >= 2 ? FOLLOW_UPS : REPLIES;
+  return list[((Number(i) % list.length) + list.length) % list.length];
+}
+
+/** Text of a reply from its index — the quoting side of composeReply. */
+export function renderReply(lineIndex, depth = 1, { fromName = '' } = {}) {
   const senderFirst = cap(firstWord(fromName));
-  const text = `${line}${senderFirst ? `\n\n${senderFirst}` : ''}`;
-  return { text, html: textToHtml(text) };
+  return `${replyLine(lineIndex, depth)}${senderFirst ? `\n\n${senderFirst}` : ''}`;
+}
+
+/** "On Mon, Oct 5, 2026 at 11:00 AM, Ann Lee <ann@x.com> wrote:" + "> " lines. */
+export function quoteBlock(text, { date = null, name = '', email = '', tz = 'America/New_York' } = {}) {
+  let when = '';
+  const d = date ? new Date(date) : null;
+  if (d && Number.isFinite(d.getTime())) {
+    const f = (o) => new Intl.DateTimeFormat('en-US', { timeZone: tz, ...o }).format(d);
+    when = `${f({ weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })} at ${f({ hour: 'numeric', minute: '2-digit' })}`;
+  }
+  const who = [name, email ? `<${email}>` : ''].filter(Boolean).join(' ') || 'you';
+  const lines = String(text || '').split('\n').map((l) => (l ? `> ${l}` : '>'));
+  return `${when ? `On ${when}, ` : ''}${who} wrote:\n${lines.join('\n')}`;
+}
+
+/**
+ * A short in-thread reply. `depth` = its place in the thread (1 = replying to
+ * the first mail); `quote` = the text being replied to (quoted under the reply
+ * like a normal mail client does), with `quoteMeta` {date, name, email, tz}.
+ * @returns {{text, html, lineIndex, depth}}
+ */
+export function composeReply(rng = Math.random, { fromName = '', depth = 1, quote = null, quoteMeta = {} } = {}) {
+  const list = depth >= 2 ? FOLLOW_UPS : REPLIES;
+  const lineIndex = Math.floor(rng() * list.length);
+  const own = renderReply(lineIndex, depth, { fromName });
+  const text = quote ? `${own}\n\n${quoteBlock(quote, quoteMeta)}` : own;
+  return { text, html: textToHtml(text), lineIndex, depth };
+}
+
+/**
+ * Warm-up marker metadata (inside the signed nonce): how the mail was built,
+ * so a reply can quote it and the thread knows its depth.
+ *   original: s{subject}b{body}c{closer}d0      reply: r{line}d{depth}
+ */
+export function encodeWarmMeta(m = {}) {
+  if (m.lineIndex != null) return `r${m.lineIndex}d${m.depth || 1}`;
+  if (m.subjectIndex != null) return `s${m.subjectIndex}b${m.bodyIndex}c${m.closerIndex ?? 0}d0`;
+  return '';
+}
+
+export function decodeWarmMeta(tag) {
+  const t = String(tag || '');
+  let m = /^s(\d+)b(\d+)c(\d+)d(\d+)$/.exec(t);
+  if (m) return { kind: 'original', subjectIndex: Number(m[1]), bodyIndex: Number(m[2]), closerIndex: Number(m[3]), depth: Number(m[4]) };
+  m = /^r(\d+)d(\d+)$/.exec(t);
+  if (m) return { kind: 'reply', lineIndex: Number(m[1]), depth: Number(m[2]) };
+  return null;
 }
 
 function esc(s) {

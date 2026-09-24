@@ -5,7 +5,11 @@
  *   inboxes   every inbox passed the warm-up readiness rule (≥ 0.90 on two
  *             consecutive daily checks and ≥ 14 days)
  *   canary    the latest canary (today/yesterday, from Day −3) has every
- *             inbox at ≥ CANARY.gate
+ *             inbox at ≥ CANARY.gate (seed placement)
+ *   spamTest  every inbox's latest spam test (mail-tester ≥ PLACEMENT.minScore
+ *             of 10, or dkimvalidator within PLACEMENT.maxSpamAssassin with
+ *             DKIM + SPF pass) passed within PLACEMENT.maxAgeDays — off with
+ *             PLACEMENT.gate = false (systems/placement.js)
  *   booking   the client tapped "It worked" on the Booking Link Tester
  *             (profile.bookingTested, SPEC §6.7 step 4: Day 1 waits for it)
  * Green → state `ready` (Stage C's Sender starts on day1Date).
@@ -26,6 +30,7 @@ import { getStoredSequence } from '@/lib/systems/copy';
 import { listReady } from '@/lib/systems/leadfinder';
 import { inboxesReady } from '@/lib/systems/warmup';
 import { latestCanary } from '@/lib/systems/canary';
+import { spamTestGate } from '@/lib/systems/placement';
 import { isSendingDay } from '@/lib/systems/ramp';
 import { approvalUrl, fmtDay } from '@/lib/systems/approval';
 
@@ -40,11 +45,13 @@ export async function readinessGate(clientId, now = new Date()) {
   const gate = await cfg(clientId, 'CANARY.gate');
   const per = canary?.perInbox ? Object.values(canary.perInbox) : [];
   const canaryOk = Boolean(canary && per.length && per.every((r) => r.placement != null && r.placement >= gate) && inboxes.inboxes.every((i) => canary.perInbox[i.email]));
+  const spam = await spamTestGate(clientId, now, { inboxes: inboxes.inboxes.map((i) => i.email) });
   const checks = {
     approval: { ok: Boolean(seq.approvedAt), mode: seq.approvalMode || null },
     list: list,
     inboxes,
     canary: { ok: canaryOk, day: canary?.day || null, min: canary?.min ?? null, gate },
+    spamTest: spam,
     booking: { ok: ['1', 'true', 1, true].includes(profile.bookingTested), testedAt: profile.bookingTestedAt || null },
   };
   return { ok: Object.values(checks).every((c) => c.ok), checks };
@@ -56,6 +63,7 @@ function reasonsText(checks) {
   if (!checks.list.ok) r.push(`the list is still being built (${checks.list.unsent} of the ${checks.list.startMin} contacts we need to start)`);
   if (!checks.inboxes.ok) r.push('the new inboxes need a few more days of warm-up');
   if (!checks.canary.ok) r.push('the inbox placement test is not yet at our 85% line');
+  if (checks.spamTest && !checks.spamTest.ok) r.push('the spam-filter check on the new inboxes has not passed yet');
   if (checks.booking && !checks.booking.ok) r.push('your booking link test is not done yet (tap "It worked" in the test email)');
   return r.join('; ') || 'a final check did not pass';
 }
@@ -97,7 +105,7 @@ export async function runReadiness({ client, now = new Date(), deps = {} }) {
     // Green on Day 1 itself: the Sender starts today (its window opens 09:00
     // ET). Only a Day 1 already in the past (held / slid) is reset.
     if (!trial.day1Date || trial.day1Date < today) await announceMove(id, trial, nextSendingDay(today), gate, { held: true, deps });
-    const moved = await setState(id, 'ready', 'readiness gate green (approval, list, warm-up, canary, booking link)');
+    const moved = await setState(id, 'ready', 'readiness gate green (approval, list, warm-up, seed + spam tests, booking link)');
     await setTrial(id, { day1Held: '', readyAt: now.toISOString() });
     return { ready: moved, checks: gate.checks };
   }

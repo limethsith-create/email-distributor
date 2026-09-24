@@ -105,3 +105,128 @@ approves the real text). `sequence.js#varsFor` does not know `FirstLine`.
 50. A failed Day −3 canary does not slide Day 1 on Day −3; the gate simply stays red, and the slide happens on Day −1 if the Day −2 / −1 canaries have not recovered.
 51. Day 30 moves with Day 1 (`day30Date = day1Date + 29`); the original date is kept in `trial.day1Original`.
 52. After `WARMUP.maxSlideDays` (7) slides Day 1 is **held** (`trial.day1Held = 1`, daily `warmup_stalled`, no further client emails); when the gate turns green Day 1 is set to the next US sending day and the client gets `day1_moved`.
+
+## Deliverability v2 (2026-09-25)
+
+Research with sources: `docs/research/v2-deliverability.md`. Config lives in
+the Stage B block (`WARMUP_V2`, `EXTERNAL_WARMUP`, `PLACEMENT`, `BLACKLISTS`)
+plus three keys the spec block already had a home for: `WARMUP.includeAviance`
+(true), `WARMUP.sendingShare` (0.33), `BOUNCE.pause` (0.015).
+
+53. **No external warm-up network is integrated.** None that is free can be
+    connected by API or credentials in 2026 (AutoMailer's free plan is the
+    closest: manual Google sign-in per mailbox, no API). `EXTERNAL_WARMUP`
+    (`name`, `perDay`) lets the owner declare one he connected by hand; each
+    trial inbox's circle quota drops by `perDay` so the 15/day ceiling holds.
+    Helpers and aviance inboxes are assumed not to be on it.
+54. **Aviance inboxes in the circle** = the Redis-stored `inbox:aviance:*`
+    records with a password and `warmupEnabled` ≠ 0 (env-only
+    `SMTP_ACCOUNT_*` lines are not included — run the Phase 1 migration or add
+    them in Mission Control). Quota: the ramp table by their own
+    `warmupStartedAt`, else like a helper (8/day). They send first after trial
+    inboxes, count in `warmup:stats` only (never in client counters), are not
+    readiness-gated, and a login failure (`warmupHealth = auth_failed`) takes
+    one out until Retry on /mc/warmup. The circle still rests when no trial
+    client is warming, unless `WARMUP_V2.avianceAlone` (off: Redis cost).
+55. **Warm-up after Day 1** = max(ramp-table row, ceil(dailyCap ×
+    `WARMUP.sendingShare`)), never above 15. Sources disagree on the share
+    (5–30 %); 1/3 is the owner's report figure.
+56. **Pairing** scores a receiver +4 for another *filter family* (familyOf:
+    Yahoo and AOL are one; GMX, WEB.DE and mail.com are one), +2 for another
+    client. Existing `provider` values keep working (family defaults to the
+    provider id).
+57. **Quoted replies**: a v2 warm-up marker carries how the mail was built
+    (`w.{rand}.s{subject}b{body}c{closer}d0` or `…r{line}d{depth}`, inside the
+    HMAC), so the reader rebuilds the original text for the quote without
+    downloading the body. v1 markers still verify (no quote). Replies to a
+    reply use shorter lines, happen at `replyRate × WARMUP_V2.deeperReplyShare`
+    (0.6), and stop at depth `WARMUP_V2.maxThreadDepth` (4). The random draw
+    is always taken so the RNG stream does not depend on thread depth.
+58. **Provider presets**: Gmail, Yahoo, AOL, iCloud (IMAP user = part before @
+    by default), GMX .com and .net, WEB.DE, Yandex are helpers; Outlook.com
+    (OAuth2 only), Zoho free and mail.com (no IMAP) are marked `helper: false`
+    and refused by `/api/mc/warmup` (`force: true` overrides). Existing
+    Outlook helpers stay until their first login failure. Folder lookup:
+    special-use flag → preset names → common names.
+59. **Spam test tool**: dkimvalidator by default (free, no account); mail-tester
+    only with `MAILTESTER_USERNAME` (the owner's account; ids
+    `{username}-{16 base36}`) or `PLACEMENT.mailTesterFree` (free ids
+    `test-{9 base36}`, 3/day) — its FAQ reserves JSON results for paid plans.
+    Pass lines: mail-tester ≥ `PLACEMENT.minScore` (8/10); dkimvalidator
+    SpamAssassin ≤ `PLACEMENT.maxSpamAssassin` (2.0, ≈ mail-tester's 8/10)
+    with DKIM and SPF pass and not marked spam. No conversion between the two
+    scales is made (a dkimvalidator entry has `score: null`).
+60. **Test email** = the client's stored variant A (else B) Day 0 touch,
+    rendered by the Sender's own `trialVars` + `buildTouch` for a made-up
+    company ("Jordan", "Northfield Partners", the profile's first city), sent
+    with the same mailer path as a cold email (List-Unsubscribe added, no open
+    pixel). No stored copy yet → a plain two-line business note (`copy: false`
+    on the entry). It counts toward the inbox's warm-up ceiling like the canary.
+61. **Schedule**: from `PLACEMENT.at` (08:00 ET), after the 07:30 canary.
+    Warming: from Day −`PLACEMENT.daysBeforeDay1` (3), an inbox is tested when
+    its latest spam test failed, is missing or is older than `maxAgeDays − 1`;
+    `ready` on Day 1 and sending/paused/extension/converted: once on Day 1,
+    then every `everyDays` (7), and the day after a failure. One test per
+    inbox per ET day.
+62. **Rate limits**: `PLACEMENT.dailyLimit[tool]` claimed with INCR on
+    `placement:quota:{tool}:{day}` (all clients together) before each send and
+    released when the send fails; over it, the rest wait for tomorrow (logged,
+    no alert).
+63. **Results**: first fetch `checkAfterMin` (4) after the last send; "not
+    received yet" is retried until `giveUpMin` (120); a tool that errors 3
+    times (network, HTTP ≥ 400) or no result by `giveUpMin` → a failed entry
+    (`pass: false`, `score: null`, `error`) + `placement_test_failed`. A
+    failing score → `spam_score_low` (urgent) with the tool's own reasons.
+64. **Day 1 gate** adds `spamTest`: every inbox's latest spam test passed
+    within `maxAgeDays` (10). `PLACEMENT.gate = false` removes it (the seed
+    test still gates). Client-facing wording in `day1_moved`: "the spam-filter
+    check on the new inboxes has not passed yet".
+65. **History** `client:{id}:placement` holds both tools: the canary adds a
+    `seed` entry (overall inbox rate + per provider / per inbox lines) when it
+    finishes. Growth charts: seed entries get `score: null`; spam tests appear
+    as one entry per tool per day with the lowest inbox score (`perInbox`).
+66. **Blacklists**: `BLACKLISTS.domainZones` (URIBL, SURBL, NordSpam DBL) and
+    `ipZones` (SpamCop, PSBL, Mailspike, 0spam, s5h, NordSpam, UCEPROTECT L1
+    warn-only). Domain hit = listed; A/MX IP hit = `blacklist_warning` unless
+    `BLACKLISTS.ipAction = 'block'`. Every zone's test entry must answer
+    listed and its control must not, else "unknown" for that run. Stored:
+    `domain.blacklist` = clean | listed | unknown (no zone gave a verdict) and
+    `domain.blacklists` JSON. `SETUP.dnsbl` (Stage A block) is no longer read.
+    At setup, only a listing fails the check (unknown passes).
+67. **Bounce pause**: at or above `BOUNCE.pause` over the stop trigger's
+    window (≥ `SEND.smokeTestSends` sends, days after the last resume) and not
+    above `BOUNCE.max` → every inbox's `dailyCap` halved at once,
+    `client.bounceHalved = 1` (Ramp Planner halves from the next day), urgent
+    `bounce_pause`. Lifted after `EMERGENCY.greenDays` business days in a row
+    (with sends) under `BOUNCE.pause`, judged once a day (`bounceGreenDay`),
+    alert `bounce_pause_lifted`. The emergency stop clears the flag (its own
+    resume halves). A client paused for any reason is not bounce-paused.
+68. **7-day bounce rate** for the hub = the 7 ET days before today, stored by
+    the Ramp Planner at 00:05 ET (`client.bounceRate7d`, `bounceSent7d`)
+    once the client is sending; empty when nothing was sent.
+69. **Hub view** (`systems/deliverability.js#deliverabilityView`) reads only
+    stored values: `warmup:summary` (written by each warm-up send run), the
+    placement list (newest 10), the domain's blacklist fields, the client hash
+    and three settings. `todayPairs` is 0 when the last summary is from an
+    earlier ET day. Extra fields beyond HUB-API (additive): warmup
+    `trialInboxes/avianceInboxes/families/at`, placement `inbox/pass/
+    spamAssassin/error`, blacklists `status/warnings/unknown`, bounce
+    `sent7d/at/halved`, external `perDay`.
+
+**Redis budget after v2** (tests/redis-budget.test.mjs, same method as
+integration.md): 1 client @1 min ≈ 430k/month (was 434k), 2 @2 min ≈ 519k
+(512k), 3 @1 min ≈ 825k (819k), 3 @2 min ≈ 689k (673k) — within the guards.
+The spam test measured ≈ 55 commands per client on a test day (163 for three
+clients; the budget world blocks the tool, so this is the retry-then-fail
+path). The measured scenarios have no aviance client; in production each
+aviance inbox in the circle costs about what one trial inbox's warm-up costs
+(not measured separately).
+
+**Full-run fixture**: the zero-call run gained one `leadfinder dispatched`
+milestone near the end of the 60-day extension. Cause: warm-up threads now end
+at depth 4 (846 instead of 895 warm-up sends in that run), which shifts the
+seeded Math.random stream; the Sender's pacing jitter then fits 4 more cold
+sends into 60 days (1,444 vs 1,440), so the list crosses the refill line one
+day earlier. Nothing else in either run changed; the new Day 1 gate passes in
+the simulation because `tests/sim-world.mjs` now answers dkimvalidator from
+the test mail that actually arrived.

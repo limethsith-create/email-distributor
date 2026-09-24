@@ -18,6 +18,13 @@
  *   5 resume at half volume (client.emergencyHalved = 1)
  * Recovery: 3 green business days (bounce < 2 %, ≥ 1 reply, canary ≥ 85 %)
  * → emergencyHalved = 0, Ramp Planner restores full caps.
+ *
+ * Bounce limits (owner's rule: "pause at 1.5 % bounce, stop entirely at 2 %"),
+ * both measured over the same window as the stop trigger (≥ SEND.smokeTestSends
+ * recent sends): at or above BOUNCE.pause → every inbox cap halved today,
+ * client.bounceHalved = 1 (the Ramp Planner keeps halving), owner alert
+ * `bounce_pause`; above BOUNCE.max → the emergency sequence (stop). The pause
+ * lifts after EMERGENCY.greenDays business days in a row under BOUNCE.pause.
  */
 
 import { kv } from '@vercel/kv';
@@ -68,14 +75,19 @@ async function recentWindow(clientId, now, need, maxDays, notBefore) {
   return out;
 }
 
-/** First trigger that fires → { code, detail } or null. Pure reads. */
-export async function detectTrigger(clientId, client, now = new Date()) {
+/**
+ * First trigger that fires → { code, detail } or null. Pure reads. `info`
+ * (optional) receives the bounce window it measured, so the bounce pause
+ * check reuses it instead of reading the counters twice.
+ */
+export async function detectTrigger(clientId, client, now = new Date(), info = null) {
   if (client.emergencyRequested) return { code: String(client.emergencyRequested), detail: `requested by ${client.emergencyRequested}` };
   const em = await getEmergency(clientId);
   const bounceMax = await ccfg(clientId, 'BOUNCE.max');
   const need = await ccfg(clientId, 'SEND.smokeTestSends');
   const maxDays = await ccfg(clientId, 'EMERGENCY_C.maxWindowDays');
   const win = await recentWindow(clientId, now, need, maxDays, em.resumedDay || null);
+  if (info) info.window = win;
   if (win.sent >= need && win.bounces / win.sent > bounceMax) return { code: 'bounce', detail: `bounce ${Math.round((win.bounces / win.sent) * 1000) / 10}% over ${win.sent} sends (${win.days[win.days.length - 1]}–${win.days[0]})` };
 
   // Measurements that persist (blacklist, DMARC, canary) do not re-fire on the
@@ -252,6 +264,71 @@ async function greenDays(clientId, client, em, now) {
   return green ? 'green' : 'not green';
 }
 
+// ─── Bounce pause (1.5 %) ───────────────────────────────────────────────────
+
+const pctText = (r) => `${Math.round(r * 1000) / 10}%`;
+
+/**
+ * Pure: does this window call for the bounce pause? → { rate } or null.
+ * At or above the pause line and not above the stop line (that is the stop
+ * trigger's job); only over a window of at least `need` sends.
+ */
+export function bouncePauseDue(win, { need = 50, pauseAt = 0.015, stopAt = 0.02 } = {}) {
+  if (!win || !(win.sent >= need) || !(pauseAt < stopAt)) return null;
+  const rate = win.bounces / win.sent;
+  if (rate > stopAt || rate < pauseAt) return null;
+  return { rate };
+}
+
+async function startBouncePause(clientId, win, rate, now) {
+  const halved = [];
+  for (const r of await getInboxRecords(clientId)) {
+    const cap = num(r.dailyCap);
+    if (cap === null) continue;
+    await patchInbox(clientId, r.email, { dailyCap: String(Math.floor(cap / 2)), capHalvedAt: now.toISOString() });
+    halved.push(`${r.email}: ${cap} → ${Math.floor(cap / 2)}`);
+  }
+  await kv.hset(K.client(clientId), { bounceHalved: '1', bouncePausedAt: now.toISOString(), bouncePauseRate: rate.toFixed(4), bounceGreenStreak: 0, bounceGreenDay: dayKeyIn(ET, now) });
+  const detail = `bounce ${pctText(rate)} over ${win.sent} sends (${win.days[win.days.length - 1]}–${win.days[0]})`;
+  await logEvent(clientId, 'emergency', 'bounce_pause', { rate, sent: win.sent, bounces: win.bounces, halved });
+  const [pauseAt, stopAt, greenDays] = [await ccfg(clientId, 'BOUNCE.pause'), await ccfg(clientId, 'BOUNCE.max'), await ccfg(clientId, 'EMERGENCY.greenDays')];
+  await alert('bounce_pause', {
+    clientId, scope: `${clientId}:${dayKeyIn(ET, now)}`, vars: { clientId, rate: pctText(rate) },
+    body: `${clientId}: ${detail} — at or over the ${pctText(pauseAt)} pause line (the stop line is ${pctText(stopAt)}).\n${halved.join('\n') || 'No inbox caps set yet.'}`,
+    did: `Every inbox cap is halved from now; the Ramp Planner keeps them halved until ${greenDays} business days in a row are under ${pctText(pauseAt)}. Over ${pctText(stopAt)} the emergency stop runs by itself.`,
+  });
+  return { paused: true, rate, halved: halved.length };
+}
+
+/** While halved: judge yesterday once a day; EMERGENCY.greenDays green business days in a row lift the pause. */
+async function bouncePauseRecovery(clientId, client, now, pauseAt) {
+  const yesterday = addDays(dayKeyIn(ET, now), -1);
+  if (client.bounceGreenDay && yesterday <= client.bounceGreenDay) return { halved: true };
+  if (!isBusinessDayKey(yesterday)) { await kv.hset(K.client(clientId), { bounceGreenDay: yesterday }); return { halved: true }; }
+  const d = await getDay(clientId, yesterday);
+  if (!d.sent) { await kv.hset(K.client(clientId), { bounceGreenDay: yesterday }); return { halved: true }; }
+  const green = (d.bounces || 0) / d.sent < pauseAt;
+  const streak = green ? (Number(client.bounceGreenStreak) || 0) + 1 : 0;
+  const need = await ccfg(clientId, 'EMERGENCY.greenDays');
+  await logEvent(clientId, 'emergency', 'bounce_green_check', { day: yesterday, sent: d.sent, bounces: d.bounces || 0, green, streak });
+  if (streak >= need) {
+    await kv.hset(K.client(clientId), { bounceHalved: '0', bounceGreenStreak: streak, bounceGreenDay: yesterday, bouncePauseLiftedAt: now.toISOString() });
+    await alert('bounce_pause_lifted', { clientId, vars: { clientId }, body: `${clientId}: ${streak} business days in a row under the ${pctText(pauseAt)} bounce line.`, did: 'Half caps lifted; the Ramp Planner restores full caps from its next run.' });
+    return { lifted: true, streak };
+  }
+  await kv.hset(K.client(clientId), { bounceGreenStreak: streak, bounceGreenDay: yesterday });
+  return { halved: true, green, streak };
+}
+
+/** Bounce pause check after the stop triggers found nothing (reuses their window). */
+async function checkBouncePause(clientId, client, win, now) {
+  const pauseAt = await ccfg(clientId, 'BOUNCE.pause');
+  if (client.bounceHalved === '1') return bouncePauseRecovery(clientId, client, now, pauseAt);
+  const due = bouncePauseDue(win, { need: await ccfg(clientId, 'SEND.smokeTestSends'), pauseAt, stopAt: await ccfg(clientId, 'BOUNCE.max') });
+  if (!due) return null;
+  return startBouncePause(clientId, win, due.rate, now);
+}
+
 /** The `emergency` job (every tick). */
 export async function runEmergency(clientId, { now = new Date() } = {}) {
   if (!isTrialClient(clientId)) return { skipped: 'not a trial client' };
@@ -287,8 +364,14 @@ export async function runEmergency(clientId, { now = new Date() } = {}) {
   if (client.emergencyHalved === '1') out.green = await greenDays(clientId, client, em, now);
   // A quiet pause (client side) does not start a deliverability emergency unless requested.
   if (client.state === 'paused' && !client.emergencyRequested) return out;
-  const trigger = await detectTrigger(clientId, client, now);
-  if (!trigger) return { ...out, ok: true };
+  const info = {};
+  const trigger = await detectTrigger(clientId, client, now, info);
+  if (!trigger) {
+    const bounce = client.state === 'paused' ? null : await checkBouncePause(clientId, client, info.window, now);
+    return { ...out, ok: true, ...(bounce ? { bounce } : {}) };
+  }
+  // The stop supersedes a bounce pause (its own resume halves the caps).
+  if (client.bounceHalved === '1') await kv.hset(K.client(clientId), { bounceHalved: '0', bouncePauseEndedBy: `emergency: ${trigger.code}` });
   await step1Pause(clientId, client, trigger, now);
   await step2Diagnose(clientId, await getClient(clientId), now);
   await step6Notice(clientId, await getEmergency(clientId));

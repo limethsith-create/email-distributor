@@ -1,9 +1,25 @@
 /**
  * Warm-up Engine (SPEC §7.1). Builds sending reputation for new inboxes with
- * our own circle of mailboxes instead of a paid warm-up network.
+ * our own circle of mailboxes instead of a paid warm-up network (research:
+ * no free external network can be connected automatically in 2026 —
+ * docs/research/v2-deliverability.md §1).
  *
- * Pool = every inbox of a client in warming..extension (never `aviance`) +
- * the helper accounts (warmup:helper:{email}, clientId `_helper`).
+ * Pool = every inbox of a client in warming..converted + the aviance client's
+ * own inboxes when WARMUP.includeAviance (default on) + the helper accounts
+ * (warmup:helper:{email}, clientId `_helper`, free Gmail / Yahoo / AOL /
+ * iCloud / GMX / WEB.DE / Yandex — presets in smtp-providers.js).
+ *
+ * Quota: the WARMUP.quota ramp table by days since warmupStartedAt; once the
+ * client is sending, at least WARMUP.sendingShare (~1/3) of the inbox's cold
+ * cap; minus what an owner-managed external network sends
+ * (EXTERNAL_WARMUP.perDay); never above 15 (HARD_WARMUP_CAP).
+ *
+ * Pairing: trial inboxes send first, then aviance, then helpers; a receiver
+ * from another filter family (Google / Yahoo+AOL / Apple / GMX / Yandex …)
+ * scores highest, another client next.
+ *
+ * Replies carry the quoted original (rebuilt from the indices in the signed
+ * marker, no body download) and threads stop at WARMUP_V2.maxThreadDepth.
  *
  *  - `runWarmupSend`  every 10 min, 07:00–22:00 in the sender's tz: up to
  *    3 pairs per run, daily quota by days since warmupStartedAt, a pair is
@@ -25,21 +41,24 @@ import crypto from 'crypto';
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { cfg, HARD_WARMUP_CAP } from '@/lib/config';
-import { getAllClients, WARMUP_STATES } from '@/lib/db/client';
+import { getAllClients, WARMUP_STATES, SENDING_STATES } from '@/lib/db/client';
 import { getInboxRecords, patchInbox, toAccount } from '@/lib/db/inboxes';
 import { bump } from '@/lib/db/counters';
 import { logEvent } from '@/lib/db/events';
 import { clientNow, hasScaledClock } from '@/lib/testclock';
 import { alertOwner } from '@/lib/notify';
 import { encrypt } from '@/lib/crypto';
-import { PROVIDERS } from '@/lib/smtp-providers';
+import { PROVIDERS, HELPER_PROVIDERS, providerForAddress, familyOf, providerLabel } from '@/lib/smtp-providers';
 import { ET, dayKeyIn, daysBetween, addDays, inWindow } from '@/lib/time';
-import { composeWarmup, composeReply } from '@/lib/templates/warmup';
+import { composeWarmup, composeReply, renderWarmup, renderReply, encodeWarmMeta, decodeWarmMeta } from '@/lib/templates/warmup';
 
 export const HELPER = '_helper';
+export const AVIANCE = 'aviance';
 export const MARKER_HEADER = 'X-Aviance-Warm';
 const MARKER_KEY = MARKER_HEADER.toLowerCase();
-const EXCLUDED_CLIENTS = new Set(['aviance', HELPER]);
+const EXCLUDED_CLIENTS = new Set([AVIANCE, HELPER]);
+/** Trial inboxes count warm-up in the client's counters; aviance and helpers only in warmup:stats. */
+const countsForClient = (m) => !m.isHelper && !m.isAviance;
 
 // ── marker ───────────────────────────────────────────────────────────────────
 
@@ -52,14 +71,16 @@ function sign(nonce, secret = markerSecret()) {
 }
 
 /**
- * New marker value. kind 'w' = warm-up, 'c' = canary (tag = `{clientId}.{day}`).
+ * New marker value. kind 'w' = warm-up (tag = optional build metadata,
+ * `encodeWarmMeta`), 'c' = canary (tag = `{clientId}.{day}`).
  * Throws when no secret is configured (the caller alerts config_missing).
  */
 export function makeMarker(kind = 'w', tag = '') {
   const secret = markerSecret();
   if (!secret) throw new Error('no WARMUP_SECRET / ENC_KEY to sign warm-up markers');
   const rand = crypto.randomBytes(6).toString('hex');
-  const nonce = kind === 'c' ? `c.${tag}.${rand}` : `w.${rand}`;
+  const meta = String(tag || '').replace(/[^a-z0-9]/gi, '');
+  const nonce = kind === 'c' ? `c.${tag}.${rand}` : `w.${rand}${meta ? `.${meta}` : ''}`;
   return `${nonce}~${sign(nonce, secret)}`;
 }
 
@@ -78,7 +99,8 @@ export function verifyMarker(value) {
     const parts = nonce.split('.');
     return { kind: 'c', tag: parts.slice(1, -1).join('.'), nonce };
   }
-  return { kind: 'w', tag: '', nonce };
+  // w.{rand} (v1) or w.{rand}.{meta} (v2: how the mail was built, for quoting)
+  return { kind: 'w', tag: nonce.split('.').slice(2).join('.'), nonce };
 }
 
 function headerValue(headers, name) {
@@ -135,16 +157,23 @@ export function warmupDays(record, now = new Date()) {
 const memberKey = (clientId, email) => `${clientId}|${String(email).toLowerCase()}`;
 const domainOf = (email) => String(email).split('@')[1] || '';
 
-/** Add or replace a helper account (password encrypted at rest). */
-export async function saveHelper({ email, password, displayName, provider = 'google' }) {
+/**
+ * Add or replace a helper account (password encrypted at rest). `provider`
+ * defaults to the preset of the address's own domain (yahoo.com → yahoo),
+ * else google. `imapUser` overrides the IMAP login name (iCloud uses the part
+ * before the @ by default).
+ */
+export async function saveHelper({ email, password, displayName, provider = null, imapUser = null }) {
   const addr = String(email || '').trim().toLowerCase();
   if (!addr.includes('@')) throw new Error('invalid helper email');
-  const p = PROVIDERS[provider] || PROVIDERS.google;
+  const prov = provider && PROVIDERS[provider] ? provider : (providerForAddress(addr) || 'google');
+  const p = PROVIDERS[prov];
+  const user = imapUser ? String(imapUser).trim() : p.imapUser === 'local' ? addr.split('@')[0] : '';
   const rec = {
     email: addr,
     clientId: HELPER,
     displayName: String(displayName || addr.split('@')[0]).trim(),
-    provider,
+    provider: prov,
     smtpHost: p.smtp.host,
     smtpPort: p.smtp.port,
     imapHost: p.imap.host,
@@ -152,12 +181,13 @@ export async function saveHelper({ email, password, displayName, provider = 'goo
     enabled: '1',
     health: 'new',
     updatedAt: new Date().toISOString(),
+    ...(user ? { imapUser: user } : {}),
   };
   if (password) rec.passwordEnc = encrypt(String(password).replace(/\s+/g, ''));
   clearHelperMemo();
   await kv.hset(K.warmupHelper(addr), rec);
   await kv.sadd(K.warmupPool(), memberKey(HELPER, addr));
-  await logEvent(null, 'warmup', 'helper_saved', { email: addr, provider, passwordChanged: Boolean(password) });
+  await logEvent(null, 'warmup', 'helper_saved', { email: addr, provider: prov, passwordChanged: Boolean(password) });
   return rec;
 }
 
@@ -200,26 +230,77 @@ async function patchMember(member, fields) {
 }
 
 /**
+ * Daily warm-up quota of one inbox (pure).
+ *  - the ramp table by warm-up age (days since warmupStartedAt);
+ *  - once the client sends: at least `share` × the inbox's cold cap (the
+ *    owner's "keep a permanent warm-up baseline at ~1/3 of volume");
+ *  - minus what an owner-managed external network sends for it (`external`);
+ *  - never above HARD_WARMUP_CAP (15), never below 0.
+ */
+export function inboxQuota({ days, table, sending = false, dailyCap = null, share = 0, external = 0 }) {
+  let q = warmupQuota(days, table);
+  const cap = Number(dailyCap);
+  if (sending && q > 0 && Number.isFinite(cap) && cap > 0 && share > 0) q = Math.max(q, Math.ceil(cap * share));
+  q = Math.min(q, HARD_WARMUP_CAP - Math.max(0, Number(external) || 0));
+  return Math.max(0, Math.min(HARD_WARMUP_CAP, q));
+}
+
+/** A settings group read key by key, so an override of one dotted key counts. */
+async function group(prefix, keys) {
+  const vals = await Promise.all(keys.map((k) => cfg(null, `${prefix}.${k}`)));
+  return Object.fromEntries(keys.map((k, i) => [k, vals[i]]));
+}
+
+async function quotaSettings() {
+  const ext = await group('EXTERNAL_WARMUP', ['name', 'perDay']);
+  return {
+    table: await cfg(null, 'WARMUP.quota'),
+    share: Number(await cfg(null, 'WARMUP.sendingShare')) || 0,
+    external: ext.name && Number(ext.perDay) > 0 ? Math.min(HARD_WARMUP_CAP, Number(ext.perDay)) : 0,
+    helperQuota: Math.min(HARD_WARMUP_CAP, await cfg(null, 'BUILD.warmupHelperQuota')),
+    includeAviance: Boolean(await cfg(null, 'WARMUP.includeAviance')),
+  };
+}
+
+function baseMember(clientId, rec, extra = {}) {
+  const provider = rec.provider || 'google';
+  return { key: memberKey(clientId, rec.email), clientId, email: rec.email, provider, family: familyOf(provider), label: providerLabel(provider, rec.email), domain: domainOf(rec.email), tz: rec.tz || ET, isHelper: false, isAviance: false, record: rec, ...extra };
+}
+
+/**
  * Every pool member with its quota. Keeps warmup:pool in step with client
  * states (client inboxes leave the circle when the client leaves warm-up).
  */
 export async function getPool({ now = new Date(), clients = null, sync = true } = {}) {
-  const quotaTable = await cfg(null, 'WARMUP.quota');
-  const helperQuota = Math.min(HARD_WARMUP_CAP, await cfg(null, 'BUILD.warmupHelperQuota'));
+  const q = await quotaSettings();
   const all = clients || (await getAllClients());
   const members = [];
   for (const c of all) {
     if (EXCLUDED_CLIENTS.has(c.id) || !WARMUP_STATES.has(c.state)) continue;
+    const sending = SENDING_STATES.has(c.state) || c.state === 'paused';
     for (const rec of await getInboxRecords(c.id)) {
       if (!rec.passwordEnc || rec.warmupEnabled === '0' || !rec.warmupStartedAt) continue;
       // Warm-up age on the client's own clock (Test Mode runs `_test` scaled).
       const days = warmupDays(rec, clientNow(c, now));
-      members.push({ key: memberKey(c.id, rec.email), clientId: c.id, client: c, email: rec.email, provider: rec.provider || 'google', domain: domainOf(rec.email), tz: rec.tz || ET, isHelper: false, days, quota: warmupQuota(days, quotaTable), record: rec });
+      const quota = inboxQuota({ days, table: q.table, sending, dailyCap: rec.dailyCap, share: q.share, external: q.external });
+      members.push(baseMember(c.id, rec, { client: c, days, quota }));
+    }
+  }
+  // The owner's own outreach inboxes (Redis-stored; env-only accounts are not
+  // in the circle). They warm like a 15+ day inbox unless they carry their own
+  // warmupStartedAt; a login failure takes one out until it is retried.
+  const aviance = q.includeAviance ? all.find((c) => c.id === AVIANCE && c.state !== 'deleted') : null;
+  if (aviance) {
+    for (const rec of await getInboxRecords(AVIANCE).catch(() => [])) {
+      if (!rec.passwordEnc || rec.warmupEnabled === '0' || rec.warmupHealth === 'auth_failed') continue;
+      const days = rec.warmupStartedAt ? warmupDays(rec, now) : null;
+      const quota = days == null ? q.helperQuota : inboxQuota({ days, table: q.table, sending: true, dailyCap: rec.dailyCap, share: q.share });
+      members.push(baseMember(AVIANCE, rec, { client: aviance, days, quota, isAviance: true }));
     }
   }
   for (const rec of await getHelpers()) {
     if (!rec.passwordEnc || rec.enabled === '0' || rec.health === 'auth_failed') continue;
-    members.push({ key: memberKey(HELPER, rec.email), clientId: HELPER, email: rec.email, provider: rec.provider || 'google', domain: domainOf(rec.email), tz: rec.tz || ET, isHelper: true, days: null, quota: helperQuota, record: rec });
+    members.push(baseMember(HELPER, rec, { isHelper: true, days: null, quota: q.helperQuota }));
   }
   // Sync the pool set: add live client inboxes, drop client inboxes that left
   // (only when `clients` is the whole client list, never for a partial view).
@@ -273,13 +354,19 @@ export async function inboxRate7d(email, now = new Date()) {
 
 export const pairKey = (a, b) => [String(a).toLowerCase(), String(b).toLowerCase()].sort().join('|');
 
+/** Sender order: trial inboxes (being warmed) first, then aviance, then helpers. */
+const rankOf = (m) => (m.isHelper ? 2 : m.isAviance ? 1 : 0);
+const famOf = (m) => m.family || familyOf(m.provider);
+
 /**
  * Choose up to `n` sender → receiver pairs.
- * @param pool      members ({email, domain, provider, clientId, isHelper, quota})
+ * @param pool      members ({email, domain, provider, family, clientId, isHelper, isAviance, quota})
  * @param sent      {email: sentToday}
  * @param received  {email: receivedToday}
  * @param pairs     Set of pairKey already used today
  * @param inWindow  (member) → boolean (sender's local hours)
+ * Receivers: another filter family first (+4: Gmail/Workspace vs Yahoo+AOL vs
+ * iCloud vs GMX/WEB.DE …), another client next (+2), the least-loaded last.
  */
 export function planPairs(pool, { sent = {}, received = {}, pairs = new Set(), n = 3, rng = Math.random, receiveCap = 30, inWindow: open = () => true } = {}) {
   const used = new Set(pairs);
@@ -289,7 +376,7 @@ export function planPairs(pool, { sent = {}, received = {}, pairs = new Set(), n
     .filter((m) => (m.quota || 0) - (sent[m.email] || 0) > 0 && open(m))
     .map((m) => ({ m, remaining: m.quota - (sent[m.email] || 0), r: rng() }))
     // Client inboxes first (they are the ones being warmed), then most remaining.
-    .sort((a, b) => (a.m.isHelper - b.m.isHelper) || (b.remaining - a.remaining) || (a.r - b.r))
+    .sort((a, b) => (rankOf(a.m) - rankOf(b.m)) || (b.remaining - a.remaining) || (a.r - b.r))
     .map((x) => x.m);
   for (const s of senders) {
     if (out.length >= n) break;
@@ -297,7 +384,7 @@ export function planPairs(pool, { sent = {}, received = {}, pairs = new Set(), n
       .filter((r) => r.email !== s.email && r.domain !== s.domain && !used.has(pairKey(s.email, r.email)) && (recv[r.email] || 0) < receiveCap)
       .map((r) => ({
         r,
-        score: (r.provider !== s.provider ? 4 : 0) + (r.clientId !== s.clientId ? 2 : 0) - (recv[r.email] || 0) * 0.1 + rng() * 0.05,
+        score: (famOf(r) !== famOf(s) ? 4 : 0) + (r.clientId !== s.clientId ? 2 : 0) - (recv[r.email] || 0) * 0.1 + rng() * 0.05,
       }))
       .sort((a, b) => b.score - a.score);
     if (!candidates.length) continue;
@@ -323,18 +410,35 @@ async function defaultSend(account, mail) {
  */
 export const net = { send: (account, mail) => defaultSend(account, mail), imap: (account) => defaultImap(account) };
 
-function accountFor(member) {
-  return toAccount(member.record);
+/**
+ * Connection object for a pool member: the stored record (toAccount) plus the
+ * provider preset's folder names and IMAP login name (iCloud: local part).
+ */
+export function accountFor(member) {
+  const account = toAccount(member.record);
+  if (!account) return null;
+  const preset = PROVIDERS[member.record?.provider] || null;
+  if (preset) {
+    account.spamFolders = preset.spamFolders || [];
+    account.archiveFolders = preset.archiveFolders || [];
+  }
+  if (member.record?.imapUser) account.imapUser = member.record.imapUser;
+  return account;
 }
 
 /** Build + send one marked mail. Returns the mailer result plus the marker. */
 export async function sendMarked(fromMember, toMember, { deps = {}, kind = 'w', tag = '', rng = Math.random, subject = null, text = null, inReplyTo = null, references = null } = {}) {
   const account = accountFor(fromMember);
   if (!account) return { success: false, error: 'password cannot be decrypted', kind: 'auth' };
-  const marker = makeMarker(kind, tag);
   let msg;
-  if (text) msg = { subject, text, html: `<p>${String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>` };
-  else msg = composeWarmup(rng, { toName: toMember.record?.displayName, fromName: fromMember.record?.displayName });
+  let meta = tag;
+  if (text) msg = { subject, text, html: `<p>${String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>` };
+  else {
+    msg = composeWarmup(rng, { toName: toMember.record?.displayName, fromName: fromMember.record?.displayName });
+    // A new warm-up mail records how it was built, so the reply can quote it.
+    if (kind === 'w' && !meta) meta = encodeWarmMeta(msg);
+  }
+  const marker = makeMarker(kind, meta);
   const html = `${msg.html}<span data-w="${marker}" style="display:none;font-size:0;line-height:0;max-height:0;overflow:hidden"></span>`;
   const send = deps.send || net.send;
   const res = await send(account, {
@@ -357,7 +461,11 @@ async function onSendFailure(member, res, now) {
   if (res.kind === 'auth') {
     await patchMember(member, member.isHelper ? { health: 'auth_failed', healthAt: now.toISOString() } : { warmupHealth: 'auth_failed', warmupHealthAt: now.toISOString() });
     if (member.isHelper) {
-      await alertOwner('helper_unhealthy', { scope: member.email, vars: { email: member.email }, body: `The helper ${member.email} refused the login (${res.error}).`, did: 'It is out of the warm-up circle until you re-enter its app password on /mc/warmup.' });
+      const preset = PROVIDERS[member.provider];
+      const why = preset && !preset.helper ? ` ${preset.helperNote}` : '';
+      await alertOwner('helper_unhealthy', { scope: member.email, vars: { email: member.email }, body: `The helper ${member.email} refused the login (${res.error}).${why}`, did: 'It is out of the warm-up circle until you re-enter its app password on /mc/warmup.' });
+    } else if (member.isAviance) {
+      await alertOwner('helper_unhealthy', { scope: member.email, vars: { email: member.email }, body: `The aviance inbox ${member.email} refused the warm-up login (${res.error}).`, did: 'It is out of the warm-up circle (your own sending is not touched) until you press Retry on /mc/warmup or re-save its app password.' });
     } else {
       await alertOwner('inbox_auth_fail', { clientId: member.clientId, scope: `${member.clientId}:${member.email}`, vars: { email: member.email }, body: `Warm-up could not log in to ${member.email}: ${res.error}`, did: 'Warm-up for this inbox keeps retrying; nothing else changed.' });
     }
@@ -365,8 +473,44 @@ async function onSendFailure(member, res, now) {
   }
   const limit = await cfg(null, 'BUILD.warmupErrorAlert');
   if (errs >= limit) {
-    await alertOwner('warmup_errors', { clientId: member.isHelper ? null : member.clientId, scope: member.email, vars: { email: member.email }, body: `${errs} warm-up sends from ${member.email} failed today. Last error: ${res.error}`, did: 'The engine keeps pairing other inboxes; this one retries next run.' });
+    await alertOwner('warmup_errors', { clientId: countsForClient(member) ? member.clientId : null, scope: member.email, vars: { email: member.email }, body: `${errs} warm-up sends from ${member.email} failed today. Last error: ${res.error}`, did: 'The engine keeps pairing other inboxes; this one retries next run.' });
   }
+}
+
+/**
+ * The pool at a glance, written by every warm-up send run (one hash write) so
+ * the hub's deliverability view never recomputes the pool.
+ */
+export function poolSummary(pool, todayPairs, now = new Date()) {
+  const providers = {};
+  for (const m of pool) providers[m.label || providerLabel(m.provider, m.email)] = (providers[m.label || providerLabel(m.provider, m.email)] || 0) + 1;
+  return {
+    at: now.toISOString(),
+    day: dayKeyIn(ET, now),
+    pool: pool.length,
+    helpers: pool.filter((m) => m.isHelper).length,
+    trial: pool.filter((m) => countsForClient(m)).length,
+    aviance: pool.filter((m) => m.isAviance).length,
+    families: new Set(pool.map((m) => famOf(m))).size,
+    providers,
+    todayPairs,
+  };
+}
+
+async function writeSummary(pool, todayPairs, now) {
+  const s = poolSummary(pool, todayPairs, now);
+  try { await kv.hset(K.warmupSummary(), { ...s, providers: JSON.stringify(s.providers) }); } catch {}
+  return s;
+}
+
+/** Last pool summary (one read) → {at, day, pool, helpers, trial, aviance, families, providers, todayPairs} or null. */
+export async function readPoolSummary() {
+  const raw = (await kv.hgetall(K.warmupSummary())) || null;
+  if (!raw || !raw.at) return null;
+  let providers = raw.providers;
+  if (typeof providers === 'string') { try { providers = JSON.parse(providers); } catch { providers = {}; } }
+  const n = (v) => (v === '' || v == null ? null : Number(v));
+  return { at: raw.at, day: raw.day || null, pool: n(raw.pool), helpers: n(raw.helpers), trial: n(raw.trial), aviance: n(raw.aviance), families: n(raw.families), providers: providers || {}, todayPairs: n(raw.todayPairs) };
 }
 
 /**
@@ -379,8 +523,10 @@ export async function runWarmupSend({ now = new Date(), deadline = Date.now() + 
   }
   const pool = await getPool({ now, clients });
   if (pool.length < 2) return { sent: 0, pool: pool.length };
-  // Helpers exist to warm client inboxes; with no client in the circle they rest.
-  if (!pool.some((m) => !m.isHelper)) return { sent: 0, skipped: 'no client inbox in the circle' };
+  // Helpers exist to warm client inboxes; with no client in the circle they
+  // rest (aviance alone keeps it going only with WARMUP_V2.avianceAlone).
+  const avianceAlone = Boolean(await cfg(null, 'WARMUP_V2.avianceAlone'));
+  if (!pool.some((m) => countsForClient(m) || (avianceAlone && m.isAviance))) return { sent: 0, skipped: 'no client inbox in the circle' };
   const day = dayKeyIn(ET, now);
   const hours = await cfg(null, 'BUILD.warmupHours');
   const n = await cfg(null, 'BUILD.warmupPairsPerTick');
@@ -420,9 +566,11 @@ export async function runWarmupSend({ now = new Date(), deadline = Date.now() + 
     sent[from.email] = (sent[from.email] || 0) + 1;
     await statBump(from.email, 'sent', 1, now);
     await statBump(to.email, 'received', 1, now);
-    if (!from.isHelper) await bump(from.clientId, 'warmupSent', 1, now);
+    if (countsForClient(from)) await bump(from.clientId, 'warmupSent', 1, now);
     done.push({ from: from.email, to: to.email, ok: true });
   }
+  // Every entry in `done` claimed its pair (sent or failed).
+  await writeSummary(pool, Object.keys(pairsRaw).length + done.length, now);
   return { pool: pool.length, planned: plan.length, sent: done.filter((d) => d.ok).length, failed: done.filter((d) => !d.ok).length };
 }
 
@@ -434,7 +582,7 @@ async function defaultImap(account) {
     host: account.imap.host,
     port: account.imap.port || 993,
     secure: true,
-    auth: { user: account.email, pass: account.appPassword },
+    auth: { user: account.imapUser || account.email, pass: account.appPassword },
     logger: false,
     disableAutoIdle: true,
     connectionTimeout: 12000,
@@ -443,18 +591,43 @@ async function defaultImap(account) {
   });
 }
 
-/** INBOX, spam and archive folders for this server (special-use aware). */
+const SPAM_NAME_RE = /^(\[(gmail|google mail)\]\/)?(spam|junk( ?e-?mail)?|bulk( mail)?|spamverdacht|unerw(ü|ue)nscht)$/i;
+const ARCHIVE_NAME_RE = /^(\[(gmail|google mail)\]\/all mail|archive|archiv)$/i;
+
+/**
+ * INBOX, spam and archive folders for this server: RFC 6154 special-use flags
+ * first (\Junk, \All, \Archive), then the provider preset's names (Yahoo
+ * "Bulk", GMX "Spamverdacht", iCloud "Junk" …), then common names.
+ */
 export async function resolveFolders(client, account) {
   let spam = account.spamFolder || null;
   let archive = null;
   try {
     const list = (await client.list()) || [];
-    const junk = list.find((f) => f.specialUse === '\\Junk') || list.find((f) => /^(\[gmail\]\/)?(spam|junk( e-?mail)?|bulk( mail)?)$/i.test(f.path));
+    const byName = (names) => {
+      for (const n of names || []) {
+        const f = list.find((x) => String(x.path).toLowerCase() === String(n).toLowerCase());
+        if (f) return f;
+      }
+      return null;
+    };
+    const junk = list.find((f) => f.specialUse === '\\Junk') || byName(account.spamFolders) || list.find((f) => SPAM_NAME_RE.test(f.path));
     if (junk) spam = junk.path;
-    const all = list.find((f) => f.specialUse === '\\All') || list.find((f) => f.specialUse === '\\Archive') || list.find((f) => /^archive$/i.test(f.path));
+    const all = list.find((f) => f.specialUse === '\\All') || list.find((f) => f.specialUse === '\\Archive') || byName(account.archiveFolders) || list.find((f) => ARCHIVE_NAME_RE.test(f.path));
     if (all) archive = all.path;
   } catch {}
   return { inbox: 'INBOX', spam: spam && spam !== 'INBOX' ? spam : null, archive };
+}
+
+/**
+ * The text a warm-up mail carried, rebuilt from the metadata in its marker
+ * (no body download). null for v1 markers (no metadata) or an unknown member.
+ */
+export function quotedTextFor(meta, { reader, sender }) {
+  if (!meta || !sender) return null;
+  if (meta.kind === 'original') return renderWarmup(meta, { toName: reader?.record?.displayName, fromName: sender.record?.displayName }).text;
+  if (meta.kind === 'reply') return renderReply(meta.lineIndex, meta.depth, { fromName: sender.record?.displayName });
+  return null;
 }
 
 const MAX_PER_FOLDER = 40;
@@ -474,6 +647,10 @@ export async function processMailbox(member, { mode = 'warm', tag = '', now = ne
   const rng = deps.rng || Math.random;
   const flagRate = await cfg(null, 'BUILD.warmupFlagRate');
   const replyRate = await cfg(null, 'WARMUP.replyRate');
+  const v2 = await group('WARMUP_V2', ['maxThreadDepth', 'deeperReplyShare', 'quoteReplies']);
+  const maxDepth = Number(v2.maxThreadDepth) || 4;
+  const deeperShare = Number.isFinite(Number(v2.deeperReplyShare)) ? Number(v2.deeperReplyShare) : 0.6;
+  const quoteReplies = v2.quoteReplies !== false;
   const lookback = await cfg(null, 'BUILD.warmupLookbackHours');
   const since = new Date(now.getTime() - lookback * 3600e3);
   const day = dayKeyIn(ET, now);
@@ -529,18 +706,26 @@ export async function processMailbox(member, { mode = 'warm', tag = '', now = ne
           const flags = ['\\Seen'];
           if (mode === 'warm' && rng() < flagRate) flags.push('\\Flagged');
           try { await client.messageFlagsAdd(msg.uid, flags, { uid: true }); } catch {}
-          if (mode === 'warm' && rng() < replyRate && poolByEmail[sender] && Date.now() < deadline - 5000) {
+          // Threads: a first reply at WARMUP.replyRate, later replies less
+          // often, none past WARMUP_V2.maxThreadDepth. The roll is always
+          // drawn so the random stream does not depend on the thread depth.
+          const meta = mode === 'warm' ? decodeWarmMeta(marker.tag) : null;
+          const depth = meta ? meta.depth : 0;
+          const roll = mode === 'warm' ? rng() : 1;
+          if (mode === 'warm' && depth < maxDepth && roll < (depth === 0 ? replyRate : replyRate * deeperShare) && poolByEmail[sender] && Date.now() < deadline - 5000) {
             const sentToday = (await statsFor(member.email, day)).sent || 0;
             if (sentToday < HARD_WARMUP_CAP) {
-              const reply = composeReply(rng, { fromName: member.record?.displayName });
+              const other = poolByEmail[sender];
+              const quote = quoteReplies ? quotedTextFor(meta, { reader: member, sender: other }) : null;
+              const reply = composeReply(rng, { fromName: member.record?.displayName, depth: depth + 1, quote, quoteMeta: { date: msg.envelope?.date || null, name: other.record?.displayName || '', email: sender, tz: member.tz || ET } });
               const subj = String(msg.envelope?.subject || '');
-              const res = await sendMarked(member, poolByEmail[sender], { deps, rng, subject: /^re:/i.test(subj) ? subj : `Re: ${subj}`, text: reply.text, inReplyTo: msg.envelope?.messageId || null, references: [headers.references, msg.envelope?.messageId].filter(Boolean).join(' ') || null }).catch((err) => ({ success: false, error: err.message }));
+              const res = await sendMarked(member, other, { deps, rng, tag: encodeWarmMeta(reply), subject: /^re:/i.test(subj) ? subj : `Re: ${subj}`, text: reply.text, inReplyTo: msg.envelope?.messageId || null, references: [headers.references, msg.envelope?.messageId].filter(Boolean).join(' ') || null }).catch((err) => ({ success: false, error: err.message }));
               if (res.success) {
                 out.replied++;
                 await statBump(member.email, 'sent', 1, now);
                 await statBump(member.email, 'replied', 1, now);
                 await statBump(sender, 'received', 1, now);
-                if (!member.isHelper) await bump(member.clientId, 'warmupSent', 1, now);
+                if (countsForClient(member)) await bump(member.clientId, 'warmupSent', 1, now);
               }
             }
           }
@@ -591,7 +776,7 @@ async function recordLandings(bySender, poolByEmail, now) {
     for (const [field, counter] of [['inbox', 'warmupInbox'], ['spam', 'warmupSpam'], ['rescued', 'warmupRescued']]) {
       if (!c[field]) continue;
       await statBump(sender, field, c[field], now);
-      if (m && !m.isHelper) await bump(m.clientId, counter, c[field], now);
+      if (m && countsForClient(m)) await bump(m.clientId, counter, c[field], now);
     }
   }
 }
@@ -604,7 +789,8 @@ export async function runWarmupRead({ now = new Date(), deadline = Date.now() + 
   if (!markerSecret()) return { skipped: 'no_secret' };
   const pool = await getPool({ now, clients });
   if (!pool.length) return { read: 0 };
-  if (!pool.some((m) => !m.isHelper)) return { read: 0, skipped: 'no client inbox in the circle' };
+  const avianceAlone = Boolean(await cfg(null, 'WARMUP_V2.avianceAlone'));
+  if (!pool.some((m) => countsForClient(m) || (avianceAlone && m.isAviance))) return { read: 0, skipped: 'no client inbox in the circle' };
   const perRun = await cfg(null, 'BUILD.warmupReadPerRun');
   const everyMin = await cfg(null, 'BUILD.warmupReadEveryMin');
   const readAt = (await kv.hgetall(K.warmupReadAt())) || {};
@@ -669,7 +855,8 @@ export async function runWarmupDaily({ now = new Date(), clients = null, scaled 
   const out = [];
   for (const m of pool) {
     const { rate, inbox, spam } = await inboxRate7d(m.email, now);
-    if (m.isHelper) {
+    if (m.isHelper || m.isAviance) {
+      // Helpers and the owner's own inboxes are not gated by readiness.
       if (rate != null) await patchMember(m, { inboxRate7d: rate.toFixed(3) });
       continue;
     }
@@ -700,9 +887,58 @@ export async function poolStatus({ now = new Date() } = {}) {
   for (const m of pool) {
     const s = await statsFor(m.email, day);
     const { rate } = await inboxRate7d(m.email, now);
-    members.push({ email: m.email, clientId: m.clientId, provider: m.provider, isHelper: m.isHelper, days: m.days, quota: m.quota, sentToday: s.sent || 0, receivedToday: s.received || 0, errorsToday: s.errors || 0, inboxRate7d: rate, ready: m.record.warmupReady === '1', health: m.isHelper ? m.record.health || 'new' : m.record.warmupHealth || 'ok', lastReadAt: readAt[m.key] || null, lastReadError: m.record.lastWarmReadError || '' });
+    members.push({ email: m.email, clientId: m.clientId, provider: m.provider, family: m.family, label: m.label, isHelper: m.isHelper, isAviance: Boolean(m.isAviance), days: m.days, quota: m.quota, sentToday: s.sent || 0, receivedToday: s.received || 0, errorsToday: s.errors || 0, inboxRate7d: rate, ready: m.record.warmupReady === '1', health: m.isHelper ? m.record.health || 'new' : m.record.warmupHealth || 'ok', lastReadAt: readAt[m.key] || null, lastReadError: m.record.lastWarmReadError || '' });
   }
-  const helpers = (await getHelpers()).map(({ passwordEnc, ...h }) => ({ ...h, hasPassword: Boolean(passwordEnc) }));
+  const helpers = (await getHelpers()).map(({ passwordEnc, ...h }) => ({ ...h, hasPassword: Boolean(passwordEnc), providerOk: Boolean(PROVIDERS[h.provider]?.helper), providerNote: PROVIDERS[h.provider]?.helper ? '' : (PROVIDERS[h.provider]?.helperNote || '') }));
   const pairs = Object.entries((await kv.hgetall(K.warmupPair(day))) || {}).map(([k, at]) => ({ pair: k, at }));
-  return { day, members, helpers, pairs, minPool: await cfg(null, 'WARMUP.minPool') };
+  const includeAviance = Boolean(await cfg(null, 'WARMUP.includeAviance'));
+  const avianceOut = includeAviance
+    ? (await getInboxRecords(AVIANCE).catch(() => [])).filter((r) => r.warmupHealth === 'auth_failed').map((r) => ({ email: r.email, since: r.warmupHealthAt || null }))
+    : [];
+  return {
+    day, members, helpers, pairs,
+    minPool: await cfg(null, 'WARMUP.minPool'),
+    // Pairing across providers needs other filters to pair with (the trial
+    // inboxes are Google): the page warns below this many families.
+    minFamilies: Number(await cfg(null, 'WARMUP_V2.minFamilies')) || 0,
+    summary: poolSummary(pool, pairs.length, now),
+    presets: providerPresets(),
+    external: await externalStatus(),
+    aviance: { included: includeAviance, loginFailed: avianceOut },
+  };
+}
+
+/** Provider presets for the /mc/warmup form (no hosts needed there). */
+export function providerPresets() {
+  return Object.entries(PROVIDERS)
+    .filter(([id]) => !['namecheap', 'custom'].includes(id))
+    .map(([id, p]) => ({ id, label: p.label || id, family: p.family || id, helper: Boolean(p.helper), note: p.helperNote || '', setup: p.setup || [], imap: `${p.imap.host}:${p.imap.port}`, smtp: `${p.smtp.host}:${p.smtp.port}`, spam: p.spamFolder }))
+    .sort((a, b) => Number(b.helper) - Number(a.helper));
+}
+
+export { HELPER_PROVIDERS };
+
+/**
+ * The external warm-up network the owner runs by hand (EXTERNAL_WARMUP), or
+ * null. None can be connected automatically in 2026 (research §1), so this is
+ * only what the owner declared in /mc/config: its name and daily volume, which
+ * the circle subtracts from each trial inbox's quota (the 15/day ceiling
+ * counts both).
+ */
+export async function externalStatus() {
+  const ext = await group('EXTERNAL_WARMUP', ['name', 'url', 'perDay']);
+  if (!ext.name) return null;
+  const perDay = Math.max(0, Math.min(HARD_WARMUP_CAP, Number(ext.perDay) || 0));
+  return { name: String(ext.name), url: ext.url || null, perDay, status: perDay > 0 ? 'connected' : 'not connected', managedBy: 'owner' };
+}
+
+/** Put an aviance inbox whose warm-up login failed back into the circle (Retry on /mc/warmup). */
+export async function retryMember(clientId, email) {
+  if (clientId === HELPER) {
+    clearHelperMemo();
+    await kv.hset(K.warmupHelper(email), { health: 'new', healthAt: new Date().toISOString() });
+  } else {
+    await patchInbox(clientId, email, { warmupHealth: '', warmupHealthAt: new Date().toISOString() });
+  }
+  await logEvent(clientId === HELPER ? null : clientId, 'warmup', 'member_retry', { email: String(email).toLowerCase() });
 }

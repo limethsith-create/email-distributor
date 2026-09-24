@@ -149,6 +149,15 @@ export function installWorld({ seed = 20261005 } = {}) {
     if (u.includes('rdap.org')) return new Response('not found', { status: 404 });
     if (u.includes('porkbun.com')) return new Response(JSON.stringify({ status: 'SUCCESS', pricing: { com: { registration: '10.37', renewal: '11.08' }, net: { registration: '12.52' }, co: { registration: '11.00' } } }), { status: 200 });
     if (u.includes('api.github.com')) return new Response(null, { status: 204 });
+    // Spam test (Deliverability v2, systems/placement.js): dkimvalidator answers
+    // from the mail that really arrived at {id}@dkimvalidator.com, like the site.
+    const dv = /^https:\/\/dkimvalidator\.com\/cgi-bin\/(sa|dkim|spf)\.pl\?email=([a-z0-9]+)$/.exec(u);
+    if (dv) {
+      const [, page, id] = dv;
+      if (!sim.warmBoxes[`${id}@dkimvalidator.com`]) return new Response(`I haven't received an email recently to ${id}`, { status: 200 });
+      const body = { sa: 'SpamAssassin Score: -0.1\nMessage is NOT marked as spam\nPoints breakdown:\n-0.1 DKIM_VALID_AU Message has a valid DKIM or DK signature', dkim: 'DKIM Information:\nValidating Signature\nresult = pass', spf: 'SPF Information:\nResult code: pass' }[page];
+      return new Response(`<pre>${body}</pre>`, { status: 200 });
+    }
     throw new Error(`unexpected network call in the simulation: ${u.slice(0, 100)}`);
   };
 }

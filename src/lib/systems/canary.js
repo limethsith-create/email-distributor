@@ -26,6 +26,7 @@ import { logEvent } from '@/lib/db/events';
 import { alertOwner } from '@/lib/notify';
 import { ET, dayKeyIn, trialDay, partsIn, addDays } from '@/lib/time';
 import { getHelpers, HELPER, sendMarked, processMailbox, statsFor, statBump } from '@/lib/systems/warmup';
+import { recordPlacement } from '@/lib/systems/placement';
 
 const parse = (v, d) => { if (v == null || v === '') return d; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return d; } };
 
@@ -215,6 +216,16 @@ async function finalize({ client, run, key, now }) {
     return { phase: 'done', placement: null };
   }
   await updateClient(id, { canaryPlacement: res.overall.toFixed(3), canaryMinPlacement: res.min == null ? '' : res.min.toFixed(3), canaryDay: day });
+  // The seed test joins the client's placement history (hub: deliverability.placement).
+  await recordPlacement(id, {
+    at: now.toISOString(), day, tool: 'seed', inbox: null, score: null,
+    inboxRate: Math.round(res.overall * 1000) / 1000,
+    detail: [
+      ...Object.entries(res.perProvider || {}).map(([p, r]) => `${p}: ${r.placement == null ? 'not read' : `${Math.round(r.placement * 100)}% inbox`} (${Math.min(r.inbox, r.sent)}/${r.sent})`),
+      ...Object.entries(res.perInbox || {}).map(([e, r]) => `${e}: ${r.inbox}/${r.sent} in the inbox`),
+    ],
+    reportUrl: null,
+  }).catch(() => {});
   const pct = `${Math.round(res.overall * 100)}%`;
   if (res.overall < warn || (res.min != null && res.min < warn)) {
     await alertOwner('placement_low', { clientId: id, vars: { clientId: id, rate: pct }, body: `Canary placement today: ${pct} overall, lowest inbox ${Math.round((res.min ?? 0) * 100)}%.\n${Object.entries(res.perInbox).map(([e, r]) => `${e}: ${r.inbox}/${r.sent}`).join('\n')}`, did: SENDING_STATES.has(client.state) ? 'Logged; the Emergency Runner is asked to act if any inbox is under the emergency line.' : 'Day 1 cannot start until every inbox is at the gate line.' });

@@ -33,6 +33,11 @@ export const DEFAULTS = {
     readyConsecutiveDays: 2,
     lowRate: 0.80,
     maxSlideDays: 7,
+    // Deliverability v2: the aviance client's own inboxes join the circle
+    // (more members = better network); after Day 1 warm-up stays at about a
+    // third of the inbox's cold cap (owner's report), never under the 15+ row.
+    includeAviance: true,
+    sendingShare: 0.33,
   },
   LIST: { need: 400, refillBelow: 50, startMin: 200, sanitySample: 20, maxFail: 2 },
   PLACES: { monthlyEnterprise: 1000 },
@@ -52,7 +57,7 @@ export const DEFAULTS = {
   },
   FRESH_MIN_SHARE: 0.4,
   FOLLOWUP_GRACE_DAYS: 7,
-  BOUNCE: { max: 0.02 },
+  BOUNCE: { max: 0.02, pause: 0.015 }, // pause (halve caps) at 1.5 %, stop (emergency) over 2 % — owner's rule
   REPLIES: { usHoursMinutes: 5, offHoursMinutes: 20 },
   HOT: { nudgeHours: 4, holdingHours: 24 },
   BOOK: { farSlotDays: 5, reminders: [24, 1], tapReminderHours: 24 },
@@ -182,6 +187,64 @@ export const DEFAULTS = {
     // Readiness (warming → ready)
     readinessAt: '00:30',              // hourly from here (after the 23:45 warm-up check), so Day 1 can start at 09:00
     day1SendHour: '09:00',
+  },
+  // Deliverability v2 (docs/research/v2-deliverability.md)
+  WARMUP_V2: {
+    avianceAlone: false,               // keep the circle running for the aviance inboxes when no trial is warming (Redis cost)
+    maxThreadDepth: 4,                 // replies in one warm-up thread before it ends
+    deeperReplyShare: 0.6,             // later replies happen at replyRate × this
+    quoteReplies: true,                // replies quote the mail they answer, like a mail client
+    minFamilies: 3,                    // /mc/warmup warns when the circle has fewer mail-filter families
+  },
+  // An external warm-up network the owner runs by hand (none connects
+  // automatically in 2026). name null = none. perDay = what it sends per trial
+  // inbox per day; the circle sends that much less (the 15/day ceiling holds).
+  EXTERNAL_WARMUP: { name: null, url: null, perDay: 0 },
+  PLACEMENT: {
+    // 'auto': mail-tester when MAILTESTER_USERNAME is set (the owner's account,
+    // one-time credits, official JSON API) or mailTesterFree is on; else
+    // dkimvalidator (free, no account). 'mail-tester' / 'dkimvalidator' force one.
+    tool: 'auto',
+    mailTesterFree: false,             // mail-tester's 3 free tests / 24 h with self-made ids — its FAQ puts JSON on paid plans, so off unless the owner accepts that
+    gate: true,                        // Day 1 needs a passing spam test on every inbox
+    minScore: 8,                       // mail-tester mark out of 10
+    maxSpamAssassin: 2.0,              // dkimvalidator: SpamAssassin points (5 = spam); mail-tester's 8/10 ≈ 2 points off
+    dailyLimit: { 'mail-tester': 3, dkimvalidator: 20 },   // tests per day, all clients together
+    daysBeforeDay1: 3,                 // first test on Day −3 (the gate), retried daily until it passes
+    everyDays: 7,                      // then Day 1 and every 7 days while sending
+    at: '08:00',                       // ET, daily start
+    checkAfterMin: 4,                  // wait before fetching the result
+    giveUpMin: 120,                    // no result by then → failed test, retried next day
+    maxAgeDays: 10,                    // an older result does not count for the gate
+    sendsPerRun: 2,
+    checksPerRun: 2,
+  },
+  BLACKLISTS: {
+    // One shape per zone (so /mc/config can validate edits). Answer 127.0.0.X:
+    // bitmask lists (listedBits/warnBits > 0) test X & bits; others use the
+    // X ranges listedFrom–listedTo and warnFrom–warnTo (0–0 = none). `errors`
+    // = X values meaning "refused". `test` must answer listed and `control`
+    // must not, every run, or the zone gives no verdict (IP lists: reversed
+    // labels, 2.0.0.127 = 127.0.0.2).
+    // Domain (URI) lists: a hit here is "listed".
+    domainZones: [
+      { zone: 'multi.uribl.com', name: 'URIBL', listedBits: 2, warnBits: 12, listedFrom: 0, listedTo: 0, warnFrom: 0, warnTo: 0, errors: [1], test: 'test.uribl.com', control: 'example.com', warnOnly: false },
+      { zone: 'multi.surbl.org', name: 'SURBL', listedBits: 216, warnBits: 0, listedFrom: 0, listedTo: 0, warnFrom: 0, warnTo: 0, errors: [1], test: 'test.surbl.org', control: 'example.com', warnOnly: false },
+      { zone: 'dbl.nordspam.com', name: 'NordSpam DBL', listedBits: 0, warnBits: 0, listedFrom: 2, listedTo: 2, warnFrom: 0, warnTo: 0, errors: [1], test: 'test', control: 'example.com', warnOnly: false },
+    ],
+    // IP lists, asked for the A record and MX IPs (not our sending IPs → warnings by default).
+    ipZones: [
+      { zone: 'bl.spamcop.net', name: 'SpamCop', listedBits: 0, warnBits: 0, listedFrom: 2, listedTo: 99, warnFrom: 0, warnTo: 0, errors: [1], test: '2.0.0.127', control: '1.0.0.127', warnOnly: false },
+      { zone: 'psbl.surriel.com', name: 'PSBL', listedBits: 0, warnBits: 0, listedFrom: 2, listedTo: 99, warnFrom: 0, warnTo: 0, errors: [1], test: '2.0.0.127', control: '1.0.0.127', warnOnly: false },
+      { zone: 'bl.mailspike.net', name: 'Mailspike', listedBits: 0, warnBits: 0, listedFrom: 2, listedTo: 2, warnFrom: 10, warnTo: 12, errors: [1], test: '2.0.0.127', control: '1.0.0.127', warnOnly: false },
+      { zone: 'bl.0spam.org', name: '0spam', listedBits: 0, warnBits: 0, listedFrom: 2, listedTo: 99, warnFrom: 0, warnTo: 0, errors: [1], test: '2.0.0.127', control: '1.0.0.127', warnOnly: false },
+      { zone: 'all.s5h.net', name: 's5h', listedBits: 0, warnBits: 0, listedFrom: 2, listedTo: 99, warnFrom: 0, warnTo: 0, errors: [1], test: '2.0.0.127', control: '1.0.0.127', warnOnly: false },
+      { zone: 'bl.nordspam.com', name: 'NordSpam', listedBits: 0, warnBits: 0, listedFrom: 2, listedTo: 2, warnFrom: 0, warnTo: 0, errors: [1], test: '2.0.0.127', control: '1.0.0.127', warnOnly: false },
+      { zone: 'dnsbl-1.uceprotect.net', name: 'UCEPROTECT L1', listedBits: 0, warnBits: 0, listedFrom: 2, listedTo: 99, warnFrom: 0, warnTo: 0, errors: [1], test: '2.0.0.127', control: '1.0.0.127', warnOnly: true },
+    ],
+    ipAction: 'warn',                  // 'block' = an IP-list hit counts as listed
+    timeoutMs: 4000,
+    mxHosts: 2,
   },
   // ── end Stage B ──
   // ── Stage C additions ──
