@@ -1,0 +1,31 @@
+name: leadfinder-watch
+# When a Lead Finder run ends in failure / cancellation / timeout (including a
+# runner that died before the script could report), tell the app so it raises
+# leadfinder_failed (SPEC §7.2 Failure). Authenticated with the shared secret
+# GITHUB_WEBHOOK_SECRET (same value as the app's env var).
+on:
+  workflow_run:
+    workflows: [leadfinder]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  report:
+    if: ${{ github.event.workflow_run.conclusion != 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Report failure to the app
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://email-distributor.vercel.app' }}
+          SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
+          TITLE: ${{ github.event.workflow_run.display_title }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          body=$(python3 -c 'import json,os;print(json.dumps({"action":"completed","workflow_run":{"name":"leadfinder","display_title":os.environ["TITLE"],"conclusion":os.environ["CONCLUSION"],"id":os.environ["RUN_ID"],"html_url":os.environ["RUN_URL"]}}))')
+          curl -fsS -m 30 -X POST "$APP_URL/api/webhooks/github" \
+            -H "Authorization: Bearer $SECRET" -H "content-type: application/json" \
+            -H "X-GitHub-Event: workflow_run" -d "$body"

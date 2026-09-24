@@ -1,0 +1,39 @@
+{
+  "name": "MSP trial sequence — backup opening (Pace Check Day 7)",
+  "niche": "msp",
+  "source": "Same bodies as msp.json; only the Day 0 subject line and the first line change (SPEC §8.9 Day 7 fix).",
+  "version": 2,
+  "footer": "{SenderName}\n{ClientCompany}\n{postalAddress}\n\nNot the right fit? Just reply STOP and I will not email you again.",
+  "variants": [
+    { "id": "msp-c2", "firstLineSet": "C", "subjects": { "d0": "who handles IT at {Company}" } },
+    { "id": "msp-d2", "firstLineSet": "D", "subjects": { "d0": "{Company} and computer headaches" } }
+  ],
+  "touches": [
+    {
+      "touch": "d0",
+      "day": 0,
+      "thread": "new",
+      "subject": "@variant",
+      "body": "Hi {FirstName},\n\n{FirstLine}\n\nI'm {SenderName} at {ClientCompany}. {oneLiner}\n\nMost {ICP} we speak with lose hours every month to IT problems nobody owns.\n\nWould a 15-minute call to compare notes be useful?"
+    },
+    {
+      "touch": "d3",
+      "day": 3,
+      "thread": "d0",
+      "body": "{FirstName}, a quick follow-up. We look after day-to-day IT for {ICP}, so your team has one number to call when something breaks.\n\nIs it worth a short call to see if that fits {Company}?"
+    },
+    {
+      "touch": "d7",
+      "day": 7,
+      "thread": "new",
+      "subject": "IT at {Company}",
+      "body": "{FirstName}, I'm reaching out to a few {ICP} around {City} this month. {oneLiner}\n\nIf IT ever gets in the way at {Company}, it helps to have someone ready.\n\nOpen to a 15-minute call next week?"
+    },
+    {
+      "touch": "d10",
+      "day": 10,
+      "thread": "d7",
+      "body": "{FirstName}, I don't want to crowd your inbox, so this is my last note. If IT support comes up for {Company} later, just reply and I'll pick it up.\n\nShould I close the file for now?"
+    }
+  ]
+}

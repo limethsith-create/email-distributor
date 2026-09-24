@@ -1,0 +1,39 @@
+{
+  "name": "Trial sequence — any niche (the client's offer to the client's prospects)",
+  "niche": "trial-default",
+  "source": "Structure of Sequence T (The 30-Day Trial, Section 10): plain text, no links in email 1, one reply CTA, four touches. Wording is new, written for the client's own offer; the client reviews it on the approval page and the owner edits it in Mission Control on request.",
+  "version": 1,
+  "footer": "{SenderName}\n{ClientCompany}\n{postalAddress}\n\nNot the right fit? Just reply STOP and I will not email you again.",
+  "variants": [
+    { "id": "default-a1", "firstLineSet": "A", "subjects": { "d0": "{Company} and {ClientCompany}" } },
+    { "id": "default-b1", "firstLineSet": "B", "subjects": { "d0": "quick question, {FirstName}" } }
+  ],
+  "touches": [
+    {
+      "touch": "d0",
+      "day": 0,
+      "thread": "new",
+      "subject": "@variant",
+      "body": "Hi {FirstName},\n\n{FirstLine}\n\nI'm {SenderName} at {ClientCompany}. {oneLiner}\n\nWe work with {ICP}, and I think there may be a fit with {Company}.\n\nWould a 15-minute call next week be worth it?"
+    },
+    {
+      "touch": "d3",
+      "day": 3,
+      "thread": "d0",
+      "body": "{FirstName}, a quick follow-up on my note. If {niche} is on your list this year, I'm happy to share what we see working for {ICP}.\n\nIs a short call worth it?"
+    },
+    {
+      "touch": "d7",
+      "day": 7,
+      "thread": "new",
+      "subject": "{Company} and {niche}",
+      "body": "{FirstName}, I'm reaching out to a few {ICP} around {City} this month. {oneLiner}\n\nIf the timing is right for {Company}, I'd be glad to walk you through it.\n\nOpen to a 15-minute call next week?"
+    },
+    {
+      "touch": "d10",
+      "day": 10,
+      "thread": "d7",
+      "body": "{FirstName}, I don't want to crowd your inbox, so this is my last note. If this becomes a priority for {Company} later, just reply and I'll pick it up.\n\nShould I close the file for now?"
+    }
+  ]
+}

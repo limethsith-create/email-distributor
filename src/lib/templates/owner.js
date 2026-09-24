@@ -68,6 +68,12 @@ export const ALERTS = {
   booking_link_broken: { urgent: false, title: 'Booking link problem: {clientId}' },
   // ── end Stage A ──
   // ── Stage B additions ──
+  warmup_pool_small: { urgent: false, title: 'Warm-up pool has {count} members (needs {min})' },
+  helper_unhealthy: { urgent: false, title: 'Warm-up helper not working: {email}' },
+  warmup_errors: { urgent: false, title: 'Warm-up sends failing: {email}' },
+  canary_incomplete: { urgent: false, title: 'Canary test incomplete: {clientId}' },
+  day1_slid: { urgent: false, title: 'Day 1 moved for {clientId} to {date}' },
+  approved_by_silence: { urgent: false, title: 'Copy approved by silence: {clientId}' },
   // ── end Stage B ──
   // ── Stage C additions ──
   // ── end Stage C ──

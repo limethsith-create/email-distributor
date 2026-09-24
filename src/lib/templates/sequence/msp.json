@@ -1,0 +1,39 @@
+{
+  "name": "MSP trial sequence (the client's offer to the client's prospects)",
+  "niche": "msp",
+  "source": "Structure of Sequence T (The 30-Day Trial, Section 10): plain text, no links in email 1, one reply CTA, four touches. Wording is new, written for the client's own offer; the client reviews it on the approval page and the owner edits it in Mission Control on request.",
+  "version": 1,
+  "footer": "{SenderName}\n{ClientCompany}\n{postalAddress}\n\nNot the right fit? Just reply STOP and I will not email you again.",
+  "variants": [
+    { "id": "msp-a1", "firstLineSet": "A", "subjects": { "d0": "IT support for {Company}" } },
+    { "id": "msp-b1", "firstLineSet": "B", "subjects": { "d0": "{FirstName}, a question about your IT" } }
+  ],
+  "touches": [
+    {
+      "touch": "d0",
+      "day": 0,
+      "thread": "new",
+      "subject": "@variant",
+      "body": "Hi {FirstName},\n\n{FirstLine}\n\nI'm {SenderName} at {ClientCompany}. {oneLiner}\n\nMost {ICP} we speak with lose hours every month to IT problems nobody owns.\n\nWould a 15-minute call to compare notes be useful?"
+    },
+    {
+      "touch": "d3",
+      "day": 3,
+      "thread": "d0",
+      "body": "{FirstName}, a quick follow-up. We look after day-to-day IT for {ICP}, so your team has one number to call when something breaks.\n\nIs it worth a short call to see if that fits {Company}?"
+    },
+    {
+      "touch": "d7",
+      "day": 7,
+      "thread": "new",
+      "subject": "IT at {Company}",
+      "body": "{FirstName}, I'm reaching out to a few {ICP} around {City} this month. {oneLiner}\n\nIf IT ever gets in the way at {Company}, it helps to have someone ready.\n\nOpen to a 15-minute call next week?"
+    },
+    {
+      "touch": "d10",
+      "day": 10,
+      "thread": "d7",
+      "body": "{FirstName}, I don't want to crowd your inbox, so this is my last note. If IT support comes up for {Company} later, just reply and I'll pick it up.\n\nShould I close the file for now?"
+    }
+  ]
+}

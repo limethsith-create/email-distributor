@@ -1,0 +1,38 @@
+name: leadfinder
+# Lead Finder (SPEC §7.2). Dispatched by the app (src/lib/ext/github.js):
+#   POST /repos/{repo}/dispatches  {event_type: 'leadfinder', client_payload: {clientId, need, mode, exclude, widen}}
+# Pulls the client profile from the app, searches Places (OSM fallback),
+# crawls, verifies, scores, and posts batches of 100 to /api/webhooks/leadfinder.
+# A failure posts {type:'failed'} from the script; if the runner itself dies,
+# the repo's workflow_run webhook → /api/webhooks/github raises leadfinder_failed.
+run-name: leadfinder ${{ github.event.client_payload.clientId }} ${{ github.event.client_payload.mode }}
+
+on:
+  repository_dispatch:
+    types: [leadfinder]
+
+concurrency:
+  group: leadfinder-${{ github.event.client_payload.clientId }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Find leads
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://email-distributor.vercel.app' }}
+          LEADFINDER_TOKEN: ${{ secrets.LEADFINDER_TOKEN }}
+          PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
+          REOON_API_KEY: ${{ secrets.REOON_API_KEY }}
+          CLIENT_PAYLOAD: ${{ toJSON(github.event.client_payload) }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: node scripts/leadfinder/index.mjs
