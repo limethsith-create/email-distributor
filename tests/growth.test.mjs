@@ -23,6 +23,7 @@ test('growth: daily history from stored counters, nulls where nothing was record
   assert.equal(g.days[9], today);
   assert.equal(g.email.sent[9], 20);
   assert.equal(g.email.sent[8], null, 'a day with nothing recorded is null, not 0');
+  assert.equal(g.email.positive[9], 0, 'on a recorded day, a counter that did not move is 0');
   assert.equal(g.warmup.sent[8], 8);
   assert.equal(g.warmup.rate[9], 0.95); // (9+10)/(9+10+1)
   assert.equal(g.inboxes[0].dailyCap, 12);

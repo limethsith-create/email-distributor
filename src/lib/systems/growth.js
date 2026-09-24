@@ -2,7 +2,8 @@
  * Growth history for one trial (docs/HUB-API.md "growth"): what the hub's
  * charts draw — daily sending, replies and bookings, daily warm-up volume and
  * inbox rate per inbox, and each placement test — straight from the stored
- * daily counters. A day with nothing recorded is null, never a guessed 0.
+ * daily counters. A day with nothing recorded is null (a gap), never a
+ * guessed 0; on a recorded day a counter that did not move is 0.
  *
  * One pipeline per call (≈ days × (2 + inboxes) commands), so the hub loads
  * it only when the Growth tab is opened, never on its auto-refresh.
@@ -17,7 +18,11 @@ import { clientNow } from '@/lib/testclock';
 
 const EMAIL_FIELDS = ['sent', 'sentD0', 'replies', 'positive', 'booked', 'held', 'qualified', 'bounces'];
 const parse = (v, fb) => { if (v == null || v === '') return fb; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return fb; } };
-const numOrNull = (row, f) => (row && row[f] !== undefined && row[f] !== null && row[f] !== '' ? Number(row[f]) : null);
+/** A day whose hash exists was recorded: a field it lacks is a real 0. A day with no hash at all is null (a gap). */
+const numOrNull = (row, f) => {
+  if (!row || !Object.keys(row).length) return null;
+  return row[f] !== undefined && row[f] !== null && row[f] !== '' ? Number(row[f]) : 0;
+};
 
 /** Rolling inbox rate: inbox / (inbox + spam) over the 7 days ending at i (null when nothing observed). */
 function rolling(inbox, spam, i) {

@@ -224,9 +224,11 @@ Redis reads) — never on the 60-second auto-refresh.
   "email":  { "sent": [n|null…], "sentD0": […], "replies": […], "positive": […], "booked": […], "held": […], "qualified": […], "bounces": […] },
   "warmup": { "sent": […], "inbox": […], "spam": […], "rate": [0.93|null…] },   // rate = 7-day rolling inbox/(inbox+spam)
   "inboxes": [ { "email": "…", "dailyCap": 12|null, "warmupStartedAt": "ISO|null", "sent": […], "rate": […] } ],
-  "placement": [ { "day": "…", "at": "ISO", "tool": "seed|mail-tester", "inboxRate": 0.9|null, "score": 9.1|null, "min": 0.8|null, "perProvider": {…}|null } ] }
+  "placement": [ { "day": "…", "at": "ISO", "tool": "seed|mail-tester|dkimvalidator", "inboxRate": 0.9|null, "score": 9.1|null, "spamAssassin": 1.2|null, "min": 0.8|null, "perProvider": {…}|null, "perInbox": {…}|null } ] }
 ```
-`null` in a series = nothing recorded that day (draw a gap, never a 0).
+`null` in a series = nothing recorded that day (draw a gap). On a recorded day a
+counter that did not move is `0`. `score` is mail-tester's /10; dkimvalidator
+gives a SpamAssassin score (`spamAssassin`, lower is better, ≥ 5 = spam).
 
 ## Applicant research — `application.research` (in `GET /api/mc/hub/{id}`)
 
