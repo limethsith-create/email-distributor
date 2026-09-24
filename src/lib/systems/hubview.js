@@ -27,6 +27,7 @@ import { getRunState } from '@/lib/systems/stagec-common';
 import { listQueue } from '@/lib/systems/gatekeeper';
 import { overduePromises } from '@/lib/systems/health';
 import { jobRecords } from '@/lib/scheduler';
+import { loadAccounts } from '@/lib/smtp-accounts';
 import { JOBS } from '@/lib/jobs';
 
 export const STATE_LABELS = {
@@ -395,7 +396,7 @@ export async function hubBoard({ now = new Date() } = {}) {
         cronSecret: Boolean(process.env.CRON_SECRET),
         telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
         healthchecks: Boolean(process.env.HC_PING_URL),
-        ownerInbox: Boolean(process.env.OWNER_INBOX),
+        ownerInbox: Boolean(process.env.OWNER_INBOX) || (await loadAccounts().catch(() => [])).length > 0,
       },
       queue: (queue.rows || []).map((q, i) => ({ id: q.id, name: q.name, position: i + 1, expectedDate: q.expectedDate || null })),
       others,
@@ -412,7 +413,8 @@ async function machineTodos(board, queue) {
   const missing = [];
   if (!process.env.ENC_KEY) missing.push('ENC_KEY');
   if (!process.env.CRON_SECRET) missing.push('CRON_SECRET');
-  if (!process.env.OWNER_INBOX) missing.push('OWNER_INBOX');
+  // Owner alerts fall back to the first aviance inbox, so OWNER_INBOX is only missing when that is empty too.
+  if (!process.env.OWNER_INBOX && !(await loadAccounts().catch(() => [])).length) missing.push('OWNER_INBOX');
   if (!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID)) missing.push('Telegram');
   if (!process.env.HC_PING_URL) missing.push('Healthchecks');
   if (missing.length) t.push({ id: 'machine-setup', clientId: null, clientName: 'Machine', text: `Finish the machine setup: ${missing.join(', ')}`, detail: 'Settings in Vercel — see docs/PROGRESS.md', urgent: false, since: null, action: { type: 'none' } });
