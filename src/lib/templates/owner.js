@@ -66,6 +66,12 @@ export const ALERTS = {
   // ── Stage B additions ──
   // ── end Stage B ──
   // ── Stage C additions ──
+  hot_lead_failed: { urgent: true, title: 'Hot lead NOT delivered to {clientId}' },
+  prospect_send_failed: { urgent: false, title: 'Reply to a prospect failed: {clientId} ({template})' },
+  competitor_booked: { urgent: false, title: 'A competitor booked a call: {clientId}' },
+  emergency_resolved: { urgent: false, title: 'Deliverability back to normal: {clientId}' },
+  booking_unmatched: { urgent: false, title: 'Booking could not be matched to a prospect: {clientId}' },
+  trial_ended_quiet: { urgent: true, title: 'Trial ended — client quiet 14 business days: {clientId}' },
   // ── end Stage C ──
   // ── Stage D additions ──
   // ── end Stage D ──
