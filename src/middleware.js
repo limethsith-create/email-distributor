@@ -18,7 +18,7 @@ import { SESSION_COOKIE, verifySession, secretMatches } from '@/lib/auth/session
 const PUBLIC = [
   /^\/mc\/login$/, /^\/api\/mc\/login$/, /^\/api\/mc\/logout$/,
   /^\/api\/unsubscribe(\/|$)/, /^\/api\/track\//, /^\/api\/webhooks\//, /^\/api\/apply$/,
-  /^\/api\/c\//, /^\/c\//, /^\/api\/logo$/,
+  /^\/api\/c\//, /^\/c\//, /^\/api\/logo$/, /^\/apply$/,
 ];
 const MACHINE = [/^\/api\/cron\//, /^\/api\/admin\/(export|import)$/];
 

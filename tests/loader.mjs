@@ -14,6 +14,10 @@ export async function resolve(specifier, context, next) {
     if (!path.extname(p)) p += '.js';
     return { url: pathToFileURL(p).href, shortCircuit: true };
   }
+  if ((specifier.startsWith('./') || specifier.startsWith('../')) && !path.extname(specifier) && context.parentURL?.startsWith(pathToFileURL(src).href)) {
+    const p = path.join(path.dirname(fileURLToPath(context.parentURL)), specifier) + '.js';
+    return { url: pathToFileURL(p).href, shortCircuit: true };
+  }
   return next(specifier, context);
 }
 
