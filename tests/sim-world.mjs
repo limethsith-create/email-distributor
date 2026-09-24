@@ -28,7 +28,22 @@ function addressOf(v) {
   return String(v.address || '').toLowerCase();
 }
 
-export function installWorld() {
+/** Deterministic Math.random for the simulation (mulberry32), so a run is repeatable. */
+function seededRandom(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function installWorld({ seed = 20261005 } = {}) {
+  // Pacing jitter, inbox tie-breaks and warm-up pairing all use Math.random;
+  // the milestone fixture compares an exact event order, so the run must be too.
+  Math.random = seededRandom(seed);
   sim.sent = []; sim.inbound = {}; sim.warmBoxes = {}; sim.fetches = [];
   process.env.ENC_KEY = process.env.ENC_KEY || crypto.randomBytes(32).toString('base64');
   process.env.CRON_SECRET = 'sim-secret';
