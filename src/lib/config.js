@@ -89,6 +89,42 @@ export const DEFAULTS = {
   // ── Stage A additions ── (new defaults only inside this block)
   // ── end Stage A ──
   // ── Stage B additions ──
+  BUILD: {
+    // Warm-up Engine
+    warmupHours: ['07:00', '22:00'],   // in the sending inbox's tz
+    warmupPairsPerTick: 3,
+    warmupEveryMin: 10,
+    warmupFlagRate: 0.30,
+    warmupReadEveryMin: 30,            // each pool mailbox is read at most this often
+    warmupReadPerRun: 2,               // IMAP mailboxes per run (IMAP is slow)
+    warmupLookbackHours: 48,
+    warmupReadyMinDays: 14,
+    warmupHelperQuota: 8,              // helpers send like a 15+ day inbox
+    warmupReceiveCap: 30,              // max warm-up mails one member receives per day
+    warmupErrorAlert: 3,               // SMTP errors for one inbox in a day → alert
+    // Canary
+    canaryAt: '07:30',
+    canaryHelpers: 10,
+    canaryCheckAfterMin: 15,
+    canarySendsPerRun: 4,
+    canaryChecksPerRun: 2,
+    canaryGiveUpMin: 180,
+    canaryGateDay: -3,
+    // Ramp Planner
+    rampAt: '00:05',
+    // Lead Finder
+    refillAt: '02:00',
+    refillMinHoursBetween: 20,
+    refillNeed: 100,                   // contacts asked for by one refill run
+    placesStopRatio: 0.80,             // Lead Finder stops at 80 % of the monthly Places budget
+    repo: 'limethsith-create/email-distributor',
+    // Approval page
+    approvalLinkDay: -7,
+    approvalMaxRounds: 2,
+    // Readiness (warming → ready)
+    readinessAt: '10:00',
+    day1SendHour: '09:00',
+  },
   // ── end Stage B ──
   // ── Stage C additions ──
   // ── end Stage C ──

@@ -1,0 +1,76 @@
+# Copy Checker spam words (SPEC §7.5). One word or phrase per line,
+# matched case-insensitively on whole words in the subject and body.
+# Lines starting with # are comments. Edit freely; no deploy logic depends
+# on the order.
+guarantee
+guaranteed
+100% free
+free money
+free gift
+free trial offer
+act now
+act fast
+limited time
+limited time offer
+urgent
+urgent response
+don't delete
+don't miss out
+once in a lifetime
+risk free
+risk-free
+no risk
+no obligation
+no strings attached
+no catch
+no cost
+cash bonus
+earn money
+earn extra cash
+make money
+extra income
+double your
+triple your
+100% satisfied
+winner
+you have been selected
+congratulations
+click here
+click below
+buy now
+order now
+apply now
+sign up free
+call now
+special promotion
+exclusive deal
+best price
+lowest price
+cheap
+discount
+save big
+incredible deal
+amazing offer
+miracle
+unbelievable
+instant access
+increase sales
+increase traffic
+boost your
+rock-bottom
+bargain
+this isn't spam
+not spam
+unsubscribe here
+dear friend
+cancel at any time
+as seen on
+billion
+million dollars
+viagra
+casino
+crypto
+bitcoin
+lottery
+prize
+weight loss

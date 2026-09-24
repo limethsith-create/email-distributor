@@ -87,6 +87,22 @@ export const K = {
   // ── end Stage A ──
 
   // ── Stage B additions (build) ──
+  /** Warm-up landings/sends per inbox (sender) per day: {sent, inbox, spam, rescued, replied, errors}. */
+  warmupStats: (email, day) => `warmup:stats:${e(email)}:${day}`,
+  /** Message-ids of warm-up / canary mails already handled on a day (set). */
+  warmupDone: (day) => `warmup:done:${day}`,
+  /** Last warm-up IMAP read per pool member (hash member → ISO). */
+  warmupReadAt: () => 'warmup:readat',
+  /** Canary run for one client on one ET day (hash). */
+  canary: (id, day) => `${c(id)}:canary:${day}`,
+  /** Lead Finder state for one client (hash). */
+  leadfinder: (id) => `${c(id)}:leadfinder`,
+  /** The 20 sanity rows shown on the approval page (string, JSON). */
+  sanityRows: (id) => `${c(id)}:sanity`,
+  /** Approval page state (hash). */
+  approval: (id) => `${c(id)}:approval`,
+  /** Cross-client fairness: host → clientId for one niche + month (hash). */
+  leadHosts: (niche, month) => `leadhosts:${String(niche || 'general').toLowerCase().replace(/[^a-z0-9-]+/g, '-')}:${month}`,
   // ── end Stage B ──
 
   // ── Stage C additions (run) ──
