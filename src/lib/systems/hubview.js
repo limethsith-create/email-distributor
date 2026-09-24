@@ -20,6 +20,7 @@ import { boardData, clientRow } from '@/lib/systems/boarddata';
 import { clientExtras } from '@/lib/systems/clientview';
 import { readChecks } from '@/lib/systems/setupcheck';
 import { getShopping } from '@/lib/systems/pricescout';
+import { researchView } from '@/lib/systems/research';
 import { getState as leadfinderState } from '@/lib/systems/leadfinder';
 import { getApproval } from '@/lib/systems/approval';
 import { getPaceLog } from '@/lib/systems/pace';
@@ -493,7 +494,8 @@ export async function hubClient(id, { now = new Date() } = {}) {
     events,
     jobs,
     holds: { legalHoldAt: client.legalHoldAt || null, sendHold: client.sendHold || null, emergencyActive: truthy(client.emergencyActive), emergencyHalved: truthy(client.emergencyHalved), pausedReason: client.pausedReason || null },
-    application: ctx.application,
+    // Research is read only here (one Redis read per detail view), never on board rows.
+    application: ctx.application ? { ...ctx.application, research: await researchView(id).catch(() => null) } : null,
     links: {},
     virtualNow: id === '_test' ? clientNow(client, now).toISOString() : null,
   };

@@ -231,7 +231,8 @@ Redis reads) — never on the 60-second auto-refresh.
 ## Applicant research — `application.research` (in `GET /api/mc/hub/{id}`)
 
 Built automatically when an application arrives (website crawl + Google
-Places + a quick market count). No AI: extracted facts only.
+Places + a quick market count). No AI: extracted facts only. Re-run:
+`POST /api/mc/clients/{id}/intake {action:'rerunResearch'}`.
 ```jsonc
 "research": {
   "status": "pending|done|failed", "at": "ISO", "error": "text|null",
@@ -250,7 +251,7 @@ Places + a quick market count). No AI: extracted facts only.
   …existing fields…,
   "offers": [ { "domain": "getacme.com", "tld": "com", "available": true, "score": 92, "why": "short, brand + 'get', .com",
                 "prices": [ { "registrar": "Cloudflare", "firstYear": 10.44, "renewal": 10.44, "promo": null, "url": "https://…", "confirmedAt": "ISO|null", "source": "live|table" } ],
-                "best": { "registrar": "Porkbun", "firstYear": 9.73, "renewal": 11.08 } } ],      // best 5–8 names, best first
+                "best": { "registrar": "Porkbun", "firstYear": 9.73, "renewal": 11.08, "url": "registrar search link with the name filled in", "promo": "code|null" } } ],      // best 5–8 names, best first
   "registrars": [ { "name": "Porkbun", "why": "…", "url": "…" } ],                                   // the 5 compared, cheapest .com first
   "inboxes": { "provider": "CheapInboxes", "url": "https://cheapinboxes.com", "perInbox": 3.50, "count": 2, "monthly": 7.00, "notes": "…", "steps": ["…"] },
   "totals": { "domainFirstYear": 9.73, "inboxesMonthly": 7.00, "firstMonth": 16.73 }

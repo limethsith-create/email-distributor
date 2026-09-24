@@ -110,6 +110,7 @@ test('a website application is saved, held for the owner, and nobody is emailed'
   assert.equal(detail.application.source, 'website');
   assert.equal(detail.application.fit.verdict, 'fit');
   assert.ok(detail.application.answers.length >= 10);
+  assert.ok('research' in detail.application, 'the detail view carries the applicant research (or null)');
 });
 
 test('Approve sends the onboarding link; Decline sends the owner\'s reason', async () => {

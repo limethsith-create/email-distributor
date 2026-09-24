@@ -8,6 +8,7 @@
  *   rerunSetup              start a full Setup Checker round now
  *   rerunBookingTest        test the calendar link now
  *   resendWelcome           retry welcome_two_dates
+ *   rerunResearch           research the applicant again (website + Google listing)
  *   approveApplication      owner approves a website application (→ onboarding or queue)
  *   declineApplication {reason}  owner declines it; the reason is emailed to the applicant
  */
@@ -22,6 +23,7 @@ import { startSetupCheck, runSetupCheck, readChecks, sendWelcome } from '@/lib/s
 import { runBookingTest } from '@/lib/systems/bookingtest';
 import { asArray } from '@/lib/systems/intake-io';
 import { approveApplication, declineApplication } from '@/lib/systems/gatekeeper';
+import { rerunResearch } from '@/lib/systems/research';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -56,6 +58,8 @@ export async function POST(request, { params }) {
   const deadline = Date.now() + 20000;
   try {
     switch (body.action) {
+      case 'rerunResearch':
+        return Response.json({ ok: true, result: await rerunResearch(id, { deadline }) });
       case 'approveApplication':
         return Response.json({ ok: true, ...(await approveApplication(id)) });
       case 'declineApplication':
