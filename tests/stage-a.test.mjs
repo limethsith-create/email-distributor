@@ -251,7 +251,7 @@ async function fullProfile(id) {
   const r = await saveOnboarding(id, {
     companyName: 'Acme Plumbing', senderName: 'John Smith', senderTitle: 'Owner', senderPrefix: 'john',
     calendarUrl: 'https://calendly.com/acme/30min', postalAddress: '12 Main St, Dallas, TX 75201', hotLeadEmail: 'john@acme.com',
-    suppressCustomers: 'bigcustomer.com', sellsTo: 'We fix pipes for restaurants.', industry: 'restaurant, cafe',
+    suppressCustomers: 'bigcustomer.com\nJoe\'s Diner', sellsTo: 'We fix pipes for restaurants.', defaultNiche: 'commercial plumbing', defaultIcp: 'restaurants', industry: 'restaurant, cafe',
     cities: 'Dallas, TX\nHouston, TX', sizeMin: '5', sizeMax: '50', titles: 'Owner\nGeneral Manager',
     dreamCustomers: [{ name: 'A', website: 'a.com' }, { name: 'B', website: 'b.com' }, { name: 'C', website: 'c.com' }],
     capacityPerWeek: '5', winCondition: 'Two good calls.',
@@ -289,6 +289,8 @@ test('onboarding: signer missing blocks the agreement; accept → market passes 
   assert.equal((await getClient('acme')).state, 'awaiting_purchase');
   assert.equal((await getClient('acme')).intakeStep, 'pricescout');
   assert.ok(emails.some((e) => e.key === 'agreement_copy'));
+  // Blocklist Keeper ran on submit: the bare company name is in the client blocklist.
+  assert.equal(await kv.sismember('client:acme:blocklist', 'name:joe s diner'), 1);
   // 5 queries × 3 pages of 20 = 300 unique ids × 3 = 900 < 1000 → widened once and passed.
   assert.equal(Number((await getProfile('acme')).marketEstimate) >= 1000, true);
   assert.ok(fetchLog.every((u) => u.includes('places.googleapis.com')));

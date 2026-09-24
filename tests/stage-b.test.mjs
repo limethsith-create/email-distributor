@@ -651,6 +651,11 @@ test('warming → ready: Day 1 slides one sending day while the gate is red, the
   await insertLeads('beta', Array.from({ length: 200 }, (_, i) => ({ email: `p${i}@co${i}.com`, company: `Co ${i}` })));
   await patchInbox('beta', 'a@beta-trial.com', { warmupReady: '1', inboxRate7d: '0.950', readyStreak: '2' });
   await kv.hset(K.canary('beta', '2026-10-05'), { phase: 'done', result: JSON.stringify({ overall: 0.9, min: 0.9, perInbox: { 'a@beta-trial.com': { sent: 10, inbox: 9, placement: 0.9 } } }) });
+  // Still red until the client has done the Booking Link Tester (SPEC §6.7).
+  const red = await runReadiness({ client: await getClient('beta'), now: new Date(NOW.getTime() + 2 * 3600e3), deps });
+  assert.equal(red.ready, false);
+  assert.equal(red.checks.booking, false);
+  await kv.hset(K.profile('beta'), { bookingTested: '1' });
   const r2 = await runReadiness({ client: await getClient('beta'), now: new Date(NOW.getTime() + 2 * 3600e3), deps });
   assert.equal(r2.ready, true);
   assert.equal((await getClient('beta')).state, 'ready');
@@ -665,6 +670,7 @@ test('warming → ready: canary below the gate keeps it red; 7 slides → held +
   await kv.hset(K.sequence('gamma'), { approvedAt: NOW.toISOString() });
   await insertLeads('gamma', Array.from({ length: 200 }, (_, i) => ({ email: `p${i}@co${i}.com`, company: `Co ${i}` })));
   await patchInbox('gamma', 'a@g.com', { warmupReady: '1' });
+  await kv.hset(K.profile('gamma'), { bookingTested: '1' });
   await kv.hset(K.canary('gamma', '2026-10-05'), { phase: 'done', result: JSON.stringify({ overall: 0.8, min: 0.8, perInbox: { 'a@g.com': { sent: 10, inbox: 8, placement: 0.8 } } }) });
   const r = await runReadiness({ client: await getClient('gamma'), now: NOW, deps: { notify: async () => ({ sent: true }) } });
   assert.equal(r.held, true);

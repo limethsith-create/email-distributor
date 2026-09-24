@@ -25,6 +25,7 @@ import { addToBlocklist } from '@/lib/db/leads';
 import { dayKeyIn, ET } from '@/lib/time';
 import { renderAgreement, agreementHash, AGREEMENT_VERSION } from '@/lib/templates/agreement';
 import { runMarketCount } from '@/lib/systems/market';
+import { addBlocklistInput } from '@/lib/systems/blocklist';
 import { io, asArray, firstNameOf, ownerName, sendClient, formatDay, isPublicUrl } from '@/lib/systems/intake-io';
 import { stateCode, isUsPostalAddress } from '@/lib/systems/usgeo';
 
@@ -46,7 +47,9 @@ export const FIELDS = [
   { key: 'hotLeadEmail', label: 'Where hot-lead alerts go (email)', type: 'email', required: true },
   { key: 'suppressCustomers', label: 'Existing customers to suppress (names, websites or emails — one per line, or paste a CSV)', type: 'list', required: false },
   { key: 'competitors', label: 'Competitors to exclude (names or websites)', type: 'list', required: false },
-  { key: 'sellsTo', label: 'One sentence: what you sell and to whom, in your words', type: 'long', required: true },
+  { key: 'sellsTo', label: 'One sentence: what you sell and to whom, in your words (it goes into your emails as written)', type: 'long', required: true },
+  { key: 'defaultNiche', label: 'What you offer, in 2–4 words (used in the emails, e.g. "managed IT")', type: 'text', required: true },
+  { key: 'defaultIcp', label: 'Your ideal customers in a few words, plural (used in the emails, e.g. "dental practices")', type: 'text', required: true },
   { key: 'industry', label: 'Industry keywords of your customers (comma-separated, e.g. managed IT services, IT support)', type: 'text', required: true },
   { key: 'cities', label: 'Cities to target (one per line, "Dallas, TX")', type: 'list', required: false },
   { key: 'states', label: 'States to target (e.g. TX, OK)', type: 'list', required: false },
@@ -280,6 +283,16 @@ export async function acceptAgreement(clientId, { name, title, agree, ip, now = 
   }
   const own = await io.sendOwnerEmail(`[Aviance] Agreement signed: ${vars.companyName}`, `${vars.companyName} accepted the trial agreement.\n\nAccepted by: ${vars.agreementName}, ${signerTitle}\nAt: ${record.agreementAcceptedAt} from IP ${record.agreementIp}\nText fingerprint: ${record.agreementHash}\n\n${ag.text}`).catch((e) => ({ ok: false, error: e.message }));
   if (!own?.ok) await logEvent(clientId, SYSTEM, 'owner_copy_failed', { error: own?.error || 'unknown' });
+
+  // Blocklist Keeper (SPEC §7.3) on onboarding submit: every pasted customer /
+  // competitor, including bare company names (resolved with a Places IDs-only lookup).
+  try {
+    const pasted = [...splitList(asArray(profile.suppressCustomers)), ...splitList(asArray(profile.competitors)), ...asArray(profile.suppressNames)];
+    if (pasted.length) await addBlocklistInput(clientId, [...new Set(pasted)].join('\n'), { source: 'onboarding' });
+  } catch (err) {
+    await logEvent(clientId, SYSTEM, 'blocklist_failed', { error: String(err.message).slice(0, 200) });
+    await io.alertOwner('config_missing', { clientId, scope: `${clientId}:blocklist`, vars: { key: 'client blocklist' }, body: `The pasted customer / competitor list for ${clientId} could not be added to the blocklist: ${String(err.message).slice(0, 200)}`, did: 'Domains and emails were added when the form was saved; bare company names were not. Paste them again in Mission Control.' });
+  }
 
   const market = await runMarketCount(clientId, { deadline, now }).catch(async (err) => {
     await logEvent(clientId, SYSTEM, 'market_start_failed', { error: String(err.message).slice(0, 200) });

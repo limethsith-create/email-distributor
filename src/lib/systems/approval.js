@@ -141,7 +141,7 @@ export async function loadApprovalPage(rawToken) {
       sizeMin: profile.sizeMin || '', sizeMax: profile.sizeMax || '', titles: profile.titles || '', excludedTitles: profile.excludedTitles || '',
       senderName: profile.senderName || '', senderTitle: profile.senderTitle || '', postalAddress: profile.postalAddress || '', calendarUrl: profile.calendarUrl || '',
     },
-    marketEstimate: client?.marketEstimate ?? profile.marketEstimate ?? null,
+    marketEstimate: [client?.marketEstimate, profile.marketEstimate].map((v) => (v === undefined || v === null || v === '' ? NaN : Number(v))).find((v) => Number.isFinite(v)) ?? null,
     rows,
     sampleLead: lead ? { first_name: lead.first_name, company: lead.company, city: lead.city } : null,
     variants,

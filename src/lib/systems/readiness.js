@@ -6,6 +6,8 @@
  *             consecutive daily checks and ≥ 14 days)
  *   canary    the latest canary (today/yesterday, from Day −3) has every
  *             inbox at ≥ CANARY.gate
+ *   booking   the client tapped "It worked" on the Booking Link Tester
+ *             (profile.bookingTested, SPEC §6.7 step 4: Day 1 waits for it)
  * Green → state `ready` (Stage C's Sender starts on day1Date).
  * Not green from Day −1 on → Day 1 slides one US sending day at a time (and
  * Day 30 with it), client email day1_moved, owner day1_slid; after
@@ -16,7 +18,7 @@
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { cfg } from '@/lib/config';
-import { getTrial, setState } from '@/lib/db/client';
+import { getTrial, getProfile, setState } from '@/lib/db/client';
 import { logEvent } from '@/lib/db/events';
 import { alertOwner, notifyClient } from '@/lib/notify';
 import { ET, dayKeyIn, trialDay, addDays } from '@/lib/time';
@@ -34,7 +36,7 @@ export function nextSendingDay(dayKey) {
 }
 
 export async function readinessGate(clientId, now = new Date()) {
-  const [seq, list, inboxes, canary] = await Promise.all([getStoredSequence(clientId), listReady(clientId), inboxesReady(clientId), latestCanary(clientId, now)]);
+  const [seq, list, inboxes, canary, profile] = await Promise.all([getStoredSequence(clientId), listReady(clientId), inboxesReady(clientId), latestCanary(clientId, now), getProfile(clientId)]);
   const gate = await cfg(clientId, 'CANARY.gate');
   const per = canary?.perInbox ? Object.values(canary.perInbox) : [];
   const canaryOk = Boolean(canary && per.length && per.every((r) => r.placement != null && r.placement >= gate) && inboxes.inboxes.every((i) => canary.perInbox[i.email]));
@@ -43,6 +45,7 @@ export async function readinessGate(clientId, now = new Date()) {
     list: list,
     inboxes,
     canary: { ok: canaryOk, day: canary?.day || null, min: canary?.min ?? null, gate },
+    booking: { ok: ['1', 'true', 1, true].includes(profile.bookingTested), testedAt: profile.bookingTestedAt || null },
   };
   return { ok: Object.values(checks).every((c) => c.ok), checks };
 }
@@ -53,6 +56,7 @@ function reasonsText(checks) {
   if (!checks.list.ok) r.push(`the list is still being built (${checks.list.unsent} of the ${checks.list.startMin} contacts we need to start)`);
   if (!checks.inboxes.ok) r.push('the new inboxes need a few more days of warm-up');
   if (!checks.canary.ok) r.push('the inbox placement test is not yet at our 85% line');
+  if (checks.booking && !checks.booking.ok) r.push('your booking link test is not done yet (tap "It worked" in the test email)');
   return r.join('; ') || 'a final check did not pass';
 }
 
@@ -64,7 +68,10 @@ async function announceMove(clientId, trial, newDay1, gate, { held = false, deps
   const newDay30 = addDays(newDay1, 29);
   await setTrial(clientId, { day1Date: newDay1, day30Date: newDay30, day1Original: trial.day1Original || trial.day1Date || '', day1MovedAt: new Date().toISOString() });
   const reason = reasonsText(gate.checks);
-  const waitingLine = gate.checks.approval.ok ? 'Nothing is needed from you.' : `One thing from you: approve the emails here: ${await approvalUrl(clientId)}`;
+  const asks = [];
+  if (!gate.checks.approval.ok) asks.push(`approve the emails here: ${await approvalUrl(clientId)}`);
+  if (gate.checks.booking && !gate.checks.booking.ok) asks.push('do the 60-second booking link test from our earlier email and tap "It worked"');
+  const waitingLine = !asks.length ? 'Nothing is needed from you.' : asks.length === 1 ? `One thing from you: ${asks[0]}` : `Two things from you: ${asks.join('; and ')}`;
   const ownerName = (await cfg(clientId, 'OWNER.signerName')) || 'The Aviance team';
   try {
     await (deps.notify || notifyClient)(clientId, 'day1_moved', { day1Date: fmtDay(newDay1), day30Date: fmtDay(newDay30), reason: held ? 'everything is now ready' : reason, waitingLine, ownerName }, { dedupe: `day1_moved:${newDay1}` });
@@ -89,7 +96,7 @@ export async function runReadiness({ client, now = new Date(), deps = {} }) {
   if (gate.ok) {
     // A held / passed Day 1 is reset to the next sending day.
     if (!trial.day1Date || trial.day1Date <= today) await announceMove(id, trial, nextSendingDay(today), gate, { held: true, deps });
-    const moved = await setState(id, 'ready', 'readiness gate green (approval, list, warm-up, canary)');
+    const moved = await setState(id, 'ready', 'readiness gate green (approval, list, warm-up, canary, booking link)');
     await setTrial(id, { day1Held: '', readyAt: now.toISOString() });
     return { ready: moved, checks: gate.checks };
   }
