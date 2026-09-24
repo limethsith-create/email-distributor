@@ -21,8 +21,15 @@ import { onClientClock } from '@/lib/joblist/helpers';
 
 const SKIP = new Set(['aviance', '_helper']);
 const trialClient = (c) => c && !SKIP.has(c.id);
-/** Any trial client whose inboxes are in the warm-up circle (from the clients the tick loaded). */
-const anyWarming = (clients) => (clients || []).some((c) => trialClient(c) && WARMUP_STATES.has(c.state));
+/**
+ * Any trial client whose inboxes are in the warm-up circle (from the clients
+ * the tick loaded) — or, with WARMUP_V2.avianceAlone, the aviance client.
+ */
+async function anyWarmingOrAviance(clients) {
+  if ((clients || []).some((c) => trialClient(c) && WARMUP_STATES.has(c.state))) return true;
+  if (!(clients || []).some((c) => c && c.id === 'aviance' && c.state !== 'deleted')) return false;
+  return Boolean(await cfg(null, 'WARMUP_V2.avianceAlone')) && Boolean(await cfg(null, 'WARMUP.includeAviance'));
+}
 const hourKey = (p) => `${p.dayKey}T${String(p.hour).padStart(2, '0')}`;
 
 const warmup = {
@@ -32,7 +39,7 @@ const warmup = {
   minBudgetMs: 12_000,
   claimTtl: 1200,
   async due({ now, clients }) {
-    if (!anyWarming(clients)) return null; // helpers only warm client inboxes
+    if (!(await anyWarmingOrAviance(clients))) return null; // helpers only warm client inboxes
     const every = await cfg(null, 'BUILD.warmupEveryMin');
     return bucketKey(partsIn(ET, now), every);
   },
@@ -49,7 +56,7 @@ const warmupRead = {
   minBudgetMs: 14_000,
   claimTtl: 600,
   async due({ now, clients, heartbeat }) {
-    if (!anyWarming(clients)) return null;
+    if (!(await anyWarmingOrAviance(clients))) return null;
     const p = partsIn(ET, now);
     const [from, to] = await cfg(null, 'BUILD.warmupReadHours');
     if (p.hhmm < from || p.hhmm >= to) return null;
@@ -112,6 +119,28 @@ const canary = {
   async run(ctx) {
     const { runCanary } = await import('@/lib/systems/canary');
     return runCanary({ client: ctx.client, now: ctx.now, deadline: ctx.deadline });
+  },
+};
+
+/**
+ * Spam test (Deliverability v2, systems/placement.js): from PLACEMENT.at ET,
+ * every 5 min until today's run is settled — Day −3 onwards while warming,
+ * Day 1, then weekly while sending. Small state machine, bounded per run.
+ */
+const placement = {
+  name: 'placement',
+  scope: 'client',
+  cost: 5,
+  minBudgetMs: 12_000,
+  claimTtl: 900,
+  async due({ client, now }) {
+    if (!trialClient(client) || !WARMUP_STATES.has(client.state)) return null;
+    const { placementDue } = await import('@/lib/systems/placement');
+    return placementDue(client, now);
+  },
+  async run(ctx) {
+    const { runPlacement } = await import('@/lib/systems/placement');
+    return runPlacement({ client: ctx.client, now: ctx.now, deadline: ctx.deadline });
   },
 };
 
@@ -199,4 +228,4 @@ const readiness = {
   },
 };
 
-export const JOBS = [warmup, warmupRead, warmupDaily, warmupDailyScaled, canary, ramp, leadfinderStart, leadfinderRefill, approval, readiness].map(onClientClock);
+export const JOBS = [warmup, warmupRead, warmupDaily, warmupDailyScaled, canary, placement, ramp, leadfinderStart, leadfinderRefill, approval, readiness].map(onClientClock);

@@ -125,7 +125,9 @@ async function warmPool() {
   await patchInbox('acme', 'ann@acme-trial.com', { warmupStartedAt: new Date(NOW.getTime() - 9 * 864e5).toISOString() });
   await saveHelper({ email: 'h1@gmail.com', password: 'pw2', provider: 'google', displayName: 'Hal One' });
   await saveHelper({ email: 'h2@outlook.com', password: 'pw3', provider: 'outlook', displayName: 'Hana Two' });
-  // aviance inboxes never join the circle
+  // aviance inboxes stay out of the circle with WARMUP.includeAviance off
+  // (Deliverability v2 turns it on by default: tests/deliverability-v2.test.mjs)
+  await setOverride(null, 'WARMUP.includeAviance', false);
   await createClient('aviance', { state: 'sending' });
   await saveInbox('aviance', { email: 'me@aviance.online', password: 'x' });
   await patchInbox('aviance', 'me@aviance.online', { warmupStartedAt: NOW.toISOString() });
@@ -657,9 +659,14 @@ test('warming → ready: Day 1 slides one sending day while the gate is red, the
   await insertLeads('beta', Array.from({ length: 200 }, (_, i) => ({ email: `p${i}@co${i}.com`, company: `Co ${i}` })));
   await patchInbox('beta', 'a@beta-trial.com', { warmupReady: '1', inboxRate7d: '0.950', readyStreak: '2' });
   await kv.hset(K.canary('beta', '2026-10-05'), { phase: 'done', result: JSON.stringify({ overall: 0.9, min: 0.9, perInbox: { 'a@beta-trial.com': { sent: 10, inbox: 9, placement: 0.9 } } }) });
-  // Still red until the client has done the Booking Link Tester (SPEC §6.7).
+  // Still red until the spam test passed (Deliverability v2) …
+  const noSpamTest = await runReadiness({ client: await getClient('beta'), now: new Date(DAY1.getTime() + 2 * 3600e3), deps });
+  assert.equal(noSpamTest.checks.spamTest, false);
+  await kv.lpush(K.placement('beta'), JSON.stringify({ at: NOW.toISOString(), day: '2026-10-05', tool: 'mail-tester', inbox: 'a@beta-trial.com', score: 9.5, pass: true, detail: [] }));
+  // … and until the client has done the Booking Link Tester (SPEC §6.7).
   const red = await runReadiness({ client: await getClient('beta'), now: new Date(DAY1.getTime() + 2 * 3600e3), deps });
   assert.equal(red.ready, false);
+  assert.equal(red.checks.spamTest, true);
   assert.equal(red.checks.booking, false);
   await kv.hset(K.profile('beta'), { bookingTested: '1' });
   const r2 = await runReadiness({ client: await getClient('beta'), now: new Date(DAY1.getTime() + 2 * 3600e3), deps });

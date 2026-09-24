@@ -44,7 +44,9 @@ export async function growthFor(clientId, { days = 45, now = new Date() } = {}) 
   for (const d of dayKeys) p.hgetall(K.countersDay(clientId, d));
   for (const d of dayKeys) p.hgetall(K.canary(clientId, d));
   for (const ib of inboxes) for (const d of dayKeys) p.hgetall(K.warmupStats(ib.email, d));
+  p.lrange(K.placement(clientId), 0, -1); // spam-test scores (Deliverability v2), last item
   const rows = await p.exec();
+  const placementRows = rows.pop() || [];
 
   const counters = rows.slice(0, n);
   const canary = rows.slice(n, 2 * n);
@@ -82,8 +84,26 @@ export async function growthFor(clientId, { days = 45, now = new Date() } = {}) 
     if (!run || run.phase !== 'done') return;
     const res = parse(run.result, {});
     if (res.overall == null) return;
-    placement.push({ day: d, at: run.doneAt || null, tool: 'seed', inboxRate: Math.round(res.overall * 1000) / 1000, min: res.min ?? null, perProvider: res.perProvider || null });
+    placement.push({ day: d, at: run.doneAt || null, tool: 'seed', inboxRate: Math.round(res.overall * 1000) / 1000, score: null, min: res.min ?? null, perProvider: res.perProvider || null });
   });
+  // Spam tests (mail-tester / dkimvalidator): one entry per tool per day, the
+  // lowest inbox score that day (the one the Day 1 gate looks at); per inbox
+  // in `perInbox`. A test that could not finish has no score and is left out.
+  const inRange = new Set(dayKeys);
+  const byDayTool = new Map();
+  for (const raw of placementRows) {
+    const e = parse(raw, null);
+    if (!e || e.tool === 'seed' || !inRange.has(e.day) || (e.score == null && e.spamAssassin == null)) continue;
+    const k = `${e.day}|${e.tool}`;
+    const cur = byDayTool.get(k) || { day: e.day, at: e.at || null, tool: e.tool, inboxRate: null, score: null, spamAssassin: null, min: null, perProvider: null, perInbox: {} };
+    if (e.score != null) cur.score = cur.score == null ? e.score : Math.min(cur.score, e.score);
+    if (e.spamAssassin != null) cur.spamAssassin = cur.spamAssassin == null ? e.spamAssassin : Math.max(cur.spamAssassin, e.spamAssassin);
+    if (e.inbox) cur.perInbox[e.inbox] = e.score ?? e.spamAssassin;
+    if (e.at && (!cur.at || e.at > cur.at)) cur.at = e.at;
+    byDayTool.set(k, cur);
+  }
+  placement.push(...byDayTool.values());
+  placement.sort((a, b) => (a.day === b.day ? String(a.at || '').localeCompare(String(b.at || '')) : a.day.localeCompare(b.day)));
 
   return {
     days: dayKeys,

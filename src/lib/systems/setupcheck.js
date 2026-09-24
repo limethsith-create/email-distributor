@@ -154,31 +154,21 @@ export async function checkDns(domain, which = ['spf', 'dkim', 'dmarc', 'mx'], {
   return Object.fromEntries(entries);
 }
 
-/** DNSBL check on the domain's A record and its MX hosts' IPs. */
+/**
+ * DNSBL check (Deliverability v2, systems/blacklists.js): the domain on the
+ * free domain lists, its A/MX IPs on the free IP lists (BLACKLISTS config;
+ * SETUP.dnsbl is no longer read — SORBS closed in 2024, Barracuda needs a
+ * registered resolver). A timeout or refusal is "unknown", never "listed";
+ * only a domain-list hit (or an IP hit with BLACKLISTS.ipAction = 'block')
+ * fails the check. The full result rides along as `blacklists`.
+ */
 export async function checkBlacklist(domain) {
-  const setup = await cfg(null, 'SETUP');
-  const ms = setup.dnsTimeoutMs;
-  const ips = new Set();
-  const a = await dnsLookup(io.dns.resolve4, domain, ms);
-  if (a.ok) a.value.forEach((ip) => ips.add(ip));
-  const mx = await dnsLookup(io.dns.resolveMx, domain, ms);
-  if (mx.ok) {
-    const hosts = mx.value.map((m) => String(m.exchange || '').replace(/\.$/, '')).filter(Boolean).slice(0, 3);
-    const res = await Promise.all(hosts.map((h) => dnsLookup(io.dns.resolve4, h, ms)));
-    res.forEach((r) => r.ok && r.value.slice(0, 2).forEach((ip) => ips.add(ip)));
-  }
-  if (!ips.size) return { status: 'pass', detail: 'no A/MX addresses to check yet', listed: [], skipped: [] };
-  const queries = dnsblQueries([...ips], setup.dnsbl);
-  const listed = [];
-  const skipped = [];
-  await Promise.all(queries.map(async (q) => {
-    const r = await dnsLookup(io.dns.resolve4, q.name, ms);
-    if (!r.ok) { skipped.push(`${q.list} (${q.ip})`); return; }
-    if (isListedAnswer(r.value)) listed.push(`${q.ip} on ${q.list}`);
-  }));
-  return listed.length
-    ? { status: 'fail', detail: `listed: ${listed.join('; ')}`, listed, skipped }
-    : { status: 'pass', detail: `clean on ${setup.dnsbl.length} lists for ${ips.size} IPs${skipped.length ? ` (skipped on timeout: ${skipped.join(', ')})` : ''}`, listed, skipped };
+  const { checkDomainBlacklists } = await import('@/lib/systems/blacklists');
+  const r = await checkDomainBlacklists(domain, { now: io.now() });
+  const summary = { checkedAt: r.checkedAt, listed: r.listed, warnings: r.warnings, clean: r.clean, unknown: r.unknown, lists: r.lists };
+  return r.status === 'listed'
+    ? { status: 'fail', detail: r.detail, listed: r.listed, skipped: r.unknown, blacklists: summary }
+    : { status: 'pass', detail: r.detail, listed: [], skipped: r.unknown, blacklists: summary };
 }
 
 /** GET https://{domain} must land (2xx) on the main domain. Warn only. */
@@ -276,7 +266,11 @@ export async function runSetupCheck(clientId, { deadline = Date.now() + 15000, n
     const off = domain.autoRenew === false || String(domain.autoRenew).toLowerCase() === 'false';
     await put('autorenew', off ? { status: 'pass', detail: 'auto-renew off (confirmed by owner)' } : { status: 'fail', detail: `auto-renew is "${domain.autoRenew ?? 'not confirmed'}"` });
   }
-  if (pending('blacklist') && left() > 6000) await put('blacklist', await checkBlacklist(name));
+  if (pending('blacklist') && left() > 6000) {
+    const bl = await checkBlacklist(name);
+    await put('blacklist', bl);
+    if (bl.blacklists) await kv.hset(K.domain(clientId), { blacklists: JSON.stringify(bl.blacklists) });
+  }
   if (pending('redirect') && left() > 9000) await put('redirect', await checkRedirect(name, client.mainDomain));
 
   const inboxes = await accountsOf(clientId);

@@ -24,6 +24,7 @@ import { parseAccount } from '@/lib/smtp-accounts';
 import { dayKeyIn, addDays, ET } from '@/lib/time';
 import { io } from '@/lib/systems/intake-io';
 import { checkDns, checkBlacklist, fixFor } from '@/lib/systems/setupcheck';
+import { statusOf } from '@/lib/systems/blacklists';
 
 const SYSTEM = 'authguard';
 
@@ -63,19 +64,31 @@ export async function runAuthCheck({ clientId, now = io.now() }) {
   return { failed: failed.map(([c]) => c) };
 }
 
-/** Daily DNSBL check for one client. Listed → alert + pause if sending. */
+/**
+ * Daily DNSBL check for one client (Deliverability v2 lists, systems/blacklists.js).
+ * Listed (a domain list, or an IP list when BLACKLISTS.ipAction = 'block') →
+ * alert + pause if sending. Timeouts / refusals are "unknown" and change
+ * nothing; an IP-list hit on the A/MX addresses (not our sending IPs) is a
+ * non-blocking `blacklist_warning`. Stores `blacklist` (clean | listed |
+ * unknown) and `blacklists` = {checkedAt, listed[], warnings[], clean, unknown[], lists[]}.
+ */
 export async function runBlacklistCheck({ clientId, now = io.now() }) {
   const domain = await getDomain(clientId);
   if (!domain.name || domain.retiredAt) return { skipped: 'no domain' };
   const r = await checkBlacklist(domain.name);
-  await kv.hset(K.domain(clientId), { blacklist: r.status === 'pass' ? 'clean' : 'listed', blacklistCheckedAt: now.toISOString(), 'check:blacklist': JSON.stringify({ status: r.status, detail: r.detail, checkedAt: now.toISOString(), by: 'authguard' }) });
-  await logEvent(clientId, SYSTEM, 'blacklist_checked', { status: r.status, listed: r.listed });
+  const summary = r.blacklists || { checkedAt: now.toISOString(), listed: r.listed || [], warnings: [], clean: 0, unknown: r.skipped || [], lists: [] };
+  const status = r.status !== 'pass' ? 'listed' : statusOf(summary);
+  await kv.hset(K.domain(clientId), { blacklist: status, blacklistCheckedAt: now.toISOString(), blacklists: JSON.stringify(summary), 'check:blacklist': JSON.stringify({ status: r.status, detail: r.detail, checkedAt: now.toISOString(), by: 'authguard' }) });
+  await logEvent(clientId, SYSTEM, 'blacklist_checked', { status, listed: summary.listed, warnings: summary.warnings, unknown: summary.unknown });
   if (r.status !== 'pass') {
-    const paused = await pauseSending(clientId, `blacklisted: ${r.listed.join(', ')}`);
+    const paused = await pauseSending(clientId, `blacklisted: ${summary.listed.join(', ')}`);
     await io.alertOwner('blacklisted', { clientId, vars: { domain: domain.name }, body: `${domain.name} is ${r.detail}.\nFix: ${fixFor('blacklist', domain.name)}`, did: paused ? 'Sending paused on this client (warm-up continues).' : 'Not sending yet; logged.' });
-    return { listed: r.listed, paused };
+    return { listed: summary.listed, paused };
   }
-  return { listed: [] };
+  if (summary.warnings.length) {
+    await io.alertOwner('blacklist_warning', { clientId, scope: `${clientId}:bl-warn`, vars: { domain: domain.name }, body: `${summary.warnings.join('\n')}\n\nThese are the addresses ${domain.name}'s web forwarding (A record) or mail servers (MX) use — not the IPs your mail is sent from (Google Workspace), so nothing is paused. The spam test checks the real sending IP.`, did: 'Logged only; sending continues.' });
+  }
+  return { listed: [], warnings: summary.warnings, unknown: summary.unknown };
 }
 
 // ── DMARC aggregate reports ─────────────────────────────────────────────────

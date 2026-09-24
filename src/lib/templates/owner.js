@@ -76,6 +76,12 @@ export const ALERTS = {
   canary_incomplete: { urgent: false, title: 'Canary test incomplete: {clientId}' },
   day1_slid: { urgent: false, title: 'Day 1 moved for {clientId} to {date}' },
   approved_by_silence: { urgent: false, title: 'Copy approved by silence: {clientId}' },
+  // Deliverability v2
+  spam_score_low: { urgent: true, title: 'Spam test {score}/10 for {email} ({clientId})' },
+  placement_test_failed: { urgent: false, title: 'Spam test could not run: {clientId}' },
+  bounce_pause: { urgent: true, title: 'Bounces at {rate} — caps halved: {clientId}' },
+  bounce_pause_lifted: { urgent: false, title: 'Bounces back under the pause line: {clientId}' },
+  blacklist_warning: { urgent: false, title: 'An address near {domain} is on a blacklist (not blocking)' },
   // ── end Stage B ──
   // ── Stage C additions ──
   hot_lead_failed: { urgent: true, title: 'Hot lead NOT delivered to {clientId}' },
