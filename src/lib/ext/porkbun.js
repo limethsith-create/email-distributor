@@ -54,6 +54,8 @@ export async function checkDomain(name) {
     available: String(r.avail).toLowerCase() === 'yes',
     price: Number(r.price) || null,
     regularPrice: Number(r.regularPrice) || null,
+    premium: String(r.premium || '').toLowerCase() === 'yes',
+    renewal: Number(r.additional?.renewal?.price) || null,
   };
 }
 
@@ -83,5 +85,27 @@ export async function rdapAvailable(name) {
     return null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * One RDAP lookup with the detail the domain tools need:
+ * { status: 'free' | 'taken' | 'limited' | 'unknown', registeredAt: ISO|null }.
+ * 404 = free, 200 = taken (registeredAt from the `registration` event),
+ * 429 = rate-limited (the caller backs off; nothing is retried here).
+ */
+export async function rdapLookup(name, { base = 'https://rdap.org/domain/', timeoutMs = 6000 } = {}) {
+  try {
+    const res = await fetchJson(`${base}${encodeURIComponent(name)}`, { service: 'rdap', timeoutMs, retry: false, headers: { accept: 'application/rdap+json' } });
+    if (res.status === 404) return { status: 'free', registeredAt: null };
+    if (res.status === 429) return { status: 'limited', registeredAt: null };
+    if (res.status === 200) {
+      const ev = (res.json?.events || []).find((e) => String(e?.eventAction || '').toLowerCase() === 'registration');
+      const at = ev && Number.isFinite(Date.parse(ev.eventDate)) ? new Date(ev.eventDate).toISOString() : null;
+      return { status: 'taken', registeredAt: at };
+    }
+    return { status: 'unknown', registeredAt: null };
+  } catch {
+    return { status: 'unknown', registeredAt: null };
   }
 }

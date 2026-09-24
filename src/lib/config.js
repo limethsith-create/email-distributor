@@ -104,6 +104,9 @@ export const DEFAULTS = {
     inboxesPerTrial: 2,
     autoBuyMarginUsd: 2,
   },
+  // v1 tables, kept for reference only: since Intake v2 the shopping list reads
+  // REGISTRARS and INBOX_PROVIDER (below, in this block). pricescout.registrarQuotes
+  // / inboxQuotes still accept these shapes.
   // Registrar first-year .com prices. Porkbun is read live from its public
   // pricing API (static value below is only the fallback, marked unconfirmed);
   // Cloudflare sells at cost. Source: Inbox Provider Research, 10 Sep 2026
@@ -142,6 +145,124 @@ export const DEFAULTS = {
     lengthMin: 15,
     lengthMax: 30,
     hosts: ['calendly.com', 'cal.com', 'calendar.google.com', 'calendar.app.google', 'tidycal.com', 'zoho.com', 'zohobookings.com', 'bookings.zoho.com'],
+  },
+  // ── Intake v2: Applicant Research (systems/research.js) ──
+  RESEARCH: {
+    userAgent: 'AvianceBot/1.0 (+aviance.online/bot)',
+    pageTimeoutMs: 10_000,        // per page
+    maxBytes: 1_000_000,          // per page; the rest is not read
+    pages: ['home', 'about', 'services', 'team', 'contact', 'locations'],
+    inRequestMs: 12_000,          // how long POST /api/apply waits for research before alerting the owner without it
+    maxServices: 12,
+    maxLocations: 10,
+    maxPhones: 5,
+    maxEmails: 5,
+    placesPageSize: 3,            // Enterprise-SKU call; one per applicant
+    marketQueries: 2,             // "{customers} in {city}", "{customers} in {state}" — IDs-only (free)
+    newSiteDays: 365,             // domain registered less than this many days ago → "very new site"
+    prefill: true,                // fill empty onboarding fields from research (company name, address, cities, customers)
+  },
+  // ── Intake v2: Domains (systems/domains.js) ──
+  DOMAINS: {
+    prefixes: ['get', 'try', 'use', 'hey', 'join', 'with'],
+    suffixes: ['hq', 'team', 'mail', 'co', 'app', 'labs', 'group', 'usa'],
+    maxLabel: 15,                 // letters before the TLD
+    offersMin: 5,
+    offersMax: 8,
+    rdapBase: 'https://rdap.org/domain/',
+    rdapConcurrency: 2,
+    rdapBackoffSec: 120,          // after a 429 from rdap.org
+    rdapCacheHours: { free: 12, taken: 168 },
+    livePriceMaxAgeDays: 40,      // a live price older than this falls back to the table
+    // How much each pattern reads like a real company's second address (score points).
+    affixWeights: { get: 8, try: 6, use: 4, hey: 2, join: 3, with: 2, hq: 7, team: 6, mail: -2, co: 5, app: 1, labs: 1, group: 5, usa: 3 },
+    spamWords: ['free', 'cash', 'win', 'winner', 'deal', 'deals', 'promo', 'offer', 'sale', 'cheap', 'bonus', 'click', 'money', 'loan', 'crypto', 'casino', 'bet', 'gift', 'prize', 'discount', 'bulk', 'spam', 'leads', 'outreach', 'mailer', 'blast'],
+    bigBrands: ['google', 'gmail', 'microsoft', 'outlook', 'office365', 'apple', 'icloud', 'amazon', 'facebook', 'instagram', 'whatsapp', 'paypal', 'netflix', 'yahoo', 'linkedin', 'twitter', 'tiktok', 'youtube', 'adobe', 'oracle', 'salesforce', 'hubspot', 'shopify', 'stripe', 'airbnb', 'walmart', 'costco', 'disney', 'mastercard', 'wellsfargo', 'citibank', 'verizon', 'tmobile', 'comcast', 'xfinity', 'cisco', 'samsung', 'tesla', 'fedex', 'docusign', 'dropbox', 'intuit', 'quickbooks', 'godaddy'],
+    // Table prices older than this are listed as unconfirmed on the shopping list.
+    // (Verisign's .com wholesale rises from $10.26 to $10.97 on 1 Nov 2026, so the
+    // .com rows below go up by about $0.71 then — re-check and edit in /mc/config.)
+    tableMaxAgeDays: 35,
+  },
+  // The five registrars compared on every shopping list (docs/research/v2-domains.md,
+  // every price from the registrar's own page on 25 Sep 2026 unless `source` says
+  // otherwise; USD incl. the $0.20 ICANN fee). Chosen: the five reputable
+  // registrars with the lowest .com first-year + renewal. `promo` is shown, never
+  // used for `best` (codes change without notice). Porkbun is refreshed live from
+  // its keyless pricing API (job `registrar-prices`); the others are this table.
+  // `search` pre-fills the name: {domain}. Every entry has the same keys (the
+  // /mc/config editor checks each entry against the first one).
+  REGISTRARS: [
+    {
+      id: 'cloudflare', name: 'Cloudflare', url: 'https://www.cloudflare.com/products/registrar/',
+      search: 'https://domains.cloudflare.com/?domain={domain}',
+      prices: { com: { firstYear: 10.46, renewal: 10.46 }, net: { firstYear: 11.86, renewal: 11.86 }, co: { firstYear: 30.00, renewal: 30.00 } },
+      promo: { com: null, net: null, co: null },
+      whoisPrivacy: true, autoRenewOff: true, liveApi: null, checkedAt: '2026-09-25',
+      source: '.com = wholesale $10.26 + $0.20 ICANN fee; .net/.co from cfdomainpricing.com (Cloudflare shows its list only when signed in)',
+      why: 'Sells at cost, no mark-up at renewal. The domain must use Cloudflare DNS — fine for Google Workspace and for CheapInboxes.',
+    },
+    {
+      id: 'spaceship', name: 'Spaceship', url: 'https://www.spaceship.com/domain-search/?tab=pricing',
+      search: 'https://www.spaceship.com/domain-search/?query={domain}&tab=domains',
+      prices: { com: { firstYear: 9.08, renewal: 10.18 }, net: { firstYear: 11.40, renewal: 11.40 }, co: { firstYear: 15.53, renewal: 31.05 } },
+      promo: { com: { code: 'COM67', firstYear: 3.80, note: 'limited time, no end date shown' }, net: null, co: null },
+      whoisPrivacy: true, autoRenewOff: true, liveApi: null, checkedAt: '2026-09-25',
+      source: 'registrar pricing page',
+      why: 'Lowest .com list price and renewal; free WHOIS privacy. Some reports of new accounts held for an ID check.',
+    },
+    {
+      id: 'dynadot', name: 'Dynadot', url: 'https://www.dynadot.com/domain/prices',
+      search: 'https://www.dynadot.com/domain/search?domain={domain}',
+      prices: { com: { firstYear: 10.88, renewal: 10.88 }, net: { firstYear: 12.52, renewal: 12.52 }, co: { firstYear: 4.99, renewal: 31.20 } },
+      promo: { com: { code: '899COM', firstYear: 8.99, note: 'limited quantity; help page dated 29 May 2026, not re-checked' }, net: null, co: null },
+      whoisPrivacy: true, autoRenewOff: true, liveApi: null, checkedAt: '2026-09-25',
+      source: 'registrar pricing page',
+      why: 'Same price to renew, nothing added at checkout, free privacy; cheapest .co first year.',
+    },
+    {
+      id: 'porkbun', name: 'Porkbun', url: 'https://porkbun.com/products/domains',
+      search: 'https://porkbun.com/checkout/search?q={domain}',
+      prices: { com: { firstYear: 11.08, renewal: 11.08 }, net: { firstYear: 12.52, renewal: 12.52 }, co: { firstYear: 15.76, renewal: 31.20 } },
+      promo: { com: null, net: null, co: null },
+      whoisPrivacy: true, autoRenewOff: true, liveApi: 'porkbun', checkedAt: '2026-09-25',
+      source: 'keyless pricing API api.porkbun.com/api/json/v3/pricing/get',
+      why: 'Same price to renew, strong reputation, and the only registrar with a keyless price API (refreshed live).',
+    },
+    {
+      id: 'namecheap', name: 'Namecheap', url: 'https://www.namecheap.com/domains/',
+      search: 'https://www.namecheap.com/domains/registration/results/?domain={domain}',
+      prices: { com: { firstYear: 11.48, renewal: 18.68 }, net: { firstYear: 12.68, renewal: 18.78 }, co: { firstYear: 19.98, renewal: 45.48 } },
+      promo: { com: { code: 'NEWCOM679', firstYear: 6.99, note: 'first order of a new customer only' }, net: null, co: null },
+      whoisPrivacy: true, autoRenewOff: true, liveApi: null, checkedAt: '2026-09-25',
+      source: 'registrar pricing page (.com sale price $11.28 + $0.20 ICANN fee)',
+      why: 'Well-known and reliable; renewal is dear ($18.68) but auto-renew is off anyway.',
+    },
+  ],
+  // Inboxes are bought at CheapInboxes only (owner's decision, 25 Sep 2026). Prices and
+  // facts: cheapinboxes.com, /terms, /fulfillment, api.cheapinboxes.com/docs (checked
+  // 25 Sep 2026, docs/research/v2-domains.md). The tier is set by the account's total
+  // active mailboxes. The other providers stay in `inboxProviders` for reference only.
+  INBOX_PROVIDER: {
+    id: 'cheapinboxes', name: 'CheapInboxes', url: 'https://www.cheapinboxes.com/', orderUrl: 'https://app.cheapinboxes.com/add',
+    // USD per inbox per month from `from` active mailboxes on the account upward.
+    tiers: [{ from: 1, price: 3.50 }, { from: 100, price: 3.25 }, { from: 250, price: 3.00 }, { from: 1000, price: 2.80 }],
+    count: 2,
+    setupFee: 0,
+    api: true,          // public REST API (70+ endpoints, key from the dashboard) — not used yet
+    freeWarmup: false,  // they sell no warm-up; our Warm-up Engine warms the inboxes
+    checkedAt: '2026-09-25',
+    notes: 'Google Workspace Business Starter with admin access, month-to-month (card charged 5 days before renewal, cancel with 7 days\' notice), no setup fee. Public API: yes (not used yet). Warm-up: none included — our Warm-up Engine does it. App passwords appear in their API\'s credential output but the site does not promise them: ask support (WhatsApp) to confirm before the first order.',
+    steps: [
+      'Keep {domain} on Cloudflare DNS: bought at Cloudflare it already is; bought elsewhere, add it to your free Cloudflare account and switch the nameservers at the registrar. DNS stays in your hands for the setup checks.',
+      'Sign in at https://app.cheapinboxes.com (first time: create the account and add a card).',
+      'New order (https://app.cheapinboxes.com/add): import your own domain {domain} (free) and choose Google Workspace.',
+      'DNS: pick the Cloudflare option and paste a Cloudflare API token limited to {domain} (Zone Read + DNS Edit). CheapInboxes adds MX, SPF, DKIM and DMARC. This choice cannot be changed later.',
+      'Add {count} users: {users}. Skip the sequencer connection.',
+      'If offered, forward the website {domain} to {mainDomain}.',
+      'Pay {count} × {perInbox} = {monthly} a month (no setup fee).',
+      'When the inboxes show Active (10 minutes to 48 hours), copy each app password (16 letters). None shown: sign in as the user, turn on 2-Step Verification and create one at https://myaccount.google.com/apppasswords.',
+      'Paste {domain}, both inboxes and their app passwords below, tick "auto-renew is OFF" and save — the setup checks start at once.',
+    ],
   },
   // ── end Stage A ──
   // ── Stage B additions ──

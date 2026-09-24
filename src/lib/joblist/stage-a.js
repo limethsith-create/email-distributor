@@ -19,6 +19,8 @@
  *  booking-test      hourly              warming..extension    Day −4 and on calendar URL change
  *  booking-reminder  daily 10:00 ET      warming / ready       until "It worked" is tapped
  *  promo-check       monthly, 1st 09:00  (global)              expired promos, Cloudflare .com price
+ *  research          every minute        researchStep=running  Applicant Research (Intake v2), bounded + resumable
+ *  registrar-prices  monthly, 1st 09:10  (global)              live Porkbun prices (keyless) for the shopping list
  */
 
 import { kv } from '@vercel/kv';
@@ -227,6 +229,42 @@ const bookingReminder = {
   },
 };
 
+// Intake v2: Applicant Research continues every minute while the client hash
+// says `researchStep = running` (set when an application arrives; cleared
+// when done or failed). Reads nothing beyond the client hash to decide.
+const research = {
+  name: 'research',
+  scope: 'client',
+  cost: 3,
+  minBudgetMs: 8000,
+  claimTtl: 600,
+  async due({ client, now }) {
+    if (skip(client) || client.researchStep !== 'running') return null;
+    return minuteKey(et(now));
+  },
+  async run({ clientId, now, deadline }) {
+    const { runResearch } = await import('@/lib/systems/research');
+    return runResearch(clientId, { now, deadline: deadline - 1000 });
+  },
+};
+
+// Intake v2: live registrar prices from keyless public APIs (Porkbun), monthly.
+const registrarPrices = {
+  name: 'registrar-prices',
+  scope: 'global',
+  cost: 2,
+  minBudgetMs: 6000,
+  claimTtl: 40 * 86400,
+  async due({ now }) {
+    const p = et(now);
+    return p.dayKey.endsWith('-01') && p.hhmm >= '09:10' ? p.monthKey : null;
+  },
+  async run({ now }) {
+    const { runRegistrarPriceRefresh } = await import('@/lib/systems/domains');
+    return runRegistrarPriceRefresh({ now });
+  },
+};
+
 const promoCheck = {
   name: 'promo-check',
   scope: 'global',
@@ -243,4 +281,4 @@ const promoCheck = {
   },
 };
 
-export const JOBS = [onboardingNudge, queuePromote, market, pricescout, purchaseNudge, setupCheck, welcome, auth, blacklist, dmarc, bookingTest, bookingReminder, promoCheck].map(onClientClock);
+export const JOBS = [onboardingNudge, queuePromote, research, market, pricescout, purchaseNudge, setupCheck, welcome, auth, blacklist, dmarc, bookingTest, bookingReminder, promoCheck, registrarPrices].map(onClientClock);

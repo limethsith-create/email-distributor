@@ -95,6 +95,14 @@ export const K = {
   dmarcSeen: () => 'intake:dmarc:seen',
   dmarcState: () => 'intake:dmarc:state',
   onceClaim: (what, id, key) => `intake:once:${what}:${assertClientId(id)}:${key}`,
+  /** Applicant research (hash): status, at, summary, website/business/market/flags (JSON) + crawl progress. */
+  research: (id) => `${c(id)}:research`,
+  /** Registrar prices refreshed from keyless public APIs (hash): `{registrarId}` → {tld: {firstYear, renewal, confirmedAt}}. */
+  registrarPrices: () => 'intake:registrarprices',
+  /** RDAP availability cache (hash): domain → {available: true|false, at}. */
+  rdapCache: () => 'intake:rdapcache',
+  /** RDAP politeness: set (with EX) after a 429 so nobody asks again until it expires. */
+  rdapBackoff: () => 'intake:rdapbackoff',
   // ── end Stage A ──
 
   // ── Stage B additions (build) ──

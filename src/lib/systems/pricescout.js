@@ -1,13 +1,20 @@
 /**
- * Price Scout + Promo Hunter + optional Auto-Buyer (SPEC §6.4).
+ * Price Scout + Promo Hunter + optional Auto-Buyer (SPEC §6.4), Intake v2.
  *
  * The minute the market count passes (state awaiting_purchase) this builds
- * the owner's shopping list: best available lookalike domain + two backups,
- * the cheapest registrar by first-year price (Porkbun live price, Cloudflare
- * and Spaceship static tables, active promo codes), the two cheapest inbox
- * providers that allow app passwords with minOrder ≤ 2, sender addresses and
- * the total. Every price seen is cached with seenAt; a failed source falls
- * back to the cache (or the static table) and is marked `unconfirmed`.
+ * the owner's complete shopping list (systems/domains.js):
+ *  - 5–8 available lookalike domains, scored best first, each with the five
+ *    registrars' first-year + renewal prices (REGISTRARS table + Porkbun's
+ *    keyless live prices) and the cheapest one (`best`);
+ *  - the inboxes, fixed to CheapInboxes (INBOX_PROVIDER): 2 × tier price,
+ *    the buying checklist with the sender names filled in;
+ *  - totals. The v1 fields (chosenDomain, backups, registrarQuotes,
+ *    inboxQuotes, senderAddresses, total, unconfirmed) are kept, filled from
+ *    the same data.
+ * Availability is checked in score order until 8 free names are known; a
+ * run that hits the tick deadline or an RDAP 429 continues next minute (the
+ * RDAP cache makes that cheap). A price that could not be confirmed is
+ * listed in `unconfirmed`, never guessed.
  *
  * Auto-Buyer runs only with AUTO_BUY=true and Porkbun keys: balance check,
  * dryRun, real create, auto-renew off. Any error → manual list +
@@ -24,8 +31,12 @@ import { baseUrl } from '@/lib/notify';
 import { getPricing, checkDomain, porkbunKeys, rdapAvailable, balance, createDomain, setAutoRenewOff } from '@/lib/ext/porkbun';
 import { dayKeyIn, ET } from '@/lib/time';
 import { io, asArray, asObject, firstNameOf, ownerName, sendClient } from '@/lib/systems/intake-io';
+import { rankCandidates, checkNames, livePrices, refreshLivePrices, priceRows, registrarList, inboxPlan, inboxUsers, buildOffers, totalsOf } from '@/lib/systems/domains';
 
 const SYSTEM = 'pricescout';
+/** Runs a list may wait for availability answers before it goes out with what it has. */
+const MAX_SCOUT_RUNS = 10;
+const V2_TLDS = ['com', 'net', 'co'];
 
 // ── candidates ──────────────────────────────────────────────────────────────
 
@@ -184,50 +195,116 @@ export function buildShoppingList({ availability, quotesByTld, inboxes, profile,
   };
 }
 
-function shoppingText(client, list, { autoBought = null, link }) {
-  const reg = list.registrarQuotes[0];
-  const inb = list.inboxQuotes;
-  return [
-    `Shopping list for ${client.name || client.id} (${client.mainDomain}).`,
-    '',
-    autoBought
-      ? `Domain: ${autoBought.name} — ALREADY BOUGHT at Porkbun for ${money(autoBought.price)}, auto-renew off.`
-      : `Domain: ${list.chosenDomain || 'none available — pick one by hand'}${list.backups.length ? ` (backups: ${list.backups.join(', ')})` : ''}`,
-    autoBought ? '' : `Registrar: ${reg ? `${reg.name} ${money(reg.price)} first year${reg.code ? `, code ${reg.code}` : ''}${reg.unconfirmed ? ' (UNCONFIRMED price)' : ''}` : 'no price known'}${list.registrarQuotes[1] ? ` · next: ${list.registrarQuotes[1].name} ${money(list.registrarQuotes[1].price)}` : ''}`,
-    autoBought ? '' : 'Turn auto-renew OFF when you buy it.',
-    `Inboxes (2): ${inb.length ? inb.map((p) => `${p.name} ${money(p.pricePerMonth)}/inbox/month`).join(' · ') : 'no provider matches'}`,
-    `Sender addresses: ${list.senderAddresses.join(', ') || 'set the sender name/prefix first'}`,
-    'Enable 2-Step Verification and create an app password for each inbox.',
-    `Total: ${list.total != null ? `${money(list.total)} (domain first year + 2 inboxes, first month)` : 'unknown'}`,
-    list.unconfirmed.length ? `\nUnconfirmed: ${list.unconfirmed.join('; ')}` : '',
-    '',
-    `When bought, paste the logins here: ${link}`,
-  ].filter((l) => l !== '').join('\n');
+/**
+ * The owner's shopping_list text: the top 3 domains with the cheapest
+ * registrar and price (+ its search link), every registrar's price for the
+ * top domain's TLD, the CheapInboxes line with the users, the total.
+ */
+export function shoppingText(client, list, { autoBought = null, link }) {
+  const offers = list.offers || [];
+  const top = offers[0] || null;
+  const inb = list.inboxes || null;
+  const lines = [`Shopping list for ${client.name || client.id} (${client.mainDomain}).`, ''];
+  if (autoBought) lines.push(`Domain: ${autoBought.name} — ALREADY BOUGHT at Porkbun for ${money(autoBought.price)}, auto-renew off.`);
+  else if (!offers.length) lines.push('Domain: no available lookalike found — pick one by hand.');
+  else {
+    lines.push('Best domains (first-year price at the cheapest of the five registrars):');
+    offers.slice(0, 3).forEach((o, i) => {
+      const b = o.best;
+      lines.push(`${i + 1}. ${o.domain}${o.available === null ? ' (availability unconfirmed)' : ''} — ${b ? `${b.registrar} ${money(b.firstYear)}${b.renewal != null ? `, renews ${money(b.renewal)}` : ''}${b.url ? ` · ${b.url}` : ''}` : 'no price known'}`);
+    });
+    if (top) lines.push(`.${top.tld} at all five (first year / renewal): ${top.prices.map((p) => `${p.registrar} ${money(p.firstYear)}/${money(p.renewal)}${p.source === 'live' ? ' (live)' : ''}`).join(' · ')}`);
+    const promos = top ? top.prices.filter((p) => p.promo) : [];
+    if (promos.length) lines.push(`Promo codes (not counted, may have ended): ${promos.map((p) => `${p.registrar} ${p.promo.code} → ${money(p.promo.firstYear)}${p.promo.note ? ` (${p.promo.note})` : ''}`).join(' · ')}`);
+    lines.push('Turn auto-renew OFF when you buy it.');
+  }
+  lines.push(inb
+    ? `Inboxes: ${inb.provider} — ${inb.count} × ${money(inb.perInbox)} = ${money(inb.monthly)} a month (Google Workspace, no setup fee).`
+    : 'Inboxes: provider price unknown.');
+  lines.push(`Users: ${(list.users || []).length ? list.users.map((u) => `${u.name || '(sender name not set)'} → ${u.email}`).join('; ') : 'set the sender name/prefix on the onboarding page first'}`);
+  lines.push(`Total: ${list.total != null ? `${money(list.total)} (domain first year + ${inb?.count || 2} inboxes, first month)` : 'unknown'}`);
+  if (list.unconfirmed.length) lines.push('', `Unconfirmed: ${list.unconfirmed.join('; ')}`);
+  lines.push('', `The CheapInboxes steps, every price and the paste form: ${link}`);
+  return lines.join('\n');
 }
 
 /**
- * Domain availability + registrar and inbox quotes for a client → the list
- * (no side effects beyond the price cache). `exclude` drops names (e.g. a
- * burned domain) from the candidates.
+ * Domain availability + prices + inboxes for a client → the list (no side
+ * effects beyond the RDAP / price caches). `exclude` drops names (e.g. a
+ * burned domain). `complete` is false while fewer than DOMAINS.offersMax
+ * free names are known and unchecked candidates remain.
  */
 export async function computeShoppingList(clientId, client, { deadline = Date.now() + 15000, now = io.now(), exclude = [] } = {}) {
   const profile = await getProfile(clientId);
-  const tlds = allowedTlds(await cfg(clientId, 'ALLOWED_TLDS'), await cfg(clientId, 'BANNED_TLDS'));
+  const tlds = allowedTlds(await cfg(clientId, 'ALLOWED_TLDS'), await cfg(clientId, 'BANNED_TLDS')).filter((t) => V2_TLDS.includes(t));
   const price = await cfg(clientId, 'PRICE');
-  const names = candidateDomains(client.mainDomain, price.candidatePatterns, tlds).filter((n) => !exclude.includes(n));
-  const availability = await checkAvailability(names, { want: 1 + price.backups, deadline });
+  const D = await cfg(clientId, 'DOMAINS');
+  const P = await cfg(clientId, 'INBOX_PROVIDER');
+  const ranked = rankCandidates(client.mainDomain, D, tlds).filter((c) => !exclude.includes(c.domain));
 
-  let livePorkbun = null;
-  try { livePorkbun = await getPricing(); } catch (err) { await logEvent(clientId, SYSTEM, 'porkbun_pricing_failed', { error: String(err.message).slice(0, 200) }); }
-  const registrars = await cfg(clientId, 'registrars');
-  const promos = await cfg(clientId, 'promos');
-  const today = dayKeyIn(ET, now);
-  const quotesByTld = {};
-  for (const tld of tlds) quotesByTld[tld] = await registrarQuotes(tld, { livePorkbun, registrars, promos, today, now });
-  const inboxes = inboxQuotes(await cfg(clientId, 'inboxProviders'), price.inboxesPerTrial);
-  const list = buildShoppingList({ availability, quotesByTld, inboxes, profile, backups: price.backups, inboxesPerTrial: price.inboxesPerTrial });
+  let live = await livePrices();
+  try { live = { ...live, porkbun: await refreshLivePrices({ now }) }; } catch (err) { await logEvent(clientId, SYSTEM, 'porkbun_pricing_failed', { error: String(err.message).slice(0, 200) }); }
+  // Registrars in one stable order everywhere (cheapest .com first), so price columns line up.
+  const table = await cfg(clientId, 'REGISTRARS');
+  const comOrder = registrarList(table, priceRows(table, 'com', { live, now, D })).map((r) => r.name);
+  const registrars = [...table].sort((a, b) => comOrder.indexOf(a.name) - comOrder.indexOf(b.name));
 
-  return { profile, availability, list };
+  const availability = {};
+  let limited = false;
+  const batch = 6;
+  for (let i = 0; i < ranked.length; i += batch) {
+    if (Object.values(availability).filter((a) => a.available === true).length >= D.offersMax) break;
+    if (Date.now() > deadline - 3000) break;
+    const r = await checkNames(ranked.slice(i, i + batch).map((c) => c.domain), { D, deadline, now });
+    Object.assign(availability, r.results);
+    if (r.limited) { limited = true; break; }
+  }
+  const freeCount = Object.values(availability).filter((a) => a.available === true).length;
+  const complete = freeCount >= D.offersMax || ranked.every((c) => availability[c.domain]);
+
+  const offersRaw = buildOffers(ranked, availability, { registrars, live, now, D, min: D.offersMin, max: D.offersMax });
+  const top = offersRaw[0] || null;
+  const chosen = top?.domain || null;
+  const senders = chosen ? senderAddresses(profile, chosen) : [];
+  const users = inboxUsers(senders, profile);
+  const inboxes = inboxPlan(P, { domain: chosen, mainDomain: client.mainDomain, users });
+  const comRows = priceRows(registrars, 'com', { live, now, D });
+  const totals = totalsOf(offersRaw, inboxes);
+
+  const unconfirmed = [];
+  if (!chosen) unconfirmed.push('no available domain found among the candidates — pick one by hand');
+  if (top && top.available === null) unconfirmed.push(`availability of ${chosen} (the registry did not answer)`);
+  if (top?.best && top._stale.includes(top.best.registrar)) {
+    const reg = registrars.find((r) => r.name === top.best.registrar);
+    unconfirmed.push(`${top.best.registrar} .${top.tld} price is from the table checked ${reg?.checkedAt || 'on an unknown date'} — re-check at the registrar`);
+  }
+  if (top && !top.best) unconfirmed.push(`no registrar price known for .${top.tld}`);
+  if (inboxes.perInbox === null) unconfirmed.push(`${P.name} price per inbox`);
+  if (!users.length && chosen) unconfirmed.push('sender name / prefix not set yet (inbox user names)');
+
+  const legacyQuotes = top
+    ? priceRows(registrars, top.tld, { live, now, D, domain: top.domain })
+      .filter((p) => p.firstYear !== null)
+      .map((p) => ({ registrar: p.id, name: p.registrar, price: p.firstYear, renewal: p.renewal, seenAt: p.confirmedAt, source: p.source, unconfirmed: p.stale, url: p.url }))
+      .sort((a, b) => a.price - b.price || (a.renewal ?? Infinity) - (b.renewal ?? Infinity))
+    : [];
+  const offers = offersRaw.map(({ _stale, ...o }) => o);
+  const list = {
+    offers,
+    registrars: registrarList(registrars, comRows),
+    inboxes,
+    totals,
+    users,
+    chosenDomain: chosen,
+    backups: offers.slice(1, 1 + price.backups).map((o) => o.domain),
+    registrarQuotes: legacyQuotes,
+    inboxQuotes: inboxes.perInbox === null ? [] : [{ id: P.id, name: P.name, url: P.url, pricePerMonth: inboxes.perInbox, seenAt: P.checkedAt }],
+    senderAddresses: senders,
+    total: totals.firstMonth,
+    unconfirmed,
+  };
+  const checked = ranked.filter((c) => availability[c.domain]).map((c) => ({ name: c.domain, available: availability[c.domain].available, source: availability[c.domain].source, score: c.score }));
+  return { profile, availability: checked, list, complete, limited };
 }
 
 /**
@@ -250,8 +327,15 @@ export async function runPriceScout(clientId, { deadline = Date.now() + 15000, n
   const existing = (await kv.hgetall(K.shopping(clientId))) || {};
   if (existing.sentAt) { await updateClient(clientId, { intakeStep: '' }); return { skipped: 'already sent' }; }
 
-  const { profile, availability, list } = await computeShoppingList(clientId, client, { deadline, now });
-  const price = await cfg(clientId, 'PRICE');
+  const { profile, availability, list, complete, limited } = await computeShoppingList(clientId, client, { deadline, now });
+  if (!complete) {
+    // Keep going next minute (the RDAP cache keeps every answer); after
+    // MAX_SCOUT_RUNS runs the list goes out with what is known.
+    const runs = (Number(existing.scoutRuns) || 0) + 1;
+    await kv.hset(K.shopping(clientId), { scoutRuns: runs });
+    if (runs < MAX_SCOUT_RUNS) return { status: 'running', checked: availability.length, rdapLimited: limited };
+    await logEvent(clientId, SYSTEM, 'availability_partial', { checked: availability.length, runs });
+  }
 
   const autoBought = await maybeAutoBuy(clientId, list, { now });
   const link = `${baseUrl()}/mc/clients/${clientId}/purchase`;
@@ -270,7 +354,12 @@ export async function runPriceScout(clientId, { deadline = Date.now() + 15000, n
     total: list.total ?? '',
     unconfirmed: JSON.stringify(list.unconfirmed),
     autoBought: autoBought ? JSON.stringify(autoBought) : '',
+    offers: JSON.stringify(list.offers),
+    registrars: JSON.stringify(list.registrars),
+    inboxes: JSON.stringify(list.inboxes),
+    totals: JSON.stringify(list.totals),
     builtAt: now.toISOString(),
+    scoutRuns: 0,
   });
 
   const body = shoppingText(client, list, { autoBought, link });
@@ -373,11 +462,16 @@ export async function runPromoCheck({ now = io.now() } = {}) {
   return { expired: expired.length, cloudflareCom: cloudflare };
 }
 
-/** Shopping list as stored, parsed for the purchase page. */
+/**
+ * Shopping list as stored, parsed (the purchase page and docs/HUB-API.md
+ * `shopping`). Two reads, nothing recomputed per view: offers, registrars,
+ * inboxes and totals were stored when the list was built.
+ */
 export async function getShopping(clientId) {
   const s = (await kv.hgetall(K.shopping(clientId))) || {};
+  const { scoutRuns, ...rest } = s;
   return {
-    ...s,
+    ...rest,
     domainCandidates: asArray(s.domainCandidates),
     backups: asArray(s.backups),
     registrarQuotes: asArray(s.registrarQuotes),
@@ -385,6 +479,13 @@ export async function getShopping(clientId) {
     senderAddresses: asArray(s.senderAddresses),
     unconfirmed: asArray(s.unconfirmed),
     autoBought: asObject(s.autoBought),
+    offers: asArray(s.offers).filter((o) => o && typeof o === 'object'),
+    registrars: asArray(s.registrars).filter((r) => r && typeof r === 'object'),
+    inboxes: asObject(s.inboxes),
+    totals: asObject(s.totals),
     domain: await getDomain(clientId),
   };
 }
+
+/** docs/HUB-API.md `shopping` for one client (same object the purchase API returns). */
+export const shoppingView = (clientId) => getShopping(clientId);

@@ -319,6 +319,7 @@ export async function applyForTrial(raw, { preApproved = false, override = false
   }
 
   if (review) {
+    await queueResearch(clientId, now);
     try {
       return { ok: true, clientId, ...(await holdForReview(clientId, app, review, now)) };
     } catch (err) {
@@ -329,10 +330,27 @@ export async function applyForTrial(raw, { preApproved = false, override = false
 
   try {
     const result = await decide(clientId, app, { preApproved, override, now });
+    if (result.outcome !== 'declined') await queueResearch(clientId, now);
     return { ok: true, clientId, ...result };
   } catch (err) {
     await gatekeeperError(clientId, app.contactEmail, err, 'the decision');
+    await queueResearch(clientId, now);
     return { ok: true, clientId, outcome: 'manual' };
+  }
+}
+
+/**
+ * Applicant research (Intake v2) for every application that is not declined
+ * on the spot — website (held for review), form, the owner's New client. It
+ * never blocks or changes a decision: a failure here is logged and the
+ * application goes on as before.
+ */
+async function queueResearch(clientId, now) {
+  try {
+    const { startResearch } = await import('@/lib/systems/research');
+    await startResearch(clientId, { now });
+  } catch (err) {
+    await logEvent(clientId, SYSTEM, 'research_not_started', { error: String(err?.message || err).slice(0, 200) });
   }
 }
 
@@ -351,10 +369,22 @@ async function holdForReview(clientId, app, { answers = [], fit = null, extras =
   await updateClient(clientId, { intakeStep: 'review' });
   await logEvent(clientId, SYSTEM, 'held_for_review', { verdict: fit?.verdict || null, summary: fit?.summary || null });
   const lines = (answers || []).map((a) => `${a.q}\n  ${a.a}`).join('\n');
+  // Research gets a short, bounded head start so the alert can carry its
+  // summary; if it is not done in time the alert goes without it (the
+  // `research` job finishes it and the hub shows it — no second alert).
+  let researchText = '';
+  try {
+    const { runResearch, researchView, researchLine } = await import('@/lib/systems/research');
+    const ms = await cfg(clientId, 'RESEARCH.inRequestMs');
+    await runResearch(clientId, { now, deadline: Date.now() + ms, alertOnFail: false });
+    researchText = researchLine(await researchView(clientId));
+  } catch (err) {
+    await logEvent(clientId, SYSTEM, 'research_inline_failed', { error: String(err?.message || err).slice(0, 200) });
+  }
   await io.alertOwner('new_application', {
     clientId,
     vars: { company: app.companyName || app.mainDomain || clientId },
-    body: `${app.contactName} <${app.contactEmail}> applied for a trial from the website.\n\n${fit?.summary || ''}\n\n${lines}`,
+    body: `${app.contactName} <${app.contactEmail}> applied for a trial from the website.\n\n${fit?.summary || ''}${researchText ? `\n\n${researchText}` : ''}\n\n${lines}`,
     did: 'Saved it and held it for you. Approve or decline it on the Trials tab of the hub; they get an answer only when you press one.',
   });
   return { outcome: 'review' };
@@ -372,7 +402,16 @@ async function pendingApplication(clientId) {
 export async function approveApplication(clientId, { now = io.now() } = {}) {
   const { application } = await pendingApplication(clientId);
   if (application.web_sellsTo) await kv.hset(K.profile(clientId), { sellsTo: application.web_sellsTo });
-  if (application.web_city) await kv.hset(K.profile(clientId), { cities: JSON.stringify([application.web_city]) });
+  if (application.web_city) {
+    // Their own city first, then the US places their website names (research), five at most.
+    let places = [];
+    try {
+      const { researchView } = await import('@/lib/systems/research');
+      places = (await researchView(clientId))?.website?.locations || [];
+    } catch {}
+    const cities = [application.web_city, ...places].filter((c, i, all) => all.findIndex((x) => x.toLowerCase() === c.toLowerCase()) === i).slice(0, 5);
+    await kv.hset(K.profile(clientId), { cities: JSON.stringify(cities) });
+  }
   await kv.hset(K.application(clientId), { review: 'approved', decision: 'approve', decidedAt: now.toISOString() });
   await logEvent(clientId, SYSTEM, 'review_approved', {});
   return decide(clientId, { mainDomain: application.mainDomain }, { preApproved: true, now });
