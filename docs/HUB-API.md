@@ -206,3 +206,77 @@ Owner actions: `POST /api/mc/clients/{id}/intake` `{action:'approveApplication'}
 3-trial cap still apply) · `{action:'declineApplication', reason}` →
 `{ok, outcome:'declined'}`; the reason is emailed to the applicant
 (`decline_fit`), 400 when empty.
+
+---
+
+# v2 additions (2026-09-25) — research, domains, warm-up, placement, leads, growth
+
+Every field below is additive; the hub must render gracefully when a field is
+missing or null (older clients, a system that has not run yet).
+
+## Growth — `GET /api/mc/hub/{id}/growth?days=45` (7–90)
+
+Load it **only when the Growth tab is opened** (it costs ~days×(2+inboxes)
+Redis reads) — never on the 60-second auto-refresh.
+
+```jsonc
+{ "days": ["2026-09-01", …],                        // oldest → today (ET)
+  "email":  { "sent": [n|null…], "sentD0": […], "replies": […], "positive": […], "booked": […], "held": […], "qualified": […], "bounces": […] },
+  "warmup": { "sent": […], "inbox": […], "spam": […], "rate": [0.93|null…] },   // rate = 7-day rolling inbox/(inbox+spam)
+  "inboxes": [ { "email": "…", "dailyCap": 12|null, "warmupStartedAt": "ISO|null", "sent": […], "rate": […] } ],
+  "placement": [ { "day": "…", "at": "ISO", "tool": "seed|mail-tester", "inboxRate": 0.9|null, "score": 9.1|null, "min": 0.8|null, "perProvider": {…}|null } ] }
+```
+`null` in a series = nothing recorded that day (draw a gap, never a 0).
+
+## Applicant research — `application.research` (in `GET /api/mc/hub/{id}`)
+
+Built automatically when an application arrives (website crawl + Google
+Places + a quick market count). No AI: extracted facts only.
+```jsonc
+"research": {
+  "status": "pending|done|failed", "at": "ISO", "error": "text|null",
+  "summary": "Acme Plumbing is a commercial plumbing company in Charlotte, NC (4.7★, 128 Google reviews) …",
+  "website": { "url": "…", "title": "…", "description": "…", "headline": "…", "services": ["…"], "locations": ["Charlotte, NC"], "phones": ["…"], "emails": ["…"], "socials": { "linkedin": "…", "facebook": "…" }, "teamHint": "12 people on the team page|null", "yearsHint": "Since 2009|null", "pagesRead": 4 },
+  "business": { "name": "…", "address": "…", "category": "Plumber", "rating": 4.7, "reviews": 128, "mapsUrl": "…", "phone": "…" } | null,
+  "market": { "query": "property management companies in Charlotte, NC", "estimate": 1450, "source": "places|overpass" } | null,
+  "flags": [ { "level": "warn|info", "text": "Website mentions 'appointment setting' — could be an agency" } ]
+}
+```
+
+## Domains + inboxes — `shopping` (in `GET /api/mc/clients/{id}/purchase` and `GET /api/mc/hub/{id}`)
+
+```jsonc
+"shopping": {
+  …existing fields…,
+  "offers": [ { "domain": "getacme.com", "tld": "com", "available": true, "score": 92, "why": "short, brand + 'get', .com",
+                "prices": [ { "registrar": "Cloudflare", "firstYear": 10.44, "renewal": 10.44, "promo": null, "url": "https://…", "confirmedAt": "ISO|null", "source": "live|table" } ],
+                "best": { "registrar": "Porkbun", "firstYear": 9.73, "renewal": 11.08 } } ],      // best 5–8 names, best first
+  "registrars": [ { "name": "Porkbun", "why": "…", "url": "…" } ],                                   // the 5 compared, cheapest .com first
+  "inboxes": { "provider": "CheapInboxes", "url": "https://cheapinboxes.com", "perInbox": 3.50, "count": 2, "monthly": 7.00, "notes": "…", "steps": ["…"] },
+  "totals": { "domainFirstYear": 9.73, "inboxesMonthly": 7.00, "firstMonth": 16.73 }
+}
+```
+
+## Deliverability — `deliverability` (in `GET /api/mc/hub/{id}`)
+
+```jsonc
+"deliverability": {
+  "warmup": { "pool": 14, "helpers": 10, "providers": { "gmail": 4, "yahoo": 2, … }, "todayPairs": 11, "external": { "name": "…", "status": "connected|not connected" } | null },
+  "placement": [ { "at": "ISO", "tool": "mail-tester|seed", "score": 9.1, "inboxRate": 0.9, "detail": ["SPF pass", "DKIM pass", …], "reportUrl": "https://…|null" } ],   // newest first, max 10
+  "blacklists": { "checkedAt": "ISO", "listed": ["…"], "clean": 7, "lists": ["bl.spamcop.net", …] },
+  "bounce": { "rate7d": 0.012, "pauseAt": 0.015, "stopAt": 0.02 }
+}
+```
+
+## Lead quality — `leadQuality` (in `GET /api/mc/hub/{id}`)
+
+```jsonc
+"leadQuality": {
+  "graded": 812, "grades": { "A": 140, "B": 210, "C": 90, "rejected": 372 },
+  "sendable": 350,                                   // A+B that passed verification
+  "verification": { "valid": 330, "risky": 40, "catchall": 25, "invalid": 60, "unknown": 12, "pending": 30, "budgetLeftToday": 45 },
+  "rejectReasons": [ { "reason": "Role address (info@)", "count": 120 }, … ],
+  "sources": [ { "source": "google-places", "count": 600 }, … ],
+  "sample": [ { "email": "…", "name": "…", "title": "…", "company": "…", "city": "…", "grade": "A", "score": 87, "reasons": ["Owner title", "Verified email", "Matches dream customer"] } ]   // top 25
+}
+```
