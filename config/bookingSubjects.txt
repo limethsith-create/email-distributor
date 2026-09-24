@@ -1,0 +1,14 @@
+# Booking Watcher (SPEC §8.4): subjects that mark a booking confirmation even without an .ics file.
+# One phrase per line, matched case-insensitively anywhere in the subject.
+new event:
+invitation:
+updated invitation:
+new booking
+booking confirmed
+booked:
+confirmed:
+has scheduled
+scheduled:
+new meeting
+canceled:
+cancelled:

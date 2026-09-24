@@ -1,0 +1,10 @@
+# Reply Handler (SPEC §8.3): any of these in a reply (lower-cased, quotes stripped) = `angry`.
+# One phrase per line. Checked AFTER the legal list and BEFORE the no/wrong-person/not-now rules.
+stop emailing
+remove me now
+how did you get
+spam
+scam
+unsubscribe me immediately
+f***
+fuck

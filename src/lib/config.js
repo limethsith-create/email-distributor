@@ -182,6 +182,14 @@ export const DEFAULTS = {
   },
   // ── end Stage B ──
   // ── Stage C additions ──
+  PACING: { minGapMin: 10, maxGapMin: 60 },
+  SMOKE: { rescanHours: 2 },
+  OOO: { defaultHoldDays: 7 },
+  COMPLIANCE: { alertBlocksPerDay: 3 },
+  NOSHOW_EMAIL_DAYS: [0, 3, 7],
+  EMERGENCY_C: { burnedCanary: 0.50, maxWindowDays: 7, verifyPerTick: 25 },
+  LEARNING: { minSends: 20 },
+  REPLIES_C: { maxMessagesPerRun: 30, firstScanDays: 7 },
   // ── end Stage C ──
   // ── Stage D additions ──
   REVIEW: { clutchUrl: null }, // "to set": review requests block + config_missing until filled

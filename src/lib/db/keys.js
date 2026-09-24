@@ -117,6 +117,30 @@ export const K = {
   // ── end Stage B ──
 
   // ── Stage C additions (run) ──
+  /** Pace Check log (list, newest first): {at, day, test, fix, detail} — read by the Friday update. */
+  pacelog: (id) => `${c(id)}:pacelog`,
+  /** Settings the Pace Checks switched on (hash): compressed, earlySend, softInterested, narrowSlice, exclude. */
+  pace: (id) => `${c(id)}:pace`,
+  /** Sender / reply / booking run state (hash): smoke test, IMAP cursors, bounce-scan flags. */
+  sendState: (id) => `${c(id)}:sendstate`,
+  /** IMAP UID watermarks (hash): `{purpose}|{inbox}|{folder}` → {uidValidity, lastUid}. */
+  imapState: (id) => `${c(id)}:imapstate`,
+  /** Message-ID index (hash): normalised Message-ID → lead email (every mail we sent a prospect). */
+  msgIndex: (id) => `${c(id)}:msgindex`,
+  /** Per-inbox sends on one ET day (hash): `{inbox}`, `{inbox}:{touch}`, `{inbox}:bounces`. */
+  inboxSends: (id, day) => `${c(id)}:inboxsends:${day}`,
+  /** Hosts that already got a first touch (set) — companiesContacted. */
+  sentHosts: (id) => `${c(id)}:senthosts`,
+  /** Hot leads handed to the client (hash): replyId → {leadEmail, sentAt, nudgedAt, holdingAt, answeredAt, …}. */
+  hot: (id) => `${c(id)}:hot`,
+  /** Compliance Guard blocks on one ET day (string counter). */
+  complianceDay: (id, day) => `${c(id)}:compliance:${day}`,
+  /** Emergency Runner state (hash). */
+  emergency: (id) => `${c(id)}:emergency`,
+  /** Per-client learning counters (hash, flat fields) used by the Pace Checks. */
+  learnStats: (id) => `${c(id)}:learnstats`,
+  /** Learning Library raw counters per niche (hash, flat fields; aggregate only, survives deletion). */
+  learningRaw: (niche) => `learning:${niche}:raw`,
   // ── end Stage C ──
 
   // ── Stage D additions (report, close, Mission Control) ──
