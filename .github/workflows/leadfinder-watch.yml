@@ -2,7 +2,7 @@ name: leadfinder-watch
 # When a Lead Finder run ends in failure / cancellation / timeout (including a
 # runner that died before the script could report), tell the app so it raises
 # leadfinder_failed (SPEC §7.2 Failure). Authenticated with the shared secret
-# GITHUB_WEBHOOK_SECRET (same value as the app's env var).
+# WATCH_WEBHOOK_SECRET (same value as the app's GITHUB_WEBHOOK_SECRET env var; GitHub reserves secret names starting with GITHUB_).
 on:
   workflow_run:
     workflows: [leadfinder]
@@ -19,7 +19,7 @@ jobs:
       - name: Report failure to the app
         env:
           APP_URL: ${{ vars.APP_URL || 'https://email-distributor.vercel.app' }}
-          SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
+          SECRET: ${{ secrets.WATCH_WEBHOOK_SECRET }}
           TITLE: ${{ github.event.workflow_run.display_title }}
           CONCLUSION: ${{ github.event.workflow_run.conclusion }}
           RUN_ID: ${{ github.event.workflow_run.id }}

@@ -23,11 +23,11 @@ GITHUB_WEBHOOK_SECRET=$(rand 32)
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   printf '%s' "$CRON_SECRET" | gh secret set CRON_SECRET -R "$REPO"
   printf '%s' "$LEADFINDER_TOKEN" | gh secret set LEADFINDER_TOKEN -R "$REPO"
-  printf '%s' "$GITHUB_WEBHOOK_SECRET" | gh secret set GITHUB_WEBHOOK_SECRET -R "$REPO"
+  printf '%s' "$GITHUB_WEBHOOK_SECRET" | gh secret set WATCH_WEBHOOK_SECRET -R "$REPO"
   gh variable set APP_URL -R "$REPO" --body "https://email-distributor.vercel.app" >/dev/null
-  echo "GitHub secrets set: CRON_SECRET, LEADFINDER_TOKEN, GITHUB_WEBHOOK_SECRET (+ variable APP_URL)"
+  echo "GitHub secrets set: CRON_SECRET, LEADFINDER_TOKEN, WATCH_WEBHOOK_SECRET (+ variable APP_URL)"
 else
-  echo "gh is not signed in — set CRON_SECRET, LEADFINDER_TOKEN, GITHUB_WEBHOOK_SECRET yourself under GitHub → Settings → Secrets"
+  echo "gh is not signed in — set CRON_SECRET, LEADFINDER_TOKEN, WATCH_WEBHOOK_SECRET yourself under GitHub → Settings → Secrets"
 fi
 
 cat <<EOF

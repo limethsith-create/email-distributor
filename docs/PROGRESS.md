@@ -75,7 +75,7 @@ needs `ADMIN_SECRET` on the machine.
 | `LEADFINDER_TOKEN` | secret | leadfinder.yml (same value as Vercel) |
 | `PLACES_API_KEY` | secret | leadfinder.yml |
 | `REOON_API_KEY` | secret | leadfinder.yml |
-| `GITHUB_WEBHOOK_SECRET` | secret | leadfinder-watch.yml (same value as Vercel) |
+| `WATCH_WEBHOOK_SECRET` | secret | leadfinder-watch.yml (same value as Vercel's `GITHUB_WEBHOOK_SECRET`; GitHub forbids the GITHUB_ prefix) |
 | `APP_URL` | variable | heartbeat / leadfinder / backup (default `https://email-distributor.vercel.app`) |
 | `BACKUP_REPO` | variable | backup.yml (default `limethsith-create/aviance-backups`) |
 
