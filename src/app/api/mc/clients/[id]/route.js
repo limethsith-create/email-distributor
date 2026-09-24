@@ -6,6 +6,11 @@ import { getEvents, logEvent } from '@/lib/db/events';
 import { runTick } from '@/lib/scheduler';
 import { JOBS } from '@/lib/jobs';
 import { hasEncKey } from '@/lib/crypto';
+import { clientExtras } from '@/lib/systems/clientview';
+import { addOwnerNote, completePromise } from '@/lib/systems/promiseregister';
+import { markInboxesCancelled } from '@/lib/systems/wrapup';
+import { markPaid } from '@/lib/systems/invoice';
+import { patchTrial, recordLedger } from '@/lib/systems/dshared';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -22,48 +27,89 @@ export async function GET(_req, { params }) {
   const id = assertClientId(params.id);
   const client = await getClient(id);
   if (!client) return Response.json({ error: 'not found' }, { status: 404 });
-  const [profile, trial, domain, inboxes, events] = await Promise.all([getProfile(id), getTrial(id), getDomain(id), getInboxRecords(id), getEvents(id, 150)]);
+  const [profile, trial, domain, inboxes, events, extras] = await Promise.all([getProfile(id), getTrial(id), getDomain(id), getInboxRecords(id), getEvents(id, 150), clientExtras(client)]);
   const jobs = {};
   for (const j of JOBS.filter((x) => x.scope === 'client')) {
     try { jobs[j.name] = await kv.get(K.jobLast(j.name, id)); } catch { jobs[j.name] = null; }
   }
-  return Response.json({ client, profile, trial, domain, inboxes: inboxes.map(publicInbox), events, jobs, states: STATES, profileFields: PROFILE_FIELDS, encKey: hasEncKey() });
+  return Response.json({ client, profile, trial, domain, inboxes: inboxes.map(publicInbox), events, jobs, states: STATES, profileFields: PROFILE_FIELDS, encKey: hasEncKey(), ...extras });
 }
 
 export async function POST(request, { params }) {
   const id = assertClientId(params.id);
-  if (!(await getClient(id))) return Response.json({ error: 'not found' }, { status: 404 });
+  const client = await getClient(id);
+  if (!client) return Response.json({ error: 'not found' }, { status: 404 });
   const body = await request.json().catch(() => ({}));
-  switch (body.action) {
-    case 'profile': {
-      const fields = {};
-      for (const f of PROFILE_FIELDS) if (typeof body.fields?.[f] === 'string') fields[f] = body.fields[f].trim();
-      await kv.hset(K.profile(id), fields);
-      await logEvent(id, 'mc', 'profile_updated', { fields: Object.keys(fields) });
-      return Response.json({ ok: true });
+  try {
+    switch (body.action) {
+      case 'profile': {
+        const fields = {};
+        for (const f of PROFILE_FIELDS) if (typeof body.fields?.[f] === 'string') fields[f] = body.fields[f].trim();
+        await kv.hset(K.profile(id), fields);
+        await logEvent(id, 'mc', 'profile_updated', { fields: Object.keys(fields) });
+        return Response.json({ ok: true });
+      }
+      case 'addInbox': {
+        if (!hasEncKey()) return Response.json({ error: 'ENC_KEY is not set on the server, so passwords cannot be stored safely yet.' }, { status: 503 });
+        const rec = await saveInbox(id, { email: body.email, password: body.password, displayName: body.displayName, provider: body.provider || 'google', enabled: false });
+        return Response.json({ ok: true, inbox: publicInbox(rec) });
+      }
+      case 'removeInbox':
+        await removeInbox(id, body.email);
+        return Response.json({ ok: true });
+      case 'inboxEnabled':
+        await patchInbox(id, body.email, { enabled: body.enabled ? '1' : '0' });
+        if (id === 'aviance') await kv.hset('inbox_enabled', { [String(body.email).toLowerCase()]: body.enabled ? '1' : '0' });
+        await logEvent(id, 'mc', 'inbox_switched', { email: body.email, enabled: Boolean(body.enabled) });
+        return Response.json({ ok: true });
+      case 'setState': {
+        const changed = await setState(id, body.to, body.reason || 'owner (Mission Control)', { force: Boolean(body.force) });
+        return Response.json({ ok: true, changed });
+      }
+      case 'runJob': {
+        const result = await runTick({ source: 'mc', only: body.job, clientId: id, force: true });
+        return Response.json({ ok: true, result });
+      }
+      // ── Phase 6 actions ──
+      case 'addNote': {
+        const r = await addOwnerNote(id, body.text, body.dueDate || null);
+        return Response.json({ ok: true, ...r });
+      }
+      case 'completePromise':
+        await completePromise(id, String(body.promiseId));
+        await logEvent(id, 'promises', 'promise_done', { promiseId: body.promiseId });
+        return Response.json({ ok: true });
+      case 'inboxesCancelled':
+        await markInboxesCancelled(id);
+        return Response.json({ ok: true });
+      case 'markPaid':
+        return Response.json({ ok: true, ...(await markPaid(id)) });
+      case 'clearLegalHold': {
+        await kv.hdel(K.client(id), 'legalHold');
+        await logEvent(id, 'mc', 'legal_hold_cleared', { by: 'owner' });
+        let changed = false;
+        if (client.state === 'paused') changed = await setState(id, 'sending', 'legal hold cleared by owner');
+        return Response.json({ ok: true, resumed: changed });
+      }
+      case 'reviewCaptured': {
+        const at = new Date().toISOString();
+        await patchTrial(id, { reviewCapturedAt: at });
+        await recordLedger(id, { reviewCapturedAt: at });
+        await logEvent(id, 'mc', 'review_captured', {});
+        return Response.json({ ok: true });
+      }
+      case 'logTime': {
+        const minutes = Math.round(Number(body.minutes));
+        if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 600) return Response.json({ error: 'minutes must be 1–600' }, { status: 400 });
+        const total = await kv.hincrby(K.trial(id), 'ownerMinutes', minutes);
+        await recordLedger(id, { ownerMinutes: total });
+        await logEvent(id, 'mc', 'owner_time_logged', { minutes, total });
+        return Response.json({ ok: true, total });
+      }
+      default:
+        return Response.json({ error: 'unknown action' }, { status: 400 });
     }
-    case 'addInbox': {
-      if (!hasEncKey()) return Response.json({ error: 'ENC_KEY is not set on the server, so passwords cannot be stored safely yet.' }, { status: 503 });
-      const rec = await saveInbox(id, { email: body.email, password: body.password, displayName: body.displayName, provider: body.provider || 'google', enabled: false });
-      return Response.json({ ok: true, inbox: publicInbox(rec) });
-    }
-    case 'removeInbox':
-      await removeInbox(id, body.email);
-      return Response.json({ ok: true });
-    case 'inboxEnabled':
-      await patchInbox(id, body.email, { enabled: body.enabled ? '1' : '0' });
-      if (id === 'aviance') await kv.hset('inbox_enabled', { [String(body.email).toLowerCase()]: body.enabled ? '1' : '0' });
-      await logEvent(id, 'mc', 'inbox_switched', { email: body.email, enabled: Boolean(body.enabled) });
-      return Response.json({ ok: true });
-    case 'setState': {
-      const changed = await setState(id, body.to, body.reason || 'owner (Mission Control)', { force: Boolean(body.force) });
-      return Response.json({ ok: true, changed });
-    }
-    case 'runJob': {
-      const result = await runTick({ source: 'mc', only: body.job, clientId: id, force: true });
-      return Response.json({ ok: true, result });
-    }
-    default:
-      return Response.json({ error: 'unknown action' }, { status: 400 });
+  } catch (err) {
+    return Response.json({ error: err.message }, { status: 400 });
   }
 }
