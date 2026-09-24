@@ -11,11 +11,13 @@
  * The token (lib/tokens) is an HMAC over the address, so only an address we
  * actually mailed can be suppressed. A bare `?email=` is honoured only when
  * it matches a valid token — an unsigned address is never suppressed.
- * Never throws.
+ * The address is added to suppression:global (all clients) and to the
+ * legacy aviance set. Never throws.
  */
 
 import { verifyUnsubscribeToken } from '@/lib/tokens';
 import { addToSuppression } from '@/lib/leads-db';
+import { suppress as suppressGlobal } from '@/lib/db/leads';
 import { normalizeEmail } from '@/lib/metrics';
 
 export const dynamic = 'force-dynamic';
@@ -87,8 +89,17 @@ async function resolveEmail(request) {
   return email;
 }
 
+/**
+ * A STOP applies to every client (SPEC §1 rule 7): the address goes to
+ * `suppression:global`, which every trial sender checks before each email,
+ * and to the legacy `suppression` set the aviance engine still reads.
+ */
 async function suppress(email) {
-  try { await addToSuppression(email, 'one_click_unsubscribe'); return true; } catch { return false; }
+  try {
+    await suppressGlobal(email);
+    await addToSuppression(email, 'one_click_unsubscribe');
+    return true;
+  } catch { return false; }
 }
 
 export async function GET(request) {

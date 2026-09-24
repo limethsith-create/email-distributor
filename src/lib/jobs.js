@@ -28,8 +28,14 @@ function internalRequest(path) {
 
 // ── aviance: the pre-trial engine, driven by the tick ─────────────────────────
 
+// Names are unique across every job file (claims, last-run records and the
+// Mission Control "force a job now" button key off the name); the aviance
+// engine's jobs carry an aviance- prefix so a forced trial `send` / `replies`
+// can never start the legacy engine. Each run also refuses any other client.
+const notAviance = (clientId) => (clientId !== 'aviance' ? { skipped: 'aviance engine only' } : null);
+
 const avianceSend = {
-  name: 'send',
+  name: 'aviance-send',
   scope: 'client',
   cost: 3,
   minBudgetMs: 12_000,
@@ -39,7 +45,9 @@ const avianceSend = {
     const p = partsIn(ET, now);
     return usBusinessHours(p) ? minuteKey(p) : null;
   },
-  async run() {
+  async run({ clientId }) {
+    const refused = notAviance(clientId);
+    if (refused) return refused;
     const { GET } = await import('@/app/api/cron/auto-send/route');
     const res = await GET(internalRequest('/api/cron/auto-send?skipReplies=1'));
     const body = await res.json();
@@ -62,7 +70,7 @@ const avianceSend = {
 };
 
 const avianceReplies = {
-  name: 'replies',
+  name: 'aviance-replies',
   scope: 'client',
   cost: 4,
   minBudgetMs: 10_000,
@@ -72,7 +80,9 @@ const avianceReplies = {
     const p = partsIn(ET, now);
     return bucketKey(p, usBusinessHours(p) ? 5 : 20);
   },
-  async run({ deadline }) {
+  async run({ clientId, deadline }) {
+    const refused = notAviance(clientId);
+    if (refused) return refused;
     const { checkAllReplies } = await import('@/lib/reply-checker');
     const r = await checkAllReplies({ deadlineMs: deadline - 1000 });
     if (r.skipped === 'locked') return { skipped: 'locked' };
@@ -81,7 +91,7 @@ const avianceReplies = {
 };
 
 const avianceEodReport = {
-  name: 'eod-report',
+  name: 'aviance-eod-report',
   scope: 'client',
   cost: 5,
   minBudgetMs: 10_000,
@@ -90,7 +100,9 @@ const avianceEodReport = {
     const p = partsIn(ET, now);
     return isWeekday(p.weekday) && p.hour >= 19 && p.hour < 22 ? p.dayKey : null;
   },
-  async run() {
+  async run({ clientId }) {
+    const refused = notAviance(clientId);
+    if (refused) return refused;
     // Outside the send window the legacy sender runs its end-of-day report
     // path (which has its own once-a-day guard).
     const { GET } = await import('@/app/api/cron/auto-send/route');
@@ -121,3 +133,11 @@ const usage = {
 };
 
 export const JOBS = [watchdog, usage, avianceSend, avianceReplies, avianceEodReport, ...STAGE_A, ...STAGE_B, ...STAGE_C, ...STAGE_D];
+
+/** Job names that appear more than once (must be empty; tests check it). */
+export function duplicateJobNames(jobs = JOBS) {
+  const seen = new Set();
+  const dup = new Set();
+  for (const j of jobs) { if (seen.has(j.name)) dup.add(j.name); seen.add(j.name); }
+  return [...dup];
+}

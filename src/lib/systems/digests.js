@@ -1,7 +1,10 @@
 /**
  * Owner digests (SPEC §10.2).
  *
- * Morning (08:00 Asia/Colombo, daily): "All green" when nothing is open, or
+ * Morning (08:00 Asia/Colombo, daily): leads with the Price Scout escalations
+ * (shopping list not bought 48 h after it was sent, shopping.escalatedAt) and
+ * the clients whose Booking Link Tester is still untested (SPEC §6.4 step 7,
+ * §6.7 step 4). Then "All green" when nothing is open, or
  * per client each open alert and what the system already did in the last 24
  * hours; plus every promise due today or overdue (Promise Register) and any
  * config drift (overrides that differ from the defaults, SPEC §10.3).
@@ -13,7 +16,12 @@
  * health colour of every live client. Includes `aviance`.
  */
 
+import { kv } from '@vercel/kv';
+import { K } from '@/lib/db/keys';
 import { cfg, globalOverrides, defaultOf } from '@/lib/config';
+import { getProfile, getTrial } from '@/lib/db/client';
+import { trialDay } from '@/lib/time';
+import { clientNow } from '@/lib/testclock';
 import { getAllClients } from '@/lib/db/client';
 import { getEvents } from '@/lib/db/events';
 import { alertOwner, getAlertLog } from '@/lib/notify';
@@ -46,6 +54,26 @@ export async function morningDigest({ now = new Date(), send = true } = {}) {
   const since = now.getTime() - 24 * 3600_000;
   const sections = [];
   const dueLines = [];
+  const topLines = [];
+  for (const c of clients) {
+    if (c.state === 'deleted' || c.id === 'aviance') continue;
+    if (c.state === 'awaiting_purchase') {
+      const shop = (await kv.hgetall(K.shopping(c.id))) || {};
+      if (shop.escalatedAt && !shop.boughtAt) {
+        const hours = shop.sentAt ? Math.floor((now.getTime() - Date.parse(shop.sentAt)) / 3600e3) : null;
+        topLines.push(`NOT BOUGHT: ${c.name || c.id} — shopping list sent ${hours != null ? `${hours} h ago` : 'earlier'} (${shop.chosenDomain || 'see the list'}). Paste the logins on /mc/clients/${c.id}/purchase.`);
+      }
+    }
+    if (['warming', 'ready'].includes(c.state)) {
+      const profile = await getProfile(c.id);
+      const tested = ['1', 'true', 1, true].includes(profile.bookingTested);
+      if (!tested && (profile.bookingRequestSentAt || profile.bookingCheckStatus === 'problems')) {
+        const day = trialDay(await getTrial(c.id), clientNow(c, now));
+        const why = profile.bookingCheckStatus === 'problems' ? 'the link check found problems' : 'the client has not tapped "It worked"';
+        topLines.push(`Booking link untested: ${c.name || c.id}${day != null ? ` (Day ${day})` : ''} — ${why}; Day 1 waits for it.`);
+      }
+    }
+  }
   for (const c of clients) {
     if (c.state === 'deleted') continue;
     const open = alerts.filter((a) => a.clientId === c.id);
@@ -63,8 +91,9 @@ export async function morningDigest({ now = new Date(), send = true } = {}) {
   const globalOpen = alerts.filter((a) => !a.clientId);
   if (globalOpen.length) sections.push(['System', ...globalOpen.map((a) => `  • ${a.title}${a.urgent ? ' [urgent]' : ''}`)].join('\n'));
   const drift = await configDrift();
-  const allGreen = sections.length === 0 && dueLines.length === 0;
+  const allGreen = sections.length === 0 && dueLines.length === 0 && topLines.length === 0;
   const body = [
+    ...(topLines.length ? [...topLines, ''] : []),
     allGreen ? 'All green.' : `${sections.length} client${sections.length === 1 ? '' : 's'} with open alerts${dueLines.length ? `, ${dueLines.length} promise${dueLines.length === 1 ? '' : 's'} due` : ''}.`,
     ...(sections.length ? ['', ...sections] : []),
     ...(dueLines.length ? ['', 'Promises:', ...dueLines.map((l) => `  • ${l}`)] : []),

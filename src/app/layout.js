@@ -7,15 +7,38 @@ import { usePathname } from 'next/navigation';
 
 const NAV = [
   { href: '/mc', label: 'Mission' },
-  { href: '/mc/alerts', label: 'Alerts' },
-  { href: '/mc/config', label: 'Config' },
-  { href: '/mc/test', label: 'Test' },
   { href: '/', label: 'Dashboard' },
   { href: '/inboxes', label: 'Inboxes' },
   { href: '/leads', label: 'Leads' },
   { href: '/replies', label: 'Replies' },
   { href: '/activity', label: 'Activity' },
 ];
+
+// Mission Control sub-navigation, shown under the top bar on /mc pages only.
+const MC_NAV = [
+  { href: '/mc', label: 'Board' },
+  { href: '/mc/queue', label: 'Queue' },
+  { href: '/mc/warmup', label: 'Warm-up' },
+  { href: '/mc/learning', label: 'Learning' },
+  { href: '/mc/alerts', label: 'Alerts' },
+  { href: '/mc/config', label: 'Config' },
+  { href: '/mc/test', label: 'Test' },
+];
+
+/** Public pages (client token pages, the application form, the login) show no admin navigation. */
+const isPublicPage = (p) => Boolean(p) && (p.startsWith('/c/') || p === '/apply' || p === '/mc/login');
+
+function McNav({ pathname }) {
+  if (!pathname?.startsWith('/mc') || isPublicPage(pathname)) return null;
+  return (
+    <nav className="mono" style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px', display: 'flex', gap: 16, overflowX: 'auto', height: 36, alignItems: 'center', fontSize: 11.5, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+      {MC_NAV.map((l) => {
+        const active = l.href === '/mc' ? pathname === '/mc' || pathname.startsWith('/mc/clients') : pathname.startsWith(l.href);
+        return <Link key={l.href} href={l.href} style={{ textDecoration: 'none', whiteSpace: 'nowrap', color: active ? 'var(--fg)' : 'var(--fg-muted)', borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent', paddingBottom: 2 }}>{l.label}</Link>;
+      })}
+    </nav>
+  );
+}
 
 function Brand() {
   return (
@@ -47,8 +70,8 @@ function ClientBrand() {
 function TopNav() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
-  // Client pages (/c/[token]/...) are public: no admin navigation on them.
-  const clientPage = pathname?.startsWith('/c/');
+  // Client pages (/c/[token]/...), /apply and the login are public: no admin navigation on them.
+  const clientPage = isPublicPage(pathname);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 4);
@@ -75,7 +98,7 @@ function TopNav() {
           overflowX: 'auto', height: '100%',
         }}>
           {NAV.map((link, i) => {
-            const active = pathname === link.href;
+            const active = link.href === '/mc' ? Boolean(pathname?.startsWith('/mc')) : pathname === link.href;
             return (
               <Link key={link.href} href={link.href}
                 className="mono"
@@ -109,6 +132,7 @@ function TopNav() {
           aviance.online <span aria-hidden>→</span>
         </a>
       </div>
+      {!clientPage && <McNav pathname={pathname} />}
     </header>
   );
 }
