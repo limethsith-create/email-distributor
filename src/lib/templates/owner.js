@@ -66,6 +66,7 @@ export const ALERTS = {
   autorenew_on: { urgent: true, title: 'Auto-renew is not confirmed off for {domain}' },
   promo_expired: { urgent: false, title: 'Promo expired: {registrar} {code}' },
   booking_link_broken: { urgent: false, title: 'Booking link problem: {clientId}' },
+  new_application: { urgent: true, title: 'New trial application: {company}' },
   // ── end Stage A ──
   // ── Stage B additions ──
   warmup_pool_small: { urgent: false, title: 'Warm-up pool has {count} members (needs {min})' },

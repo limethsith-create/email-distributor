@@ -182,3 +182,27 @@ Day 1", sending "Sending", paused "Paused", extension "Free extension",
 deciding "Deciding", converted "Converted", not_now "Not now", retired
 "Retired", deleted "Deleted", declined "Declined", closed_silent "Never
 finished onboarding".
+
+## Trial applications from the website
+
+aviance.online/trial.html posts its form to `POST /api/apply` (CORS for
+`SITE_ORIGINS`, default `https://www.aviance.online,https://aviance.online`).
+The site asks different questions from the Gatekeeper's, so a website
+application is saved in state `applied` and **held for the owner**
+(`systems/webapply.js`): the owner gets `new_application` (email + Telegram),
+the hub gets a to-do `review:{id}` → detail section `application`, and
+nothing reaches the applicant until the owner decides.
+
+`GET /api/mc/hub/{id}` → `application` (null when none):
+```jsonc
+{ "receivedAt": "ISO", "source": "website|form|owner", "review": "pending|approved|declined|null",
+  "decidedAt": "ISO|null", "decision": "approve|decline|null", "declineReason": "text|null",
+  "answers": [ { "q": "What do you sell, and who to?", "a": "…" } ],
+  "fit": { "verdict": "fit|fails", "summary": "Looks like a fit — 3 checks unknown",
+           "lines": [ { "rule": "deal_value", "label": "Customer worth ≥ $2,000 in year one", "status": "pass|fail|unknown", "note": "They said $5,000–$20,000" } ] } }
+```
+Owner actions: `POST /api/mc/clients/{id}/intake` `{action:'approveApplication'}`
+→ `{ok, outcome:'onboarding'|'queued'|'declined'}` (the repeat rule and the
+3-trial cap still apply) · `{action:'declineApplication', reason}` →
+`{ok, outcome:'declined'}`; the reason is emailed to the applicant
+(`decline_fit`), 400 when empty.

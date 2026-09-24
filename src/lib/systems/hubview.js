@@ -82,11 +82,31 @@ function daysSince(iso, now) {
 
 const sys = (key, status, line, detail = []) => ({ key, label: SYSTEM_LABELS[key], status, line, detail: detail.filter(Boolean) });
 
+const parseJ = (v, fb) => { if (v == null || v === '') return fb; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return fb; } };
+
+/** The stored application → the hub's shape (docs/HUB-API.md "application"), or null. */
+export function applicationView(raw) {
+  if (!raw || !Object.keys(raw).length) return null;
+  return {
+    receivedAt: raw.receivedAt || null,
+    source: raw.source || null,
+    review: raw.review || null,
+    decidedAt: raw.decidedAt || null,
+    decision: raw.decision || null,
+    declineReason: raw.declineReason || null,
+    answers: parseJ(raw.answers, []),
+    fit: parseJ(raw.fit, null),
+  };
+}
+
+const underReview = (ctx) => ctx.client.state === 'applied' && ctx.application?.review === 'pending';
+
 // ─── state label ──────────────────────────────────────────────────────────────
 
 export function stateLabelFor(ctx) {
   const { client, trial = {}, day, shopping = {}, now } = ctx;
   const base = STATE_LABELS[client.state] || client.state;
+  if (underReview(ctx)) return `${base} — waiting for your review`;
   switch (client.state) {
     case 'queued': return client.queueExpectedDate ? `${base} — expected ${client.queueExpectedDate}` : base;
     case 'onboarding': return trial.onboardingSentAt ? `${base} — link sent ${ago(trial.onboardingSentAt, now)}` : base;
@@ -117,7 +137,9 @@ export function systemsFor(ctx) {
   const out = [];
 
   // 1. Intake
-  if (st === 'applied') out.push(sys('intake', 'working', 'Application received · fit check running'));
+  const app = ctx.application;
+  if (underReview(ctx)) out.push(sys('intake', 'waiting', `${app.source === 'website' ? 'Website application' : 'Application'} — waiting for your review${app.fit?.summary ? ` · ${app.fit.summary}` : ''}`, (app.fit?.lines || []).filter((l) => l.status !== 'pass').map((l) => `${l.label}: ${l.status} — ${l.note}`)));
+  else if (st === 'applied') out.push(sys('intake', 'working', 'Application received · fit check running'));
   else if (st === 'queued') out.push(sys('intake', 'waiting', `In the queue${client.queueExpectedDate ? ` · expected ${client.queueExpectedDate}` : ''}`));
   else if (st === 'declined') out.push(sys('intake', 'off', `Declined${client.declineReason ? ` · ${client.declineReason}` : ''}`));
   else if (st === 'closed_silent') out.push(sys('intake', 'off', 'Never finished onboarding'));
@@ -272,6 +294,13 @@ export function todosFor(ctx) {
   const t = [];
   const push = (key, text, detail, urgent, since, action) => t.push({ id: `${key}:${id}`, clientId: id, clientName: client.name || id, text, detail: detail || '', urgent: Boolean(urgent), since: since || null, action });
 
+  if (underReview(ctx)) {
+    const a = ctx.application;
+    const since = a.receivedAt || client.createdAt;
+    push('review', `Review ${client.name || id}'s trial application`,
+      `${a.source === 'website' ? 'From the website' : 'Application'} ${ago(since, now)}${a.fit?.summary ? ` · ${a.fit.summary.charAt(0).toLowerCase()}${a.fit.summary.slice(1)}` : ''}`,
+      Boolean(since) && now.getTime() - Date.parse(since) > 12 * 3600e3, since, view('detail', id, 'application'));
+  }
   if (st === 'awaiting_purchase' && shopping.sentAt && !shopping.boughtAt) {
     push('buy', `Buy ${shopping.chosenDomain || 'the domain'} and 2 inboxes, then paste the logins`,
       `Shopping list sent ${ago(shopping.sentAt, now)}${has(shopping.total) ? ` · about $${shopping.total}` : ''}${shopping.escalatedAt ? ' · overdue' : ''}`,
@@ -345,13 +374,14 @@ export async function loadContext(client, { alerts = null, now = new Date() } = 
   const checks = domainRead.checks || {};
   const inboxes = inboxesRaw.map(({ passwordEnc, ...r }) => ({ ...r, hasPassword: Boolean(passwordEnc) }));
   const hot = Object.values((await kv.hgetall(K.hot(id)).catch(() => null)) || {});
+  const application = applicationView(await kv.hgetall(K.application(id)).catch(() => null));
   const openAlerts = allAlerts.filter((a) => a.clientId === id && !a.acknowledged);
   return {
     client, trial: trial || {}, profile, domain, checks, shopping, inboxes,
     leads: extras.leadsByStatus || {}, lf, approval, sequence: sequence || {}, counters: extras.counters || {},
     bookings: extras.bookings || [], replies: extras.replies || [], repliesByKind: extras.repliesByKind || {}, hot,
     invoice: extras.invoice, promises: extras.promises || [], pacelog, reports: extras.reports || [], upcoming: extras.upcoming || [],
-    runState, alerts: openAlerts, day: extras.trialDay, health: extras.health, now: vnow, minMarket: await cfg(id, 'MIN_MARKET'),
+    runState, application, alerts: openAlerts, day: extras.trialDay, health: extras.health, now: vnow, minMarket: await cfg(id, 'MIN_MARKET'),
   };
 }
 
@@ -463,6 +493,7 @@ export async function hubClient(id, { now = new Date() } = {}) {
     events,
     jobs,
     holds: { legalHoldAt: client.legalHoldAt || null, sendHold: client.sendHold || null, emergencyActive: truthy(client.emergencyActive), emergencyHalved: truthy(client.emergencyHalved), pausedReason: client.pausedReason || null },
+    application: ctx.application,
     links: {},
     virtualNow: id === '_test' ? clientNow(client, now).toISOString() : null,
   };

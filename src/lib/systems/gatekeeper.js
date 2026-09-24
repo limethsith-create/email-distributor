@@ -284,7 +284,7 @@ export async function decide(clientId, app, { preApproved = false, override = fa
  * Entry point for POST /api/apply and the owner's New client button.
  * @returns {{ok, clientId?, outcome?, errors?, duplicate?}}
  */
-export async function applyForTrial(raw, { preApproved = false, override = false, source = 'form', now = io.now() } = {}) {
+export async function applyForTrial(raw, { preApproved = false, override = false, source = 'form', now = io.now(), review = null } = {}) {
   const app = normaliseApplication(raw);
   const errors = validateApplication(app);
   if (Object.keys(errors).length) return { ok: false, errors };
@@ -318,6 +318,15 @@ export async function applyForTrial(raw, { preApproved = false, override = false
     return { ok: true, clientId, outcome: 'manual' };
   }
 
+  if (review) {
+    try {
+      return { ok: true, clientId, ...(await holdForReview(clientId, app, review, now)) };
+    } catch (err) {
+      await gatekeeperError(clientId, app.contactEmail, err, 'holding the application for review');
+      return { ok: true, clientId, outcome: 'manual' };
+    }
+  }
+
   try {
     const result = await decide(clientId, app, { preApproved, override, now });
     return { ok: true, clientId, ...result };
@@ -325,6 +334,58 @@ export async function applyForTrial(raw, { preApproved = false, override = false
     await gatekeeperError(clientId, app.contactEmail, err, 'the decision');
     return { ok: true, clientId, outcome: 'manual' };
   }
+}
+
+// ── owner review (website applications, see systems/webapply.js) ────────────
+
+/**
+ * Keep the application in `applied` for the owner: store the answers and the
+ * fit verdict, and tell the owner. Nothing is sent to the applicant yet.
+ */
+async function holdForReview(clientId, app, { answers = [], fit = null, extras = {} }, now) {
+  await kv.hset(K.application(clientId), {
+    review: 'pending', reviewSince: now.toISOString(),
+    answers: JSON.stringify(answers), fit: JSON.stringify(fit || {}),
+    ...Object.fromEntries(Object.entries(extras).filter(([, v]) => v !== null && v !== undefined && v !== '').map(([k, v]) => [`web_${k}`, String(v)])),
+  });
+  await updateClient(clientId, { intakeStep: 'review' });
+  await logEvent(clientId, SYSTEM, 'held_for_review', { verdict: fit?.verdict || null, summary: fit?.summary || null });
+  const lines = (answers || []).map((a) => `${a.q}\n  ${a.a}`).join('\n');
+  await io.alertOwner('new_application', {
+    clientId,
+    vars: { company: app.companyName || app.mainDomain || clientId },
+    body: `${app.contactName} <${app.contactEmail}> applied for a trial from the website.\n\n${fit?.summary || ''}\n\n${lines}`,
+    did: 'Saved it and held it for you. Approve or decline it on the Trials tab of the hub; they get an answer only when you press one.',
+  });
+  return { outcome: 'review' };
+}
+
+async function pendingApplication(clientId) {
+  const client = await getClient(clientId);
+  if (!client) throw new Error(`no client ${clientId}`);
+  const application = (await kv.hgetall(K.application(clientId))) || {};
+  if (client.state !== 'applied' || application.review !== 'pending') throw new Error('this application is not waiting for a review');
+  return { client, application };
+}
+
+/** Owner pressed Approve: the repeat rule and the cap still apply (→ onboarding or queue). */
+export async function approveApplication(clientId, { now = io.now() } = {}) {
+  const { application } = await pendingApplication(clientId);
+  if (application.web_sellsTo) await kv.hset(K.profile(clientId), { sellsTo: application.web_sellsTo });
+  if (application.web_city) await kv.hset(K.profile(clientId), { cities: JSON.stringify([application.web_city]) });
+  await kv.hset(K.application(clientId), { review: 'approved', decision: 'approve', decidedAt: now.toISOString() });
+  await logEvent(clientId, SYSTEM, 'review_approved', {});
+  return decide(clientId, { mainDomain: application.mainDomain }, { preApproved: true, now });
+}
+
+/** Owner pressed Decline: the reason goes to the applicant in decline_fit. */
+export async function declineApplication(clientId, reason, { now = io.now() } = {}) {
+  const text = String(reason || '').trim();
+  if (!text) throw new Error('a reason is required — it goes to the applicant');
+  await pendingApplication(clientId);
+  await kv.hset(K.application(clientId), { review: 'declined', decision: 'decline', declineReason: text.slice(0, 500), decidedAt: now.toISOString() });
+  await logEvent(clientId, SYSTEM, 'review_declined', {});
+  return decline(clientId, 'owner', 'decline_fit', { reason: text }, now);
 }
 
 // ── queue ───────────────────────────────────────────────────────────────────

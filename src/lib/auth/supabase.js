@@ -126,6 +126,15 @@ export function isAllowedOrigin(origin) {
   return false;
 }
 
+/** The public website's origins, allowed to POST /api/apply. */
+export function isSiteOrigin(origin) {
+  if (!origin) return false;
+  const o = String(origin).replace(/\/+$/, '');
+  const raw = process.env.SITE_ORIGINS || 'https://www.aviance.online,https://aviance.online';
+  if (raw.split(',').map((s) => s.trim().replace(/\/+$/, '')).includes(o)) return true;
+  return process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(o);
+}
+
 export function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin,

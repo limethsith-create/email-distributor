@@ -7,6 +7,7 @@
  *  - machine: /api/cron/* and /api/admin/export|import accept
  *             `Authorization: Bearer CRON_SECRET` (or `?token=` for the old
  *             pingers) — or an admin session.
+ *  - site:    /api/apply answers the public website (SITE_ORIGINS) cross-origin.
  *  - hub:     /api/mc/* also accepts `Authorization: Bearer <Supabase access
  *             token>` of an allowed hub admin, with CORS for the hub's origin.
  *  - admin:   everything else needs the ADMIN_SECRET session cookie.
@@ -16,7 +17,7 @@
 
 import { NextResponse } from 'next/server';
 import { SESSION_COOKIE, verifySession, secretMatches } from '@/lib/auth/session';
-import { verifyHubToken, bearerOf, isAllowedOrigin, corsHeaders } from '@/lib/auth/supabase';
+import { verifyHubToken, bearerOf, isAllowedOrigin, isSiteOrigin, corsHeaders } from '@/lib/auth/supabase';
 
 const PUBLIC = [
   /^\/mc\/login$/, /^\/api\/mc\/login$/, /^\/api\/mc\/logout$/,
@@ -41,6 +42,13 @@ export async function middleware(request) {
   // CORS preflight for the hub (before any auth: browsers send it without headers).
   if (request.method === 'OPTIONS' && HUB_API.test(pathname)) {
     return hubOrigin ? withCors(new NextResponse(null, { status: 204 }), hubOrigin) : new NextResponse(null, { status: 403 });
+  }
+
+  // The public website posts trial applications cross-origin.
+  if (pathname === '/api/apply') {
+    const site = isSiteOrigin(origin) ? String(origin).replace(/\/+$/, '') : null;
+    if (request.method === 'OPTIONS') return site ? withCors(new NextResponse(null, { status: 204 }), site) : new NextResponse(null, { status: 403 });
+    return withCors(NextResponse.next(), site);
   }
 
   if (PUBLIC.some((re) => re.test(pathname))) return withCors(NextResponse.next(), hubOrigin);

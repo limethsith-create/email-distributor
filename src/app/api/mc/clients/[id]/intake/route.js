@@ -8,6 +8,8 @@
  *   rerunSetup              start a full Setup Checker round now
  *   rerunBookingTest        test the calendar link now
  *   resendWelcome           retry welcome_two_dates
+ *   approveApplication      owner approves a website application (→ onboarding or queue)
+ *   declineApplication {reason}  owner declines it; the reason is emailed to the applicant
  */
 
 import { kv } from '@vercel/kv';
@@ -19,6 +21,7 @@ import { getShopping, runPriceScout } from '@/lib/systems/pricescout';
 import { startSetupCheck, runSetupCheck, readChecks, sendWelcome } from '@/lib/systems/setupcheck';
 import { runBookingTest } from '@/lib/systems/bookingtest';
 import { asArray } from '@/lib/systems/intake-io';
+import { approveApplication, declineApplication } from '@/lib/systems/gatekeeper';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -53,6 +56,11 @@ export async function POST(request, { params }) {
   const deadline = Date.now() + 20000;
   try {
     switch (body.action) {
+      case 'approveApplication':
+        return Response.json({ ok: true, ...(await approveApplication(id)) });
+      case 'declineApplication':
+        if (!String(body.reason || '').trim()) return Response.json({ error: 'Write the reason — it goes to the applicant.' }, { status: 400 });
+        return Response.json({ ok: true, ...(await declineApplication(id, body.reason)) });
       case 'marketOverride':
         return Response.json({ ok: true, result: await overrideMarket(id, { note: body.note || '' }) });
       case 'rerunMarket':

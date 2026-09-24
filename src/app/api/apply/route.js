@@ -1,7 +1,9 @@
 /**
  * POST /api/apply — public trial application (SPEC §6.1). Accepts JSON or a
  * form post with the application answers; runs the Gatekeeper and answers
- * with a plain status the applicant can read. Public in middleware; guarded
+ * with a plain status the applicant can read. Applications from the public
+ * website are held for the owner's review (systems/webapply.js); the site
+ * calls this cross-origin (CORS in middleware). Public; guarded
  * by a honeypot field and a per-IP hourly limit (IP stored hashed only).
  */
 
@@ -10,6 +12,7 @@ import { K } from '@/lib/db/keys';
 import { cfg } from '@/lib/config';
 import { sha256 } from '@/lib/crypto';
 import { applyForTrial } from '@/lib/systems/gatekeeper';
+import { submitWebsiteApplication } from '@/lib/systems/webapply';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -20,7 +23,11 @@ const MESSAGES = {
   declined: 'Thank you for applying. We have emailed you our answer and the reason.',
   manual: 'Thank you — your application is saved and we will answer you by email within one business day.',
   received: 'Thank you — we already have your application and will answer by email.',
+  review: 'Application in. A person reads every one and answers within one business day.',
 };
+
+/** The public site's form (aviance.online/trial.html) sends its own nine questions. */
+const isWebsiteForm = (b) => b.source === 'website' || (b.sell !== undefined && b.email !== undefined && b.companyName === undefined);
 
 async function readBody(request) {
   const type = request.headers.get('content-type') || '';
@@ -45,7 +52,7 @@ export async function POST(request) {
     if (n > (await cfg(null, 'INTAKE.applyPerHourPerIp'))) return Response.json({ ok: false, error: 'Too many applications from this address. Please try again later.' }, { status: 429 });
   } catch {}
 
-  const result = await applyForTrial(body, { source: 'form' });
+  const result = isWebsiteForm(body) ? await submitWebsiteApplication(body) : await applyForTrial(body, { source: 'form' });
   if (!result.ok) return Response.json({ ok: false, errors: result.errors }, { status: 400 });
   return Response.json({ ok: true, outcome: result.outcome, message: MESSAGES[result.outcome] || MESSAGES.manual });
 }
