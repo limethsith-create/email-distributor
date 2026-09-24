@@ -27,15 +27,12 @@ export async function clientRow(c, { alerts = [], now = new Date() } = {}) {
   const health = computeHealth({ client: c, trial, totals, day, alerts: open, promises, now: clientNow(c, now), quietWarnDays: await cfg(c.id, 'CLIENT.quietWarnDays') });
   const rates = inboxes.map((i) => Number(i.inboxRate7d)).filter(Number.isFinite).map((n) => (n > 1 ? n / 100 : n));
   let lastJobAt = null;
-  const { JOBS } = await import('@/lib/jobs');
-  const names = [...new Set(JOBS.filter((j) => j.scope === 'client').map((j) => j.name))];
-  if (names.length) {
-    try {
-      const p = kv.pipeline();
-      for (const n of names) p.get(K.jobLast(n, c.id));
-      const rows = await p.exec();
-      for (const r of rows) if (r?.at && (!lastJobAt || r.at > lastJobAt)) lastJobAt = r.at;
-    } catch {}
+  // Last runs live in the client hash (jl:{job}, written by the scheduler).
+  for (const [k, v] of Object.entries(c)) {
+    if (!k.startsWith('jl:')) continue;
+    let r = v;
+    if (typeof v === 'string') { try { r = JSON.parse(v); } catch { r = null; } }
+    if (r?.at && (!lastJobAt || r.at > lastJobAt)) lastJobAt = r.at;
   }
   return {
     id: c.id, name: c.name || c.id, state: c.state, plan: c.plan || 'trial',

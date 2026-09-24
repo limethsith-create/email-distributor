@@ -154,6 +154,7 @@ export async function saveHelper({ email, password, displayName, provider = 'goo
     updatedAt: new Date().toISOString(),
   };
   if (password) rec.passwordEnc = encrypt(String(password).replace(/\s+/g, ''));
+  clearHelperMemo();
   await kv.hset(K.warmupHelper(addr), rec);
   await kv.sadd(K.warmupPool(), memberKey(HELPER, addr));
   await logEvent(null, 'warmup', 'helper_saved', { email: addr, provider, passwordChanged: Boolean(password) });
@@ -162,12 +163,26 @@ export async function saveHelper({ email, password, displayName, provider = 'goo
 
 export async function removeHelper(email) {
   const addr = String(email || '').trim().toLowerCase();
+  clearHelperMemo();
   await kv.srem(K.warmupPool(), memberKey(HELPER, addr));
   await kv.del(K.warmupHelper(addr));
   await logEvent(null, 'warmup', 'helper_removed', { email: addr });
 }
 
+// Helper records change only from /mc/warmup; a warm instance reuses them for
+// a minute (CFG_MEMO_MS) instead of one read per helper per warm-up run.
+let helperMemo = null;
+export function clearHelperMemo() { helperMemo = null; }
+
 export async function getHelpers() {
+  const ms = Number(process.env.CFG_MEMO_MS ?? 60_000);
+  if (ms > 0 && helperMemo && helperMemo.exp > Date.now()) return helperMemo.value.map((h) => ({ ...h }));
+  const value = await loadHelpers();
+  if (ms > 0) helperMemo = { value, exp: Date.now() + ms };
+  return value.map((h) => ({ ...h }));
+}
+
+async function loadHelpers() {
   const members = ((await kv.smembers(K.warmupPool())) || []).filter((m) => m.startsWith(`${HELPER}|`));
   const out = [];
   for (const m of members) {
@@ -178,6 +193,7 @@ export async function getHelpers() {
 }
 
 async function patchMember(member, fields) {
+  if (member.isHelper && 'health' in fields && fields.health !== member.record?.health) clearHelperMemo();
   if (member.isHelper) await kv.hset(K.warmupHelper(member.email), { ...fields, updatedAt: new Date().toISOString() });
   else await patchInbox(member.clientId, member.email, fields);
   Object.assign(member.record, fields);
@@ -221,9 +237,17 @@ export async function getPool({ now = new Date(), clients = null, sync = true } 
 // ── stats ────────────────────────────────────────────────────────────────────
 
 export async function statBump(email, field, n = 1, now = new Date()) {
-  const key = K.warmupStats(email, dayKeyIn(ET, now));
-  await kv.hincrby(key, field, n);
-  await kv.expire(key, 30 * 86400);
+  const day = dayKeyIn(ET, now);
+  const key = K.warmupStats(email, day);
+  const v = await kv.hincrby(key, field, n);
+  if (Number(v) === n) await kv.expire(key, 30 * 86400);
+  // Day roll-up of sent/received for every member in one hash, so a warm-up
+  // run reads one key instead of one per pool member (Redis budget).
+  if (field === 'sent' || field === 'received') {
+    const dk = K.warmupDayStats(day);
+    const t = await kv.hincrby(dk, `${String(email).toLowerCase()}|${field}`, n);
+    if (Number(t) === n) await kv.expire(dk, 3 * 86400);
+  }
 }
 
 export async function statsFor(email, day) {
@@ -292,6 +316,13 @@ async function defaultSend(account, mail) {
   return sendEmail(account, mail);
 }
 
+/**
+ * Network seam for the warm-up engine and the canary (SMTP send, IMAP client).
+ * Tests replace members (`net.send = …`) so nothing reaches a real server;
+ * a per-call `deps` still wins.
+ */
+export const net = { send: (account, mail) => defaultSend(account, mail), imap: (account) => defaultImap(account) };
+
 function accountFor(member) {
   return toAccount(member.record);
 }
@@ -305,7 +336,7 @@ export async function sendMarked(fromMember, toMember, { deps = {}, kind = 'w', 
   if (text) msg = { subject, text, html: `<p>${String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>')}</p>` };
   else msg = composeWarmup(rng, { toName: toMember.record?.displayName, fromName: fromMember.record?.displayName });
   const html = `${msg.html}<span data-w="${marker}" style="display:none;font-size:0;line-height:0;max-height:0;overflow:hidden"></span>`;
-  const send = deps.send || defaultSend;
+  const send = deps.send || net.send;
   const res = await send(account, {
     to: toMember.email,
     subject: subject || msg.subject,
@@ -348,17 +379,20 @@ export async function runWarmupSend({ now = new Date(), deadline = Date.now() + 
   }
   const pool = await getPool({ now, clients });
   if (pool.length < 2) return { sent: 0, pool: pool.length };
+  // Helpers exist to warm client inboxes; with no client in the circle they rest.
+  if (!pool.some((m) => !m.isHelper)) return { sent: 0, skipped: 'no client inbox in the circle' };
   const day = dayKeyIn(ET, now);
   const hours = await cfg(null, 'BUILD.warmupHours');
   const n = await cfg(null, 'BUILD.warmupPairsPerTick');
   const receiveCap = await cfg(null, 'BUILD.warmupReceiveCap');
   const pairsRaw = (await kv.hgetall(K.warmupPair(day))) || {};
+  const roll = (await kv.hgetall(K.warmupDayStats(day))) || {};
   const sent = {};
   const received = {};
   for (const m of pool) {
-    const s = await statsFor(m.email, day);
-    sent[m.email] = s.sent || 0;
-    received[m.email] = s.received || 0;
+    const e = String(m.email).toLowerCase();
+    sent[m.email] = Number(roll[`${e}|sent`]) || 0;
+    received[m.email] = Number(roll[`${e}|received`]) || 0;
   }
   const rng = deps.rng || Math.random;
   const plan = planPairs(pool, { sent, received, pairs: new Set(Object.keys(pairsRaw)), n, rng, receiveCap, inWindow: (m) => inWindow(m.tz || ET, hours, now) });
@@ -436,7 +470,7 @@ export async function processMailbox(member, { mode = 'warm', tag = '', now = ne
   const out = { ok: false, member: member.email, found: 0, bySender: {}, replied: 0, archived: 0, error: null };
   const account = accountFor(member);
   if (!account) { out.error = 'password cannot be decrypted'; return out; }
-  const client = await (deps.imap || defaultImap)(account);
+  const client = await (deps.imap || net.imap)(account);
   const rng = deps.rng || Math.random;
   const flagRate = await cfg(null, 'BUILD.warmupFlagRate');
   const replyRate = await cfg(null, 'WARMUP.replyRate');
@@ -570,6 +604,7 @@ export async function runWarmupRead({ now = new Date(), deadline = Date.now() + 
   if (!markerSecret()) return { skipped: 'no_secret' };
   const pool = await getPool({ now, clients });
   if (!pool.length) return { read: 0 };
+  if (!pool.some((m) => !m.isHelper)) return { read: 0, skipped: 'no client inbox in the circle' };
   const perRun = await cfg(null, 'BUILD.warmupReadPerRun');
   const everyMin = await cfg(null, 'BUILD.warmupReadEveryMin');
   const readAt = (await kv.hgetall(K.warmupReadAt())) || {};
@@ -595,13 +630,8 @@ export async function runWarmupRead({ now = new Date(), deadline = Date.now() + 
     }
     results.push({ email: m.email, ok: r.ok, found: r.found, replied: r.replied });
   }
-  // Keep the displayed rate fresh for the senders we just saw.
-  for (const email of touched) {
-    const m = poolByEmail[email];
-    if (!m) continue;
-    const { rate } = await inboxRate7d(email, now);
-    if (rate != null) await patchMember(m, { inboxRate7d: rate.toFixed(3) });
-  }
+  // inboxRate7d is refreshed by the daily readiness run (and computed live on
+  // /mc/warmup); recomputing it here cost 7 reads per sender per run.
   return { read: results.length, results };
 }
 

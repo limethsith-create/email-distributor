@@ -10,6 +10,7 @@
  * whatever an override says (SPEC §14.8): 25 cold + 15 warm-up per inbox/day.
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 
@@ -52,7 +53,7 @@ export const DEFAULTS = {
   FRESH_MIN_SHARE: 0.4,
   FOLLOWUP_GRACE_DAYS: 7,
   BOUNCE: { max: 0.02 },
-  REPLIES: { offHoursMinutes: 20 },
+  REPLIES: { usHoursMinutes: 5, offHoursMinutes: 20 },
   HOT: { nudgeHours: 4, holdingHours: 24 },
   BOOK: { farSlotDays: 5, reminders: [24, 1], tapReminderHours: 24 },
   NOSHOW: { attempts: 2, emails: 3, windowDays: 14, highRate: 0.30 },
@@ -147,11 +148,13 @@ export const DEFAULTS = {
   BUILD: {
     // Warm-up Engine
     warmupHours: ['07:00', '22:00'],   // in the sending inbox's tz
-    warmupPairsPerTick: 3,
-    warmupEveryMin: 10,
+    warmupPairsPerTick: 5,             // 5 pairs every 20 min = 225/day of capacity (Redis budget, integration.md)
+    warmupEveryMin: 20,
     warmupFlagRate: 0.30,
     warmupReadEveryMin: 30,            // each pool mailbox is read at most this often
-    warmupReadPerRun: 2,               // IMAP mailboxes per run (IMAP is slow)
+    warmupReadPerRun: 6,               // IMAP mailboxes per run (IMAP is slow; the run stops at the tick deadline)
+    warmupReadRunEveryMin: 15,         // the warmup-read job's cadence
+    warmupReadHours: ['06:00', '23:30'], // ET; warm-up mail only goes out 07:00–22:00 sender time
     warmupLookbackHours: 48,
     warmupReadyMinDays: 14,
     warmupHelperQuota: 8,              // helpers send like a 15+ day inbox
@@ -248,15 +251,62 @@ export function defaultOf(key) {
   return getPath(DEFAULTS, key);
 }
 
+// ── Tick-scoped config snapshot ─────────────────────────────────────────────
+// Inside a tick (withConfigSnapshot) every cfg() reads one copy of the global
+// override hash, loaded once, and a client's own override hash only when that
+// client has one (listed in the global hash's `__clients` field). Outside a
+// tick (pages, API routes) cfg() reads Redis as before. Upstash free tier is
+// 500k commands/month; a per-call read cost ~2 commands per cfg() call.
+const CLIENTS_FIELD = '__clients';
+const snapshotStore = new AsyncLocalStorage();
+// A warm serverless instance reuses the global override hash for up to
+// CFG_MEMO_MS (default 60 s) across ticks; an edit in /mc/config applies
+// within a minute. setOverride() on this instance clears it at once.
+let globalMemo = null;
+const memoMs = () => { const v = Number(process.env.CFG_MEMO_MS); return Number.isFinite(v) ? v : 60_000; };
+export function clearConfigMemo() { globalMemo = null; }
+
+export function withConfigSnapshot(fn) {
+  return snapshotStore.run({ global: null, clients: new Map() }, fn);
+}
+
+async function snapshotValue(snap, clientId, key) {
+  if (!snap.global) {
+    if (globalMemo && globalMemo.exp > Date.now()) snap.global = globalMemo.value;
+    else {
+      try { snap.global = (await kv.hgetall(K.globalConfig())) || {}; } catch { snap.global = {}; }
+      if (memoMs() > 0) globalMemo = { value: snap.global, exp: Date.now() + memoMs() };
+    }
+  }
+  if (clientId) {
+    let listed = [];
+    try { listed = parse(snap.global[CLIENTS_FIELD]) || []; } catch {}
+    if (Array.isArray(listed) && listed.includes(clientId)) {
+      if (!snap.clients.has(clientId)) {
+        let h = {};
+        try { h = (await kv.hgetall(K.config(clientId))) || {}; } catch {}
+        snap.clients.set(clientId, h);
+      }
+      const v = parse(snap.clients.get(clientId)[key]);
+      if (v !== undefined) return v;
+    }
+  }
+  return parse(snap.global[key]);
+}
+
 /**
  * Resolve one setting. `clientId` may be null for global-only lookups.
  * Never throws: a KV failure falls back to the default.
  */
 export async function cfg(clientId, key) {
   let value;
+  const snap = snapshotStore.getStore();
   try {
-    if (clientId) value = parse(await kv.hget(K.config(clientId), key));
-    if (value === undefined) value = parse(await kv.hget(K.globalConfig(), key));
+    if (snap) value = await snapshotValue(snap, clientId, key);
+    else {
+      if (clientId) value = parse(await kv.hget(K.config(clientId), key));
+      if (value === undefined) value = parse(await kv.hget(K.globalConfig(), key));
+    }
   } catch {
     value = undefined;
   }
@@ -269,7 +319,7 @@ export async function globalOverrides() {
   try {
     const raw = (await kv.hgetall(K.globalConfig())) || {};
     const out = {};
-    for (const [k, v] of Object.entries(raw)) out[k] = parse(v);
+    for (const [k, v] of Object.entries(raw)) if (k !== CLIENTS_FIELD) out[k] = parse(v);
     return out;
   } catch {
     return {};
@@ -279,7 +329,15 @@ export async function globalOverrides() {
 /** Set (or with `value === undefined`, clear) an override. */
 export async function setOverride(clientId, key, value) {
   if (defaultOf(key) === undefined) throw new Error(`unknown config key: ${key}`);
+  clearConfigMemo();
   const hash = clientId ? K.config(clientId) : K.globalConfig();
+  if (clientId) {
+    // Keep the list of clients that have overrides (read by the tick snapshot).
+    let listed = [];
+    try { listed = parse(await kv.hget(K.globalConfig(), CLIENTS_FIELD)) || []; } catch {}
+    if (!Array.isArray(listed)) listed = [];
+    if (!listed.includes(clientId)) await kv.hset(K.globalConfig(), { [CLIENTS_FIELD]: JSON.stringify([...listed, clientId]) });
+  }
   if (value === undefined) return kv.hdel(hash, key);
   return kv.hset(hash, { [key]: JSON.stringify(clamp(key, value)) });
 }

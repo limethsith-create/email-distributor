@@ -25,6 +25,14 @@ const DELIVERY_STATES = ['sending', 'paused', 'extension', 'converted'];
 const REPLY_STATES = ['sending', 'paused', 'extension', 'deciding', 'converted', 'not_now'];
 const BOOKING_STATES = ['sending', 'paused', 'extension', 'deciding', 'converted', 'not_now'];
 
+// Stagger per-client polling so three clients do not all open IMAP in the same minute.
+const offsetOf = (id) => [...String(id)].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 997, 7);
+const staggered = (p, minutes, id) => {
+  const shifted = { ...p, minuteOfDay: p.minuteOfDay - (offsetOf(id) % minutes) };
+  if (shifted.minuteOfDay < 0) return null; // just after midnight: wait for the first full bucket
+  return bucketKey(shifted, minutes);
+};
+
 const send = {
   name: 'send',
   scope: 'client',
@@ -34,7 +42,11 @@ const send = {
   async due({ client, now }) {
     if (!inStates(client, SEND_STATES)) return null;
     const p = partsIn(ET, now);
-    return usBusinessHours(p) ? minuteKey(p) : null;
+    if (!usBusinessHours(p)) return null;
+    // The sender stores when it is next worth running (pacing, caps, no lead
+    // in window yet) on the client hash; until then this costs nothing.
+    if (client.state !== 'ready' && client.sendNextDueAt && Date.parse(client.sendNextDueAt) > now.getTime()) return null;
+    return minuteKey(p);
   },
   async run({ clientId, client, now, deadline }) {
     const { runSender } = await import('@/lib/systems/sender');
@@ -51,11 +63,29 @@ const replies = {
   async due({ client, now }) {
     if (!inStates(client, REPLY_STATES)) return null;
     const p = partsIn(ET, now);
-    return usBusinessHours(p) ? minuteKey(p) : bucketKey(p, await ccfg(client.id, 'REPLIES.offHoursMinutes'));
+    // Every inbox every REPLIES.usHoursMinutes (5) in US hours, every
+    // REPLIES.offHoursMinutes (20) otherwise (Redis budget, integration.md).
+    const every = usBusinessHours(p) ? await ccfg(client.id, 'REPLIES.usHoursMinutes') : await ccfg(client.id, 'REPLIES.offHoursMinutes');
+    return staggered(p, every, client.id);
+  },
+  async run({ clientId, now, deadline }) {
+    const { runReplies } = await import('@/lib/systems/replies');
+    return runReplies(clientId, { now, deadline });
+  },
+};
+
+const hotChaser = {
+  name: 'hot-chaser',
+  scope: 'client',
+  cost: 2,
+  claimTtl: 7200,
+  async due({ client, now }) {
+    if (!inStates(client, REPLY_STATES) || client.bookingWatch !== '1') return null;
+    return hourKey(partsIn(ET, now));
   },
   async run({ clientId, now }) {
-    const { runReplies } = await import('@/lib/systems/replies');
-    return runReplies(clientId, { now });
+    const { runChasers } = await import('@/lib/systems/replies');
+    return runChasers(clientId, { now });
   },
 };
 
@@ -91,11 +121,16 @@ const emergency = {
     // from the client hash the tick already loaded); a full trigger scan of
     // the counters every 5 minutes otherwise (free-tier command budget).
     if (client.emergencyRequested || client.emergencyActive === '1') return minuteKey(p);
-    return bucketKey(p, 5);
+    // Full trigger scan every 15 min after new sends (the sender sets
+    // sentSinceScan), and once a day at noon for the time-based triggers
+    // (no replies for 2 days, the green-day count while halved).
+    if (client.sentSinceScan === '1' && usBusinessHours(p)) return staggered(p, 15, client.id);
+    return dailyAt(p, '12:00');
   },
   async run({ clientId, now }) {
     const { runEmergency } = await import('@/lib/systems/emergency');
-    return runEmergency(clientId, { now });
+    const r = await runEmergency(clientId, { now });
+    return { ...(r || {}), _clientFields: { sentSinceScan: '0' } };
   },
 };
 
@@ -114,6 +149,11 @@ const clientWatch = {
   },
 };
 
+// Bookings, reminders, the no-show ladder and the hot-lead chaser only have
+// work after the first hot lead (client.bookingWatch, set by the Reply
+// Handler): before that no booking link has gone to anyone.
+const watching = (client) => inStates(client, BOOKING_STATES) && client.bookingWatch === '1';
+
 const bookings = {
   name: 'bookings',
   scope: 'client',
@@ -121,8 +161,10 @@ const bookings = {
   minBudgetMs: 8_000,
   claimTtl: 900,
   async due({ client, now }) {
-    if (!inStates(client, BOOKING_STATES)) return null;
-    return bucketKey(partsIn(ET, now), 5);
+    if (!watching(client)) return null;
+    const p = partsIn(ET, now);
+    // Calendar confirmations: every 15 min in US hours, hourly otherwise (handoff is due within 2 h).
+    return usBusinessHours(p) ? staggered(p, 15, client.id) : hourKey(p);
   },
   async run({ clientId, now }) {
     const { runBookings } = await import('@/lib/systems/bookings');
@@ -136,8 +178,9 @@ const reminders = {
   cost: 2,
   claimTtl: 900,
   async due({ client, now }) {
-    if (!inStates(client, BOOKING_STATES)) return null;
-    return bucketKey(partsIn(ET, now), 5);
+    if (!watching(client)) return null;
+    // 24 h / 1 h reminders and the +1 h tap: 15-minute resolution is enough.
+    return bucketKey(partsIn(ET, now), 15);
   },
   async run({ clientId, now }) {
     const { runReminders } = await import('@/lib/systems/bookings');
@@ -151,7 +194,7 @@ const noshow = {
   cost: 2,
   claimTtl: 7200,
   async due({ client, now }) {
-    if (!inStates(client, BOOKING_STATES)) return null;
+    if (!watching(client)) return null;
     return hourKey(partsIn(ET, now));
   },
   async run({ clientId, now }) {
@@ -169,11 +212,13 @@ const notnow = {
     if (!inStates(client, ['sending', 'extension', 'deciding'])) return null;
     const p = partsIn(ET, now);
     if (isUsHoliday(p.dayKey) || ['Sat', 'Sun'].includes(p.weekday)) return null;
-    return dailyAt(p, '09:00');
+    // Hourly 09:00–11:59 so a run cut short by the tick budget finishes the
+    // same morning (each follow-up is deduped per lead and date).
+    return p.hour >= 9 && p.hour < 12 ? hourKey(p) : null;
   },
-  async run({ clientId, now }) {
+  async run({ clientId, now, deadline }) {
     const { runNotNow } = await import('@/lib/systems/replies');
-    return runNotNow(clientId, { now });
+    return runNotNow(clientId, { now, deadline });
   },
 };
 
@@ -186,10 +231,9 @@ const pace = {
     if (!inStates(client, ['sending', 'extension'])) return null;
     const p = partsIn(ET, now);
     if (p.hour < 18 || p.hour >= 22) return null;
-    const { getTrial } = await import('@/lib/db/client');
-    const day = trialDay(await getTrial(client.id), now);
-    const days = await ccfg(client.id, 'PACE.days');
-    return days.includes(day) ? p.dayKey : null;
+    // Once a day from 18:00; the run checks whether today is a pace day
+    // (reading the trial hash here would cost a read every tick until 22:00).
+    return p.dayKey;
   },
   async run({ clientId, now }) {
     const { runPace } = await import('@/lib/systems/pace');
@@ -212,4 +256,4 @@ const learning = {
   },
 };
 
-export const JOBS = [emergency, send, reminders, clientWatch, noshow, notnow, pace, replies, bounces, bookings, learning].map(onClientClock);
+export const JOBS = [emergency, send, reminders, clientWatch, noshow, notnow, pace, replies, hotChaser, bounces, bookings, learning].map(onClientClock);

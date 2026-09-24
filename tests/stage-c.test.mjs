@@ -356,14 +356,20 @@ test('reply handler: no / legal / ooo / warm-up / bounce / wrong person / not no
   assert.ok(sent.find((s) => s.to === 'later@g.com' && /check back in January/.test(s.text)));
 });
 
-test('reply job: one inbox per run, then the hot-lead chaser (4 h nudge, 24 h holding reply)', async () => {
+test('reply job: every inbox per run, then the hot-lead chaser (4 h nudge, 24 h holding reply)', async () => {
   await setup();
   await emailedLead('ann@alpha.com');
   mailbox.push(msg('ann@alpha.com', 'Who else have you worked with?'));
   const r = await runReplies(ID, { now: NOW });
-  assert.equal(r.scan.messages, 1);
-  assert.deepEqual(r.scan.results, ['question']);
+  assert.equal(r.scan.inboxes.length, 1);
+  assert.equal(r.scan.inboxes[0].messages, 1);
+  assert.deepEqual(r.scan.inboxes[0].results, ['question']);
   assert.ok(await kv.hget(K.imapState(ID), `replies|${INBOX}|INBOX`));
+  // A second run with nothing new writes nothing (Redis budget).
+  const { __commandsBy, __resetCommands } = await import('@vercel/kv');
+  __resetCommands();
+  await runReplies(ID, { now: new Date(NOW.getTime() + 60_000) });
+  assert.equal(__commandsBy().hset || 0, 0);
   const n0 = notified.length;
   await runHotChaser(ID, new Date(NOW.getTime() + 5 * 3600e3));
   assert.equal(notified.length, n0 + 1);
@@ -726,7 +732,11 @@ test('jobs: every Stage C client job skips aviance and wrong states', async () =
   assert.equal(await send.due({ client: { id: 'acme', state: 'sending' }, now: NOW }), '2026-10-06T11:00');
   assert.equal(await send.due({ client: { id: 'acme', state: 'sending' }, now: new Date('2026-10-12T15:00:00Z') }), null); // holiday
   const em = JOBS.find((j) => j.name === 'emergency');
-  assert.equal(await em.due({ client: { id: 'acme', state: 'sending' }, now: new Date('2026-10-06T15:03:00Z') }), '2026-10-06T11:00');
+  // No sends since the last scan: once a day at noon (time-based triggers).
+  assert.equal(await em.due({ client: { id: 'acme', state: 'sending' }, now: new Date('2026-10-06T15:03:00Z') }), null);
+  assert.equal(await em.due({ client: { id: 'acme', state: 'sending' }, now: new Date('2026-10-06T16:03:00Z') }), '2026-10-06');
+  // New sends: a scan in the client's 15-minute slot; a request: this minute.
+  assert.match(await em.due({ client: { id: 'acme', state: 'sending', sentSinceScan: '1' }, now: new Date('2026-10-06T15:03:00Z') }), /^2026-10-06T1[01]:\d\d$/);
   assert.equal(await em.due({ client: { id: 'acme', state: 'sending', emergencyRequested: 'canary' }, now: new Date('2026-10-06T15:03:00Z') }), '2026-10-06T11:03');
 });
 

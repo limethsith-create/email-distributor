@@ -86,9 +86,9 @@ export async function isBlocked(clientId, email) {
   const e = norm(email);
   const p = kv.pipeline();
   p.sismember(K.suppression(), e);
-  p.sismember(K.blocklist(clientId), e);
-  p.sismember(K.blocklist(clientId), hostOf(e));
-  const [sup, em, host] = await p.exec();
+  p.smismember(K.blocklist(clientId), [e, hostOf(e)]);
+  const [sup, both] = await p.exec();
+  const [em, host] = Array.isArray(both) ? both : [0, 0];
   if (sup === 1) return 'suppressed';
   if (em === 1) return 'blocklist:email';
   if (host === 1) return 'blocklist:domain';

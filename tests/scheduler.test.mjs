@@ -10,11 +10,16 @@ test('a job runs once per period even when two pingers hit the same minute', asy
   let runs = 0;
   JOBS.push({ name: 'probe', scope: 'global', cost: 0, due: async () => 'P1', run: async () => { runs++; return { ok: true }; } });
   const a = await runTick({ source: 'cronjob', only: 'probe' });
+  // The next tick sees the claimed period in the heartbeat hash: no Redis call, no run.
   const b = await runTick({ source: 'github', only: 'probe' });
+  // Two pingers racing (neither saw the other's record yet): the SET NX claim decides.
+  await kv.hdel('system:heartbeat', 'jp:probe');
+  const c = await runTick({ source: 'github', only: 'probe' });
   JOBS.pop();
   assert.equal(runs, 1);
   assert.equal(a.ran[0].job, 'probe:global');
-  assert.equal(b.skipped[0].reason, 'claimed');
+  assert.equal(b.ran.length, 0);
+  assert.equal(c.skipped[0].reason, 'claimed');
   assert.equal((await kv.hgetall('system:heartbeat')).lastTickSource, 'github');
 });
 

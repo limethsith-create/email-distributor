@@ -17,9 +17,11 @@ export async function bump(clientId, field, n = 1, now = new Date()) {
   const day = dayKeyIn(ET, now);
   const p = kv.pipeline();
   p.hincrby(K.countersDay(clientId, day), field, n);
-  p.expire(K.countersDay(clientId, day), 120 * 86400);
   p.hincrby(K.countersTotal(clientId), field, n);
-  await p.exec();
+  const [dayValue] = await p.exec();
+  // The day hash gets its TTL on the first increment of a field that day
+  // (not on every bump: Redis budget).
+  if (Number(dayValue) === n) await kv.expire(K.countersDay(clientId, day), 120 * 86400);
 }
 
 /** Make sure a counter exists (at 0) so reports know it was tracked, not missing. */

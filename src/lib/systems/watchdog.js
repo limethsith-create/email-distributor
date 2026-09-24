@@ -15,8 +15,9 @@ import { cfg } from '@/lib/config';
 import { alertOwner } from '@/lib/notify';
 import { partsIn, isWeekday, ET } from '@/lib/time';
 
-export async function runWatchdog({ now = new Date() } = {}) {
-  const hb = (await kv.hgetall(K.heartbeat())) || {};
+export async function runWatchdog({ now = new Date(), heartbeat = null } = {}) {
+  // The tick passes the heartbeat it read at its start (saves a Redis read).
+  const hb = heartbeat || (await kv.hgetall(K.heartbeat())) || {};
   const p = partsIn(ET, now);
   const out = { stall: false };
   if (!isWeekday(p.weekday) || p.hour < 8 || p.hour >= 19) return out;

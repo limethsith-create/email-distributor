@@ -3,7 +3,7 @@ import { K, assertClientId } from '@/lib/db/keys';
 import { getClient, getProfile, getTrial, getDomain, setState, STATES } from '@/lib/db/client';
 import { getInboxRecords, saveInbox, removeInbox, patchInbox } from '@/lib/db/inboxes';
 import { getEvents, logEvent } from '@/lib/db/events';
-import { runTick } from '@/lib/scheduler';
+import { runTick, jobRecords } from '@/lib/scheduler';
 import { JOBS } from '@/lib/jobs';
 import { hasEncKey } from '@/lib/crypto';
 import { clientExtras } from '@/lib/systems/clientview';
@@ -28,10 +28,10 @@ export async function GET(_req, { params }) {
   const client = await getClient(id);
   if (!client) return Response.json({ error: 'not found' }, { status: 404 });
   const [profile, trial, domain, inboxes, events, extras] = await Promise.all([getProfile(id), getTrial(id), getDomain(id), getInboxRecords(id), getEvents(id, 150), clientExtras(client)]);
+  // Last runs live in the client hash (jl:{job}), written by the scheduler.
+  const last = jobRecords(client);
   const jobs = {};
-  for (const j of JOBS.filter((x) => x.scope === 'client')) {
-    try { jobs[j.name] = await kv.get(K.jobLast(j.name, id)); } catch { jobs[j.name] = null; }
-  }
+  for (const j of JOBS.filter((x) => x.scope === 'client')) jobs[j.name] = last[j.name] || null;
   return Response.json({ client, profile, trial, domain, inboxes: inboxes.map(publicInbox), events, jobs, states: STATES, profileFields: PROFILE_FIELDS, encKey: hasEncKey(), ...extras });
 }
 

@@ -211,6 +211,7 @@ export async function runDmarcScan({ now = io.now(), clients = null } = {}) {
     }
   }
   await kv.set(K.dmarcState(), { lastUid: fetched.maxUid, scannedAt: now.toISOString(), more: Boolean(fetched.more) });
+  await kv.hset(K.heartbeat(), { dmarcMore: fetched.more ? '1' : '0' });
   await logEvent(null, SYSTEM, 'dmarc_scanned', { messages: fetched.messages.length, reports, rows, more: fetched.more });
 
   const warn = await cfg(null, 'AUTH.dmarcWarn');

@@ -54,7 +54,9 @@ export async function recordLearning(clientId, event, { lead = {}, niche = null,
     }
     if (size) p.hincrby(K.learnStats(clientId), `s:${size}:${event}`, 1);
     await p.exec();
-    await rollVariant(n, variant);
+    // Sends are rolled up with the next reply / positive / booking and by the
+    // weekly job (a roll-up per send cost ~2 commands per email).
+    if (event !== 'sends') await rollVariant(n, variant);
   } catch (err) {
     console.error('[learning] record failed', clientId, event, err?.message);
   }

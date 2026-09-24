@@ -100,6 +100,7 @@ export const K = {
   // ── Stage B additions (build) ──
   /** Warm-up landings/sends per inbox (sender) per day: {sent, inbox, spam, rescued, replied, errors}. */
   warmupStats: (email, day) => `warmup:stats:${e(email)}:${day}`,
+  warmupDayStats: (day) => `warmup:daystats:${day}`, // {email|sent, email|received} roll-up (integration)
   /** Message-ids of warm-up / canary mails already handled on a day (set). */
   warmupDone: (day) => `warmup:done:${day}`,
   /** Last warm-up IMAP read per pool member (hash member → ISO). */
@@ -148,7 +149,7 @@ export const K = {
   invoice: (id) => `${c(id)}:invoice`, // Invoice Maker: month-one invoice
   paceLogRead: (id) => `${c(id)}:pacelog`, // Stage C's Pace Check log (list of {at, day, test, fix}); read-only here
   trialLedger: () => 'system:trials:ledger', // clientId -> outcome snapshot (no personal data); survives deletion for KPIs
-  testSkipPings: () => 'system:test:skippings', // Test Mode: heartbeat-loss simulation flag (TTL)
+  testSkipPings: () => 'system:test:skippings', // legacy: now system:heartbeat.skipPingsUntil
   // ── end Stage D ──
 };
 

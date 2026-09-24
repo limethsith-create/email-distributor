@@ -11,6 +11,7 @@ import { K } from '@/lib/db/keys';
 import { cfg } from '@/lib/config';
 import { partsIn, ET, OWNER_TZ } from '@/lib/time';
 import { clientNow } from '@/lib/testclock';
+import { getTrial } from '@/lib/db/client';
 import { dailyAt, bucketKey } from '@/lib/joblist/helpers';
 
 const trialClient = (client) => client && client.id !== 'aviance';
@@ -41,14 +42,16 @@ const day1Notice = {
   claimTtl: 3600,
   async due({ client, now }) {
     if (!trialClient(client) || !['sending', 'paused', 'extension'].includes(client.state)) return null;
-    let t = {};
-    try { t = (await kv.hmget(K.trial(client.id), 'firstSendAt', 'day1NoticeAt')) || {}; } catch { return null; }
-    if (!t.firstSendAt || t.day1NoticeAt) return null;
+    // client.day1NoticeDone (set through the tick's own write) ends the polling;
+    // until then the run reads the trial hash every 15 minutes.
+    if (client.day1NoticeDone === '1') return null;
     return bucketKey(etParts(client, now), 15);
   },
   async run({ clientId, client, now }) {
     const { sendDay1Notice } = await import('@/lib/systems/trialmanager');
-    return sendDay1Notice(clientId, clientNow(client, now));
+    const r = await sendDay1Notice(clientId, clientNow(client, now));
+    const trial = await getTrial(clientId);
+    return trial.day1NoticeAt ? { ...r, _clientFields: { day1NoticeDone: '1' } } : r;
   },
 };
 

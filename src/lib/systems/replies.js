@@ -263,6 +263,12 @@ function leadContext(lead) {
 }
 
 async function sendHotLead(clientId, { lead, reply, id, kind, ctx, now = new Date() }) {
+  // From the first hot lead on, a booking is possible: the booking watcher,
+  // reminders, no-show ladder and hot-lead chaser start polling (Redis budget).
+  if (ctx.client && ctx.client.bookingWatch !== '1') {
+    await kv.hset(K.client(clientId), { bookingWatch: '1' });
+    ctx.client.bookingWatch = '1';
+  }
   const name = lead.name || [lead.first_name, lead.last_name].filter(Boolean).join(' ') || reply.fromName || lead.email;
   const actionLine = kind === 'interested'
     ? 'I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these.'
@@ -500,11 +506,22 @@ export async function processMessage(clientId, meta, ctx, now = new Date()) {
 
 // ─── Context + runs ──────────────────────────────────────────────────────────
 
-async function buildContext(clientId) {
-  const [client, profile, trial, pace, accounts] = await Promise.all([getClient(clientId), getProfile(clientId), getTrial(clientId), loadPace(clientId), getAccounts(clientId)]);
-  const inboxEmails = accounts.map((a) => a.email);
+/**
+ * Everything message handling needs. `light` loads only the inboxes; the rest
+ * (client, profile, trial, pace) is loaded by `fullContext` when the first
+ * message arrives — an empty scan costs no extra Redis reads.
+ */
+async function buildContext(clientId, { light = false } = {}) {
+  const accounts = await getAccounts(clientId);
+  const ctx = { accounts, inboxEmails: accounts.map((a) => a.email), loaded: false };
+  return light ? ctx : fullContext(clientId, ctx);
+}
+
+async function fullContext(clientId, ctx) {
+  if (ctx.loaded) return ctx;
+  const [client, profile, trial, pace] = await Promise.all([getClient(clientId), getProfile(clientId), getTrial(clientId), loadPace(clientId)]);
   const clientHost = client?.mainDomain ? hostOf(client.mainDomain) : null;
-  return { client: client || {}, profile, trial, pace, accounts, inboxEmails, clientAddrs: clientAddresses(client || {}, profile), clientHost, niche: nicheOf(client || {}, profile) };
+  return Object.assign(ctx, { client: client || {}, profile, trial, pace, clientAddrs: clientAddresses(client || {}, profile), clientHost, niche: nicheOf(client || {}, profile), loaded: true });
 }
 
 function stateFor(saved, purpose, email) {
@@ -517,18 +534,12 @@ function stateFor(saved, purpose, email) {
 }
 
 /**
- * Scan one inbox (round-robin) and handle what arrived. `purpose` keeps
- * separate watermarks for the reply scan and the bounce scan.
+ * Scan one inbox and handle what arrived. `saved` is the client's imapState
+ * hash (read once per run). Redis budget: with nothing new this costs no
+ * command at all — the watermark is written only when it moved, and the
+ * inbox-health "last OK" at most hourly.
  */
-export async function scanNextInbox(clientId, { purpose = 'replies', cursorField = 'replyCursor', now = new Date() } = {}) {
-  const ctx = await buildContext(clientId);
-  const accounts = ctx.accounts.filter((a) => a.appPassword || a.password);
-  if (!accounts.length) return { skipped: 'no inbox with a password' };
-  const st = await getRunState(clientId);
-  const idx = (Number(st[cursorField]) || 0) % accounts.length;
-  const account = accounts[idx];
-  await patchRunState(clientId, { [cursorField]: idx + 1 });
-  const saved = (await kv.hgetall(K.imapState(clientId))) || {};
+async function scanInbox(clientId, account, { ctx, saved, purpose, now }) {
   const max = await ccfg(clientId, 'REPLIES_C.maxMessagesPerRun');
   const firstScanDays = await ccfg(clientId, 'REPLIES_C.firstScanDays');
   const res = await deps.scanMailbox(account, { includeSpam: true, uidState: stateFor(saved, purpose, account.email), maxMessages: max, firstScanDays, wantBody: (m) => m.kind !== 'bulk', wantIcs: () => false });
@@ -537,6 +548,7 @@ export async function scanNextInbox(clientId, { purpose = 'replies', cursorField
     throw new Error(`IMAP ${account.email}: ${res?.error || 'scan failed'}`);
   }
   const results = [];
+  if ((res.messages || []).length) await fullContext(clientId, ctx);
   for (const meta of res.messages || []) {
     try { results.push(await processMessage(clientId, meta, ctx, now)); } catch (err) {
       results.push({ error: err.message });
@@ -544,10 +556,61 @@ export async function scanNextInbox(clientId, { purpose = 'replies', cursorField
     }
   }
   const upd = {};
-  for (const [folder, v] of Object.entries(res.uidState || {})) upd[`${purpose}|${account.email}|${folder}`] = v;
-  if (Object.keys(upd).length) await kv.hset(K.imapState(clientId), upd);
-  await recordImapResult(account.email, { ok: true, newMessages: (res.messages || []).length });
-  return { inbox: account.email, index: idx, total: accounts.length, messages: (res.messages || []).length, results: results.map((r) => r.kind || r.skipped || (r.bounce ? 'bounce' : r.client ? 'client' : r.error ? 'error' : '?')) };
+  const same = (a, b) => JSON.stringify(typeof a === 'string' ? JSON.parse(a) : a) === JSON.stringify(typeof b === 'string' ? JSON.parse(b) : b);
+  for (const [folder, v] of Object.entries(res.uidState || {})) {
+    const k = `${purpose}|${account.email}|${folder}`;
+    let unchanged = false;
+    try { unchanged = saved[k] != null && same(saved[k], v); } catch {}
+    if (!unchanged) upd[k] = v;
+  }
+  const n = (res.messages || []).length;
+  const okKey = `ok|${account.email}`;
+  if (n > 0 || !saved[okKey] || now.getTime() - Date.parse(saved[okKey]) >= 3600e3) {
+    await recordImapResult(account.email, { ok: true, newMessages: n });
+    upd[okKey] = now.toISOString();
+  }
+  if (Object.keys(upd).length) { await kv.hset(K.imapState(clientId), upd); Object.assign(saved, upd); }
+  return { inbox: account.email, messages: n, results: results.map((r) => r.kind || r.skipped || (r.bounce ? 'bounce' : r.client ? 'client' : r.error ? 'error' : '?')) };
+}
+
+/**
+ * Scan the next inbox (round-robin; used by the bounce scan). `purpose` keeps
+ * separate watermarks for the reply scan and the bounce scan.
+ */
+export async function scanNextInbox(clientId, { purpose = 'replies', cursorField = 'replyCursor', now = new Date() } = {}) {
+  const ctx = await buildContext(clientId);
+  const accounts = ctx.accounts.filter((a) => a.appPassword || a.password);
+  if (!accounts.length) return { skipped: 'no inbox with a password' };
+  const st = await getRunState(clientId);
+  const idx = (Number(st[cursorField]) || 0) % accounts.length;
+  await patchRunState(clientId, { [cursorField]: idx + 1 });
+  const saved = (await kv.hgetall(K.imapState(clientId))) || {};
+  const r = await scanInbox(clientId, accounts[idx], { ctx, saved, purpose, now });
+  return { ...r, index: idx, total: accounts.length };
+}
+
+/**
+ * Scan every inbox of the client in one run (the `replies` job, every 5 min
+ * in US hours: each inbox read every 5 minutes). Stops early at the deadline;
+ * the next run starts with the inbox that was skipped.
+ */
+export async function scanAllInboxes(clientId, { now = new Date(), deadline = Date.now() + 15_000 } = {}) {
+  const ctx = await buildContext(clientId, { light: true });
+  const accounts = ctx.accounts.filter((a) => a.appPassword || a.password);
+  if (!accounts.length) return { skipped: 'no inbox with a password' };
+  const saved = (await kv.hgetall(K.imapState(clientId))) || {};
+  const start = (Number(saved.replyNext) || 0) % accounts.length;
+  const out = [];
+  let i = 0;
+  for (; i < accounts.length; i++) {
+    if (i > 0 && Date.now() > deadline - 6000) break;
+    const account = accounts[(start + i) % accounts.length];
+    try { out.push(await scanInbox(clientId, account, { ctx, saved, purpose: 'replies', now })); } catch (err) { out.push({ inbox: account.email, error: err.message }); }
+  }
+  if (i < accounts.length) await kv.hset(K.imapState(clientId), { replyNext: (start + i) % accounts.length });
+  const failed = out.filter((r) => r.error);
+  if (failed.length && failed.length === out.length) throw new Error(failed.map((r) => `IMAP ${r.inbox}: ${r.error}`).join('; '));
+  return { inboxes: out };
 }
 
 // ─── Hot-lead chaser ─────────────────────────────────────────────────────────
@@ -594,13 +657,23 @@ async function runSoftNudges(clientId, now) {
   return n;
 }
 
-/** The `replies` job for one client: one inbox scan + the chaser. */
-export async function runReplies(clientId, { now = new Date() } = {}) {
+/** The `replies` job for one client: every inbox scanned once. */
+export async function runReplies(clientId, { now = new Date(), deadline = Date.now() + 15_000 } = {}) {
   if (!isTrialClient(clientId)) return { skipped: 'not a trial client' };
-  const scan = await scanNextInbox(clientId, { purpose: 'replies', cursorField: 'replyCursor', now });
+  return { scan: await scanAllInboxes(clientId, { now, deadline }) };
+}
+
+/**
+ * The hot-lead chaser + soft-offer nudges (hourly `hot-chaser` job; the 4 h /
+ * 24 h / +2 day steps do not need a tighter clock). One read when nothing is
+ * waiting.
+ */
+export async function runChasers(clientId, { now = new Date() } = {}) {
+  if (!isTrialClient(clientId)) return { skipped: 'not a trial client' };
   const chaser = await runHotChaser(clientId, now);
-  const soft = await runSoftNudges(clientId, now);
-  return { scan, chaser, softNudges: soft };
+  const pace = await loadPace(clientId);
+  const soft = pace.softInterested ? await runSoftNudges(clientId, now) : 0;
+  return { chaser, softNudges: soft };
 }
 
 /**
@@ -631,13 +704,14 @@ export async function runBounceScan(clientId, { now = new Date() } = {}) {
 }
 
 /** Not-Now follow-ups due today (daily 09:00 job). */
-export async function runNotNow(clientId, { now = new Date() } = {}) {
+export async function runNotNow(clientId, { now = new Date(), deadline = Date.now() + 15_000 } = {}) {
   if (!isTrialClient(clientId)) return { skipped: 'not a trial client' };
   const { getLeadsByStatus } = await import('@/lib/db/leads');
   const today = dayKeyIn(ET, now);
   const leads = await getLeadsByStatus(clientId, 'notnow', 2000);
   let sent = 0;
   for (const lead of leads) {
+    if (Date.now() > deadline - 4000) break; // the rest go next run (the job claims per day; see joblist)
     if (!lead.notnowDate || lead.notnowDate > today || lead.notnowFollowedUpFor === lead.notnowDate) continue;
     const r = await sendToProspect(clientId, 'notnow_followup', { lead, thread: { subject: lead.original_subject, messageId: lead.original_message_id, references: [lead.original_message_id].filter(Boolean) }, dedupe: `notnow_followup:${lead.email}:${lead.notnowDate}` });
     if (r.sent || r.deduped) {

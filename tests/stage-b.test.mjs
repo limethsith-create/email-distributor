@@ -7,7 +7,7 @@ import { K } from '@/lib/db/keys';
 import { createClient, getClient } from '@/lib/db/client';
 import { saveInbox, patchInbox, getInboxRecords } from '@/lib/db/inboxes';
 import { insertLeads, getLeads, addToBlocklist, countByStatus } from '@/lib/db/leads';
-import { HARD_COLD_CAP } from '@/lib/config';
+import { HARD_COLD_CAP, setOverride } from '@/lib/config';
 import { partsIn, addDays } from '@/lib/time';
 import {
   warmupQuota, planPairs, pairKey, makeMarker, verifyMarker, isWarmupMessage, saveHelper, runWarmupSend, runWarmupRead,
@@ -189,7 +189,9 @@ test('warm-up read: rescue from spam, seen/flag/reply/archive, landings counted 
   };
   const replies = [];
   const deps = { rng: () => 0.1, imap: fakeImap(boxes, log), send: async (account, mail) => { replies.push({ from: account.email, ...mail }); return { success: true }; } };
+  await setOverride(null, 'BUILD.warmupReadPerRun', 2);
   const r = await runWarmupRead({ now: NOW, deadline: Date.now() + 20_000, deps });
+  await setOverride(null, 'BUILD.warmupReadPerRun', undefined);
   assert.equal(r.read, 2);
   const day = '2026-10-05';
   assert.equal((await statsFor('h1@gmail.com', day)).spam, 1);
@@ -272,7 +274,8 @@ test('canary run: Day −3 onwards, sends → waits 15 min → reads helpers →
   assert.ok(await canaryDue(await getClient('acme'), t0));
   // Day −5 of a warming client: too early (canary starts on the Day −3 gate).
   await trialClient('early', { trial: { signedDay: '2026-09-26', day1Date: '2026-10-10' } });
-  assert.equal(await canaryDue(await getClient('early'), t0), null);
+  assert.match((await runCanary({ client: await getClient('early'), now: t0 })).skipped, /before the canary gate/);
+  assert.equal(await canaryDue(await getClient('early'), t0), null); // settled for today, no further reads
 
   const boxes = {};
   const log = [];

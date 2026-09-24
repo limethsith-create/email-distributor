@@ -346,7 +346,7 @@ async function saveLeadPatch(clientId, email, patch) {
   return saveLead(clientId, { ...existing, ...patch }, existing.status);
 }
 
-async function recordSuccess(clientId, { account, lead, touch, built, res, variant, version, now, niche }) {
+async function recordSuccess(clientId, { account, lead, touch, built, res, variant, version, now, niche, ctx = {} }) {
   const at = now.toISOString();
   const base = { account_used: account.email, last_touch: touch, last_touch_at: at, send_count: (Number(lead.send_count) || 0) + 1 };
   let patch;
@@ -356,7 +356,8 @@ async function recordSuccess(clientId, { account, lead, touch, built, res, varia
     patch = { ...base, [`${touch}_sent_at`]: at, [`${touch}_message_id`]: res.messageId || null, [`${touch}_subject`]: built.subject, sequence_day: Number(touch.slice(1)) };
     if (touch === 'd10') { patch.status = 'done'; patch.sequenceCompleteAt = at; }
   }
-  const saved = await saveLeadPatch(clientId, lead.email, patch);
+  // `lead` was read under this send's claim: write it back without a re-read.
+  const saved = await saveLead(clientId, { ...lead, ...patch }, lead.status);
   await indexMessageId(clientId, res.messageId, lead.email);
   const day = dayKeyIn(ET, now);
   const p = kv.pipeline();
@@ -369,9 +370,13 @@ async function recordSuccess(clientId, { account, lead, touch, built, res, varia
   if (touch === 'd0') {
     const host = hostOf(lead.email);
     if (host && (await kv.sadd(K.sentHosts(clientId), host)) === 1) await bump(clientId, 'companiesContacted', 1, now);
-    await markFirstSend(clientId, now);
+    if (!ctx.trial?.firstSendAt) { await markFirstSend(clientId, now); if (ctx.trial) ctx.trial.firstSendAt = now.toISOString(); }
   }
-  await recordSendSuccess(account.email, { ms: res.ms, response: res.response, messageId: res.messageId });
+  // Inbox health: a clean inbox records a success at most every 30 minutes.
+  const h = ctx.health?.[account.email];
+  if (!h || Number(h.consecutiveFailures) > 0 || h.disabledReason || !h.lastSuccessAt || now.getTime() - Date.parse(h.lastSuccessAt) > 30 * 60_000) {
+    await recordSendSuccess(account.email, { ms: res.ms, response: res.response, messageId: res.messageId });
+  }
   await recordLearning(clientId, 'sends', { lead: saved || { ...lead, ...patch }, niche, at });
   await kv.del(K.leadClaim(clientId, lead.email));
 }
@@ -511,7 +516,7 @@ async function attempt(clientId, { account, lead: candidate, touch, ctx, now }) 
 
   // Gate 4: Compliance Guard.
   const headers = { ...unsubscribeHeaders(email, account.email) };
-  const guard = await guardOutbound(clientId, { to: email, fromName: account.displayName, fromAddress: account.email, subject: built.subject, text: built.text, headers }, { profile: ctx.profile, inboxEmails: ctx.inboxEmails, firstTouch: touch === 'd0', now });
+  const guard = await guardOutbound(clientId, { to: email, fromName: account.displayName, fromAddress: account.email, subject: built.subject, text: built.text, headers }, { profile: ctx.profile, inboxEmails: ctx.inboxEmails, firstTouch: touch === 'd0', now, blockedReason: blocked });
   if (!guard.ok) {
     if (guard.leadSpecific) { await closeLead(clientId, lead, guard.rule === 'suppressed' ? 'suppressed' : 'done', `compliance: ${guard.rule}`); return { skipped: true, reason: guard.rule }; }
     await release();
@@ -525,7 +530,7 @@ async function attempt(clientId, { account, lead: candidate, touch, ctx, now }) 
     res = { success: false, kind: 'other', error: err.message };
   }
   if (res && res.success) {
-    await recordSuccess(clientId, { account, lead, touch, built, res, variant, version: lead.sentVersion || ctx.seqs.version, now, niche: ctx.niche });
+    await recordSuccess(clientId, { account, lead, touch, built, res, variant, version: lead.sentVersion || ctx.seqs.version, now, niche: ctx.niche, ctx });
     return { sent: true, detail: { to: email, inbox: account.email, touch, variant, subject: built.subject } };
   }
   const outcome = await recordFailure(clientId, { account, lead, touch, res: res || {}, now });
@@ -534,32 +539,64 @@ async function attempt(clientId, { account, lead: candidate, touch, ctx, now }) 
 
 // ─── The run ─────────────────────────────────────────────────────────────────
 
-/** True when every inbox of the client has a future nextSendAt or no sends left today. */
+/**
+ * Every inbox of the client has a future nextSendAt or no sends left today?
+ * Returns { idle, nextAt } (nextAt = the earliest future nextSendAt, ms).
+ */
 async function allInboxesIdle(clientId, now) {
   const p = kv.pipeline();
   p.smembers(K.inboxes(clientId));
   p.hgetall(K.pacing(clientId));
   const [emails, pacing] = await p.exec();
-  if (!emails || !emails.length) return false;
+  if (!emails || !emails.length) return { idle: false };
   const today = dayKeyIn(ET, now);
-  return emails.every((e) => {
+  let nextAt = Infinity;
+  const idle = emails.every((e) => {
     const rec = parseJson((pacing || {})[e], null);
     if (!rec) return false;
-    if (rec.nextSendAt && Date.parse(rec.nextSendAt) > now.getTime()) return true;
+    if (rec.nextSendAt && Date.parse(rec.nextSendAt) > now.getTime()) { nextAt = Math.min(nextAt, Date.parse(rec.nextSendAt)); return true; }
     return rec.day === today && Number(rec.remaining) <= 0;
   });
+  return { idle, nextAt };
+}
+
+const MIN = 60_000;
+/**
+ * When the send job should look again (client.sendNextDueAt, written by the
+ * scheduler with no extra Redis command). Between now and then the job's
+ * `due` is null, so a paced client costs nothing per tick.
+ */
+function nextDueAt(r, now) {
+  const t = now.getTime();
+  let at;
+  if (Number.isFinite(r._nextAt)) at = r._nextAt;
+  else if (r.sent > 0) at = t + 10 * MIN;
+  else if (r.blocked || r.held) at = t + 15 * MIN;
+  else at = t + 10 * MIN;
+  return new Date(Math.max(at, t + MIN)).toISOString();
 }
 
 /**
  * One tick of the Sender for one client. At most one email per inbox.
- * Returns a summary for the scheduler log.
+ * Returns a summary for the scheduler log; `_clientFields.sendNextDueAt`
+ * tells the send job when it is next worth running.
  */
-export async function runSender(clientId, { now = new Date(), deadline = Date.now() + 15_000, client: loaded = null } = {}) {
+export async function runSender(clientId, opts = {}) {
+  const now = opts.now || new Date();
+  const r = await runSenderOnce(clientId, { ...opts, now });
+  const next = nextDueAt(r, now);
+  const { _nextAt, ...out } = r;
+  // sentSinceScan tells the Emergency Runner there are new counters to look at.
+  return { ...out, _clientFields: { sendNextDueAt: next, ...(r.sent > 0 ? { sentSinceScan: '1' } : {}) } };
+}
+
+async function runSenderOnce(clientId, { now = new Date(), deadline = Date.now() + 15_000, client: loaded = null } = {}) {
   if (!isTrialClient(clientId)) return { skipped: 'not a trial client' };
-  // Cheap idle path (2 commands): every inbox paced or at today's cap → nothing to do.
-  if (loaded && SENDING_STATES.has(loaded.state)) {
+  // Cheap idle path (2 commands): every inbox paced or at today's cap → nothing
+  // to do. Skipped when the send job was gated by sendNextDueAt (it already knows).
+  if (loaded && SENDING_STATES.has(loaded.state) && !loaded.sendNextDueAt) {
     const idle = await allInboxesIdle(clientId, now);
-    if (idle) return { sent: 0, paced: true, idle: true };
+    if (idle.idle) return { sent: 0, paced: true, idle: true, _nextAt: Number.isFinite(idle.nextAt) ? idle.nextAt : now.getTime() + 60 * MIN };
   }
   let client = loaded && loaded.state !== 'ready' ? loaded : await getClient(clientId);
   if (!client) return { skipped: 'no client' };
@@ -593,9 +630,10 @@ export async function runSender(clientId, { now = new Date(), deadline = Date.no
   if (smoke.failed || (!smoke.cleared && smoke.waiting !== 'sending')) return { held: 'smoke test', smoke };
   let allowance = smoke.cleared ? Infinity : smoke.allowance;
 
-  const accounts = (await getAccounts(clientId, { enabledOnly: true })).filter((a) => a.appPassword);
+  const allAccounts = await getAccounts(clientId);
+  const inboxEmails = allAccounts.map((a) => a.email);
+  const accounts = allAccounts.filter((a) => a.appPassword && ['1', 1, true].includes(a.record?.enabled ?? a.enabled));
   if (!accounts.length) return { skipped: 'no enabled inbox' };
-  const inboxEmails = (await getAccounts(clientId)).map((a) => a.email);
 
   const day = p.dayKey;
   const [counts, pacingMap, health, pace] = await Promise.all([
@@ -616,13 +654,14 @@ export async function runSender(clientId, { now = new Date(), deadline = Date.no
     const nextAt = pacing?.nextSendAt ? Date.parse(pacing.nextSendAt) : 0;
     const skip = shouldSkipInbox(health[a.email], now.getTime());
     status.push({
-      account: a, cap, sent, remaining: Math.max(0, cap - sent),
+      account: a, cap, sent, remaining: Math.max(0, cap - sent), nextAt,
       followUpsToday: Math.max(0, sent - fresh), followUpBudget: Math.max(0, cap - Math.min(cap, Math.ceil(cap * share))),
       ready: !nextAt || nextAt <= now.getTime(), skip: skip.skip ? skip.reason : null,
     });
   }
   const due = status.filter((s) => s.remaining > 0 && s.ready && !s.skip).sort((a, b) => (b.remaining - a.remaining) || (Math.random() - 0.5));
-  if (!due.length) return { sent: 0, paced: true, away, inboxes: status.map((s) => ({ email: s.account.email, cap: s.cap, sent: s.sent, ready: s.ready, skip: s.skip })) };
+  const waiting = status.filter((s) => s.remaining > 0 && !s.skip && !s.ready).map((s) => s.nextAt);
+  if (!due.length) return { sent: 0, paced: true, away, inboxes: status.map((s) => ({ email: s.account.email, cap: s.cap, sent: s.sent, ready: s.ready, skip: s.skip })), _nextAt: waiting.length ? Math.min(...waiting) : now.getTime() + 60 * MIN };
 
   const window = await ccfg(clientId, 'SEND.windowLeadTz');
   const gaps = await ccfg(clientId, pace.compressed ? 'SEQUENCE.compressedGaps' : 'SEQUENCE.gaps');
@@ -634,7 +673,7 @@ export async function runSender(clientId, { now = new Date(), deadline = Date.no
   }
   const { open: fresh, poolSize } = orderFresh(unsent, { pace, now, window });
 
-  const ctx = { client, profile, seqs, inboxEmails, niche: nicheOf(client, profile) };
+  const ctx = { client, profile, trial, health, seqs, inboxEmails, niche: nicheOf(client, profile) };
   const results = { sent: 0, details: [], skipped: 0, failed: 0 };
   let tried = 0;
   const used = new Set();
@@ -685,10 +724,15 @@ export async function runSender(clientId, { now = new Date(), deadline = Date.no
       allowance--;
       const nextSendAt = await computeNextSendAt(clientId, Math.max(0, s.remaining - 1), now, inboxWin[1]);
       await kv.hset(K.pacing(clientId), { [inbox]: { nextSendAt, lastSendAt: now.toISOString(), remaining: Math.max(0, s.remaining - 1), day: p.dayKey } });
+      if (nextSendAt && s.remaining - 1 > 0) waiting.push(Date.parse(nextSendAt));
+    } else if (!results.blocked && !stopInbox) {
+      // Due but nothing to send from this inbox right now (no lead in its window yet).
+      waiting.push(now.getTime() + 10 * MIN);
     }
   }
 
   if (results.sent > 0 && !smoke.cleared) await evaluateSmoke(clientId, now);
   await heartbeatAfterSend({ sent: results.sent, dueButUnsent: results.sent === 0 && tried > 0 && !results.blocked });
-  return { ...results, followUpsDue: followUps.length, freshOpen: fresh.length, expired: expired.length, away };
+  for (const s of due) if (!results.details.some((d) => d.inbox === s.account.email) && results.blocked) waiting.push(now.getTime() + 15 * MIN);
+  return { ...results, followUpsDue: followUps.length, freshOpen: fresh.length, expired: expired.length, away, _nextAt: waiting.length ? Math.min(...waiting) : now.getTime() + 60 * MIN };
 }

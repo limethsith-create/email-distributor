@@ -181,16 +181,14 @@ const dmarc = {
   cost: 5,
   minBudgetMs: 14_000,
   claimTtl: 86400,
-  async due({ now, clients }) {
+  async due({ now, clients, heartbeat }) {
     if (!(clients || []).some((c) => c.id !== 'aviance' && WARMUP_STATES.has(c.state))) return null;
     const p = et(now);
     if (p.hhmm < '06:20') return null;
     // A backlog (more reports than one run reads) is worked off in the
-    // morning, 10 minutes apart; the rest of the day costs no extra read.
-    if (p.hour < 12) try {
-      const st = await kv.get(K.dmarcState());
-      if (st?.more) return bucketKey(p, 10);
-    } catch {}
+    // morning, 10 minutes apart. The scan mirrors its `more` flag onto the
+    // heartbeat hash the tick already read, so this costs no Redis read.
+    if (p.hour < 12 && heartbeat?.dmarcMore === '1') return bucketKey(p, 10);
     return p.dayKey;
   },
   async run({ now, clients }) {

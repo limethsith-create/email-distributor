@@ -126,5 +126,7 @@ export async function purgeClient(clientId) {
   const keys = await clientDataKeys(clientId);
   await deleteKeys([...keys, K.client(clientId)]);
   await kv.srem(K.clients(), clientId);
+  const { syncClientIndex } = await import('@/lib/db/client');
+  await syncClientIndex();
   return { purged: keys.length + 1 };
 }

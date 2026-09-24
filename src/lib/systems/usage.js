@@ -27,9 +27,27 @@ export async function countUsage(service, field, n = 1) {
   try { await kv.hincrby(K.usage(service, monthOf()), field, n); } catch {}
 }
 
-export async function isThrottled(service) {
-  try { return Boolean(await kv.get(`throttle:${service}`)); } catch { return false; }
+// Throttle flags change at most hourly (Usage Meter); a warm instance reuses
+// an answer for a minute instead of one Redis read per job per tick.
+const throttleMemo = new Map();
+/**
+ * `heartbeat` (the hash a tick already read) answers without a Redis call:
+ * the meter mirrors each flag there as `throttle:{service}` = `level|expiresAt`.
+ */
+export async function isThrottled(service, heartbeat = null) {
+  if (heartbeat) {
+    const [level, until] = String(heartbeat[`throttle:${service}`] || '').split('|');
+    return Boolean(level) && Date.parse(until) > Date.now();
+  }
+  const hit = throttleMemo.get(service);
+  if (hit && hit.exp > Date.now()) return hit.v;
+  let v = false;
+  try { v = Boolean(await kv.get(`throttle:${service}`)); } catch { v = false; }
+  const ms = Number(process.env.CFG_MEMO_MS ?? 60_000);
+  if (ms > 0) throttleMemo.set(service, { v, exp: Date.now() + ms });
+  return v;
 }
+export function clearThrottleMemo() { throttleMemo.clear(); }
 
 async function upstashCommands() {
   const { UPSTASH_EMAIL: email, UPSTASH_API_KEY: key, UPSTASH_DB_ID: id } = process.env;
@@ -65,7 +83,12 @@ export async function runUsageMeter({ now = new Date() } = {}) {
     if (!Number.isFinite(used) || !limit) { report[service] = { used: row[spec.field] ?? null, limit, measured: false }; continue; }
     const ratio = used / limit;
     report[service] = { used, limit, pct: Math.round(ratio * 100) };
-    if (ratio >= warn) await kv.set(`throttle:${service}`, ratio >= stop ? 'stop' : 'slow', { ex: 2 * 3600 });
+    if (ratio >= warn) {
+      const level = ratio >= stop ? 'stop' : 'slow';
+      await kv.set(`throttle:${service}`, level, { ex: 2 * 3600 });
+      await kv.hset(K.heartbeat(), { [`throttle:${service}`]: `${level}|${new Date(Date.now() + 2 * 3600e3).toISOString()}` });
+      throttleMemo.delete(service);
+    }
     if (ratio >= stop) {
       await alertOwner('usage_95', { scope: service, vars: { service, pct: Math.round(ratio * 100) }, body: `${service}: ${used} of ${limit} this month.`, did: 'Non-essential jobs (list refills, canary) are paused; sending and replies continue.' });
     } else if (ratio >= warn) {

@@ -60,6 +60,34 @@ export const LIVE_STATES = new Set([
   'sending', 'paused', 'extension', 'deciding', 'converted', 'not_now', 'retired',
 ]);
 
+/** Terminal states no job ever acts on; the tick does not load these clients. */
+export const REST_STATES = new Set(['declined', 'closed_silent']);
+
+const parseList = (v) => { if (Array.isArray(v)) return v; try { const j = JSON.parse(v || '[]'); return Array.isArray(j) ? j : []; } catch { return []; } };
+
+/**
+ * The tick's client index, kept on system:heartbeat so a tick needs no
+ * SMEMBERS: `clientIds` (every client) and `restClients` (in REST_STATES).
+ */
+export async function syncClientIndex() {
+  const ids = await listClientIds();
+  await kv.hset(K.heartbeat(), { clientIds: JSON.stringify(ids) });
+  return ids;
+}
+
+async function markRest(id, rest) {
+  const cur = parseList(await kv.hget(K.heartbeat(), 'restClients'));
+  const next = rest ? [...new Set([...cur, id])] : cur.filter((x) => x !== id);
+  if (next.length !== cur.length) await kv.hset(K.heartbeat(), { restClients: JSON.stringify(next) });
+}
+
+/** Client ids the tick should load, from the heartbeat hash it already read (null → unknown). */
+export function tickClientIds(hb = {}) {
+  if (!hb.clientIds) return null;
+  const rest = new Set(parseList(hb.restClients));
+  return parseList(hb.clientIds).filter((id) => !rest.has(id));
+}
+
 export function canTransition(from, to) {
   return (TRANSITIONS[from] || []).includes(to);
 }
@@ -74,9 +102,9 @@ export async function getClient(id) {
   return rec && Object.keys(rec).length ? { id, ...rec } : null;
 }
 
-/** Every client hash in one pipeline (tick step 2). */
-export async function getAllClients() {
-  const ids = await listClientIds();
+/** Every client hash in one pipeline (tick step 2). `ids` skips the SMEMBERS. */
+export async function getAllClients(ids = null) {
+  if (!ids) ids = await listClientIds();
   if (!ids.length) return [];
   const p = kv.pipeline();
   for (const id of ids) p.hgetall(K.client(id));
@@ -96,6 +124,8 @@ export async function createClient(id, fields = {}) {
   if (!(created === 1 || created === true)) throw new Error(`client ${id} already exists`);
   await kv.hset(K.client(id), rec);
   await kv.sadd(K.clients(), id);
+  await syncClientIndex();
+  if (REST_STATES.has(rec.state)) await markRest(id, true);
   await logEvent(id, 'client', 'created', { state: rec.state, name: rec.name || null });
   return { id, ...rec };
 }
@@ -125,7 +155,10 @@ export async function setState(id, to, reason = null, { force = false } = {}) {
     throw new Error(`illegal transition ${current} -> ${to} for ${id}`);
   }
   const ok = await kv.eval(script, [K.client(id)], [String(current), to, new Date().toISOString()]);
-  if (ok === 1) await logEvent(id, 'state', 'changed', { from: current, to, reason, forced: force || undefined });
+  if (ok === 1) {
+    await logEvent(id, 'state', 'changed', { from: current, to, reason, forced: force || undefined });
+    if (REST_STATES.has(to) !== REST_STATES.has(current)) await markRest(id, REST_STATES.has(to));
+  }
   return ok === 1;
 }
 

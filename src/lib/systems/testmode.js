@@ -93,7 +93,7 @@ export async function startTest({ from = 'apply', now = new Date() } = {}) {
 
 export async function resetTest() {
   const r = await purgeClient(TEST_ID);
-  try { await kv.del(K.testSkipPings()); } catch {}
+  try { await kv.hset(K.heartbeat(), { skipPingsUntil: '' }); } catch {}
   await logEvent(null, 'test', 'test_reset', r);
   return r;
 }
@@ -142,6 +142,7 @@ export async function simulate(kind, now = new Date()) {
     const lead = await pickLead(['replied', 'in_sequence', 'unsent']);
     await kv.hset(K.bookings(TEST_ID), { [id]: { leadEmail: lead?.email || null, scheduledAt: new Date(vnow.getTime() + 864e5).toISOString(), source: 'link', remindersSent: [], status: 'booked', qualified: false, rebookAttempts: 0, createdAt: at } });
     await bump(TEST_ID, 'booked', 1, vnow);
+    await updateClient(TEST_ID, { bookingWatch: '1' });
     await logEvent(TEST_ID, 'test', 'simulated_booking', { bookingId: id });
     return { bookingId: id };
   }
@@ -181,9 +182,9 @@ export async function simulate(kind, now = new Date()) {
   }
 
   if (kind === 'heartbeat_loss') {
-    await kv.set(K.testSkipPings(), '1', { ex: 20 * 60 });
+    await kv.hset(K.heartbeat(), { skipPingsUntil: new Date(Date.now() + 20 * 60_000).toISOString() });
     await logEvent(null, 'test', 'simulated_heartbeat_loss', { minutes: 20 });
-    return { skipPingsFor: '20 min', note: 'Honoured by /api/cron/tick once the 2-line change in the Stage D report is merged.' };
+    return { skipPingsFor: '20 min' };
   }
   throw new Error(`unknown simulation ${kind}`);
 }
@@ -194,6 +195,6 @@ export async function testStatus(now = new Date()) {
   const trial = await getTrial(TEST_ID);
   const vnow = clientNow(client, now);
   let skip = null;
-  try { skip = await kv.get(K.testSkipPings()); } catch {}
+  try { const u = await kv.hget(K.heartbeat(), 'skipPingsUntil'); skip = u && Date.parse(u) > Date.now() ? u : null; } catch {}
   return { running: true, state: client.state, virtualNow: vnow.toISOString(), day: trialDay(trial, vnow), clockScale: Number(client.clockScale), heartbeatLoss: Boolean(skip), trial };
 }

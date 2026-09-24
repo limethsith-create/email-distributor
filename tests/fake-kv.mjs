@@ -85,6 +85,17 @@ const api = {
   },
 };
 
+// Command counter (Upstash bills every command, pipelined ones included).
+const counts = new Map();
+for (const name of Object.keys(api)) {
+  if (name === 'pipeline') continue;
+  const fn = api[name];
+  api[name] = (...a) => { counts.set(name, (counts.get(name) || 0) + 1); return fn(...a); };
+}
+
 export const kv = api;
+export function __commands() { let n = 0; for (const v of counts.values()) n += v; return n; }
+export function __commandsBy() { return Object.fromEntries([...counts.entries()].sort((a, b) => b[1] - a[1])); }
+export function __resetCommands() { counts.clear(); }
 export function __reset() { store.clear(); ttl.clear(); }
 export function __dump() { return store; }

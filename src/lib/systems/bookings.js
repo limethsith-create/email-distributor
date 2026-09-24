@@ -286,14 +286,14 @@ export async function processBookingMessage(clientId, meta, ctx, now = new Date(
 /** The `bookings` job: one inbox per run. */
 export async function runBookings(clientId, { now = new Date() } = {}) {
   if (!isTrialClient(clientId)) return { skipped: 'not a trial client' };
-  const ctx = await bookingContext(clientId);
-  const accounts = ctx.accounts.filter((a) => a.appPassword || a.password);
+  // Redis budget: only the inboxes and the IMAP watermarks are read up front;
+  // the client + profile context loads when a message needs it, and the
+  // watermark/cursor is written only when it moved.
+  const accounts = (await getAccounts(clientId)).filter((a) => a.appPassword || a.password);
   if (!accounts.length) return { skipped: 'no inbox with a password' };
-  const st = await getRunState(clientId);
-  const idx = (Number(st.bookingCursor) || 0) % accounts.length;
-  const account = accounts[idx];
-  await patchRunState(clientId, { bookingCursor: idx + 1 });
   const saved = (await kv.hgetall(K.imapState(clientId))) || {};
+  const idx = (Number(saved.bookingCursor) || 0) % accounts.length;
+  const account = accounts[idx];
   const uidState = {};
   for (const [k, v] of Object.entries(saved)) { const [p, e, ...f] = k.split('|'); if (p === 'bookings' && e === account.email) uidState[f.join('|')] = v; }
   const res = await deps.scanMailbox(account, { folders: ['INBOX'], uidState, maxMessages: 40, firstScanDays: 14, wantBody: (m) => subjectIsBooking(m.subject), wantIcs: (m) => m.hasIcs });
@@ -302,16 +302,21 @@ export async function runBookings(clientId, { now = new Date() } = {}) {
     throw new Error(`IMAP ${account.email}: ${res?.error || 'scan failed'}`);
   }
   const results = [];
+  let ctx = null;
   for (const meta of res.messages || []) {
     if (!(meta.ics && meta.ics.length) && !subjectIsBooking(meta.subject)) continue;
+    ctx ||= await bookingContext(clientId);
     if (ctx.exclude.has(lower(meta.from)) && !(meta.ics && meta.ics.length)) continue;
     try { results.push(...(await processBookingMessage(clientId, meta, ctx, now))); } catch (err) {
       results.push({ error: err.message });
       await logEvent(clientId, 'bookings', 'message_error', { uid: meta.uid, error: err.message });
     }
   }
-  const upd = {};
-  for (const [folder, v] of Object.entries(res.uidState || {})) upd[`bookings|${account.email}|${folder}`] = v;
+  const upd = accounts.length > 1 ? { bookingCursor: idx + 1 } : {};
+  for (const [folder, v] of Object.entries(res.uidState || {})) {
+    const k = `bookings|${account.email}|${folder}`;
+    if (JSON.stringify(saved[k]) !== JSON.stringify(v)) upd[k] = v;
+  }
   if (Object.keys(upd).length) await kv.hset(K.imapState(clientId), upd);
   return { inbox: account.email, messages: (res.messages || []).length, bookings: results.filter((r) => r.created).length };
 }

@@ -88,8 +88,9 @@ export async function recordBlock(clientId, rule, detail, { to = null, now = new
  * Full guard: looks up suppression + blocklist, runs the rules, records a
  * block. Returns { ok, rule, detail, leadSpecific }.
  */
-export async function guardOutbound(clientId, msg, { profile, inboxEmails, firstTouch = false, now = new Date() } = {}) {
-  const blockedReason = await isBlocked(clientId, msg.to);
+export async function guardOutbound(clientId, msg, { profile, inboxEmails, firstTouch = false, now = new Date(), blockedReason: known } = {}) {
+  // The sender has just checked the recipient (known === null means "not blocked").
+  const blockedReason = known === undefined ? await isBlocked(clientId, msg.to) : known;
   const res = checkRules(msg, { profile, inboxEmails, firstTouch, blockedReason });
   if (!res.ok) {
     await recordBlock(clientId, res.rule, res.detail, { to: msg.to, now });

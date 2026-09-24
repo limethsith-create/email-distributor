@@ -67,16 +67,17 @@ export function computePlacement({ sent = [], checked = [], landed = {} }) {
 }
 
 /** Is the canary due for this client now? (period for the scheduler, else null) */
+/**
+ * Due every 5 minutes from BUILD.canaryAt until today's canary is settled
+ * (client.canaryCheckedDay = today: finished, or not a canary day yet).
+ * Reads nothing beyond the client hash the tick already loaded; the trial
+ * day gate (Day −3 onwards) is checked by the run, once a day.
+ */
 export async function canaryDue(client, now = new Date()) {
-  const trial = await getTrial(client.id);
-  const day = trialDay(trial, now);
-  const startDay = await cfg(client.id, 'BUILD.canaryGateDay');
-  if (day == null || day < startDay) return null;
   const at = await cfg(client.id, 'BUILD.canaryAt');
   const p = partsIn(ET, now);
   if (p.hhmm < at) return null;
-  const run = (await kv.hgetall(K.canary(client.id, p.dayKey))) || {};
-  if (run.phase === 'done') return null;
+  if (client.canaryCheckedDay === p.dayKey) return null;
   const m = Math.floor(p.minuteOfDay / 5) * 5;
   return `${p.dayKey}T${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
@@ -89,14 +90,23 @@ export async function runCanary({ client, now = new Date(), deadline = Date.now(
   const day = dayKeyIn(ET, now);
   const key = K.canary(id, day);
   let run = (await kv.hgetall(key)) || {};
+  if (run.phase === 'done') { await updateClient(id, { canaryCheckedDay: day }); return { phase: 'done' }; }
 
   if (!run.phase) {
+    // Canary days start at the Day −3 gate (BUILD.canaryGateDay).
+    const tday = trialDay(await getTrial(id), now);
+    const startDay = await cfg(id, 'BUILD.canaryGateDay');
+    if (tday == null || tday < startDay) {
+      await updateClient(id, { canaryCheckedDay: day });
+      return { skipped: `trial day ${tday} is before the canary gate (Day ${startDay})` };
+    }
     const nHelpers = await cfg(id, 'BUILD.canaryHelpers');
     const helpers = (await getHelpers()).filter((h) => h.passwordEnc && h.enabled !== '0' && h.health !== 'auth_failed').slice(0, nHelpers);
     const inboxes = (await getInboxRecords(id)).filter((r) => r.passwordEnc && r.warmupEnabled !== '0');
     if (!helpers.length || !inboxes.length) {
       await kv.hset(key, { phase: 'done', startedAt: now.toISOString(), doneAt: now.toISOString(), result: JSON.stringify({ overall: null, reason: !helpers.length ? 'no helper accounts' : 'no inboxes' }) });
       await kv.expire(key, 40 * 86400);
+      await updateClient(id, { canaryCheckedDay: day });
       await alertOwner('canary_incomplete', { clientId: id, vars: { clientId: id }, body: `The canary could not run: ${!helpers.length ? 'there are no working helper accounts' : 'the client has no inboxes'}.`, did: 'No placement was recorded today; Day 1 cannot pass the canary gate without one.' });
       return { phase: 'done', placement: null };
     }
@@ -195,6 +205,7 @@ async function finalize({ client, run, key, now }) {
   const emergency = await cfg(id, 'CANARY.emergency');
   const day = dayKeyIn(ET, now);
   await kv.hset(key, { phase: 'done', doneAt: now.toISOString(), result: JSON.stringify(res) });
+  await updateClient(id, { canaryCheckedDay: day });
   for (const [email, row] of Object.entries(res.perInbox)) {
     if (row.placement != null) await patchInbox(id, email, { canaryPlacement: row.placement.toFixed(3), canaryCheckedAt: now.toISOString() });
   }

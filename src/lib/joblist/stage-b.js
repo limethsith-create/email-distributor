@@ -21,6 +21,8 @@ import { onClientClock } from '@/lib/joblist/helpers';
 
 const SKIP = new Set(['aviance', '_helper']);
 const trialClient = (c) => c && !SKIP.has(c.id);
+/** Any trial client whose inboxes are in the warm-up circle (from the clients the tick loaded). */
+const anyWarming = (clients) => (clients || []).some((c) => trialClient(c) && WARMUP_STATES.has(c.state));
 const hourKey = (p) => `${p.dayKey}T${String(p.hour).padStart(2, '0')}`;
 
 const warmup = {
@@ -29,7 +31,8 @@ const warmup = {
   cost: 5,
   minBudgetMs: 12_000,
   claimTtl: 1200,
-  async due({ now }) {
+  async due({ now, clients }) {
+    if (!anyWarming(clients)) return null; // helpers only warm client inboxes
     const every = await cfg(null, 'BUILD.warmupEveryMin');
     return bucketKey(partsIn(ET, now), every);
   },
@@ -45,11 +48,16 @@ const warmupRead = {
   cost: 6,
   minBudgetMs: 14_000,
   claimTtl: 600,
-  async due({ now }) {
+  async due({ now, clients, heartbeat }) {
+    if (!anyWarming(clients)) return null;
+    const p = partsIn(ET, now);
+    const [from, to] = await cfg(null, 'BUILD.warmupReadHours');
+    if (p.hhmm < from || p.hhmm >= to) return null;
     const { isThrottled } = await import('@/lib/systems/usage');
-    // Usage Meter at 80 %+ on Redis → reads slow to every 15 min (SPEC §10.4).
-    const every = (await isThrottled('redis')) ? 15 : 5;
-    return bucketKey(partsIn(ET, now), every);
+    // Usage Meter at 80 %+ on Redis → reads slow down (SPEC §10.4).
+    const base = await cfg(null, 'BUILD.warmupReadRunEveryMin');
+    const every = (await isThrottled('redis', heartbeat || {})) ? Math.max(base, 20) : base;
+    return bucketKey(p, every);
   },
   async run(ctx) {
     const { runWarmupRead } = await import('@/lib/systems/warmup');

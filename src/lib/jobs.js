@@ -119,7 +119,8 @@ const watchdog = {
   scope: 'global',
   cost: 1,
   claimTtl: 180,
-  async due({ now }) { return minuteKey(partsIn(ET, now)); },
+  // Only while a send-stall marker exists (the heartbeat hash the tick read).
+  async due({ now, heartbeat }) { return heartbeat && !heartbeat.firstDueUnsentAt ? null : minuteKey(partsIn(ET, now)); },
   async run(ctx) { return runWatchdog(ctx); },
 };
 
@@ -133,6 +134,22 @@ const usage = {
 };
 
 export const JOBS = [watchdog, usage, avianceSend, avianceReplies, avianceEodReport, ...STAGE_A, ...STAGE_B, ...STAGE_C, ...STAGE_D];
+
+/**
+ * Tick budget (20 s, SPEC §5): a job starts only when at least minBudgetMs
+ * is left. Jobs that email, call an API or open IMAP/DNS but set no value of
+ * their own get one here (the scheduler default of 2 s only suits jobs that
+ * touch Redis alone), so a late start can never push a tick past cron-job.org's
+ * 30-second cut-off.
+ */
+const NETWORK_BUDGET_MS = {
+  watchdog: 4000, usage: 5000,
+  'purchase-nudge': 5000, welcome: 5000, 'booking-reminder': 5000,
+  'leadfinder-start': 5000, 'leadfinder-refill': 5000, approval: 6000, readiness: 6000,
+  'hot-chaser': 6000, emergency: 6000, 'client-watch': 5000, reminders: 6000, noshow: 6000, notnow: 8000, pace: 5000, 'learning-weekly': 4000,
+  'day1-notice': 5000, invoice: 5000, 'cancel-inboxes': 5000,
+};
+for (const job of JOBS) if (job.minBudgetMs == null && NETWORK_BUDGET_MS[job.name]) job.minBudgetMs = NETWORK_BUDGET_MS[job.name];
 
 /** Job names that appear more than once (must be empty; tests check it). */
 export function duplicateJobNames(jobs = JOBS) {
