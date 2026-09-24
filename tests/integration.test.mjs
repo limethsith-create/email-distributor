@@ -98,3 +98,18 @@ test('morning digest leads with Price Scout escalations and untested booking lin
   assert.doesNotMatch(r.body, /OK Co/);
   assert.equal(r.allGreen, false);
 });
+
+test('Test Mode: a scaled _test client runs its Stage A–C jobs on the virtual clock', async () => {
+  const { startTest } = await import('@/lib/systems/testmode');
+  const { runTick } = await import('@/lib/scheduler');
+  const { minuteKey } = await import('@/lib/joblist/helpers');
+  const { partsIn, ET } = await import('@/lib/time');
+  setDeps({ alertOwner: async () => ({ sent: true }), sendEmail: async () => ({ success: true, messageId: '<x@t>' }), verifyEmail: async () => ({ valid: true }) });
+  process.env.OWNER_EMAIL = 'owner@aviance.test';
+  const origin = new Date('2026-10-06T04:00:00Z'); // Tue 00:00 ET — no sending hours in real time
+  await startTest({ from: 'sending', now: origin }); // clockScale 24: one real hour = one day
+  const real = new Date(origin.getTime() + 30 * 60_000); // 00:30 real → 12:00 ET virtual
+  await runTick({ source: 'test', now: real, only: 'send', clientId: '_test' });
+  const c = await getClient('_test');
+  assert.equal(c['jp:send'], minuteKey(partsIn(ET, new Date(origin.getTime() + 12 * 3600e3))));
+});

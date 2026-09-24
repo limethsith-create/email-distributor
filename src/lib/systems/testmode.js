@@ -79,6 +79,13 @@ export async function startTest({ from = 'apply', now = new Date() } = {}) {
   });
   await kv.hset(K.profile(TEST_ID), { capacityPerWeek: '5', industry: 'IT services', niche: 'msp', senderName: 'Test Sender', postalAddress: '1 Test St, Dover, DE 19901', calendarUrl: 'https://cal.com/aviance-test' });
   const seeded = await seedLeads(now);
+  if (from === 'apply') {
+    // Stage A's Gatekeeper takes it from here: pre-approved (the owner's own
+    // test) and over the cap, so a test never waits in the queue.
+    const { decide } = await import('@/lib/systems/gatekeeper');
+    const c = await getClient(TEST_ID);
+    await decide(TEST_ID, { mainDomain: c.mainDomain, companyName: c.name, contactName: c.contactName, contactEmail: c.contactEmail, website: c.website }, { preApproved: true, override: true, now: clientNow(c, now) });
+  }
   if (from === 'sending') {
     const c = await getClient(TEST_ID);
     const vnow = clientNow(c, now);

@@ -635,8 +635,11 @@ test('warming → ready: Day 1 slides one sending day while the gate is red, the
   await saveInbox('beta', { email: 'a@beta-trial.com', password: 'x' });
   const sent = [];
   const deps = { notify: async (id, key, vars, opts) => { sent.push({ key, vars, dedupe: opts.dedupe }); return { sent: true }; } };
-  // Monday = Day −1, nothing is ready.
-  const r1 = await runReadiness({ client: await getClient('beta'), now: NOW, deps });
+  // Day −1: nothing is ready, but the last warm-up check (23:45) is still to come — no slide yet.
+  assert.equal((await runReadiness({ client: await getClient('beta'), now: NOW, deps })).slid, undefined);
+  // Tuesday = Day 1 morning, still red → Day 1 slides.
+  const DAY1 = new Date(NOW.getTime() + 864e5);
+  const r1 = await runReadiness({ client: await getClient('beta'), now: DAY1, deps });
   assert.equal(r1.slid, '2026-10-07');
   let trial = await kv.hgetall(K.trial('beta'));
   assert.equal(trial.day1Date, '2026-10-07');
@@ -646,7 +649,7 @@ test('warming → ready: Day 1 slides one sending day while the gate is red, the
   assert.match(sent[0].vars.waitingLine, /approve the emails here/);
   assert.ok((await alerts()).includes('day1_slid'));
   // Same day again: no second slide.
-  assert.equal((await runReadiness({ client: await getClient('beta'), now: new Date(NOW.getTime() + 3600e3), deps })).slid, undefined);
+  assert.equal((await runReadiness({ client: await getClient('beta'), now: new Date(DAY1.getTime() + 3600e3), deps })).slid, undefined);
   assert.equal(nextSendingDay('2026-10-09'), '2026-10-13'); // Fri → skips weekend + Columbus Day
 
   // Make every gate green.
@@ -655,11 +658,11 @@ test('warming → ready: Day 1 slides one sending day while the gate is red, the
   await patchInbox('beta', 'a@beta-trial.com', { warmupReady: '1', inboxRate7d: '0.950', readyStreak: '2' });
   await kv.hset(K.canary('beta', '2026-10-05'), { phase: 'done', result: JSON.stringify({ overall: 0.9, min: 0.9, perInbox: { 'a@beta-trial.com': { sent: 10, inbox: 9, placement: 0.9 } } }) });
   // Still red until the client has done the Booking Link Tester (SPEC §6.7).
-  const red = await runReadiness({ client: await getClient('beta'), now: new Date(NOW.getTime() + 2 * 3600e3), deps });
+  const red = await runReadiness({ client: await getClient('beta'), now: new Date(DAY1.getTime() + 2 * 3600e3), deps });
   assert.equal(red.ready, false);
   assert.equal(red.checks.booking, false);
   await kv.hset(K.profile('beta'), { bookingTested: '1' });
-  const r2 = await runReadiness({ client: await getClient('beta'), now: new Date(NOW.getTime() + 2 * 3600e3), deps });
+  const r2 = await runReadiness({ client: await getClient('beta'), now: new Date(DAY1.getTime() + 2 * 3600e3), deps });
   assert.equal(r2.ready, true);
   assert.equal((await getClient('beta')).state, 'ready');
   trial = await kv.hgetall(K.trial('beta'));
@@ -675,7 +678,7 @@ test('warming → ready: canary below the gate keeps it red; 7 slides → held +
   await patchInbox('gamma', 'a@g.com', { warmupReady: '1' });
   await kv.hset(K.profile('gamma'), { bookingTested: '1' });
   await kv.hset(K.canary('gamma', '2026-10-05'), { phase: 'done', result: JSON.stringify({ overall: 0.8, min: 0.8, perInbox: { 'a@g.com': { sent: 10, inbox: 8, placement: 0.8 } } }) });
-  const r = await runReadiness({ client: await getClient('gamma'), now: NOW, deps: { notify: async () => ({ sent: true }) } });
+  const r = await runReadiness({ client: await getClient('gamma'), now: new Date(NOW.getTime() + 864e5), deps: { notify: async () => ({ sent: true }) } });
   assert.equal(r.held, true);
   assert.equal(r.checks.canary, false);
   assert.equal((await kv.hgetall(K.trial('gamma'))).day1Held, '1');

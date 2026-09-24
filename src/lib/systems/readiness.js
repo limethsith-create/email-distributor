@@ -9,7 +9,7 @@
  *   booking   the client tapped "It worked" on the Booking Link Tester
  *             (profile.bookingTested, SPEC §6.7 step 4: Day 1 waits for it)
  * Green → state `ready` (Stage C's Sender starts on day1Date).
- * Not green from Day −1 on → Day 1 slides one US sending day at a time (and
+ * Not green on the morning of Day 1 → Day 1 slides one US sending day at a time (and
  * Day 30 with it), client email day1_moved, owner day1_slid; after
  * WARMUP.maxSlideDays slides Day 1 is held and the owner gets warmup_stalled
  * daily until the gate turns green, when Day 1 is set to the next sending day.
@@ -94,15 +94,20 @@ export async function runReadiness({ client, now = new Date(), deps = {} }) {
   const gate = await readinessGate(id, now);
 
   if (gate.ok) {
-    // A held / passed Day 1 is reset to the next sending day.
-    if (!trial.day1Date || trial.day1Date <= today) await announceMove(id, trial, nextSendingDay(today), gate, { held: true, deps });
+    // Green on Day 1 itself: the Sender starts today (its window opens 09:00
+    // ET). Only a Day 1 already in the past (held / slid) is reset.
+    if (!trial.day1Date || trial.day1Date < today) await announceMove(id, trial, nextSendingDay(today), gate, { held: true, deps });
     const moved = await setState(id, 'ready', 'readiness gate green (approval, list, warm-up, canary, booking link)');
     await setTrial(id, { day1Held: '', readyAt: now.toISOString() });
     return { ready: moved, checks: gate.checks };
   }
 
+  // Warm-up readiness is decided by the 23:45 daily check, so the last chance
+  // for Day 1 is that check on Day −1: the slide decision waits for Day 1's
+  // first readiness run (00:30), instead of sliding on Day −1 while the
+  // final warm-up check is still to come (it made every Day 1 slide once).
   const td = trialDay(trial, now);
-  if (td == null || td < -1 || trial.slideCheckedDay === today) return { ready: false, checks: summarize(gate.checks) };
+  if (td == null || td < 1 || trial.slideCheckedDay === today) return { ready: false, checks: summarize(gate.checks) };
   await setTrial(id, { slideCheckedDay: today });
   const slides = Number(trial.day1Slides) || 0;
   const maxSlides = await cfg(id, 'WARMUP.maxSlideDays');

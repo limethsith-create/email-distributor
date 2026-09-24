@@ -180,7 +180,7 @@ export const DEFAULTS = {
     approvalLinkDay: -7,
     approvalMaxRounds: 2,
     // Readiness (warming → ready)
-    readinessAt: '10:00',
+    readinessAt: '00:30',              // hourly from here (after the 23:45 warm-up check), so Day 1 can start at 09:00
     day1SendHour: '09:00',
   },
   // ── end Stage B ──
