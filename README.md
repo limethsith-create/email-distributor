@@ -1,43 +1,73 @@
-# Aviance Outreach
+# Aviance Trial Machine
 
-Cold-email sending engine for [aviance.online](https://www.aviance.online) — books qualified
-sales calls onto B2B calendars. Next.js 14 (App Router) + Vercel + Vercel KV (Upstash).
+The engine behind [aviance.online](https://www.aviance.online)'s 30-Day Trial:
+it takes a prospect from "yes" to Day 45 with about 20 minutes of owner time
+per trial and no person in the loop. Next.js 14 (App Router) on Vercel,
+Upstash Redis (Vercel KV), nodemailer SMTP, imapflow IMAP, GitHub Actions for
+the long jobs. The full design is `docs/SPEC.md`; build status and the
+owner's setup list are `docs/PROGRESS.md`.
 
-This is the trimmed engine: sending, timing, reply tracking, deliverability and reporting.
-The old two-campaign copy, the AI layer and the auto-booking bot were removed for the
-30-Day Trial model (one offer, one sequence, handled by a person). Copy lives in
-`src/lib/personalize.js` as a placeholder scaffold until Sequence T is written in.
+## How it runs
 
-## How sending works
+- **One heartbeat.** cron-job.org (every minute) and GitHub Actions (every
+  5 minutes, backup) call `GET /api/cron/tick` with `Authorization: Bearer
+  CRON_SECRET`. The scheduler (`src/lib/scheduler.js`) runs every job that is
+  due, once per period (SET NX claims), inside a 20-second budget. A job that
+  fails three times in a row alerts the owner. Healthchecks.io is pinged after
+  every good tick (dead-man alarm).
+- **Per-client systems** (`src/lib/systems/`): intake (Gatekeeper, onboarding
+  + agreement, Market Counter, Price Scout, Setup Checker, Auth Guard, Booking
+  Link Tester), build (Warm-up Engine, Canary, Ramp Planner, Lead Finder,
+  Blocklist Keeper, Sanity Check, Copy Engine + Checker, approval page), run
+  (Sender, Compliance Guard, Reply Handler, Booking Watcher, Scorekeeper,
+  Client Watch, Pace Checks, Emergency Runner, Learning Library) and close
+  (Friday update, Day 29 report + Market Report, Plan Recommender, decision
+  page, extension, ladder, handover, wrap-up, invoice, digests). Every key,
+  inbox, lead, reply and email is scoped by `clientId`.
+- **Rules** (SPEC §1): no silent failure, no subscriptions, no LLM at runtime,
+  never invent a number, idempotent everything, hand up never drop, per-client
+  isolation.
 
-- An external heartbeat pings `GET /api/cron/auto-send` every ~10 minutes
-  (auth: `Authorization: Bearer <CRON_SECRET>` or `?token=`). The app is serverless
-  and cannot tick itself, so this pinger is what drives all sending.
-- Each ping sends **at most one email**, with a global anti-burst gap, **only** during
-  **8 AM–7 PM US Eastern, Mon–Fri**, **only** from inboxes switched **ON** (Inboxes page),
-  up to each inbox's daily cap.
-- Sequence per lead: day 0 → day 3 follow-up → day 7 breakup (threaded as "Re:").
-  Each inbox reserves a share of its daily cap for fresh day-0 sends (`FRESH_MIN_SHARE`)
-  so follow-ups can never starve new leads; follow-ups more than `FOLLOWUP_GRACE_DAYS`
-  past due are retired instead of sent.
-- The heartbeat also emails the owner a **switch-off alarm** (from 10 AM ET if no inbox
-  is on) and an **end-of-day report** (after 7 PM ET). See `src/lib/daily-report.js`.
-- `GET /api/cron/check-replies` (every 1–2 h) records replies and stops their sequence
-  (replies are handled by a person — there is no auto-reply bot).
-  `GET /api/cron/check-bounces` (daily) records bounces.
+## Where the owner works
 
-## Pages
+- **Aviance Hub** (https://aviance.store, repo `aviance-hub`): the Trials tab
+  shows every trial by stage, each client's thirteen systems with a status
+  line, and "what you need to do". It talks to this app through
+  `/api/mc/hub` with the hub's own sign-in (`docs/HUB-API.md`).
+- **Mission Control** (`/mc`, admin password `ADMIN_SECRET`): the full
+  screens — board, client page, purchase page, sequence editor, queue,
+  warm-up circle, alerts, config, learning, Test Mode. The hub opens these
+  signed in.
+- **Client pages** (`/c/<token>/...`): onboarding + agreement, approval,
+  booking test, call taps, decision, and the customer / stop / away buttons.
 
-Dashboard · Inboxes (on/off + daily cap per inbox) · Leads · Replies · Activity.
+## Layout
 
-## Key API routes
-
-`/api/cron/auto-send` (the sender) · `/api/cron/check-replies` · `/api/cron/check-bounces` ·
-`/api/inboxes-control` · `/api/leads` (list/add) · `/api/leads/bulk` (spreadsheet import) ·
-`/api/leads/cleanup` · `/api/leads/export` · `/api/replies` · `/api/daily-log` ·
-`/api/track/open` · `/api/unsubscribe`.
+```
+src/lib/db/            keys.js (every Redis key), client.js (state machine), leads, counters, inboxes, events, promises
+src/lib/systems/       one file per system (see above) + hubview.js (the hub's view), boarddata, health
+src/lib/joblist/       scheduler jobs per stage (stage-a … stage-d)
+src/lib/templates/     every email and page text; sequence/*.json is the copy
+src/lib/config.js      every threshold (SPEC §12), overridable in /mc/config
+src/lib/notify.js      the only module that emails a human (owner alerts, client emails)
+src/app/api/cron/tick  the heartbeat
+src/app/api/mc/        Mission Control + hub API (admin session or hub token)
+src/app/api/c/         client-page APIs (signed tokens)
+src/app/api/webhooks/  Lead Finder results, GitHub workflow failures
+scripts/leadfinder/    the GitHub Actions lead finder
+.github/workflows/     heartbeat, backup, keep-alive, leadfinder
+tests/                 npm test — 150+ tests on an in-memory Redis, incl. a full simulated trial
+docs/                  SPEC, PROGRESS, CONTRACTS, HUB-API, assumptions/
+```
 
 ## Env
 
-See `.env.example` — SMTP/IMAP accounts (`SMTP_ACCOUNT_*`), `CRON_SECRET`, KV credentials,
-optional `DAILY_REPORT_TO`, `FRESH_MIN_SHARE`, `FOLLOWUP_GRACE_DAYS`.
+Everything is listed with one line each in `.env.example`. Secrets never
+leave Redis: inbox passwords are encrypted under `ENC_KEY`, backups exclude
+them, and the black box log never holds a password or token.
+
+## Legacy
+
+The owner's own outreach runs as client `aviance` on the pre-trial engine
+(`/api/cron/auto-send`, the old dashboard pages) until the per-client Sender
+takes it over; its inboxes now load from Redis and its copy is Sequence T.
