@@ -446,6 +446,27 @@ export const DEFAULTS = {
   TESTMODE: { clockScale: 24 },
   WINBACK_TEXT: { whatsNew: null }, // "to set": what's new since they left (Offboarding SOP [X])
   // ── end Stage D ──
+  // ── Onboarding call (docs/ONBOARD-CALL.md) ── one machine-wide block (no per-client overrides)
+  ONBOARDCALL: {
+    // The address that sends the "you're in — book your onboarding call" email and
+    // receives the replies. null → the owner sender used today (OWNER_INBOX, else the
+    // first Aviance inbox). Any other address must be an inbox the machine can log
+    // into: OWNER_INBOX or an Aviance inbox saved with its password.
+    inbox: null,
+    // The owner's calendar link for onboarding calls (Calendly / Cal.com / Google).
+    // null → the email asks them to reply with two or three times that suit them.
+    bookingUrl: null,
+    callMinutes: 30,
+    // US business days after the acceptance email to have the call BOOKED; later = overdue (one owner alert).
+    bookWithinDays: 3,
+    // Hours after the acceptance email for a short "just checking you saw this" while the call is not booked.
+    reminderHours: [24, 72],
+    // A reminder to the applicant on the business day before a booked call.
+    dayBeforeReminder: true,
+    // How often the inbox may be checked — the job, the hub opening the Trials screen and Approve share it.
+    checkEveryMinutes: 2,
+  },
+  // ── end onboarding call ──
   // US federal holidays, observed dates. Update once a year (one line per year).
   US_HOLIDAYS: [
     '2026-01-01', '2026-01-19', '2026-02-16', '2026-05-25', '2026-06-19', '2026-07-03',

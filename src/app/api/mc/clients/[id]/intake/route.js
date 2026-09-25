@@ -9,7 +9,8 @@
  *   rerunBookingTest        test the calendar link now
  *   resendWelcome           retry welcome_two_dates
  *   rerunResearch           research the applicant again (website + Google listing)
- *   approveApplication      owner approves a website application (→ onboarding or queue)
+ *   approveApplication      owner approves a website application (→ onboarding with the one
+ *                           accepted_call email, or the queue); the onboarding-call check runs in after()
  *   declineApplication {reason}  owner declines it; the reason is emailed to the applicant
  */
 
@@ -25,6 +26,7 @@ import { asArray } from '@/lib/systems/intake-io';
 import { approveApplication, declineApplication } from '@/lib/systems/gatekeeper';
 import { after } from 'next/server';
 import { rerunResearch, researchToEnd } from '@/lib/systems/research';
+import { checkOnboardCallsQuietly } from '@/lib/systems/onboardcall';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -67,7 +69,13 @@ export async function POST(request, { params }) {
         return Response.json({ ok: true, result });
       }
       case 'approveApplication':
-        return Response.json({ ok: true, ...(await approveApplication(id)) });
+      {
+        const result = await approveApplication(id);
+        // The heartbeat is not running yet: the onboarding-call check (inbox, reminders,
+        // overdue) runs right after the answer too (throttled, never throws).
+        try { after(() => checkOnboardCallsQuietly()); } catch { /* not inside a request (tests) */ }
+        return Response.json({ ok: true, ...result });
+      }
       case 'declineApplication':
         if (!String(body.reason || '').trim()) return Response.json({ error: 'Write the reason — it goes to the applicant.' }, { status: 400 });
         return Response.json({ ok: true, ...(await declineApplication(id, body.reason)) });

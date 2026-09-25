@@ -19,6 +19,7 @@ import { addPromise } from '@/lib/db/promises';
 import { mintToken, pageUrl, TTL } from '@/lib/pagetokens';
 import { dayKeyIn, daysBetween, addDays, ET } from '@/lib/time';
 import { io, truthy, asArray, firstNameOf, ownerName, sendClient, formatDay, nextUsBusinessDay, isPublicUrl } from '@/lib/systems/intake-io';
+import { sendAcceptance } from '@/lib/systems/onboardcall';
 
 const SYSTEM = 'gatekeeper';
 /** Earlier records in these states do not block a new application (no trial was ever run). */
@@ -228,15 +229,18 @@ async function enqueue(clientId, cap, now) {
 }
 
 /**
- * Open the trial: mint the onboarding token (14 days), email the link, move
- * to `onboarding`. Used for fit-passes and for queue promotions.
+ * Open the trial: mint the onboarding token (14 days), send ONE email —
+ * `accepted_call`, "you're in, book your onboarding call", with the
+ * one-page onboarding link inside (systems/onboardcall.js, docs/ONBOARD-CALL.md)
+ * — and move to `onboarding`. Used for Approve, fit-passes, the owner's New
+ * client and queue promotions.
  */
 export async function startOnboarding(clientId, { now = io.now() } = {}) {
   const client = await getClient(clientId);
   if (!client) throw new Error(`no client ${clientId}`);
   if (!['applied', 'queued'].includes(client.state)) throw new Error(`cannot start onboarding from ${client.state}`);
   const token = await mintToken(clientId, 'onboarding', { ttl: TTL.long });
-  await sendClient(clientId, 'onboarding_link', { firstName: firstNameOf(client.contactName), ownerName: await ownerName(clientId), link: pageUrl(token, 'onboard') }, { dedupe: 'onboarding_link' });
+  await sendAcceptance(clientId, { onboardingLink: pageUrl(token, 'onboard'), now });
   await setState(clientId, 'onboarding', client.state === 'queued' ? 'slot opened' : 'fit passed');
   await kv.hset(K.trial(clientId), { onboardingSentAt: now.toISOString() });
   await updateClient(clientId, { intakeStep: '' });
@@ -400,7 +404,11 @@ async function pendingApplication(clientId) {
   return { client, application };
 }
 
-/** Owner pressed Approve: the repeat rule and the cap still apply (→ onboarding or queue). */
+/**
+ * Owner pressed Approve: the repeat rule and the cap still apply (→ onboarding
+ * with the one `accepted_call` email, or the queue). If the email cannot go,
+ * the application goes back to waiting so Approve can simply be pressed again.
+ */
 export async function approveApplication(clientId, { now = io.now() } = {}) {
   const { application } = await pendingApplication(clientId);
   if (application.web_sellsTo) await kv.hset(K.profile(clientId), { sellsTo: application.web_sellsTo });
@@ -416,7 +424,17 @@ export async function approveApplication(clientId, { now = io.now() } = {}) {
   }
   await kv.hset(K.application(clientId), { review: 'approved', decision: 'approve', decidedAt: now.toISOString() });
   await logEvent(clientId, SYSTEM, 'review_approved', {});
-  return decide(clientId, { mainDomain: application.mainDomain }, { preApproved: true, now });
+  try {
+    return await decide(clientId, { mainDomain: application.mainDomain }, { preApproved: true, now });
+  } catch (err) {
+    // Email first, state second: nothing changed for the applicant, so the application waits again.
+    if ((await getClient(clientId))?.state === 'applied') {
+      await kv.hset(K.application(clientId), { review: 'pending' });
+      await kv.hdel(K.application(clientId), 'decision', 'decidedAt');
+      await logEvent(clientId, SYSTEM, 'review_approve_failed', { error: String(err?.message || err).slice(0, 200) });
+    }
+    throw err;
+  }
 }
 
 /** Owner pressed Decline: the reason goes to the applicant in decline_fit. */

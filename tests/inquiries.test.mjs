@@ -65,7 +65,7 @@ test('validation, status, notes, and turning an inquiry into a trial', async () 
   const t = await inquiryToTrial(id);
   assert.equal(t.ok, true);
   assert.equal(t.outcome, 'onboarding');
-  assert.deepEqual(emails, ['onboarding_link']);
+  assert.deepEqual(emails, ['accepted_call']);
   assert.equal((await inquiryToTrial(id)).already, true);
 });
 

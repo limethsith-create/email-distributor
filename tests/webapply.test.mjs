@@ -113,12 +113,13 @@ test('a website application is saved, held for the owner, and nobody is emailed'
   assert.ok('research' in detail.application, 'the detail view carries the applicant research (or null)');
 });
 
-test('Approve sends the onboarding link; Decline sends the owner\'s reason', async () => {
+test('Approve sends the one accepted_call email (onboarding link inside); Decline sends the owner\'s reason', async () => {
   const a = await submitWebsiteApplication(site(), { fetchText: noSite });
   const res = await approveApplication(a.clientId);
   assert.equal(res.outcome, 'onboarding');
   assert.equal((await getClient(a.clientId)).state, 'onboarding');
-  assert.deepEqual(emails.map((e) => e.key), ['onboarding_link']);
+  assert.deepEqual(emails.map((e) => e.key), ['accepted_call']);
+  assert.match(emails[0].vars.onboardingLink, /\/c\/[^/]+\/onboard$/);
   assert.equal((await kv.hgetall(`client:${a.clientId}:profile`)).sellsTo, 'Commercial plumbing for property managers in the Carolinas');
   await assert.rejects(() => approveApplication(a.clientId), /not waiting for a review/);
 

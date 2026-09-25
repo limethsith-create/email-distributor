@@ -151,10 +151,17 @@ Written new in the owner's voice (plain text, one ask): `onboarding_link`
 `booking_test_request` (the §6.7 60-second test), `booking_fix`.
 Verbatim-adapted: `welcome_two_dates` (see 35).
 
+Onboarding call (2026-09-25, docs/ONBOARD-CALL.md): `accepted_call` (the one
+email on a yes — from the contract's sketch; since then `onboarding_link` is no
+longer sent by the Gatekeeper, it stays in the catalogue), `accepted_call_reminder`,
+`onboard_call_tomorrow`, and `onboard_owner_reply` (the owner's own words from
+the hub, sent as typed). They carry `from: 'onboard'` = the ONBOARDCALL inbox.
+
 ## New owner alerts (templates/owner.js, Stage A block)
 
 `market_unavailable` (U), `autorenew_on` (U), `promo_expired`,
-`booking_link_broken`.
+`booking_link_broken`. Onboarding call: `onboard_reply`, `onboard_booked`,
+`onboard_overdue`, `onboard_cancelled` (none urgent — the hub to-dos carry it).
 
 ## Scheduler
 

@@ -33,6 +33,8 @@ import { overduePromises } from '@/lib/systems/health';
 import { jobRecords } from '@/lib/scheduler';
 import { loadAccounts } from '@/lib/smtp-accounts';
 import { JOBS } from '@/lib/jobs';
+import { onboardSettings, onboardCallView, onboardCallFor, ownerWhen, ownerDayWord } from '@/lib/systems/onboardcall';
+import { formatDay } from '@/lib/systems/intake-io';
 
 export const STATE_LABELS = {
   applied: 'Applied', queued: 'In the queue', onboarding: 'Onboarding', awaiting_purchase: 'Waiting for you to buy',
@@ -155,7 +157,7 @@ export function systemsFor(ctx) {
   else if (st === 'queued') out.push(sys('intake', 'waiting', `In the queue${client.queueExpectedDate ? ` · expected ${client.queueExpectedDate}` : ''}`));
   else if (st === 'declined') out.push(sys('intake', 'off', `Declined${client.declineReason ? ` · ${client.declineReason}` : ''}`));
   else if (st === 'closed_silent') out.push(sys('intake', 'off', 'Never finished onboarding'));
-  else if (st === 'onboarding') out.push(sys('intake', 'waiting', `Onboarding link sent ${ago(trial.onboardingSentAt, now) || '—'} · waiting for the form and agreement`, [trial.onboardingRemindersSent ? `${trial.onboardingRemindersSent} reminder(s) sent` : null]));
+  else if (st === 'onboarding') out.push(sys('intake', 'waiting', `Onboarding link sent ${ago(trial.onboardingSentAt, now) || '—'} · waiting for the form and agreement`, [trial.onboardingRemindersSent ? `${trial.onboardingRemindersSent} reminder(s) sent` : null, ctx.onboardCall ? `Onboarding call: ${ctx.onboardCall.label}` : null]));
   else out.push(sys('intake', 'ok', `Agreement accepted ${dateOf(trial.agreementAcceptedAt) || ''}${trial.agreementName ? ` by ${trial.agreementName}` : ''}`.trim()));
 
   // 2. Market count
@@ -313,6 +315,16 @@ export function todosFor(ctx) {
       `${a.source === 'website' ? 'From the website' : 'Application'} ${ago(since, now)}${ctx.fitScore ? ` · ${badgeText(ctx.fitScore)}` : ''}${a.fit?.summary ? ` · ${a.fit.summary.charAt(0).toLowerCase()}${a.fit.summary.slice(1)}` : ''}`,
       Boolean(since) && now.getTime() - Date.parse(since) > 12 * 3600e3, since, view('detail', id, 'application'));
   }
+  // Onboarding call (docs/ONBOARD-CALL.md): a reply to answer, a booking gone overdue, a call to mark.
+  const oc = ctx.onboardCall;
+  if (oc) {
+    const who = client.contactName || client.name || id;
+    if (oc.needsReply) push('onboard-reply', `Answer ${who} — they replied about the onboarding call`, `Reply ${ago(oc.lastReplyAt, now)} · it goes from ${oc.fromInbox || 'the onboarding inbox'}, in the same thread`, true, oc.lastReplyAt, view('detail', id, 'onboardCall'));
+    else if (oc.status === 'overdue') push('onboard-overdue', `Get ${who} to book the onboarding call — it's overdue`, `Should have been booked by ${ownerWhen(oc.dueBy)} (your time) · ${oc.remindersSent} reminder${oc.remindersSent === 1 ? '' : 's'} sent`, true, oc.dueBy, view('detail', id, 'onboardCall'));
+    if (oc.status === 'booked' && oc.bookedFor && now.getTime() > Date.parse(oc.bookedFor) + (oc.callMinutes || 30) * 60e3) {
+      push('onboard-mark', `Mark the onboarding call with ${who}: done or no-show`, `It was ${ownerWhen(oc.bookedFor)} (your time)`, true, oc.bookedFor, view('detail', id, 'onboardCall'));
+    }
+  }
   if (st === 'awaiting_purchase' && shopping.sentAt && !shopping.boughtAt) {
     push('buy', `Buy ${shopping.chosenDomain || 'the domain'} and 2 inboxes, then paste the logins`,
       `Shopping list sent ${ago(shopping.sentAt, now)}${has(shopping.total) ? ` · about $${shopping.total}` : ''}${shopping.escalatedAt ? ' · overdue' : ''}`,
@@ -361,13 +373,101 @@ export function todosFor(ctx) {
   return t.sort((a, b) => Number(b.urgent) - Number(a.urgent) || String(a.since || '').localeCompare(String(b.since || '')));
 }
 
+// ─── the simple Trials list (docs/ONBOARD-CALL.md §5 `simple`) ───────────────
+
+/**
+ * The one status the simple Trials list shows: where the trial is (`step`),
+ * one plain sentence (`label`), what happens next or what the owner must do
+ * (`next`), and a red dot (`needsYou`) when he must act — a new application,
+ * a reply to answer, an overdue booking, a call to mark, anything the to-do
+ * list marks urgent. Pure: ctx (+ the row's to-dos) → data. Numbers are only
+ * ever the stored ones; a missing counter is left out, never shown as 0.
+ */
+export function simpleFor(ctx, todos = todosFor(ctx)) {
+  const { client, trial = {}, shopping = {}, domain = {}, counters = {} } = ctx;
+  const st = client.state;
+  const urgent = todos.some((t) => t.urgent);
+  const since0 = client.stateChangedAt || client.createdAt || null;
+  const r = (step, label, next, needsYou = false, since = since0, dayOf30 = null) => ({
+    step, label, next, needsYou: Boolean(needsYou) || urgent, since: since || since0 || null,
+    person: client.contactName || null, company: client.name || client.id, dayOf30,
+  });
+  const booked = n(counters.booked);
+  const calls = booked != null ? `, ${booked} call${booked === 1 ? '' : 's'} booked` : '';
+  const on = (dayKey) => (dayKey ? ` on ${formatDay(dayKey)}` : '');
+
+  switch (st) {
+    case 'applied':
+      if (underReview(ctx)) return r('new', 'New application — read it and say yes or no', 'Open it and press Approve or Decline', true, ctx.application.receivedAt);
+      return r('new', 'New application — being checked', 'Nothing for you yet');
+    case 'queued':
+      return r('queued', 'In the queue — waiting for a free trial slot', `Nothing for you: they start when a slot opens${client.queueExpectedDate ? ` (about ${formatDay(client.queueExpectedDate)})` : ''}`, false, client.queuedAt);
+    case 'onboarding':
+      return onboardingSimple(ctx, r);
+    case 'awaiting_purchase':
+      return r('setting_up', 'Setting up their emails — your turn to buy the domain', shopping.sentAt ? `Buy ${shopping.chosenDomain || 'the domain'} and 2 inboxes, then paste the logins` : 'The shopping list is on its way to you', Boolean(shopping.sentAt && !shopping.boughtAt), shopping.sentAt);
+    case 'setup_check':
+      if (domain.setupPhase === 'failed') return r('setting_up', 'Setting up their emails — a domain check failed', 'Fix the record named in the to-do; the checks run again every hour', true, domain.setupFailedAt);
+      return r('setting_up', 'Setting up their emails — checking the new domain', 'Nothing for you: warm-up starts when the checks pass');
+    case 'warming':
+      return r('warming_up', `Warming up their inboxes — first emails${on(trial.day1Date)}`, 'Nothing for you: the inboxes warm up for about 2 weeks');
+    case 'ready':
+      return r('warming_up', `Ready — first emails${on(trial.day1Date)}`, 'Nothing for you');
+    case 'sending':
+      return r('sending', `Sending — day ${ctx.day ?? '—'} of 30${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, ctx.day ?? null);
+    case 'extension':
+      return r('sending', `Free extension — day ${ctx.day ?? '—'}${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, ctx.day ?? null);
+    case 'paused':
+      return r('sending', `Paused — ${client.pausedReason || 'by you'}`, 'No emails go out until it is cleared', false, since0, ctx.day ?? null);
+    case 'deciding':
+      return r('finished', 'Trial finished — waiting for their decision', trial.talkRequestedAt ? `Call ${client.contactName || 'them'} — they asked to talk` : 'Nothing for you: they choose on their decision page', Boolean(trial.talkRequestedAt));
+    case 'converted':
+      return r('finished', 'Finished — became a client', client.paidAt ? 'Nothing for you' : 'Mark the invoice paid when the money lands');
+    case 'not_now': case 'retired': case 'deleted':
+      return r('finished', 'Finished — not a client for now', 'Nothing for you');
+    case 'declined':
+      return r('declined', 'Declined', 'Nothing for you');
+    case 'closed_silent':
+      return r('declined', 'Closed — they never finished onboarding', 'Nothing for you');
+    default:
+      return r('new', STATE_LABELS[st] || st, 'Nothing for you yet');
+  }
+}
+
+/** `simple` while onboarding: the onboarding call first, then the signed page. */
+function onboardingSimple(ctx, r) {
+  const { trial = {}, now } = ctx;
+  const oc = ctx.onboardCall || null;
+  if (oc && oc.status === 'booked') {
+    if (!oc.bookedFor) return r('call_booked', 'Call booked — check your calendar for the time', 'Take the call, then mark it done', oc.needsReply, oc.bookedAt);
+    if (now.getTime() > Date.parse(oc.bookedFor) + (oc.callMinutes || 30) * 60e3) return r('call_booked', 'Call booked — did it happen? Mark it', "Press Call done or They didn't show", true, oc.bookedFor);
+    return r('call_booked', `Call booked for ${ownerWhen(oc.bookedFor)} your time`, oc.needsReply ? 'They wrote again — answer them' : `Nothing for you until the call (${ownerDayWord(oc.bookedFor, now)})`, oc.needsReply, oc.bookedAt);
+  }
+  if (trial.agreementAcceptedAt) return r('setting_up', 'Signed — checking the size of their market', 'Nothing for you yet', false, trial.agreementAcceptedAt);
+  if (!oc) return r('accepted', 'Accepted — waiting for them to fill in the onboarding page', 'Nothing for you: we remind them', false, trial.onboardingSentAt);
+  if (oc.status === 'held') return r('call_booked', 'Call done — waiting for them to finish the onboarding page', 'Nothing for you: we remind them about the page', false, oc.heldAt);
+  if (oc.needsReply) return r('accepted', 'They replied — answer them', 'Read their reply and answer it in the conversation', true, oc.lastReplyAt);
+  if (oc.status === 'no_show') return r('accepted', 'They missed the call — waiting for a new time', 'Write to them in the conversation, or mark the new time once it is booked', false, oc.noShowAt);
+  if (oc.status === 'overdue') return r('accepted', 'Accepted — the call is still not booked (overdue)', 'Write to them in the conversation, or send the email again', true, oc.dueBy);
+  if (oc.status === 'stopped') return r('accepted', 'Accepted — reminders stopped', 'Mark the call booked if you arrange it', false, oc.stoppedAt);
+  if (oc.status === 'replied') return r('accepted', 'Accepted — you answered, waiting for them to book the call', 'Mark the call booked once you agree a time', false, oc.lastOwnerReplyAt || oc.lastReplyAt);
+  const next = oc.nextReminderAt
+    ? `Nothing for you: we remind them ${ownerDayWord(oc.nextReminderAt, now)}`
+    : `Nothing for you: if it is not booked by ${ownerWhen(oc.dueBy)} (your time), you get an alert`;
+  return r('accepted', `Accepted — waiting for them to book the call${oc.status === 'opened' ? ' (they opened the email)' : ''}`, next, false, oc.sentAt);
+}
+
 // ─── loading ──────────────────────────────────────────────────────────────────
 
 const parseJson = (v, fallback) => { if (v == null || v === '') return fallback; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return fallback; } };
 
-export async function loadContext(client, { alerts = null, now = new Date() } = {}) {
+export async function loadContext(client, { alerts = null, now = new Date(), onboard = null } = {}) {
   const id = client.id;
   const vnow = clientNow(client, now);
+  // The onboarding call is read only for clients that were sent one (flag on the client hash).
+  const onboardCall = client.onboardCallSentAt
+    ? onboardCallView(await kv.hgetall(K.onboardCall(id)).catch(() => null), [], { now: vnow, settings: onboard || await onboardSettings(), clientState: client.state })
+    : null;
   const [extras, profile, trial, domainRead, shopping, inboxesRaw, lf, approval, sequence, pacelog, runState, allAlerts] = await Promise.all([
     clientExtras(client, now),
     getProfile(id),
@@ -395,19 +495,22 @@ export async function loadContext(client, { alerts = null, now = new Date() } = 
     bookings: extras.bookings || [], replies: extras.replies || [], repliesByKind: extras.repliesByKind || {}, hot,
     invoice: extras.invoice, promises: extras.promises || [], pacelog, reports: extras.reports || [], upcoming: extras.upcoming || [],
     runState, application, fitScore, alerts: openAlerts, day: extras.trialDay, health: extras.health, now: vnow, minMarket: await cfg(id, 'MIN_MARKET'),
+    onboardCall,
   };
 }
 
 /** One board row (docs/HUB-API.md "Client row"). */
-export async function hubRow(client, { alerts, now = new Date() } = {}) {
-  const [base, ctx] = await Promise.all([clientRow(client, { alerts, now }), loadContext(client, { alerts, now })]);
+export async function hubRow(client, { alerts, now = new Date(), onboard = null } = {}) {
+  const [base, ctx] = await Promise.all([clientRow(client, { alerts, now }), loadContext(client, { alerts, now, onboard })]);
   const next = ctx.upcoming[0] || null;
+  const todo = todosFor(ctx);
   return {
     ...base,
     stateLabel: stateLabelFor(ctx),
+    simple: simpleFor(ctx, todo),
     fitScore: ctx.fitScore || null,
     contactName: client.contactName || null, contactEmail: client.contactEmail || null, website: client.website || null,
-    todo: todosFor(ctx),
+    todo,
     systems: systemsFor(ctx),
     nextUp: next ? { date: next.date, what: next.what } : null,
     _ctx: ctx,
@@ -417,7 +520,9 @@ export async function hubRow(client, { alerts, now = new Date() } = {}) {
 export async function hubBoard({ now = new Date() } = {}) {
   const [board, clients, queue] = await Promise.all([boardData(now), getAllClients(), listQueue().catch(() => ({ rows: [] }))]);
   const alerts = await getAlertLog(500);
-  const rows = await Promise.all(clients.map((c) => hubRow(c, { alerts, now })));
+  // ONBOARDCALL settings once per board (one read), only when some trial has an onboarding call.
+  const onboard = clients.some((c) => c.onboardCallSentAt) ? await onboardSettings().catch(() => null) : null;
+  const rows = await Promise.all(clients.map((c) => hubRow(c, { alerts, now, onboard })));
   const byId = new Map(rows.map((r) => [r.id, r]));
   const strip = (r) => { const { _ctx, ...rest } = r; return rest; };
   const stages = STAGES.map((s) => ({ ...s, clients: board.clients.filter((c) => s.states.includes(c.state) && c.id !== 'aviance' && c.id !== '_test').map((c) => strip(byId.get(c.id))).filter(Boolean) }));
@@ -516,6 +621,8 @@ export async function hubClient(id, { now = new Date() } = {}) {
     holds: { legalHoldAt: client.legalHoldAt || null, sendHold: client.sendHold || null, emergencyActive: truthy(client.emergencyActive), emergencyHalved: truthy(client.emergencyHalved), pausedReason: client.pausedReason || null },
     // Research is read only here (one Redis read per detail view), never on board rows.
     application: ctx.application ? { ...ctx.application, research: await researchView(id).catch(() => null) } : null,
+    // The onboarding call with its whole conversation (docs/ONBOARD-CALL.md §5); null when no acceptance email went.
+    onboardCall: client.onboardCallSentAt ? await onboardCallFor(id, { now, client }).catch(() => null) : null,
     deliverability: await deliverabilityView(id).catch(() => null),
     leadQuality: await leadQualityView(id).catch(() => null),
     links: {},

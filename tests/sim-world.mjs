@@ -128,6 +128,12 @@ export function installWorld({ seed = 20261005 } = {}) {
   io.imapLogin = async () => ({ ok: true, spamFolderExists: true });
   io.imapFindMessage = async (acct, token) => ({ found: true, folder: 'INBOX', headers: `Subject: Setup check ${token}\r\nAuthentication-Results: mx.google.com; dkim=pass; spf=pass` });
   io.imapFetchAttachments = async () => ({ ok: true, messages: [], maxUid: 0, more: false });
+  // The onboarding-call inbox check reads the same simulated inboxes.
+  io.scanMailbox = async (account, { uidState = {} } = {}) => {
+    const box = sim.inbound[account.email] || [];
+    const last = Number(uidState?.INBOX?.lastUid) || 0;
+    return { ok: true, messages: box.filter((m) => m.uid > last), uidState: { INBOX: { uidValidity: '1', lastUid: Math.max(last, ...box.map((m) => m.uid)) } } };
+  };
   // The trial domain redirects to the client's main site (setup check 10);
   // every other page (calendar link, website) answers 200.
   io.fetchExt = async (url) => {

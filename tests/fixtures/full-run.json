@@ -4,7 +4,7 @@
   "match": "exact list of milestones read oldest-first from client:_test:events: state changes, client emails (notify client_email_sent key), owner alerts (except the digests) and the key system steps listed in the test; immediate repeats collapsed",
   "runs": {
     "with_calls": [
-      "client onboarding_link",
+      "client accepted_call",
       "state applied → onboarding",
       "onboarding agreement_accepted",
       "client agreement_copy",
@@ -58,7 +58,7 @@
       "client invoice_reminder"
     ],
     "zero_calls": [
-      "client onboarding_link",
+      "client accepted_call",
       "state applied → onboarding",
       "onboarding agreement_accepted",
       "client agreement_copy",

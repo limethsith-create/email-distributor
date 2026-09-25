@@ -203,7 +203,9 @@ nothing reaches the applicant until the owner decides.
 ```
 Owner actions: `POST /api/mc/clients/{id}/intake` `{action:'approveApplication'}`
 → `{ok, outcome:'onboarding'|'queued'|'declined'}` (the repeat rule and the
-3-trial cap still apply) · `{action:'declineApplication', reason}` →
+3-trial cap still apply; `onboarding` = the one `accepted_call` email went out,
+see "Onboarding call" below; if that email cannot go, the answer is a 500 with
+the reason and the application is waiting again) · `{action:'declineApplication', reason}` →
 `{ok, outcome:'declined'}`; the reason is emailed to the applicant
 (`decline_fit`), 400 when empty.
 
@@ -355,4 +357,99 @@ and, for each `new` one, a to-do `{ id: "inquiry:{id}", clientName: company, urg
 
 `GET /api/mc/inquiries` → `{ inquiries: [record…] (newest first), counts }` where a record is
 `{ id, at, source, status: new|contacted|won|lost, statusAt, notes: [{at, text}], name, email, company, website, sells, plan: starter|growth|scale|null, slotStart, slotEnd (ISO), theirTz, whenTheirs, whenHost (text, owner's time), clientId?, trialOutcome? }`.
-`POST /api/mc/inquiries` `{action:'status', id, status, note?}` · `{action:'note', id, text}` · `{action:'toTrial', id}` (runs the Gatekeeper pre-approved → onboarding link or queue; returns `{ok, clientId, outcome}`).
+`POST /api/mc/inquiries` `{action:'status', id, status, note?}` · `{action:'note', id, text}` · `{action:'toTrial', id}` (runs the Gatekeeper pre-approved → the accepted_call email or queue; returns `{ok, clientId, outcome}`).
+
+---
+
+# Onboarding call + the simple Trials status (2026-09-25)
+
+Contract: docs/ONBOARD-CALL.md. Every field is additive.
+
+When the owner says yes (Approve, New client, a plan inquiry turned into a
+trial, a queue slot opening) the applicant gets ONE email, `accepted_call`
+("You're in — let's book your onboarding call": the booking link or "reply
+with two or three times", plus the one-page onboarding link) from the
+ONBOARDCALL inbox (config `ONBOARDCALL.inbox`; null → the owner sender). The
+machine then tracks the call and collects the conversation.
+
+## `GET /api/mc/hub` — every row gains `simple`
+
+The ONLY status the simple Trials list shows:
+```jsonc
+"simple": {
+  "step": "new|accepted|call_booked|setting_up|warming_up|sending|finished|declined|queued",
+  "label": "Accepted — waiting for them to book the call",   // one plain sentence
+  "next": "Nothing for you: we remind them tomorrow",        // what happens next / what the owner must do
+  "needsYou": true,                                          // red dot + top of the list
+  "since": "ISO|null",                                       // when this step started
+  "person": "Sam Test|null", "company": "eCreek IT",
+  "dayOf30": 12 | null                                       // only while sending / extension (can pass 30 in an extension)
+}
+```
+`needsYou` is true for a new application to review, a reply to answer, an
+overdue booking, a call to mark done/no-show, domain buying, a failed domain
+check, a "talk to someone" request, and anything in the row's `todo` marked
+urgent. Times in labels are the owner's (Sri Lanka) time.
+
+Rows of trials with an onboarding call may also carry these to-dos
+(`action: {type:'view', view:'detail', clientId, section:'onboardCall'}`, all
+urgent): `onboard-reply:{id}` (they replied, not answered yet),
+`onboard-overdue:{id}`, `onboard-mark:{id}` (the call time has passed).
+
+## `GET /api/mc/hub/{id}` gains `onboardCall`
+
+`null` when no acceptance email was sent (older clients got the plain
+onboarding link; "resend" below starts the onboarding call for them).
+```jsonc
+"onboardCall": {
+  "status": "sent|opened|replied|booked|held|no_show|overdue|stopped",
+  "label": "Email sent — waiting for them to book",           // plain words
+  "sentAt": "ISO", "openedAt": "ISO|null", "lastReplyAt": "ISO|null",
+  "bookedFor": "ISO|null",          // null while booked = the confirmation had no readable time
+  "bookedAt": "ISO|null", "bookedBy": "calendar|owner|null",
+  "heldAt": "ISO|null", "dueBy": "ISO", "overdue": false,
+  "remindersSent": 1, "nextReminderAt": "ISO|null", "stopped": false,
+  "bookingUrl": "https://…|null", "fromInbox": "hello@…",
+  "noShowAt": "ISO|null", "stoppedAt": "ISO|null", "lastOwnerReplyAt": "ISO|null",
+  "needsReply": true,               // their last message came after the owner's last reply (and after any booking)
+  "callMinutes": 30,
+  "steps": [ { "key": "sent|opened|replied|booked|held", "label": "Acceptance email sent", "done": true, "at": "ISO|null" } ],
+  "thread": [ { "id": "…", "dir": "out|in", "at": "ISO", "from": "…", "to": "…", "subject": "…",
+                "text": "plain text, ≤ 4 000 chars (quoted history cut)", "kind": "acceptance|reminder|reply|owner_reply|booking" } ]   // oldest first
+}
+```
+`status` is worked out from the stored times: held > no_show > booked >
+stopped > overdue > replied > opened > sent.
+
+## `POST /api/mc/clients/{id}/onboard-call`
+
+One of:
+- `{ action: 'reply', text }` — plain text, ≤ 2 000 characters; sent from the
+  ONBOARDCALL inbox to the applicant, `In-Reply-To` their last message (else
+  our last one), `References` the whole conversation; the owner's name is
+  added as a sign-off unless his last line already has it. A double click
+  within 2 minutes sends once.
+- `{ action: 'markBooked', when: ISO }` — the call time (±30/180 days from now)
+- `{ action: 'markHeld' }` · `{ action: 'markNoShow' }` (needs a booked call)
+- `{ action: 'resend' }` — the acceptance email again, same thread, a fresh
+  onboarding link (the old one keeps working); reminders and the booking
+  deadline restart from now. Only while the client is `onboarding`.
+- `{ action: 'stopReminders' }`
+
+→ `{ ok, onboardCall }` · `400 {error}` (bad input, plain words) · `409
+{error}` (nothing sent yet / no booked call / past onboarding) · `404`.
+`GET` on the same path → `{ onboardCall }`.
+
+## `POST /api/mc/onboard-calls/check`
+
+Call it when the Trials screen or a trial opens (the heartbeat is not running
+yet). Reads the ONBOARDCALL inbox (replies + calendar confirmations), sends the
+reminders that are due, raises overdue alerts. Throttled to
+`ONBOARDCALL.checkEveryMinutes` (shared with the `onboard-calls` job and the
+check that runs right after Approve), so calling it on every open is fine.
+→ `{ ok, checked, newReplies, booked, remindersSent, skipped?: 'too soon', error? }`
+(`ok: false` + `error` when the inbox could not be read; reminders still ran).
+Reload the board / trial after it when `newReplies` or `booked` > 0.
+
+Owner alerts (phone + email, not urgent): `onboard_reply`, `onboard_booked`,
+`onboard_overdue`, `onboard_cancelled`; push `url` = `/#trial/{id}`.

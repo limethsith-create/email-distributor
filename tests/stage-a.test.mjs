@@ -110,14 +110,15 @@ test('each fit rule fails on its own', () => {
   assert.equal(detectAgency('We fix leaky pipes; no outbound nonsense', DEFAULTS.INTAKE.agencyKeywords), null);
 });
 
-test('happy path: fit passes → onboarding link, token, promise', async () => {
+test('happy path: fit passes → one accepted_call email with the onboarding link, token, promise', async () => {
   const r = await applyForTrial(GOOD, { now: new Date('2026-10-05T14:00:00Z') });
   assert.equal(r.outcome, 'onboarding');
   const c = await getClient(r.clientId);
   assert.equal(c.state, 'onboarding');
   assert.equal(c.mainDomain, 'acme.com');
-  const mail = emails.find((e) => e.key === 'onboarding_link');
-  const token = mail.vars.link.match(/\/c\/([^/]+)\/onboard$/)[1];
+  assert.deepEqual(emails.map((e) => e.key), ['accepted_call'], 'one email on a yes (docs/ONBOARD-CALL.md)');
+  const mail = emails.find((e) => e.key === 'accepted_call');
+  const token = mail.vars.onboardingLink.match(/\/c\/([^/]+)\/onboard$/)[1];
   assert.equal((await readToken(token, { purpose: 'onboarding' })).clientId, r.clientId);
   const promises = Object.values(await kv.hgetall(`client:${r.clientId}:promises`));
   assert.ok(promises[0].doneAt);
@@ -209,7 +210,7 @@ test('onboarding nudge: day +2 and +4 reminders, day +7 closed_silent and the qu
   assert.equal((await getClient('late')).state, 'closed_silent');
   assert.deepEqual(r.promoted, ['waiting']);
   assert.equal((await getClient('waiting')).state, 'onboarding');
-  assert.deepEqual(emails.slice(-2).map((e) => e.key), ['closed_silent', 'onboarding_link']);
+  assert.deepEqual(emails.slice(-2).map((e) => e.key), ['closed_silent', 'accepted_call']);
 });
 
 test('a client who signed is never closed silent', async () => {
@@ -633,6 +634,9 @@ test('every Stage A template renders with sample data; the agreement fills all b
     expectedLine: 'Soon.', reason: 'because.', minMarket: '1,000', estimate: '500', widenedLine: ' in the areas you gave me', mainDomain: 'acme.com',
     agreementText: 'TEXT', agreementName: 'Ann Lee', agreementTitle: 'CEO', companyName: 'Acme', acceptedAt: '2026-10-05 14:00', agreementIp: '1.2.3.4',
     day1Date: 'Monday 19 October', day30Date: 'Tuesday 17 November', approvalDate: 'Saturday 10 October', calendarUrl: 'https://cal', problem: 'broken.',
+    // Onboarding call (accepted_call, accepted_call_reminder, onboard_call_tomorrow, onboard_owner_reply)
+    callMinutes: 30, bookingLine: 'Book a time that suits you: https://cal.com/limeth/onboarding', onboardingLink: 'https://x/c/t/onboard',
+    threadSubject: "You're in — let's book your onboarding call", when: 'Tuesday, October 13 at 11:00 AM EDT', callDay: 'tomorrow', text: 'Tuesday works.\n\nLimeth',
   };
   for (const key of Object.keys(STAGE_A_TEMPLATES)) {
     const m = renderTemplate(key, sample);

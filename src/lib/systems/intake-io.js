@@ -144,6 +144,8 @@ export const io = {
   imapLogin,
   imapFindMessage,
   imapFetchAttachments,
+  // One bounded IMAP pass (systems/imap-scan.js) — the onboarding-call inbox check uses it.
+  scanMailbox: async (account, opts) => (await import('@/lib/systems/imap-scan')).scanMailbox(account, opts),
   dns: {
     real: true, // the live resolver (tests swap the whole object; webintel refuses the real one in tests)
     resolveTxt: (name, ms = 4000) => withTimeout(dnsp.resolveTxt(name), ms, `TXT ${name}`),

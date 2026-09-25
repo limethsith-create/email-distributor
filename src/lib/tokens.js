@@ -42,24 +42,34 @@ function safeEqual(a, b) {
  * flag scanner hits that fire seconds after delivery, and makes every touch a
  * distinct URL so an image proxy can't serve a cached copy of the last one.
  * Legacy v1 tokens (plain base64url of the email) stay accepted by the route.
+ *
+ * `extra.purpose` + `extra.clientId` mark a pixel that is not a cold email
+ * (`onboard`: the onboarding-call email, docs/ONBOARD-CALL.md) so the route
+ * records it on that client instead of the cold-email open store. Cold
+ * tokens carry neither field and verify exactly as before.
  */
-export function buildTrackingToken(toEmail, touch = 'd0', sentAt = Date.now()) {
-  const payload = Buffer.from(JSON.stringify({
+export function buildTrackingToken(toEmail, touch = 'd0', sentAt = Date.now(), extra = null) {
+  const data = {
     e: String(toEmail).trim().toLowerCase(),
     t: String(touch || 'd0'),
     s: Math.floor(sentAt / 1000),
-  })).toString('base64url');
+  };
+  if (extra && extra.purpose) data.p = String(extra.purpose).slice(0, 20);
+  if (extra && extra.clientId) data.c = String(extra.clientId).slice(0, 40);
+  const payload = Buffer.from(JSON.stringify(data)).toString('base64url');
   return `v2.${payload}.${hmac(payload)}`;
 }
 
-/** Verify a v2 token; returns { email, touch, sentAt } or null. */
+/** Verify a v2 token; returns { email, touch, sentAt } (+ { purpose, clientId } when set) or null. */
 export function verifyTrackingToken(token) {
   try {
     const m = /^v2\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{22})$/.exec(String(token || ''));
     if (!m || !safeEqual(hmac(m[1]), m[2])) return null;
     const data = JSON.parse(Buffer.from(m[1], 'base64url').toString('utf8'));
     if (!data || typeof data.e !== 'string' || !data.e.includes('@') || data.e.length > 200) return null;
-    return { email: data.e.toLowerCase(), touch: String(data.t || 'd0'), sentAt: (Number(data.s) || 0) * 1000 };
+    const out = { email: data.e.toLowerCase(), touch: String(data.t || 'd0'), sentAt: (Number(data.s) || 0) * 1000 };
+    if (data.p) { out.purpose = String(data.p); out.clientId = data.c ? String(data.c) : null; }
+    return out;
   } catch {
     return null;
   }
@@ -98,4 +108,9 @@ export function unsubscribeUrl(toEmail) {
 
 export function trackingPixelUrl(toEmail, touch = 'd0', sentAt = Date.now()) {
   return `${TRACKING_BASE_URL}/api/track/open?t=${buildTrackingToken(toEmail, touch, sentAt)}`;
+}
+
+/** Pixel for the onboarding-call email: an open marks openedAt on client:{id}:onboardcall. */
+export function onboardPixelUrl(toEmail, clientId, sentAt = Date.now()) {
+  return `${TRACKING_BASE_URL}/api/track/open?t=${buildTrackingToken(toEmail, 'onboard', sentAt, { purpose: 'onboard', clientId })}`;
 }

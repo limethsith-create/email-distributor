@@ -171,4 +171,51 @@ Please fix it on your booking tool, or reply with a different link. The first se
 
 {ownerName}`,
   },
+
+  // ── Onboarding call (docs/ONBOARD-CALL.md) ──
+  // from 'onboard' = the ONBOARDCALL inbox (else the owner sender). {bookingLine} is
+  // "Book a time that suits you: <link>" or, with no booking link set, "Reply with two or
+  // three times…". Follow-ups reuse the first subject ({threadSubject}) so they thread.
+  accepted_call: {
+    from: 'onboard',
+    subject: "You're in — let's book your onboarding call",
+    body: `Hi {firstName},
+
+Good news: we'd like to run your free 30-day trial for {companyName}.
+
+The next step is a {callMinutes}-minute onboarding call, so I can hear how you sell and who you'd like to reach. {bookingLine}
+
+Before the call (or on it, together): {onboardingLink} — one page, your details and the agreement.
+
+{ownerName}`,
+  },
+
+  accepted_call_reminder: {
+    from: 'onboard',
+    subject: 'Re: {threadSubject}',
+    body: `Hi {firstName},
+
+Just checking you saw my email about your trial. The first step is a {callMinutes}-minute onboarding call. {bookingLine}
+
+{ownerName}`,
+  },
+
+  onboard_call_tomorrow: {
+    from: 'onboard',
+    subject: 'Our onboarding call {callDay}',
+    body: `Hi {firstName},
+
+A quick reminder: our {callMinutes}-minute onboarding call is {when}.
+
+If that time no longer works, reply to this email and we'll find another.
+
+{ownerName}`,
+  },
+
+  // The owner's own words from the hub, sent as they are (a sign-off is added unless he wrote one).
+  onboard_owner_reply: {
+    from: 'onboard',
+    subject: 'Re: {threadSubject}',
+    body: '{text}',
+  },
 };

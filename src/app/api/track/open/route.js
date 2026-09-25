@@ -29,6 +29,11 @@
  *
  * It ALWAYS returns the transparent pixel, even on error, so a mail client
  * never sees a broken image. Three KV round trips at most per recorded hit.
+ *
+ * Onboarding-call pixels (token purpose `onboard`, docs/ONBOARD-CALL.md) are
+ * not cold-email opens: they never touch the stores above. A human hit (same
+ * classification) marks openedAt on client:{id}:onboardcall; scanner hits,
+ * Apple prefetches and too-soon hits are ignored.
  */
 
 import crypto from 'crypto';
@@ -139,12 +144,7 @@ async function recordOpen(token, meta) {
   const sinceSend = sentAtMs ? Math.max(0, nowMs - sentAtMs) : null;
   const cls = classify(meta.ua);
 
-  const reasons = [];
-  if (cls === 'scanner') reasons.push('scanner');
-  if (cls === 'apple-mpp' && sinceSend !== null && sinceSend < 15 * MINUTE) reasons.push('apple-mpp-prefetch');
-  if (cls === 'client' && sinceSend !== null && sinceSend < 60 * 1000) reasons.push('too-soon');
-  if (cls === 'gmail-proxy' && sinceSend !== null && sinceSend < 20 * 1000) reasons.push('sender-render');
-  if (meta.ip && ignoredIps().has(meta.ip)) reasons.push('ignored-ip');
+  const reasons = suspectReasons(cls, sinceSend, meta);
   const human = reasons.length === 0;
 
   // Round trip 2: current record + atomic first/count markers.
@@ -224,6 +224,25 @@ async function recordOpen(token, meta) {
   await p2.exec();
 }
 
+/** Why a hit is not a person reading the email ([] = a real open). */
+function suspectReasons(cls, sinceSend, meta) {
+  const reasons = [];
+  if (cls === 'scanner') reasons.push('scanner');
+  if (cls === 'apple-mpp' && sinceSend !== null && sinceSend < 15 * MINUTE) reasons.push('apple-mpp-prefetch');
+  if (cls === 'client' && sinceSend !== null && sinceSend < 60 * 1000) reasons.push('too-soon');
+  if (cls === 'gmail-proxy' && sinceSend !== null && sinceSend < 20 * 1000) reasons.push('sender-render');
+  if (meta.ip && ignoredIps().has(meta.ip)) reasons.push('ignored-ip');
+  return reasons;
+}
+
+async function recordOnboardOpen(token, meta) {
+  if (!token.clientId) return;
+  const sinceSend = token.sentAt ? Math.max(0, Date.now() - token.sentAt) : null;
+  if (suspectReasons(classify(meta.ua), sinceSend, meta).length) return;
+  const { markOpened } = await import('@/lib/systems/onboardcall');
+  await markOpened(token.clientId, token.email, { now: new Date() });
+}
+
 function requestMeta(request) {
   const h = request.headers;
   const ip = String(h.get('x-forwarded-for') || '').split(',')[0].trim();
@@ -244,7 +263,8 @@ export async function GET(request) {
     if (token) {
       // Awaited (not fire-and-forget) so the serverless runtime never kills the
       // write; the pixel still goes out the moment recording finishes.
-      await recordOpen(token, requestMeta(request));
+      if (token.purpose === 'onboard') await recordOnboardOpen(token, requestMeta(request));
+      else if (!token.purpose) await recordOpen(token, requestMeta(request));
     }
   } catch {
     /* never block the pixel on an error */

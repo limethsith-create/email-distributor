@@ -102,4 +102,12 @@ export const ALERTS = {
   decision_made: { urgent: false, title: '{clientId} chose: {choice}' },
   new_inquiry: { urgent: true, title: 'New plan inquiry: {company} — call {when}' },
   // ── end Stage D ──
+  // ── Onboarding call (docs/ONBOARD-CALL.md) ── phone + email (not urgent: the hub's own
+  // to-do for the trial clears itself once answered/booked, an urgent alert would linger).
+  // Scope is per message / booking, so each one alerts exactly once.
+  onboard_reply: { urgent: false, title: '{person} replied about the onboarding call' },
+  onboard_booked: { urgent: false, title: 'Onboarding call booked: {person}, {when}' },
+  onboard_overdue: { urgent: false, title: 'Onboarding call not booked yet: {person}' },
+  onboard_cancelled: { urgent: false, title: 'Onboarding call cancelled: {person}' },
+  // ── end onboarding call ──
 };

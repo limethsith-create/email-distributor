@@ -179,6 +179,23 @@ export const K = {
   inquiryOrder: () => 'inquiries:order', // ids, newest first
   applyRateInquiry: (ipHash, hour) => `inquiry:rate:${hour}:${ipHash}`,
   // ── end Stage D ──
+
+  // ── Onboarding call (docs/ONBOARD-CALL.md) ──
+  /**
+   * The acceptance email and the call it asks for (hash): sentAt, lastSentAt, subject,
+   * fromInbox, messageIds (JSON, every Message-ID in the conversation), dueBy, openedAt,
+   * firstReplyAt, lastReplyAt, lastOwnerReplyAt, bookedFor, bookedAt, bookedBy, bookingUid,
+   * heldAt, noShowAt, stoppedAt, cancelledAt, remindersSent, overdueAt, tomorrowSentFor.
+   * The status is worked out from these times, never stored.
+   */
+  onboardCall: (id) => `${c(id)}:onboardcall`,
+  /** The onboarding-call conversation (list, oldest first): {id, dir, at, from, to, subject, text, kind}. */
+  onboardThread: (id) => `${c(id)}:onboardthread`,
+  /** Last onboarding-call check (string ISO, with EX): one check per ONBOARDCALL.checkEveryMinutes across the job, the hub and Approve. */
+  onboardCheck: () => 'onboardcall:checkedat',
+  /** IMAP watermarks of the ONBOARDCALL inbox (hash): `{inbox}|{folder}` → {uidValidity, lastUid}. */
+  onboardImap: () => 'onboardcall:imapstate',
+  // ── end onboarding call ──
 };
 
 /**

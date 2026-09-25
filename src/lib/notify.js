@@ -15,11 +15,12 @@ import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { logEvent } from '@/lib/db/events';
 import { sendEmail } from '@/lib/mailer';
-import { parseAccount, getSmtpAccounts, loadAccounts } from '@/lib/smtp-accounts';
+import { parseAccount, getSmtpAccounts, loadAccounts, findSmtpAccount } from '@/lib/smtp-accounts';
 import { ALERTS } from '@/lib/templates/owner';
 import { fill } from '@/lib/templates/render';
 import { dayKeyIn, partsIn, OWNER_TZ } from '@/lib/time';
 import { pushToOwner } from '@/lib/push';
+import { cfg } from '@/lib/config';
 
 const DEFAULT_OWNER_EMAIL = 'limethsith@gmail.com';
 const LOG_CAP = 1000;
@@ -32,11 +33,29 @@ export function ownerEmail() {
   return (process.env.OWNER_EMAIL || process.env.DAILY_REPORT_TO || DEFAULT_OWNER_EMAIL).trim();
 }
 
-async function ownerSender() {
+export async function ownerSender() {
   const own = parseAccount(process.env.OWNER_INBOX || '');
   if (own) return own;
   await loadAccounts();
   return getSmtpAccounts()[0] || null;
+}
+
+/**
+ * The ONE inbox that sends the onboarding-call emails and receives the
+ * replies (docs/ONBOARD-CALL.md): ONBOARDCALL.inbox, else the owner sender.
+ * A set address the machine cannot log into is an error, never a silent
+ * switch to another inbox (the applicant would reply to the wrong place).
+ */
+export async function onboardSender() {
+  let wanted = await cfg(null, 'ONBOARDCALL.inbox');
+  if (!wanted) wanted = (await cfg(null, 'ONBOARDCALL'))?.inbox || null;
+  wanted = String(wanted || '').trim().toLowerCase();
+  const owner = await ownerSender();
+  if (!wanted || (owner && owner.email === wanted)) return owner;
+  await loadAccounts();
+  const found = findSmtpAccount(wanted);
+  if (found) return found;
+  throw new Error(`ONBOARDCALL.inbox ${wanted} is not an inbox the machine can log into — add it (with its password) as an Aviance inbox, or clear the setting`);
 }
 
 export async function sendTelegram(text) {
@@ -148,8 +167,14 @@ export async function getAlertLog(limit = 200) {
  * prospect could see comes from the client's trial inbox. `to` defaults to
  * the client's contactEmail. Missing slot → report_blocked alert, never a
  * blank. Deduped per (key, dedupe) forever via a claim unless `dedupe` null.
+ *
+ * `from: 'onboard'` (or a template marked so) sends from the onboarding-call
+ * inbox. The onboarding-call emails also pass `pixelUrl` (their one open
+ * pixel), `linkify` (clickable links in the HTML part) and `inReplyTo` /
+ * `references` so the conversation threads. The result carries the
+ * Message-ID and the sending address so replies can be matched.
  */
-export async function notifyClient(clientId, key, vars = {}, { to = null, from = null, dedupe = key, attachments = null } = {}) {
+export async function notifyClient(clientId, key, vars = {}, { to = null, from = null, dedupe = key, attachments = null, pixelUrl = null, linkify = false, inReplyTo = null, references = null } = {}) {
   const { renderTemplate } = await import('@/lib/templates/client');
   const { getClient } = await import('@/lib/db/client');
   const client = await getClient(clientId);
@@ -169,21 +194,44 @@ export async function notifyClient(clientId, key, vars = {}, { to = null, from =
   }
   const via = from || msg.from;
   let account;
-  if (via === 'trial') {
-    const { getAccounts } = await import('@/lib/db/inboxes');
-    account = (await getAccounts(clientId))[0];
-  } else {
-    account = await ownerSender();
+  try {
+    if (via === 'trial') {
+      const { getAccounts } = await import('@/lib/db/inboxes');
+      account = (await getAccounts(clientId))[0];
+    } else if (via === 'onboard') {
+      account = await onboardSender();
+    } else {
+      account = await ownerSender();
+    }
+  } catch (err) {
+    if (dedupe) await kv.del(`notified:${clientId}:${dedupe}`);
+    throw err;
   }
   if (!account) {
     if (dedupe) await kv.del(`notified:${clientId}:${dedupe}`);
     throw new Error(`no ${via} inbox to send ${key} for ${clientId}`);
   }
-  const res = await sendEmail(account, { to: recipient, subject: msg.subject, text: msg.text, html: `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;white-space:pre-wrap">${esc(msg.text)}</div>`, transactional: true, noTrack: true, ...(attachments ? { attachments } : {}) });
+  const body = linkify ? linkUrls(esc(msg.text)) : esc(msg.text);
+  // The only tracking on a client email is an explicit pixel (onboarding call); OPEN_TRACKING=off drops it too.
+  const pixel = pixelUrl && String(process.env.OPEN_TRACKING || '').toLowerCase() !== 'off'
+    ? `<img src="${esc(pixelUrl)}" alt="" width="1" height="1" border="0" style="display:block;width:1px;height:1px;border:0;opacity:0" />` : '';
+  const res = await sendEmail(account, {
+    to: recipient, subject: msg.subject, text: msg.text,
+    html: `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;white-space:pre-wrap">${body}</div>${pixel}`,
+    transactional: true, noTrack: true,
+    ...(attachments ? { attachments } : {}),
+    ...(inReplyTo ? { inReplyTo } : {}),
+    ...(references && references.length ? { references } : {}),
+  });
   await logEvent(clientId, 'notify', res.success ? 'client_email_sent' : 'client_email_failed', { key, to: recipient, error: res.success ? undefined : res.error });
   if (!res.success) {
     if (dedupe) await kv.del(`notified:${clientId}:${dedupe}`);
     throw new Error(`send ${key} failed: ${res.error}`);
   }
-  return { sent: true, messageId: res.messageId };
+  return { sent: true, messageId: res.messageId, from: account.email, to: recipient, subject: msg.subject, text: msg.text };
+}
+
+/** http(s) addresses in already-escaped text → links (the address stays the visible text). */
+function linkUrls(escaped) {
+  return String(escaped).replace(/https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)]/g, (u) => `<a href="${u}">${u}</a>`);
 }

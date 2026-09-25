@@ -8,6 +8,8 @@
  *
  *  onboarding-nudge  daily 10:00 ET      onboarding            Day +2/+4 reminders, +7 close
  *  queue-promote     daily 10:05 ET      (global)              pop queue:trial into free slots
+ *  onboard-calls     every ONBOARDCALL.checkEveryMinutes (global) while an onboarding call is open:
+ *                    inbox (replies, bookings), reminders, overdue (docs/ONBOARD-CALL.md)
  *  market            every minute        onboarding + 'market' continue the count; hourly when waiting
  *  pricescout        every minute        awaiting_purchase + 'pricescout'
  *  purchase-nudge    hourly              awaiting_purchase     12 h reminder, 48 h escalation
@@ -25,6 +27,7 @@
 
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
+import { cfg } from '@/lib/config';
 import { WARMUP_STATES } from '@/lib/db/client';
 import { partsIn, ET } from '@/lib/time';
 import { minuteKey, bucketKey, dailyAt } from '@/lib/joblist/helpers';
@@ -265,6 +268,27 @@ const registrarPrices = {
   },
 };
 
+// Onboarding call (docs/ONBOARD-CALL.md): read the onboarding-call inbox, send
+// the reminders that are due, raise overdue alerts — only while some client's
+// hash (already loaded by the tick) says its onboarding call is open. Shares
+// one throttle with the hub's check and the check after Approve.
+const onboardCalls = {
+  name: 'onboard-calls',
+  scope: 'global',
+  cost: 4,
+  minBudgetMs: 15_000,
+  claimTtl: 600,
+  async due({ now, clients }) {
+    if (!(clients || []).some((c) => c.onboardCallOpen === '1' || c.onboardCallOpen === 1)) return null;
+    const every = Math.max(1, Number(await cfg(null, 'ONBOARDCALL.checkEveryMinutes')) || 2);
+    return bucketKey(et(now), every);
+  },
+  async run({ now, clients }) {
+    const { checkOnboardCalls } = await import('@/lib/systems/onboardcall');
+    return checkOnboardCalls({ now, clients });
+  },
+};
+
 const promoCheck = {
   name: 'promo-check',
   scope: 'global',
@@ -281,4 +305,4 @@ const promoCheck = {
   },
 };
 
-export const JOBS = [onboardingNudge, queuePromote, research, market, pricescout, purchaseNudge, setupCheck, welcome, auth, blacklist, dmarc, bookingTest, bookingReminder, promoCheck, registrarPrices].map(onClientClock);
+export const JOBS = [onboardingNudge, queuePromote, onboardCalls, research, market, pricescout, purchaseNudge, setupCheck, welcome, auth, blacklist, dmarc, bookingTest, bookingReminder, promoCheck, registrarPrices].map(onClientClock);
