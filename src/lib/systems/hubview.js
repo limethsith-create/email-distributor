@@ -400,7 +400,7 @@ export function simpleFor(ctx, todos = todosFor(ctx)) {
 
   switch (st) {
     case 'applied':
-      if (underReview(ctx)) return r('new', 'New application — read it and say yes or no', 'Open it and press Approve or Decline', true, ctx.application.receivedAt);
+      if (underReview(ctx)) return r('new', 'New application — read it and say yes or no', 'Open it and press “Say yes” or “Say no”', true, ctx.application.receivedAt);
       return r('new', 'New application — being checked', 'Nothing for you yet');
     case 'queued':
       return r('queued', 'In the queue — waiting for a free trial slot', `Nothing for you: they start when a slot opens${client.queueExpectedDate ? ` (about ${formatDay(client.queueExpectedDate)})` : ''}`, false, client.queuedAt);
