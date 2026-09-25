@@ -139,3 +139,24 @@ client page.
    time; a copy failure holds the client and alerts (no silent send).
 10. **Warm-up reads**: each mailbox about every 30 min with up to ~14 pool
     members; a larger pool (more helpers or trials) stretches that.
+
+## v2 (2026-09-25) — what changed for the owner's setup
+
+- **Warm-up helper accounts** (replaces the old "3 Gmail, 3 Outlook, 2 Yahoo,
+  2 Zoho"): free accounts with an app password from at least three families —
+  e.g. 3 Gmail, 2 Yahoo, 1 AOL, 2 iCloud, 1 GMX (turn IMAP on), 1 Yandex. Outlook.com,
+  free Zoho and mail.com no longer work (see docs/research/v2-deliverability.md).
+- **Email checkers** (Leads v2): without at least one key nothing becomes
+  sendable. Set `QUICKEMAILVERIFICATION_API_KEY` (100/day), Verifalia (25/day)
+  and `REOON_API_KEY` (20/day) at minimum; the others in `.env.example` add
+  capacity. Reoon's $11.90 lifetime pack is the best one-time spend.
+- **Inboxes**: CheapInboxes, 2 per trial ($3.50 each). Confirm with their
+  support that app passwords are available before the first order.
+- **Domains**: the Buy & paste page compares Spaceship, Cloudflare, Dynadot,
+  Porkbun and Namecheap; prices checked 25 Sep 2026 (the .com wholesale price
+  rises on 1 Nov 2026 — refresh the table then).
+- **Spam test**: dkimvalidator (free, no account). Optional one-time
+  mail-tester credits: `MAILTESTER_USERNAME`.
+- **Decision for you**: Google's terms limit storing Places business
+  name/website/phone; lead records keep them for the length of a trial
+  (docs/research/v2-leads-copy.md).

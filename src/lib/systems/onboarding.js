@@ -48,6 +48,7 @@ export const FIELDS = [
   { key: 'suppressCustomers', label: 'Existing customers to suppress (names, websites or emails — one per line, or paste a CSV)', type: 'list', required: false },
   { key: 'competitors', label: 'Competitors to exclude (names or websites)', type: 'list', required: false },
   { key: 'sellsTo', label: 'One sentence: what you sell and to whom, in your words (it goes into your emails as written)', type: 'long', required: true },
+  { key: 'proofLine', label: 'Optional: one true proof line we may use (e.g. "We look after 40 dental offices in Dallas") — only ever used exactly as written', type: 'long', required: false },
   { key: 'defaultNiche', label: 'What you offer, in 2–4 words (used in the emails, e.g. "managed IT")', type: 'text', required: true },
   { key: 'defaultIcp', label: 'Your ideal customers in a few words, plural (used in the emails, e.g. "dental practices")', type: 'text', required: true },
   { key: 'industry', label: 'Industry keywords of your customers (comma-separated, e.g. managed IT services, IT support)', type: 'text', required: true },

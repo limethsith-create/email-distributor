@@ -14,12 +14,14 @@ import { notifyClient } from '@/lib/notify';
 import { renderReport } from '@/lib/systems/reports';
 import { getReplies, getBookings, csv, patchTrial, ownerName, markReportRendered } from '@/lib/systems/dshared';
 
-const LEAD_COLS = ['email', 'first_name', 'name', 'title', 'company', 'website', 'city', 'state', 'sizeBand', 'status', 'source', 'riskLevel', 'sent_at', 'replied_at', 'reply_kind', 'notnowDate'];
+const LEAD_COLS = ['email', 'first_name', 'name', 'title', 'company', 'website', 'city', 'state', 'sizeBand', 'status', 'grade', 'score', 'verifyStatus', 'source', 'riskLevel', 'sent_at', 'replied_at', 'reply_kind', 'notnowDate'];
 const REPLY_COLS = ['receivedAt', 'leadEmail', 'kind', 'subject', 'snippet', 'notnowDate'];
 const BOOKING_COLS = ['scheduledAt', 'leadEmail', 'status', 'qualified', 'source', 'attendedTapAt', 'rebookAttempts', 'disputeReason'];
 
 export async function buildHandover(clientId) {
-  const [leads, replies, bookings] = await Promise.all([getLeads(clientId), getReplies(clientId), getBookings(clientId)]);
+  const [allLeads, replies, bookings] = await Promise.all([getLeads(clientId), getReplies(clientId), getBookings(clientId)]);
+  // Leads the grader rejected (role addresses, invalid emails, out of area…) were never theirs to contact.
+  const leads = allLeads.filter((l) => l.status !== 'rejected');
   return {
     leadCount: leads.length,
     files: [
