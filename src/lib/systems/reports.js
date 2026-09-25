@@ -76,7 +76,7 @@ export function recommendPlan({ qualified, positive, companies, capacityPerWeek,
   }
   if (q >= 1) {
     return { plan: 'starter', kind: 'thin', rate, rateText, projections, short: line('starter'),
-      text: `${arithmetic} The rate is thin, so the recommendation is Starter, and only Starter — ${money(plans.starter.price)} for ${plans.starter.calls} calls — to prove volume fixes it before going bigger.` };
+      text: `${arithmetic} With ${q} qualified call${q === 1 ? '' : 's'} so far, the recommendation is Starter, and only Starter — ${money(plans.starter.price)} for ${plans.starter.calls} calls — to prove the rate holds at volume before going bigger.` };
   }
   if (pos > 0) {
     return { plan: 'starter', kind: 'pay_per_show', rate, rateText, projections, short: line('starter'),
@@ -330,6 +330,7 @@ export async function renderReport(name, clientId, opts = {}) {
     replies: totals.replies, replyRate: pct(totals.replies, totals.sent),
     positive: totals.positive, positiveRate: pct(totals.positive, totals.sent),
     booked: totals.booked, held: totals.held, qualified: totals.qualified, rebooked,
+    qualifiedCalls: `${totals.qualified} qualified call${Number(totals.qualified) === 1 ? '' : 's'}`,
     promiseMet: totals.qualified >= target.promise ? 'met' : 'not met',
     targetMet: totals.qualified >= target.target ? 'met' : 'not met',
     produced: producedLine(data, learning), didnt: didntLine(data.paceLog),

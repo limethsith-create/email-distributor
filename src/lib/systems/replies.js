@@ -236,6 +236,13 @@ async function followReferral(clientId, lead, reply) {
 
 // ─── Records ─────────────────────────────────────────────────────────────────
 
+/** “their words” with one closing mark: no “…?.” when they already ended the sentence. */
+export function quoteOf(text) {
+  const t = String(text || '').trim();
+  if (!t) return '(see the earlier email)';
+  return /[.!?…]["”’)]*$/.test(t) ? `“${t}”` : `“${t}.”`;
+}
+
 export function replyIdOf(meta) {
   return `r${shortHash(normId(meta.messageId) || `${meta.inbox}|${meta.folder}|${meta.uid}`)}`;
 }
@@ -282,9 +289,12 @@ async function sendHotLead(clientId, { lead, reply, id, kind, ctx, now = new Dat
     size: lead.sizeBand || lead.size || 'size not on file',
     city: lead.city || 'city not on file',
     verbatim: String(reply.text || reply.snippet || '').trim().slice(0, 1500),
+    quote: quoteOf(String(reply.text || reply.snippet || '').trim().slice(0, 1500)),
     actionLine,
     context: leadContext(lead) || lead.email,
   };
+  const known = [lead.sizeBand || lead.size, lead.city].filter(Boolean);
+  vars.who = `${name} at ${vars.Company}${known.length ? ` (${known.join(', ')})` : ''}`;
   const failBody = `A ${kind} reply for ${clientId} could not be forwarded to the client.\n\nFrom: ${name} <${lead.email}> (${vars.Company})\n“${vars.verbatim}”`;
   const to = [...new Set(clientAddresses(ctx.client, ctx.profile))];
   if (!to.length) {
@@ -627,7 +637,7 @@ export async function runHotChaser(clientId, now = new Date()) {
     if (!lead) continue;
     if (age >= nudgeH && !h.nudgedAt) {
       const verbatim = String((await kv.hget(K.replies(clientId), id))?.text || '').slice(0, 600) || '(see the earlier email)';
-      const r = await notifyClientSafe(clientId, 'hot_lead_nudge', { Company: lead.company || hostOf(lead.email), Name: lead.name || lead.first_name || lead.email, hours: Math.floor(age), verbatim }, { from: 'trial', dedupe: `hot_nudge:${id}` });
+      const r = await notifyClientSafe(clientId, 'hot_lead_nudge', { Company: lead.company || hostOf(lead.email), Name: lead.name || lead.first_name || lead.email, hours: Math.floor(age), verbatim, quote: quoteOf(verbatim) }, { from: 'trial', dedupe: `hot_nudge:${id}` });
       await kv.hset(K.hot(clientId), { [id]: { ...h, nudgedAt: now.toISOString(), nudgeSent: Boolean(r.sent) } });
       h.nudgedAt = now.toISOString();
       out.nudged++;

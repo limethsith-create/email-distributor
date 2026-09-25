@@ -364,7 +364,33 @@ test('full run: no qualified call → extension to the cap → zero-call report 
   await compareFixture('zero_calls', log);
 });
 
+/** SIM_REPORT=dir writes a plain report of the run (timeline, emails, numbers) for a human to read. */
+async function writeReport(run) {
+  const dir = process.env.SIM_REPORT;
+  if (!dir) return;
+  const events = ((await kv.lrange(K.events(TEST_ID), 0, -1)) || []).slice().reverse()
+    .map((e) => ({ at: e.at, system: e.system, event: e.event, detail: e.detail }));
+  const client = await getClient(TEST_ID);
+  const trial = await getTrial(TEST_ID);
+  const leads = await getLeads(TEST_ID);
+  const replies = Object.values((await kv.hgetall(K.replies(TEST_ID))) || {});
+  const bookings = Object.values((await kv.hgetall(K.bookings(TEST_ID))) || {});
+  const byStatus = {};
+  for (const l of leads) byStatus[l.status] = (byStatus[l.status] || 0) + 1;
+  const mail = sim.sent.map((m) => ({ at: m.at, from: m.from, to: m.to, subject: m.subject, text: String(m.text || '').slice(0, 1500), warmup: Boolean(m.headers && m.headers['X-Aviance-Warm']) }));
+  const report = {
+    run, finishedAt: sim.now.toISOString(), state: client.state, trial,
+    totals: await getTotals(TEST_ID), leadsByStatus: byStatus, leadCount: leads.length,
+    replies: replies.map((r) => ({ kind: r.kind, leadEmail: r.leadEmail, snippet: r.snippet, action: r.action })),
+    bookings: bookings.map((b) => ({ leadEmail: b.leadEmail, scheduledAt: b.scheduledAt, status: b.status, qualified: b.qualified })),
+    milestones: await milestones(), events, mail,
+  };
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(`${dir}/${run}.json`, JSON.stringify(report, null, 1));
+}
+
 async function compareFixture(run, log) {
+  await writeReport(run);
   const fx = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));
   if (WRITE) {
     fx.runs[run] = log;

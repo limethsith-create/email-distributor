@@ -19,12 +19,12 @@ export const TEMPLATES = {
   hot_lead: {
     from: 'trial',
     subject: 'Hot — {Company}, {Name}, {Title}',
-    body: '{Name} at {Company} ({size}, {city}) replied: “{verbatim}.” {actionLine} Context: {context}.',
+    body: '{who} replied: {quote} {actionLine} Context: {context}.',
   },
   hot_lead_nudge: {
     from: 'trial',
     subject: 'Still waiting — {Company}, {Name}',
-    body: '{Name} at {Company} replied {hours} hours ago and has not heard from you yet: “{verbatim}.”\n\nIf you can, reply today — response speed decides these. At 24 hours I send them a short holding note in your name.',
+    body: '{Name} at {Company} replied {hours} hours ago and has not heard from you yet: {quote}\n\nIf you can, reply today — response speed decides these. At 24 hours I send them a short holding note in your name.',
   },
   call_handoff: {
     from: 'trial',

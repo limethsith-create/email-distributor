@@ -43,7 +43,7 @@ export const REPORT_LINES = [
   '',
   'What produced it: {produced}. What didn’t: {didnt}.',
   '',
-  'Your measured rate: {qualified} qualified calls from {companies} companies is {rate}.',
+  'Your measured rate: {qualifiedCalls} from {companies} companies is {rate}.',
   '',
   'What that means at volume: Starter contacts at least {starterReach} companies a month — about {starterCalls} calls at your rate, and we guarantee {starterGuarantee}. Growth contacts {growthReach} — about {growthCalls}, and we guarantee {growthGuarantee}.',
   '',

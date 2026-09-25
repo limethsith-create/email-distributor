@@ -704,7 +704,7 @@ test('learning library: rollup per niche + variant, best hour and city, no perso
 
 test('every Stage C template renders with sample data and no blank slot', () => {
   const sample = {
-    Company: 'Acme', Name: 'Ann', Title: 'Owner', size: '10-50', city: 'Dover', verbatim: 'Tell me more', actionLine: 'x', context: 'Acme — Dover',
+    Company: 'Acme', Name: 'Ann', Title: 'Owner', size: '10-50', city: 'Dover', verbatim: 'Tell me more', quote: '“Tell me more.”', who: 'Ann at Acme (10-50, Dover)', actionLine: 'x', context: 'Acme — Dover',
     hours: 5, when: 'Thursday 10:00 AM', whyYes: 'Tell me more', asked: 'nothing', thread: 'x', days: 6, showedUrl: 'u', noshowUrl: 'u', wrongfitUrl: 'u', disputeUrl: 'u', clientNoshowUrl: 'u',
     companies: 240, replies: 7, positive: 2, diagnosis: 'd', fix: 'f', pending: 2, FirstName: 'Ann', slot1: 's1', slot2: 's2', calendarUrl: 'c',
     month: 'January', Referrer: 'Bob', Greeting: 'Hi Ann,', oneLiner: 'We fix IT.', SenderName: 'Jane', missedWhen: 'Tuesday', ClientCompany: 'Acme IT',
@@ -789,4 +789,12 @@ test('referral lead gets referral_intro as its first touch', async () => {
   assert.equal(sent[0].subject, 'Tom suggested I reach you');
   assert.match(sent[0].text, /We run IT for 20-person offices/);
   assert.match(sent[0].text, /reply STOP/);
+});
+
+test('hot-lead quotes close with one mark only', async () => {
+  const { quoteOf } = await import('@/lib/systems/replies');
+  assert.equal(quoteOf('What does it cost?'), '“What does it cost?”');
+  assert.equal(quoteOf('Tell me more'), '“Tell me more.”');
+  assert.equal(quoteOf('Sounds good!'), '“Sounds good!”');
+  assert.equal(quoteOf(''), '(see the earlier email)');
 });
