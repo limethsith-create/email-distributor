@@ -44,7 +44,7 @@
 
 import { kv } from '@vercel/kv';
 import { K, assertClientId } from '@/lib/db/keys';
-import { DEFAULTS, globalOverrides } from '@/lib/config';
+import { DEFAULTS, globalOverrides, cfg } from '@/lib/config';
 import { getClient, getAllClients, updateClient } from '@/lib/db/client';
 import { logEvent } from '@/lib/db/events';
 import { onboardPixelUrl } from '@/lib/tokens';
@@ -506,7 +506,13 @@ async function sendDayBefore(client, raw, s, now) {
   const id = client.id;
   // Their own zone when the Calendar knows it (the state they applied from), else US Eastern.
   const tz = raw.theirZone || ET;
-  const vars = { firstName: firstNameOf(client.contactName), ownerName: await ownerName(id), callMinutes: s.callMinutes, when: formatWhen(raw.bookedFor, tz), callDay: callDayWord(raw.bookedFor, now, tz) };
+  // The Google Meet link (or the owner's own link) goes in the reminder too.
+  let link = null;
+  try {
+    if (raw.meetingId) { const { getMeeting } = await import('@/lib/systems/calendar'); link = (await getMeeting(raw.meetingId))?.meetLink || null; }
+    link = link || (await cfg(id, 'CALENDAR.meetingLink')) || null;
+  } catch { link = null; }
+  const vars = { firstName: firstNameOf(client.contactName), ownerName: await ownerName(id), callMinutes: s.callMinutes, when: formatWhen(raw.bookedFor, tz), callDay: callDayWord(raw.bookedFor, now, tz), joinLine: link ? `Join here: ${link}` : "I'll send the video link before the call." };
   const res = await sendClient(id, 'onboard_call_tomorrow', vars, { dedupe: `onboard_call_tomorrow:${raw.bookedFor}`, thread: false, ...threadHeaders(raw) });
   const at = now.toISOString();
   await patch(id, { tomorrowSentFor: raw.bookedFor, lastReminderAt: at, ...(res.messageId ? { messageIds: JSON.stringify(withId(raw, res.messageId)) } : {}) });

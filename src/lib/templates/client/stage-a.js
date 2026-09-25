@@ -207,6 +207,8 @@ Just checking you saw my email about your trial. The first step is a {callMinute
 
 A quick reminder: our {callMinutes}-minute onboarding call is {when}.
 
+{joinLine}
+
 If that time no longer works, reply to this email and we'll find another.
 
 {ownerName}`,

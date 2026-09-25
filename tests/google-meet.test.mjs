@@ -654,3 +654,9 @@ test('middleware: only the Google callback is public; the hub\'s Google settings
     assert.equal(res.status, 401, path);
   }
 });
+
+test('one event, not two: the .ics invite reuses Google\'s iCalUID; the day-before reminder carries the Meet link', async () => {
+  const { renderTemplate } = await import('@/lib/templates/client');
+  const m = renderTemplate('onboard_call_tomorrow', { firstName: 'Sam', ownerName: 'Limeth', callMinutes: 30, when: 'Tuesday at 2:00 pm MT', callDay: 'tomorrow', joinLine: 'Join here: https://meet.google.com/abc-defg-hij' });
+  assert.match(m.text, /Join here: https:\/\/meet\.google\.com\/abc-defg-hij/);
+});

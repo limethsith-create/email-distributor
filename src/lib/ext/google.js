@@ -379,7 +379,7 @@ async function createEvent(m, { deadline, requestId = m.id, description = null }
     } catch { break; }
   }
   const link = meetLinkOf(ev);
-  return { eventId: String(ev.id), meetLink: link, pending: !link && conferenceStatus(ev) === 'pending' };
+  return { eventId: String(ev.id), iCalUID: ev.iCalUID ? String(ev.iCalUID) : null, meetLink: link, pending: !link && conferenceStatus(ev) === 'pending' };
 }
 
 /** New times (and title) on an existing event; `gone` when it was deleted in Google Calendar. */
@@ -423,7 +423,8 @@ export async function meetFor(m, { fixedLink = null } = {}) {
     }
     const ev = await createEvent(m, { deadline, requestId });
     await logEvent(m.clientId || null, SYSTEM, 'event_created', { meetingId: m.id, eventId: ev.eventId, meet: Boolean(ev.meetLink) });
-    return { googleEventId: ev.eventId, meetLink: ev.meetLink, meetError: ev.meetLink ? null : ev.pending ? 'Google was still making the Meet link' : 'Google made the event but no Meet link' };
+    // googleICalUid: our .ics invite reuses Google's UID, so a client on Google Calendar sees ONE event, not two.
+    return { googleEventId: ev.eventId, googleICalUid: ev.iCalUID, meetLink: ev.meetLink, meetError: ev.meetLink ? null : ev.pending ? 'Google was still making the Meet link' : 'Google made the event but no Meet link' };
   } catch (err) {
     const e = asGoogleError(err);
     if (e.code === 'not_set_up' && fixedLink) return { meetError: null };

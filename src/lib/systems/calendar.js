@@ -491,7 +491,7 @@ async function inviteFor(m, s, { method = 'REQUEST', now }) {
     m.kind === 'onboarding' ? `Our ${m.minutes}-minute onboarding call.` : `Our ${m.minutes}-minute call.`,
     linkOf(m, s) ? `Join here: ${linkOf(m, s)}` : "I'll send the link before the call.",
   ].join('\n');
-  const content = buildIcs({ method, uid: m.id, sequence: m.sequence || 0, start: m.start, minutes: m.minutes, title: m.title, description, location: linkOf(m, s) || '', organizer, attendee: { email: m.email, name: m.person }, now });
+  const content = buildIcs({ method, uid: m.googleICalUid || m.id, sequence: m.sequence || 0, start: m.start, minutes: m.minutes, title: m.title, description, location: linkOf(m, s) || '', organizer, attendee: { email: m.email, name: m.person }, now });
   return { method: method === 'CANCEL' ? 'CANCEL' : 'REQUEST', filename: method === 'CANCEL' ? 'cancel.ics' : 'invite.ics', content };
 }
 
@@ -729,7 +729,7 @@ async function confirm(id, s, now) {
   } catch (err) {
     // Still a request, but its new Google event is kept on it: pressing Yes again reuses it (no second event).
     if (next.googleEventId && next.googleEventId !== m.googleEventId) {
-      try { await saveMeeting({ ...m, googleEventId: next.googleEventId, meetLink: next.meetLink || null }); } catch {}
+      try { await saveMeeting({ ...m, googleEventId: next.googleEventId, googleICalUid: next.googleICalUid || null, meetLink: next.meetLink || null }); } catch {}
     }
     throw sendFailed(err);
   }
