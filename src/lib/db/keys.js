@@ -203,13 +203,27 @@ export const K = {
    * The status is worked out from these times, never stored.
    */
   onboardCall: (id) => `${c(id)}:onboardcall`,
-  /** The onboarding-call conversation (list, oldest first): {id, dir, at, from, to, subject, text, kind}. */
+  /**
+   * The client's ONE conversation (list, oldest first, 200 newest; docs/REPLYBOT-MEET.md §1 — the key is
+   * kept from the onboarding call): {id, dir, at, from, to, subject, text, kind, auto?, rule?, template?}.
+   */
   onboardThread: (id) => `${c(id)}:onboardthread`,
   /** Last onboarding-call check (string ISO, with EX): one check per ONBOARDCALL.checkEveryMinutes across the job, the hub and Approve. */
   onboardCheck: () => 'onboardcall:checkedat',
   /** IMAP watermarks of the ONBOARDCALL inbox (hash): `{inbox}|{folder}` → {uidValidity, lastUid}. */
   onboardImap: () => 'onboardcall:imapstate',
   // ── end onboarding call ──
+
+  // ── Messages + reply bot (docs/REPLYBOT-MEET.md §1–2) ── (the list itself is onboardThread above)
+  /**
+   * One client's conversation beside the list (hash): lastInAt, lastInMessageId, lastInSubject,
+   * messageIds (JSON), lastAnswerAt, botOff ('1' = the owner turned the bot off for them),
+   * botPending (JSON: the answer waiting to go), botDay + botCount (bot emails that US day).
+   */
+  convo: (id) => `${c(id)}:convo`,
+  /** Clients with a reply-bot answer waiting to go (set of client ids): each check reads only these. */
+  replyBotPending: () => 'replybot:pending',
+  // ── end messages ──
 
   // ── Calendar (docs/CALENDAR.md) ──
   /** Every meeting (hash): id → meeting JSON (times in UTC ISO). */

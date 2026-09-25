@@ -467,6 +467,36 @@ export const DEFAULTS = {
     checkEveryMinutes: 2,
   },
   // ── end onboarding call ──
+  // ── Reply bot (docs/REPLYBOT-MEET.md §2) ── one machine-wide block. Fixed rules, no AI: it
+  // answers an applicant's email while they are onboarding, from the ONBOARDCALL inbox, in the
+  // same thread, signed with your name. Anything it cannot answer comes to you as before.
+  REPLYBOT: {
+    // The whole bot on/off. Each client also has its own switch (the Messages section in the hub).
+    enabled: true,
+    // Bot emails to one client in a US day at most; after that their messages come to you.
+    maxPerDay: 3,
+    // Minutes to wait after their message arrived before answering, so you can still answer
+    // first (then the bot says nothing). It answers on the first inbox check after that.
+    delayMinutes: 3,
+    // 'us' = only inside OWNER.usHours (US Eastern) on US business days — outside them the
+    // answer waits for the first check inside them. 'any' = any time of day.
+    hours: 'us',
+    // What each rule sends. Filled in: {firstName} {ownerName} {bookingLink} {times} (open times
+    // in their zone, one per line) {when} (the time they wrote, in their zone) {onboardingLink}
+    // {callMinutes}. A paragraph whose slot has nothing in it (no free times) is left out; any
+    // other {word} stops that answer and the message comes to you. Never write a price here
+    // that is not decided: the price answer only says the trial is free.
+    answers: {
+      not_interested: "Hi {firstName},\n\nNo problem at all — I've closed it on my side and stopped the reminders. If anything changes, just reply to this email.\n\nThanks for letting me know.\n\n{ownerName}",
+      reschedule: "Hi {firstName},\n\nNo problem at all — pick any other time that suits you here:\n{bookingLink}\n\nI'll confirm the new time by email.\n\n{ownerName}",
+      proposes_time_ok: "Hi {firstName},\n\n{when} your time works on my side — I'll confirm it shortly.\n\n{ownerName}",
+      proposes_time_busy: "Hi {firstName},\n\nThanks — I'm afraid {when} your time isn't free on my side. The nearest times I have (your time):\n{times}\n\nOr pick any time that suits you here: {bookingLink}\n\n{ownerName}",
+      wants_time: "Hi {firstName},\n\nHappy to. Pick any time that suits you here: {bookingLink}\n\nThe next open times (your time):\n{times}\nOr just reply with the one that suits you.\n\n{ownerName}",
+      price: "Hi {firstName},\n\nGood question — the 30-day trial is free: no card, nothing to pay. The one thing I ask in return is an honest review at the end.\n\nIf you'd like to keep going after the trial, we'll go through the plans together on the call.\n\n{ownerName}",
+      what_needed: "Hi {firstName},\n\nNothing to prepare — the call is {callMinutes} minutes and we go through who you sell to and who you'd like to reach.\n\nIf you have a moment before it, this is the one page with your details and the agreement: {onboardingLink}\n\n{ownerName}",
+    },
+  },
+  // ── end reply bot ──
   // ── Calendar (docs/CALENDAR.md) ── one machine-wide block. The machine's own booking
   // page offers these times; the hub's Calendar tab shows every meeting.
   CALENDAR: {

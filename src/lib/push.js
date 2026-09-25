@@ -75,7 +75,7 @@ export async function pushToOwner(payload, { endpoint = null } = {}) {
   const entries = Object.entries(subs).filter(([, r]) => r && r.subscription && (!endpoint || r.subscription.endpoint === endpoint));
   if (!entries.length) return { ok: false, sent: 0, failed: 0, removed: 0, error: 'no phone subscribed' };
   const body = JSON.stringify({ at: new Date().toISOString(), ...payload });
-  const opts = { vapidDetails: keys, TTL: payload.urgent ? 24 * 3600 : 6 * 3600, urgency: payload.urgent ? 'high' : 'normal', topic: String(payload.tag || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) || undefined, timeout: 8000 };
+  const opts = { vapidDetails: keys, TTL: payload.urgent ? 24 * 3600 : 6 * 3600, urgency: payload.urgent ? 'high' : payload.quiet ? 'low' : 'normal', topic: String(payload.tag || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) || undefined, timeout: 8000 };
   let sent = 0; let failed = 0; let removed = 0;
   await Promise.all(entries.map(async ([id, rec]) => {
     try {

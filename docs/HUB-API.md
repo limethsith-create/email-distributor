@@ -611,3 +611,109 @@ broken connection, push `url` = `/#settings/google`.
   (the time was just taken) · 400 · 401 · 429 (10 tries per link per hour).
 - `GET /c/{token}/book/accept?m={id}` — the suggested time with one "Yes, that
   works" button (POST to the same address accepts).
+
+---
+
+# Messages + the reply bot (2026-09-25)
+
+Contract: docs/REPLYBOT-MEET.md §1–2 (its "as built" lists every decision).
+Every field is additive. Each client has ONE conversation: every email the
+machine sent to their contact (templates, the onboarding and calendar emails,
+the owner's replies, the reply bot's answers) and every email from them found
+in the ONBOARDCALL inbox — in any state, not only during onboarding.
+
+## `GET /api/mc/hub/{id}` gains `conversation`
+
+```jsonc
+"conversation": {
+  "thread": [ {                     // oldest first, the 200 newest kept (onboardCall.thread is the same list)
+    "id": "…", "dir": "out|in", "at": "ISO", "from": "…", "to": "…", "subject": "…",
+    "text": "plain text, ≤ 4 000 chars (quoted history cut)",
+    "kind": "acceptance|reminder|reply|owner_reply|booking|auto_reply|system",
+    "auto": true,                   // sent by the reply bot → show "Auto-reply" + the rule in plain words
+    "rule": "not_interested|reschedule|proposes_time|wants_time|price|what_needed|thanks|null",
+                                    // out + auto: the rule it answered; in: what the bot read in it (null when it may not answer them)
+    "template": "setup_in_progress|null"   // kind 'system' only: collapse to one line with "show"
+  } ],
+  "needsReply": true,               // their last message has no answer (bot or owner) yet → "Answer {firstName}'s message"
+  "lastInAt": "ISO|null", "lastOutAt": "ISO|null",
+  "bot": {
+    "enabled": true,                // on for everyone AND for this client (the switch "Reply bot for {firstName}")
+    "sentToday": 1, "maxPerDay": 3, // bot emails to them this US-Eastern day
+    "everyone": true,               // REPLYBOT.enabled
+    "forClient": true,              // this client's switch
+    "answersNow": true,             // it can answer them right now (they are onboarding, both switches on)
+    "why": "The reply bot only answers while they are onboarding (after the acceptance email).|null",
+    "pending": { "rule": "price", "messageAt": "ISO", "answerAfter": "ISO" } | null   // an answer waiting to go
+  },
+  "canReply": true,                 // an inbox is set up to send from
+  "fromInbox": "hello@…|null"
+}
+```
+Rule words for the hub (suggested): not_interested "they're not interested —
+sent a polite close", reschedule "sent the booking link to move the call",
+proposes_time "answered the time they asked for", wants_time "sent your
+booking link and times", price "answered the price question", what_needed
+"sent what the call needs", thanks "a thank-you — nothing to answer".
+
+## `POST /api/mc/clients/{id}/messages`
+
+One of (→ `{ ok, conversation }`):
+- `{ action: 'reply', text }` — plain text, ≤ 2 000 characters, any client.
+  From the ONBOARDCALL inbox, "Re: " their last subject, `In-Reply-To` their
+  last message (else our last email), `References` the conversation; the
+  owner's name is added as a sign-off unless his last line has it; a double
+  click within 2 minutes sends once. An answer the bot was waiting to send is
+  dropped. (`POST /api/mc/clients/{id}/onboard-call` `{ action: 'reply' }`
+  stays as an alias.)
+- `{ action: 'botOff' }` / `{ action: 'botOn' }` — the reply bot for THIS
+  client.
+
+Errors in plain words: `400` (empty / too long / unknown action), `404` (no
+such client), `409` (no email address on file). `GET` on the same path →
+`{ conversation }`.
+
+## Board rows
+
+- `simple.needsReply` (bool) — the same rule as `conversation.needsReply`:
+  show "{firstName} wrote — answer them" in red; `simple.needsYou` is true
+  whenever it is.
+- A new to-do `message-reply:{id}` (urgent, `action: { type: 'view', view:
+  'detail', clientId, section: 'conversation' }`) when their message waits
+  outside the onboarding call (during the trial, after the call) — during the
+  call the existing `onboard-reply:{id}` says it. Outside onboarding
+  `simple.next` is "Answer {firstName}'s message".
+
+## Calendar
+
+A time the bot read in their email and found free is a meeting request like
+one from the booking page, with `source: 'reply_bot'` (history `via:
+'reply_bot'` when it replaced their earlier time) and a `note` "By email: “…”"
+— the owner still says Yes / Suggest / Decline. Their emailed yes to his
+suggestion confirms it as the one-click link does.
+
+## `POST /api/mc/onboard-calls/check`
+
+Also reads every other client's mail into their conversation and sends the
+reply bot's answers that are due; the answer may carry `botReplies: n` (only
+when > 0). Reload the trial when `newReplies` or `botReplies` > 0.
+
+## Alerts
+
+- `bot_replied` (quiet: phone at low urgency + email): "Auto-replied to Sam
+  (eCreek IT): sent the booking link to pick another time"; push `url` =
+  `/#calendar` when it asked for a time in the Calendar (say yes there), else
+  `/#trial/{id}`.
+- `onboard_reply` now reads "{person} wrote — needs your answer" (also for
+  messages during the trial); when the bot saw the message but left it to the
+  owner, the body ends with why ("The reply bot left this one to you: …").
+
+## Settings › Reply bot
+
+Config `REPLYBOT` (machine-wide; `/mc/config`): `enabled`, `maxPerDay` (3),
+`delayMinutes` (3), `hours` (`'us'` = OWNER.usHours on US business days,
+`'any'`), `answers.{not_interested|reschedule|proposes_time_ok|
+proposes_time_busy|wants_time|price|what_needed}` (plain text with
+`{firstName}` `{ownerName}` `{bookingLink}` `{times}` `{when}`
+`{onboardingLink}` `{callMinutes}`). The on/off switch for everyone is
+`REPLYBOT.enabled`; show each answer read-only.

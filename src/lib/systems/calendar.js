@@ -568,8 +568,10 @@ export async function bookingPageData(clientId, { tz = null, now = io.now() } = 
  * into a request at the new time (the old time is free again until the owner
  * answers). The same pick twice changes nothing and emails nothing; picking
  * the time the owner suggested is their yes to it (acceptSuggestion).
+ * The reply bot (docs/REPLYBOT-MEET.md §2) asks with `source: 'reply_bot'` and
+ * `gotIt: false` — its own answer is their "got it".
  */
-export async function requestMeeting(clientId, { start, note = '', zone = null } = {}, { now = io.now() } = {}) {
+export async function requestMeeting(clientId, { start, note = '', zone = null } = {}, { now = io.now(), source = 'booking_page', gotIt = true } = {}) {
   assertClientId(clientId);
   const t = msOf(start);
   if (t == null) throw new CalendarError('Pick a time first.');
@@ -597,10 +599,10 @@ export async function requestMeeting(clientId, { start, note = '', zone = null }
       m = {
         ...active, status: 'requested', start: startIso, minutes: s.callMinutes, proposed: null, declineReason: null,
         note: cleanNote || active.note || '', theirZone, requestedAt: at, updatedAt: at,
-        history: [...(active.history || []), step('requested', 'them', now, { from: active.start, was: active.status })],
+        history: [...(active.history || []), step('requested', 'them', now, { from: active.start, was: active.status, ...(source !== 'booking_page' ? { via: source } : {}) })],
       };
     } else {
-      m = newMeeting({ client, kind: 'onboarding', title: onboardingTitle(client), start: startIso, minutes: s.callMinutes, status: 'requested', source: 'booking_page', theirZone, note: cleanNote, now, by: 'them' });
+      m = newMeeting({ client, kind: 'onboarding', title: onboardingTitle(client), start: startIso, minutes: s.callMinutes, status: 'requested', source, theirZone, note: cleanNote, now, by: 'them' });
     }
     m = await saveMeeting(m);
     await call.syncCallFromMeeting(clientId, m, { now });
@@ -611,7 +613,7 @@ export async function requestMeeting(clientId, { start, note = '', zone = null }
   const m = done.meeting;
   await logEvent(clientId, SYSTEM, 'requested', { meetingId: m.id, start: m.start, moved: done.was ? done.was.start : undefined });
   // After the slot is theirs: "got it" to them, the alert to the owner. Neither may undo the request.
-  try {
+  if (gotIt) try {
     const v = await meetingVars(m, s, t, 'got');
     await emailClient(m, 'meeting_received', { when: v.when, bookLink: v.bookLink }, { dedupe: `meeting_received:${m.id}:${m.start}`, now });
   } catch (err) {
@@ -622,7 +624,7 @@ export async function requestMeeting(clientId, { start, note = '', zone = null }
     clientId,
     scope: `${clientId}:request:${m.id}:${m.start}`,
     vars: { who: who(m), when: usAndOwner(t, s) },
-    body: `${m.person || m.email} (${m.email}) from ${m.company} ${moving ? 'asked to move the onboarding call to' : 'asked for'} ${usAndOwner(t, s)} (${theirShort(t, zoneOf(m, s))} for them).${moving ? ` It was ${usAndOwner(msOf(done.was.start), s)}; that time is free again until you answer.` : ''}${m.note ? `\n\nTheir note: “${m.note}”` : ''}`,
+    body: `${m.person || m.email} (${m.email}) from ${m.company} ${moving ? 'asked to move the onboarding call to' : 'asked for'} ${usAndOwner(t, s)} (${theirShort(t, zoneOf(m, s))} for them)${source === 'reply_bot' ? ' in an email (the reply bot read it and told them you will confirm)' : ''}.${moving ? ` It was ${usAndOwner(msOf(done.was.start), s)}; that time is free again until you answer.` : ''}${m.note ? `\n\nTheir note: “${m.note}”` : ''}`,
     did: 'Holding that time for them. In the hub\'s Calendar press Yes, Suggest another time, or Decline.',
     url: '/#calendar',
   });

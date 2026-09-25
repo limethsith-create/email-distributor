@@ -43,7 +43,8 @@ beforeEach(async () => {
     return { ok: true, messages: inbox.map((m) => ({ ...m })), uidState: { INBOX: { uidValidity: '1', lastUid: inbox.length } } };
   };
   io.now = realNow;
-  await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith') });
+  // These tests are the owner answering by hand; the reply bot (on by default) has tests/replybot.test.mjs.
+  await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith'), 'REPLYBOT.enabled': JSON.stringify(false) });
 });
 
 const ID = 'ecreek';

@@ -137,6 +137,8 @@ export async function alertOwner(key, { clientId = null, vars = {}, body = '', d
     url: url || (clientId ? `/#trial/${clientId}` : '/#alerts'),
     tag: `${key}:${dedupeScope}`,
     urgent: Boolean(spec.urgent),
+    // A quiet alert (the reply bot's "auto-replied"): low push urgency, and the hub may show it without sound.
+    ...(spec.quiet ? { quiet: true } : {}),
   });
   if (spec.urgent) channels.telegram = await sendTelegram(`${spec.urgent ? '🔴 ' : ''}${title}\n\n${text}`);
   const delivered = Object.values(channels).some((c) => c.ok);
@@ -174,8 +176,13 @@ export async function getAlertLog(limit = 200) {
  * `references` so the conversation threads. The result carries the
  * Message-ID and the sending address so replies can be matched. The
  * Calendar's emails pass `icalEvent` (an .ics invite or cancellation).
+ *
+ * Every email that goes to the client's contact is also an `out` entry in
+ * their one conversation (docs/REPLYBOT-MEET.md §1, kind 'system' + the
+ * template key). `thread: false` = the caller adds its own entry (the
+ * onboarding-call, calendar and reply-bot emails, which carry their kind).
  */
-export async function notifyClient(clientId, key, vars = {}, { to = null, from = null, dedupe = key, attachments = null, pixelUrl = null, linkify = false, inReplyTo = null, references = null, icalEvent = null } = {}) {
+export async function notifyClient(clientId, key, vars = {}, { to = null, from = null, dedupe = key, attachments = null, pixelUrl = null, linkify = false, inReplyTo = null, references = null, icalEvent = null, thread = true } = {}) {
   const { renderTemplate } = await import('@/lib/templates/client');
   const { getClient } = await import('@/lib/db/client');
   const client = await getClient(clientId);
@@ -230,7 +237,11 @@ export async function notifyClient(clientId, key, vars = {}, { to = null, from =
     if (dedupe) await kv.del(`notified:${clientId}:${dedupe}`);
     throw new Error(`send ${key} failed: ${res.error}`);
   }
-  return { sent: true, messageId: res.messageId, from: account.email, to: recipient, subject: msg.subject, text: msg.text };
+  const out = { sent: true, messageId: res.messageId, from: account.email, to: recipient, subject: msg.subject, text: msg.text };
+  if (thread !== false && client?.contactEmail && String(recipient).trim().toLowerCase() === String(client.contactEmail).trim().toLowerCase()) {
+    try { await (await import('@/lib/systems/conversation')).logClientEmail(clientId, key, out); } catch {}
+  }
+  return out;
 }
 
 /** http(s) addresses in already-escaped text → links (the address stays the visible text). */

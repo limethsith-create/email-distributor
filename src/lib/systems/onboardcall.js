@@ -34,6 +34,12 @@
  * (list), and two flags on the client hash the tick already reads —
  * onboardCallSentAt (the board reads the hash only when it is set) and
  * onboardCallOpen ('1' while the inbox is watched for this applicant).
+ *
+ * Messages + reply bot (docs/REPLYBOT-MEET.md §1–2): the thread is the
+ * client's ONE conversation (systems/conversation.js). The check also reads
+ * the inbox for every other client (`talksWith`), so their messages during
+ * the trial land in it too, and each new message goes past the reply bot
+ * (systems/replybot.js) before the owner is alerted.
  */
 
 import { kv } from '@vercel/kv';
@@ -50,12 +56,17 @@ import { parseIcs, parseBodyDate } from '@/lib/systems/bookings';
 import { configList, lower, shortHash, zonedToUtc, formatWhen, isBusinessDayKey } from '@/lib/systems/stagec-common';
 import { io, sendClient, firstNameOf, ownerName, isPublicUrl, asArray, asObject } from '@/lib/systems/intake-io';
 import { partsIn, addDays, hhmmToMin, ET, OWNER_TZ } from '@/lib/time';
+import * as conv from '@/lib/systems/conversation';
 
 const SYSTEM = 'onboardcall';
 /** Client states in which the inbox is still watched for this applicant. */
 export const WATCH_STATES = new Set(['onboarding', 'awaiting_purchase', 'setup_check']);
-const THREAD_CAP = 200;
-const TEXT_MAX = 4000;
+/**
+ * Clients whose mail in the ONBOARDCALL inbox goes into their conversation
+ * (docs/REPLYBOT-MEET.md §1): any state but deleted, with a contact address.
+ */
+export const talksWith = (c) => Boolean(c && c.id !== 'aviance' && c.state !== 'deleted' && c.contactEmail);
+const TEXT_MAX = conv.TEXT_MAX;
 const REPLY_MAX = 2000;
 const EMAIL_RE = /\b([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})\b/gi;
 /** The acceptance email's subject (templates/client/stage-a.js accepted_call): follow-ups answer it. */
@@ -232,11 +243,15 @@ export function statusOf(raw, { now = new Date(), clientState = 'onboarding' } =
   return 'sent';
 }
 
-/** Their last word came after the owner's last word and after any booking → the owner owes an answer. */
+/**
+ * Their last word came after the owner's last word, the reply bot's last
+ * answer (or a thank-you it read as needing none: lastAnsweredAt) and any
+ * booking → the owner owes an answer.
+ */
 export function needsReply(raw) {
   const last = ms(raw.lastReplyAt);
   if (last == null || flag(raw.heldAt) || flag(raw.noShowAt)) return false;
-  return last > Math.max(ms(raw.lastOwnerReplyAt) || 0, ms(raw.bookedAt) || 0);
+  return last > Math.max(ms(raw.lastOwnerReplyAt) || 0, ms(raw.bookedAt) || 0, ms(raw.lastAnsweredAt) || 0);
 }
 
 /**
@@ -311,11 +326,8 @@ function labelFor(status, raw, s, now) {
   }
 }
 
-function threadEntry(t) {
-  const e = asObject(t);
-  if (!e) return null;
-  return { id: String(e.id || ''), dir: e.dir === 'in' ? 'in' : 'out', at: isoOrNull(e.at), from: e.from || null, to: e.to || null, subject: e.subject || '', text: String(e.text || '').slice(0, TEXT_MAX), kind: e.kind || (e.dir === 'in' ? 'reply' : 'owner_reply') };
-}
+/** One entry of the conversation as the hub gets it (systems/conversation.js; + auto / rule / template). */
+const threadEntry = conv.entryView;
 
 /**
  * The hub's `onboardCall` (docs/ONBOARD-CALL.md §5), or null when no
@@ -373,8 +385,9 @@ export async function readCall(clientId) {
   return (await kv.hgetall(K.onboardCall(clientId))) || {};
 }
 
+/** The client's one conversation (systems/conversation.js — this list, the key kept). */
 export async function readThread(clientId) {
-  return ((await kv.lrange(K.onboardThread(clientId), 0, -1)) || []).map(asObject).filter(Boolean);
+  return conv.readThread(clientId);
 }
 
 /** hset the values, hdel the nulls. */
@@ -385,28 +398,15 @@ async function patch(clientId, fields) {
   if (del.length) await kv.hdel(K.onboardCall(clientId), ...del);
 }
 
-async function pushThread(clientId, entry) {
-  await kv.rpush(K.onboardThread(clientId), { ...entry, text: String(entry.text || '').slice(0, TEXT_MAX) });
-  await kv.ltrim(K.onboardThread(clientId), -THREAD_CAP, -1);
-}
+const pushThread = conv.pushEntry;
 
 /** '<Id@host>' as sent — Message-IDs keep their case in headers; only comparisons use normId. */
-const bracket = (id) => `<${String(id || '').trim().replace(/^<|>$/g, '').trim()}>`;
+const bracket = conv.bracket;
 /** Every Message-ID in the conversation, oldest first (last 30), one copy each. */
-function withId(raw, id) {
-  const seen = new Set();
-  const out = [];
-  for (const x of [...asArray(raw.messageIds), ...(id ? [id] : [])]) {
-    const k = normId(x);
-    if (!k || seen.has(k)) continue;
-    seen.add(k);
-    out.push(bracket(x));
-  }
-  return out.slice(-30);
-}
+const withId = (raw, id) => conv.withId(raw.messageIds, id);
 
 /** In-Reply-To = their last message, else our last one; References = the whole conversation. */
-function threadHeaders(raw) {
+export function threadHeaders(raw) {
   const ids = asArray(raw.messageIds).map(bracket);
   const inReplyTo = raw.lastInMessageId ? bracket(raw.lastInMessageId) : ids[ids.length - 1] || null;
   return inReplyTo ? { inReplyTo, references: ids.length ? ids : [inReplyTo] } : {};
@@ -455,6 +455,7 @@ export async function sendAcceptance(clientId, { onboardingLink, now = io.now(),
   };
   const res = await sendClient(clientId, 'accepted_call', vars, {
     dedupe: n === 1 ? 'accepted_call' : `accepted_call:${n}`,
+    thread: false, // its own entry below (kind 'acceptance')
     pixelUrl: onboardPixelUrl(client.contactEmail, clientId, now.getTime()),
     linkify: true,
     ...(flag(raw.sentAt) ? threadHeaders(raw) : {}),
@@ -486,6 +487,7 @@ async function sendReminder(client, raw, s, idx, now) {
   const vars = { firstName: firstNameOf(client.contactName), ownerName: await ownerName(id), callMinutes: s.callMinutes, bookingLine: bookingLine(s, await ownBookingLink(id, s, `r${Number(raw.sends) || 1}-${idx}`)), threadSubject: raw.subject || FIRST_SUBJECT };
   const res = await sendClient(id, 'accepted_call_reminder', vars, {
     dedupe: `accepted_call_reminder:${Number(raw.sends) || 1}:${idx}`,
+    thread: false,
     pixelUrl: onboardPixelUrl(client.contactEmail, id, now.getTime()),
     linkify: true,
     ...threadHeaders(raw),
@@ -505,7 +507,7 @@ async function sendDayBefore(client, raw, s, now) {
   // Their own zone when the Calendar knows it (the state they applied from), else US Eastern.
   const tz = raw.theirZone || ET;
   const vars = { firstName: firstNameOf(client.contactName), ownerName: await ownerName(id), callMinutes: s.callMinutes, when: formatWhen(raw.bookedFor, tz), callDay: callDayWord(raw.bookedFor, now, tz) };
-  const res = await sendClient(id, 'onboard_call_tomorrow', vars, { dedupe: `onboard_call_tomorrow:${raw.bookedFor}`, ...threadHeaders(raw) });
+  const res = await sendClient(id, 'onboard_call_tomorrow', vars, { dedupe: `onboard_call_tomorrow:${raw.bookedFor}`, thread: false, ...threadHeaders(raw) });
   const at = now.toISOString();
   await patch(id, { tomorrowSentFor: raw.bookedFor, lastReminderAt: at, ...(res.messageId ? { messageIds: JSON.stringify(withId(raw, res.messageId)) } : {}) });
   if (!res.deduped) {
@@ -545,32 +547,57 @@ async function runOverdue(client, raw, s, now) {
 // ─── the inbox ───────────────────────────────────────────────────────────────
 
 const subjectIsBooking = (subject) => { const s = lower(subject); return configList('bookingSubjects').some((p) => s.includes(p)); };
-/** Only mail that arrived after the acceptance email counts (a little slack for clock skew). */
-const afterSend = (meta, w) => (ms(meta.date) ?? Infinity) >= (ms(w.raw.sentAt) || 0) - 5 * 60e3;
+/**
+ * Only mail that arrived after the acceptance email counts (a little slack for
+ * clock skew); for a client with no onboarding call in play, after the client
+ * was created.
+ */
+const afterSend = (meta, w) => (ms(meta.date) ?? Infinity) >= (ms(w.raw?.sentAt) || ms(w.client?.createdAt) || 0) - 5 * 60e3;
 
+/**
+ * A message from them → one `in` entry in their conversation (any client,
+ * docs/REPLYBOT-MEET.md §1). While their onboarding call is in play
+ * (acceptance sent, client in WATCH_STATES) the call's times move as before:
+ * replied, the reminders stop. The reply bot reads it first
+ * (systems/replybot.js onInbound): it may queue an answer (no alert now —
+ * `bot_replied` follows it), read a thank-you (nothing to answer, no alert),
+ * or leave it to the owner → `onboard_reply`, exactly as before the bot.
+ */
 async function recordReply(w, meta, now) {
   const id = w.client.id;
   const entryId = `in-${shortHash(normId(meta.messageId) || `${meta.inbox}|${meta.folder}|${meta.uid}`)}`;
   if ((await readThread(id)).some((t) => t.id === entryId)) return false;
   const at = isoOrNull(meta.date) || now.toISOString();
   const text = (stripQuotedReply(meta.text || '') || snippet(meta.text || '', 600) || '(no text)').slice(0, TEXT_MAX);
-  await pushThread(id, { id: entryId, dir: 'in', at, from: lower(meta.from), to: meta.inbox || null, subject: meta.subject || '', text, kind: 'reply' });
   const raw = await readCall(id);
-  await patch(id, {
-    lastReplyAt: ms(raw.lastReplyAt) > ms(at) ? raw.lastReplyAt : at,
-    ...(flag(raw.firstReplyAt) ? {} : { firstReplyAt: at }),
-    replies: (Number(raw.replies) || 0) + 1,
-    ...(meta.messageId ? { lastInMessageId: bracket(meta.messageId), messageIds: JSON.stringify(withId(raw, meta.messageId)) } : {}),
-  });
-  await logEvent(id, SYSTEM, 'reply_received', { from: lower(meta.from), subject: meta.subject || '' });
-  await alert('onboard_reply', {
-    clientId: id,
-    scope: `${id}:${entryId}`,
-    vars: { person: person(w.client) },
-    body: `${person(w.client)} (${lower(meta.from)}) from ${w.client.name || id} replied to the onboarding-call email:\n\n“${text.slice(0, 1500)}”`,
-    did: 'Added it to the conversation on their trial in the hub. Answer them there — it goes from the same inbox, in the same thread.',
-    url: `/#trial/${id}`,
-  });
+  const inCall = flag(raw.sentAt) && WATCH_STATES.has(w.client.state);
+  const { onInbound } = await import('@/lib/systems/replybot');
+  const bot = await onInbound(w.client, raw, { entryId, at, text, subject: meta.subject || '', messageId: meta.messageId || null, from: lower(meta.from), now });
+  const thanks = bot.rule === 'thanks';
+  await pushThread(id, { id: entryId, dir: 'in', at, from: lower(meta.from), to: meta.inbox || null, subject: meta.subject || '', text, kind: 'reply', ...(bot.rule ? { rule: bot.rule } : {}) });
+  if (inCall) {
+    await patch(id, {
+      lastReplyAt: ms(raw.lastReplyAt) > ms(at) ? raw.lastReplyAt : at,
+      ...(flag(raw.firstReplyAt) ? {} : { firstReplyAt: at }),
+      replies: (Number(raw.replies) || 0) + 1,
+      ...(meta.subject ? { lastInSubject: meta.subject } : {}),
+      ...(meta.messageId ? { lastInMessageId: bracket(meta.messageId), messageIds: JSON.stringify(withId(raw, meta.messageId)) } : {}),
+      // A thank-you needs no answer — unless an earlier message of theirs still does.
+      ...(thanks && !needsReply(raw) ? { lastAnsweredAt: at } : {}),
+    });
+  }
+  await conv.noteInbound(id, { at, messageId: meta.messageId || null, subject: meta.subject || '', needsAnswer: !thanks });
+  await logEvent(id, SYSTEM, 'reply_received', { from: lower(meta.from), subject: meta.subject || '', ...(bot.rule ? { rule: bot.rule } : {}), ...(bot.queued ? { bot: 'queued' } : {}) });
+  if (bot.alert) {
+    await alert('onboard_reply', {
+      clientId: id,
+      scope: `${id}:${entryId}`,
+      vars: { person: person(w.client) },
+      body: `${person(w.client)} (${lower(meta.from)}) from ${w.client.name || id} ${inCall ? 'replied to the onboarding-call email' : 'wrote to you'}:\n\n“${text.slice(0, 1500)}”${bot.rule && bot.why ? `\n\nThe reply bot left this one to you: ${bot.why}.` : ''}`,
+      did: 'Added it to the conversation on their trial in the hub. Answer them there — it goes from the same inbox, in the same thread.',
+      url: `/#trial/${id}`,
+    });
+  }
   return true;
 }
 
@@ -623,12 +650,15 @@ async function recordCancel(w, { uid, meta, now }) {
 /**
  * One scanned message → a booking, a cancellation, a reply or nothing.
  * Calendar first (.ics naming the applicant, then a booking-tool email with
- * their address and a time in it); anything else from them or answering our
- * Message-IDs is a reply (auto-replies and bounces are not).
+ * their address and a time in it) for the applicants whose onboarding call is
+ * open (`watched`); anything else from them or answering our Message-IDs is a
+ * reply (auto-replies and bounces are not). `talk`: every other client, whose
+ * mail from their contact address goes into their conversation too.
  */
-export async function handleMessage(meta, watched, now) {
+export async function handleMessage(meta, watched, now, talk = []) {
   const out = { replies: 0, booked: 0 };
-  const byEmail = new Map(watched.map((w) => [w.email, w]));
+  // An onboarding applicant wins over another client with the same address.
+  const byEmail = new Map([...talk, ...watched].map((w) => [w.email, w]));
   const events = (meta.ics || []).flatMap(parseIcs).filter((e) => e.start || e.method === 'CANCEL' || e.status === 'CANCELLED');
   let handled = false;
   for (const ev of events) {
@@ -658,7 +688,7 @@ export async function handleMessage(meta, watched, now) {
 }
 
 /** Read the ONBOARDCALL inbox once (UID watermark, headers first, bodies only for mail that matters). */
-async function scanInbox(watched, now) {
+async function scanInbox(watched, now, talk = []) {
   let account;
   try { account = await onboardSender(); } catch (err) { return { replies: 0, booked: 0, error: String(err?.message || err) }; }
   if (!account || !(account.appPassword || account.password) || !account.imap?.host) return { replies: 0, booked: 0, error: 'no inbox the machine can read' };
@@ -667,7 +697,7 @@ async function scanInbox(watched, now) {
   const uidState = {};
   for (const [k, v] of Object.entries(saved)) if (k.startsWith(prefix)) uidState[k.slice(prefix.length)] = asObject(v) || v;
   const own = lower(account.email);
-  const emails = new Set(watched.map((w) => w.email));
+  const emails = new Set([...watched, ...talk].map((w) => w.email));
   const ids = new Set(watched.flatMap((w) => [...w.ids]));
   const matters = (m) => lower(m.from) !== own && (emails.has(lower(m.from)) || (m.threadIds || []).some((i) => ids.has(normId(i))) || m.hasIcs || subjectIsBooking(m.subject));
   const res = await io.scanMailbox(account, {
@@ -684,7 +714,7 @@ async function scanInbox(watched, now) {
   for (const meta of msgs) {
     if (!matters(meta)) continue;
     try {
-      const r = await handleMessage(meta, watched, now);
+      const r = await handleMessage(meta, watched, now, talk);
       out.replies += r.replies;
       out.booked += r.booked;
     } catch (err) {
@@ -716,14 +746,19 @@ async function claimCheck(now, minutes) {
 }
 
 /**
- * The check: the inbox, then reminders and overdue for every applicant whose
- * onboarding call is open. → { ok, checked, newReplies, booked, remindersSent, skipped?, error? }
+ * The check: the inbox (the onboarding calls that are open, and every other
+ * client's messages into their conversation), then reminders and overdue for
+ * the open calls, then the reply bot's answers that are due
+ * (systems/replybot.js). → { ok, checked, newReplies, booked, remindersSent,
+ * botReplies? (only when > 0), skipped?, error? } — `checked` counts the
+ * onboarding calls.
  */
 export async function checkOnboardCalls({ now = io.now(), force = false, clients = null } = {}) {
   const s = await onboardSettings();
   const out = { ok: true, checked: 0, newReplies: 0, booked: 0, remindersSent: 0 };
   if (!force && !(await claimCheck(now, s.checkEveryMinutes))) return { ...out, skipped: 'too soon' };
-  const open = (clients || await getAllClients()).filter((c) => c && c.id !== 'aviance' && flag(c.onboardCallOpen));
+  const all = (clients || await getAllClients()).filter((c) => c && c.id !== 'aviance');
+  const open = all.filter((c) => flag(c.onboardCallOpen));
   const watched = [];
   for (const c of open) {
     const raw = await readCall(c.id);
@@ -736,11 +771,14 @@ export async function checkOnboardCalls({ now = io.now(), force = false, clients
     watched.push({ client: c, raw, email: lower(raw.contactEmail || c.contactEmail), ids: new Set(asArray(raw.messageIds).map(normId)) });
   }
   out.checked = watched.length;
-  if (!watched.length) return out;
-  const scan = await scanInbox(watched, now);
-  out.newReplies = scan.replies;
-  out.booked = scan.booked;
-  if (scan.error) { out.ok = false; out.error = scan.error; }
+  const inWatch = new Set(watched.map((w) => w.client.id));
+  const talk = all.filter((c) => talksWith(c) && !inWatch.has(c.id)).map((c) => ({ client: c, raw: null, email: lower(c.contactEmail), ids: new Set(), talk: true }));
+  if (watched.length || talk.length) {
+    const scan = await scanInbox(watched, now, talk);
+    out.newReplies = scan.replies;
+    out.booked = scan.booked;
+    if (scan.error) { out.ok = false; out.error = scan.error; }
+  }
   for (const w of watched) {
     try {
       // Fresh times: a reply or booking found a moment ago stops a reminder.
@@ -752,6 +790,14 @@ export async function checkOnboardCalls({ now = io.now(), force = false, clients
       out.error = out.error || String(err?.message || err);
       await logEvent(w.client.id, SYSTEM, 'check_failed', { error: String(err?.message || err).slice(0, 200) });
     }
+  }
+  // The reply bot's answers that are due (a message found a moment ago may already be).
+  try {
+    const { runReplyBot } = await import('@/lib/systems/replybot');
+    const bot = await runReplyBot({ now });
+    if (bot.sent) out.botReplies = bot.sent;
+  } catch (err) {
+    await logEvent(null, SYSTEM, 'replybot_failed', { error: String(err?.message || err).slice(0, 200) });
   }
   return out;
 }
@@ -858,12 +904,15 @@ export async function sendCallEmail(clientId, key, vars, { icalEvent = null, ded
   const raw = await readCall(clientId);
   const threaded = flag(raw.sentAt);
   const all = { threadSubject: raw.subject || FIRST_SUBJECT, ...vars };
-  const res = await sendClient(clientId, key, all, { dedupe, linkify: true, ...(icalEvent ? { icalEvent } : {}), ...(threaded ? threadHeaders(raw) : {}) });
+  const res = await sendClient(clientId, key, all, { dedupe, linkify: true, thread: false, ...(icalEvent ? { icalEvent } : {}), ...(threaded ? threadHeaders(raw) : {}) });
   if (threaded && !res.deduped) {
     const at = now.toISOString();
     const copy = sentCopy(res, key, all, client);
     if (res.messageId) await patch(clientId, { messageIds: JSON.stringify(withId(raw, res.messageId)) });
     await pushThread(clientId, { id: `out-${shortHash(res.messageId || `${at}|${key}`)}`, dir: 'out', at, from: await fromInboxOf(res), to: lower(client.contactEmail), subject: copy.subject, text: copy.text, kind: 'booking' });
+  } else if (!res.deduped && res.sent) {
+    // No onboarding conversation (a meeting the owner added): still one entry in their conversation.
+    await conv.logClientEmail(clientId, key, res, { kind: 'booking' });
   }
   return res;
 }
@@ -911,7 +960,12 @@ export function withSignOff(text, signer) {
   return `${String(text).trim()}\n\n${signer}`;
 }
 
-/** The owner's reply from the hub: plain text, same inbox, same thread (In-Reply-To / References). */
+/**
+ * The owner's reply from the hub: plain text, same inbox, same thread
+ * (In-Reply-To their last message / References; "Re: " their last subject,
+ * else the acceptance email's). It answers everything of theirs so far: an
+ * answer the reply bot was waiting to send is dropped.
+ */
 export async function ownerReply(clientId, text, { now = io.now() } = {}) {
   const body = String(text || '').replace(/\r\n/g, '\n').trim();
   if (!body) throw new OnboardCallError('Write the reply first.');
@@ -921,10 +975,10 @@ export async function ownerReply(clientId, text, { now = io.now() } = {}) {
   // A double click sends once.
   const claim = await kv.set(K.onceClaim('onboard_reply', clientId, shortHash(body)), now.toISOString(), { nx: true, ex: 120 });
   if (claim !== 'OK') return { duplicate: true };
-  const vars = { threadSubject: raw.subject || FIRST_SUBJECT, text: withSignOff(body, await ownerName(clientId)) };
+  const vars = { threadSubject: conv.stripRe(raw.lastInSubject) || raw.subject || FIRST_SUBJECT, text: withSignOff(body, await ownerName(clientId)) };
   let res;
   try {
-    res = await sendClient(clientId, 'onboard_owner_reply', vars, { dedupe: null, ...threadHeaders(raw) });
+    res = await sendClient(clientId, 'onboard_owner_reply', vars, { dedupe: null, thread: false, ...threadHeaders(raw) });
   } catch (err) {
     await kv.del(K.onceClaim('onboard_reply', clientId, shortHash(body)));
     throw err;
@@ -934,8 +988,22 @@ export async function ownerReply(clientId, text, { now = io.now() } = {}) {
   const from = await fromInboxOf(res);
   await patch(clientId, { lastOwnerReplyAt: at, ...(res.messageId ? { messageIds: JSON.stringify(withId(raw, res.messageId)) } : {}) });
   await pushThread(clientId, { id: `out-${shortHash(res.messageId || `${at}|owner`)}`, dir: 'out', at, from, to: lower(client.contactEmail), subject: copy.subject, text: copy.text, kind: 'owner_reply' });
+  await conv.noteAnswered(clientId, at, { messageId: res.messageId || null });
+  const { dropPending } = await import('@/lib/systems/replybot');
+  await dropPending(clientId);
   await logEvent(clientId, SYSTEM, 'owner_replied', { chars: body.length });
   return { sent: true };
+}
+
+/**
+ * The reply bot answered them (or the calendar did, on its behalf): their
+ * messages so far are answered, and its email joins the thread's Message-IDs.
+ * Only for a client with an onboarding conversation.
+ */
+export async function markAnswered(clientId, at, messageId = null) {
+  const raw = await readCall(clientId);
+  if (!flag(raw.sentAt)) return;
+  await patch(clientId, { lastAnsweredAt: at, ...(messageId ? { messageIds: JSON.stringify(withId(raw, messageId)) } : {}) });
 }
 
 /** "Mark call booked" with the date and time the owner agreed with them. */

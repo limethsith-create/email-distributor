@@ -34,6 +34,7 @@ import { jobRecords } from '@/lib/scheduler';
 import { loadAccounts } from '@/lib/smtp-accounts';
 import { JOBS } from '@/lib/jobs';
 import { onboardSettings, onboardCallView, onboardCallFor, ownerWhen, ownerDayWord } from '@/lib/systems/onboardcall';
+import { conversationFor, needsReplyFor } from '@/lib/systems/conversation';
 import { formatDay } from '@/lib/systems/intake-io';
 
 export const STATE_LABELS = {
@@ -69,6 +70,7 @@ const truthy = (v) => v === true || v === '1' || v === 'true' || v === 1;
 const pct = (x) => (Number.isFinite(x) ? `${Math.round(x * 100)}%` : '—');
 const rate = (v) => { const x = n(v); if (!Number.isFinite(x)) return null; return x > 1 ? x / 100 : x; };
 const dateOf = (iso) => (iso ? String(iso).slice(0, 10) : null);
+const firstOf = (name) => String(name || '').trim().split(/\s+/)[0] || '';
 
 export function ago(iso, now = new Date()) {
   if (!iso) return '';
@@ -327,6 +329,12 @@ export function todosFor(ctx) {
       push('onboard-mark', `Mark the onboarding call with ${who}: done or no-show`, `It was ${ownerWhen(oc.bookedFor)} (your time)`, true, oc.bookedFor, view('detail', id, 'onboardCall'));
     }
   }
+  // A message of theirs with no answer yet, any state (docs/REPLYBOT-MEET.md §1) — the same rule as the
+  // conversation's needsReply. While the onboarding call is in play its own to-do says it.
+  if (needsReplyFor(client, ctx.callRaw) && !t.some((x) => x.id === `onboard-reply:${id}`)) {
+    const since = client.msgWaitingAt || oc?.lastReplyAt || null;
+    push('message-reply', `Answer ${firstOf(client.contactName) || client.contactName || client.name || id}'s message`, `They wrote ${ago(since, now)} · it goes from the onboarding inbox, in the same thread`, true, since, view('detail', id, 'conversation'));
+  }
   if (st === 'awaiting_purchase' && shopping.sentAt && !shopping.boughtAt) {
     push('buy', `Buy ${shopping.chosenDomain || 'the domain'} and 2 inboxes, then paste the logins`,
       `Shopping list sent ${ago(shopping.sentAt, now)}${has(shopping.total) ? ` · about $${shopping.total}` : ''}${shopping.escalatedAt ? ' · overdue' : ''}`,
@@ -386,6 +394,15 @@ export function todosFor(ctx) {
  * ever the stored ones; a missing counter is left out, never shown as 0.
  */
 export function simpleFor(ctx, todos = todosFor(ctx)) {
+  const out = simpleBase(ctx, todos);
+  // Their last message has no answer yet (the conversation's needsReply, docs/REPLYBOT-MEET.md §1): the
+  // hub shows "Sam wrote — answer them" in red. Outside the onboarding call it is also the next thing to do.
+  const needsReply = needsReplyFor(ctx.client, ctx.callRaw) || Boolean(ctx.onboardCall?.needsReply);
+  const msg = todos.find((t) => t.id === `message-reply:${ctx.client.id}`);
+  return { ...out, ...(msg ? { next: msg.text } : {}), needsReply, needsYou: out.needsYou || needsReply };
+}
+
+function simpleBase(ctx, todos) {
   const { client, trial = {}, shopping = {}, domain = {}, counters = {} } = ctx;
   const st = client.state;
   const urgent = todos.some((t) => t.urgent);
@@ -472,8 +489,9 @@ export async function loadContext(client, { alerts = null, now = new Date(), onb
   const id = client.id;
   const vnow = clientNow(client, now);
   // The onboarding call is read only for clients that were sent one (flag on the client hash).
+  const callRaw = client.onboardCallSentAt ? (await kv.hgetall(K.onboardCall(id)).catch(() => null)) || {} : {};
   const onboardCall = client.onboardCallSentAt
-    ? onboardCallView(await kv.hgetall(K.onboardCall(id)).catch(() => null), [], { now: vnow, settings: onboard || await onboardSettings(), clientState: client.state })
+    ? onboardCallView(callRaw, [], { now: vnow, settings: onboard || await onboardSettings(), clientState: client.state })
     : null;
   const [extras, profile, trial, domainRead, shopping, inboxesRaw, lf, approval, sequence, pacelog, runState, allAlerts] = await Promise.all([
     clientExtras(client, now),
@@ -502,7 +520,7 @@ export async function loadContext(client, { alerts = null, now = new Date(), onb
     bookings: extras.bookings || [], replies: extras.replies || [], repliesByKind: extras.repliesByKind || {}, hot,
     invoice: extras.invoice, promises: extras.promises || [], pacelog, reports: extras.reports || [], upcoming: extras.upcoming || [],
     runState, application, fitScore, alerts: openAlerts, day: extras.trialDay, health: extras.health, now: vnow, minMarket: await cfg(id, 'MIN_MARKET'),
-    onboardCall,
+    onboardCall, callRaw,
   };
 }
 
@@ -630,6 +648,8 @@ export async function hubClient(id, { now = new Date() } = {}) {
     application: ctx.application ? { ...ctx.application, research: await researchView(id).catch(() => null) } : null,
     // The onboarding call with its whole conversation (docs/ONBOARD-CALL.md §5); null when no acceptance email went.
     onboardCall: client.onboardCallSentAt ? await onboardCallFor(id, { now, client }).catch(() => null) : null,
+    // The client's one conversation, any state, with the reply bot's switch (docs/REPLYBOT-MEET.md §1).
+    conversation: await conversationFor(id, { now, client }).catch(() => null),
     deliverability: await deliverabilityView(id).catch(() => null),
     leadQuality: await leadQualityView(id).catch(() => null),
     links: {},

@@ -94,6 +94,154 @@ REPLYBOT: {
 }
 ```
 
+### §1–2 — as built (Machine A, 2026-09-25)
+
+Everything above holds. Code: `src/lib/systems/conversation.js` (the list,
+the `conversation` object, the owner's reply to any client, the messages
+endpoint), `src/lib/systems/replybot.js` (the rules, the time reader, the
+answers), the hooks in `systems/onboardcall.js` (every message goes past the
+bot before the owner is alerted; the check reads every client's mail) and
+`notify.js` (every `notifyClient` email to the contact is an entry); route
+`src/app/api/mc/clients/[id]/messages/route.js`; config `REPLYBOT`; keys
+`client:{id}:convo`, `replybot:pending`; template `bot_reply`; alert
+`bot_replied`; tests `tests/replybot.test.mjs`. Endpoints in
+`docs/HUB-API.md` (Messages + reply bot). **(+)** = slightly beyond the text
+above.
+
+**The conversation**
+- `notifyClient` logs every email whose recipient is the client's
+  `contactEmail` (`kind: 'system'`, `template` = its key); an email to another
+  address (a colleague, a prospect) is not in it. The onboarding, calendar,
+  owner and bot emails add their own entry (`thread: false`), so nothing is
+  there twice. A calendar email for a client with no onboarding call is a
+  `booking` entry too.
+- `in` entries carry `rule`: what the bot read in the message (only when it
+  may answer that client, else `null`). **(+)** A `thanks` there is what makes
+  the message need no answer.
+- Their mail is read for every client (any state but deleted, with a contact
+  address): from their contact address; answering our Message-IDs from
+  another address still only counts for an onboarding applicant, as before.
+  Mail dated before the client was created is ignored. The check's
+  `newReplies` counts them all; `checked` still counts onboarding calls. The
+  `onboard-calls` job keeps its cadence (only while an onboarding call is
+  open) — the other clients' mail is read on those checks and whenever the hub
+  calls `POST /api/mc/onboard-calls/check`, so the Redis budget is unchanged.
+- `needsReply` is one rule (`needsReplyFor`) for `conversation.needsReply`,
+  the row's `simple.needsReply` and the to-dos: their newest message needing
+  an answer (`msgWaitingAt` on the client hash, set on arrival) came after the
+  last answer — the owner's reply, the bot's answer, the calendar confirming
+  the time they wrote, or a booking of the onboarding call (as the onboarding
+  card has always counted it). During the onboarding call its own rule
+  (replies recorded before this build) counts too. A thank-you the bot read
+  needs no answer, unless an earlier message still does.
+- **(+)** Board rows: `simple.needsReply` (bool) and `needsYou` when true; a
+  to-do `message-reply:{id}` (urgent, `view: 'detail', section:
+  'conversation'`) when their message waits and the onboarding card's
+  `onboard-reply` does not already say so (during the trial, after the call).
+  Outside onboarding `simple.next` reads "Answer Pat's message".
+- The owner's reply for a client with an onboarding conversation is the
+  card's reply (same code, same thread). **(+)** Its subject is now "Re: "
+  THEIR last subject (else the acceptance email's), so a new email of theirs
+  ("Question about the trial") is answered in its own thread. For any other
+  client: from the ONBOARDCALL inbox, In-Reply-To their last message (else our
+  last email), References every Message-ID we know, "Re: " their last subject
+  (else our last email's). Either way it drops an answer the bot was waiting
+  to send.
+- `onboard_reply` keeps its key; its title is now "{person} wrote — needs
+  your answer" (it also covers messages during the trial) and the body says
+  "wrote to you" outside the onboarding call.
+
+**The bot — who and when**
+- It answers only a client who is `onboarding` with the acceptance email sent
+  (**decision**: "after we send the booking details"; later, a "cancel the
+  trial" mid-trial must reach the owner, never a "closed it on my side").
+  Later messages still land in the conversation and alert the owner.
+- The booking rules (reschedule, proposes_time, wants_time) need the booking
+  page open (the call not done); `proposes_time` also needs the machine's own
+  booking page (with `ONBOARDCALL.bookingUrl` set there is no calendar to ask;
+  `wants_time` then sends that link without times). `wants_time` only while
+  nothing is booked or asked for, and only when no time is readable (a
+  readable time is a proposal, or not a question).
+- Decided on arrival (before the entry is stored): no rule → alert; thanks →
+  nothing; automatic sender (the junk filter's no-reply/bounce rules) → alert;
+  older than 3 days → alert; the owner answered after it was written → alert;
+  **(+)** a second message while an answer waits, or an earlier message still
+  unanswered → the bot leaves both to the owner (alert) — two messages are a
+  conversation the rules cannot be sure of. Otherwise it is queued
+  (`botPending` in the convo hash, `replybot:pending` set) and the owner gets
+  no "needs your answer" for it.
+- Sent by `runReplyBot` at the end of every check, when all hold: the owner
+  has not answered since, the bot is still on (everyone + this client), still
+  onboarding (and the page still open for a booking rule), `delayMinutes`
+  after the message's own time, inside `hours`, fewer than `maxPerDay` bot
+  emails to them that US-Eastern day. A wait (delay, hours) keeps it queued;
+  anything else hands it to the owner with `onboard_reply` saying why ("The
+  reply bot left this one to you: …"). A failed send hands over too — no
+  retry loop. Each email is deduped per message (`bot_reply:{entryId}`).
+- `maxPerDay` counts the bot's emails and its confirmations through the
+  calendar.
+
+**The rules** (exact patterns in `replybot.js`; the text is their words with
+quoted history cut, lower-cased, curly quotes straightened)
+- `not_interested` **deviation**: "no longer" only with its object (no
+  longer interested / need / want / looking / going ahead …) — "Tuesday no
+  longer works" must never close a trial. "cancel the/my/our trial",
+  "remove me/us", "stop" as the whole message.
+- `reschedule`: + "cannot make", "something's come up"; "different time
+  zone" is not one.
+- `price`: "catch" but not "catch up"; "how much" but not "how much time".
+- `thanks`: ≤ 6 words once their and the owner's names are left out, every
+  word an ok-word (thanks, ok, great, perfect, cheers, got it, noted …) or
+  filler, no question mark.
+- **The time reader** (`readTimes`, own small parser — `parseBodyDate` needs
+  a year and a zone word): a day within 40 characters of a time. Days: dates
+  ("Oct 7", "7 October", "10/8", with or without a year — the next such date),
+  today / tomorrow, weekdays = the NEXT such day in their zone (today's
+  weekday is next week's). Times: "2pm", "2:30 p.m.", "14:30", "noon", "at 3"
+  / "3 o'clock" (no am/pm: 8–11 morning, 12–7 afternoon), a range "2-3pm" /
+  "11-1pm" is its start. Not a time: "after / before / by / until 2pm", a
+  range's end, "Mon-Fri 9am-5pm" (office hours in a signature). Zone: the one
+  named right after the time or anywhere (ET/EST/EDT/Eastern, CT…, MT…,
+  PT…, Alaska, Hawaii, Arizona — "MT" from an Arizona client is Arizona
+  time), else theirs (their meeting's, else from their state, else Eastern).
+  Up to three proposals, in the order written: the first free one is taken.
+- "Free" = one of the booking page's own open times (grid, hours, buffer,
+  notice, maxPerDay, their own request set aside). Free → `requestMeeting`
+  with `source: 'reply_bot'` and **no** separate "got it" (the bot's answer is
+  it; the owner still gets `meeting_requested`, whose body says it came by
+  email). **(+)** Their proposal equal to the owner's suggestion confirms it
+  (the calendar's own accept: the confirmation email with the invite goes, the
+  bot sends nothing more). The time they already have confirmed is no
+  proposal ("see you Tuesday at 2pm" → the owner). Taken (or taken a moment
+  ago) → the three open times nearest to it, either side.
+- `wants_time` lists the first open time on each of the next three open days
+  (**decision**: three days to choose from, not three slots of one morning).
+
+**Answers** (`REPLYBOT.answers`) — slots `{firstName}`, `{ownerName}`,
+`{bookingLink}` (a fresh booking-page link per answer, or the owner's own
+`bookingUrl`), `{times}` ("• Tue 6 Oct at 2:00 pm CT" lines), `{when}`
+**(+)** ("Tuesday 6 October at 2:00 pm", their zone), `{onboardingLink}` (a
+fresh onboarding-page token), `{callMinutes}` **(+)** (the `what_needed` text
+says the call's real length rather than a fixed "15 minutes"). A paragraph
+whose slot is empty is left out; an unknown `{slot}` stops the answer (the
+owner gets the message). The defaults name no price. The email: template
+`bot_reply` from the ONBOARDCALL inbox, "Re: " their subject, In-Reply-To
+their message, References the conversation, plain text + clickable links,
+no pixel.
+
+**Alerts** — `bot_replied` (not urgent, `quiet: true`: the push goes at
+urgency "low" with `quiet: true` in its payload): "Auto-replied to Sam
+(eCreek IT): sent the booking link to pick another time"; the body has their
+words and the reply; push `url` `/#calendar` when a request waits for his
+yes, else the trial. `not_interested` says so and that the reminders stopped
+(the onboarding call is `stopped`; closing the application stays his call).
+
+**Changed elsewhere** — `calendar.requestMeeting` takes `{ source, gotIt }`;
+`onboardcall` exports `threadHeaders`, `markAnswered`, `talksWith`; the
+onboarding hash gains `lastAnsweredAt` and `lastInSubject`; the existing
+onboarding-call tests turn the bot off (they are the owner answering by
+hand).
+
 ## 3. Google Meet (Machine B)
 
 The owner connects his Google account once; from then on every confirmed

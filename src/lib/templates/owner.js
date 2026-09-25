@@ -109,11 +109,15 @@ export const ALERTS = {
   // ── Onboarding call (docs/ONBOARD-CALL.md) ── phone + email (not urgent: the hub's own
   // to-do for the trial clears itself once answered/booked, an urgent alert would linger).
   // Scope is per message / booking, so each one alerts exactly once.
-  onboard_reply: { urgent: false, title: '{person} replied about the onboarding call' },
+  onboard_reply: { urgent: false, title: '{person} wrote — needs your answer' },
   onboard_booked: { urgent: false, title: 'Onboarding call booked: {person}, {when}' },
   onboard_overdue: { urgent: false, title: 'Onboarding call not booked yet: {person}' },
   onboard_cancelled: { urgent: false, title: 'Onboarding call cancelled: {person}' },
   // ── end onboarding call ──
+  // ── Reply bot (docs/REPLYBOT-MEET.md §2) ── quiet: phone push at low urgency + email, one per
+  // bot email. {who} = "Sam (eCreek IT)", {did} = "sent the booking link".
+  bot_replied: { urgent: false, quiet: true, title: 'Auto-replied to {who}: {did}' },
+  // ── end reply bot ──
   // ── Calendar (docs/CALENDAR.md) ── phone + email, not urgent for the same reason: the
   // Calendar's "waiting for your yes" list and the trial's to-do carry it until answered.
   // {who} = "Sam (eCreek IT)", {when} = "Tue 30 Sep 2:00 pm ET = 11:30 pm Colombo".

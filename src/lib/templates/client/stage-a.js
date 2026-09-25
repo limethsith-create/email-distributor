@@ -219,6 +219,14 @@ If that time no longer works, reply to this email and we'll find another.
     body: '{text}',
   },
 
+  // The reply bot's answer (docs/REPLYBOT-MEET.md §2): the text of REPLYBOT.answers.{rule}, filled
+  // and signed by systems/replybot.js; "Re: " their subject, threaded under their message.
+  bot_reply: {
+    from: 'onboard',
+    subject: 'Re: {threadSubject}',
+    body: '{text}',
+  },
+
   // ── Calendar (docs/CALENDAR.md) ──
   // Same inbox as the onboarding call. {when} is their own time zone first, with
   // Eastern beside it when they are elsewhere ("Tuesday 30 September at 1:00 pm

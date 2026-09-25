@@ -271,7 +271,9 @@ const registrarPrices = {
 // Onboarding call (docs/ONBOARD-CALL.md): read the onboarding-call inbox, send
 // the reminders that are due, raise overdue alerts — only while some client's
 // hash (already loaded by the tick) says its onboarding call is open. Shares
-// one throttle with the hub's check and the check after Approve.
+// one throttle with the hub's check and the check after Approve. The same
+// check reads every other client's mail into their conversation and sends the
+// reply bot's answers (docs/REPLYBOT-MEET.md) — no extra runs of its own.
 const onboardCalls = {
   name: 'onboard-calls',
   scope: 'global',
