@@ -9,7 +9,7 @@
 // signals, email pattern inference, and role addresses never kept.
 
 import {
-  TITLE_WORDS, titleTier, looksLikeName, cleanPersonName, splitName as splitNameRule, isRoleAddress as isRoleRule, isFreemail,
+  TITLE_WORDS, titleTier, titleFits, looksLikeName, cleanPersonName, splitName as splitNameRule, isRoleAddress as isRoleRule, isFreemail,
   inferPattern, candidateEmails, nameFromEmail, nameFromLinkedinSlug, FRANCHISE_TEXT_RE, FIRST_NAMES, normState,
 } from '../../src/lib/leadquality/rules.mjs';
 
@@ -375,10 +375,8 @@ export function guessPatterns(first, last, host) {
 }
 
 export function titleApproved(title, approvedTitles = []) {
-  const t = String(title || '').toLowerCase();
-  if (!t) return false;
-  const list = (approvedTitles.length ? approvedTitles : OWNER_TITLES).map((x) => String(x).toLowerCase());
-  return list.some((a) => t.includes(a) || a.includes(t));
+  if (!String(title || '').trim()) return false;
+  return titleFits(title, approvedTitles.length ? approvedTitles : OWNER_TITLES);
 }
 
 // ── contact choice ───────────────────────────────────────────────────────────
@@ -451,6 +449,8 @@ export function pickContacts(found, host, approvedTitles = [], { max = 1 } = {})
   const out = [];
   for (const p of ranked) {
     if (out.length >= max) break;
+    // A title the client did not ask for would fail the List Sanity Check and sink the whole batch: skip that person.
+    if (p.title && approvedTitles.length && !p.approved) continue;
     if (p.email) { out.push({ kind: 'person', ...p, candidates: [p.email], pattern: null, patternFrom: null }); continue; }
     // Guessing an address costs a verifier credit and risks a bounce: only for a
     // real person's name (known first name) — never "Sweco Norway"-style org names.

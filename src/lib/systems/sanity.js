@@ -22,6 +22,7 @@ import { K } from '@/lib/db/keys';
 import { hostOf } from '@/lib/db/leads';
 import { chainHosts } from '@/lib/systems/listfiles';
 import { gradeLead } from '@/lib/systems/grader';
+import { titleFits } from '@/lib/leadquality/rules.mjs';
 
 /** Grader reject reasons that say the batch's search pattern is wrong → sanity failure name. */
 const GRADER_FAILS = { role: 'role', no_name: 'no_name', chain: 'chain', out_of_area: 'state', size: 'size', excluded_title: 'title' };
@@ -60,7 +61,7 @@ function baseChecks(lead, profile = {}, { chains = new Set() } = {}) {
   const excluded = list(profile.excludedTitles);
   if (lead.title) {
     if (excluded.length && titleMatches(lead.title, excluded)) fails.push('title');
-    else if (approved.length && !titleMatches(lead.title, approved)) fails.push('title');
+    else if (approved.length && !titleFits(lead.title, approved)) fails.push('title');
   }
   const types = list(lead.types);
   const emp = Number(lead.employees);

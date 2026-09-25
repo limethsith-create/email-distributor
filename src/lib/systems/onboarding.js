@@ -51,7 +51,7 @@ export const FIELDS = [
   { key: 'proofLine', label: 'Optional: one true proof line we may use (e.g. "We look after 40 dental offices in Dallas") — only ever used exactly as written', type: 'long', required: false },
   { key: 'defaultNiche', label: 'What you offer, in 2–4 words (used in the emails, e.g. "managed IT")', type: 'text', required: true },
   { key: 'defaultIcp', label: 'Your ideal customers in a few words, plural (used in the emails, e.g. "dental practices")', type: 'text', required: true },
-  { key: 'industry', label: 'Industry keywords of your customers (comma-separated, e.g. managed IT services, IT support)', type: 'text', required: true },
+  { key: 'industry', label: 'What kind of businesses your customers are — we search for these (comma-separated, e.g. dental office, law firm, accountant). Not your own trade.', type: 'text', required: true },
   { key: 'cities', label: 'Cities to target (one per line, "Dallas, TX")', type: 'list', required: false },
   { key: 'states', label: 'States to target (e.g. TX, OK)', type: 'list', required: false },
   { key: 'sizeMin', label: 'Customer size — fewest employees', type: 'int', required: true },

@@ -241,7 +241,7 @@ export function clientVars(client = {}, profile = {}) {
 
 const NICHE_RULES = [
   ['msp', /\bmsps?\b|managed (it|services?)|\bit (support|services?|solutions|consult\w*)|managed service provider|cyber ?security|computer (repair|support|services)|tech support|network(ing)? (support|services)/],
-  ['agency', /\b(marketing|advertising|seo|web ?design|website design|web development|digital agency|branding|social media|ppc|google ads|creative agency|video production|content marketing|lead generation for)\b/],
+  ['agency', /\b(marketing|advertising|seo|web ?design|website design|web development|digital agency|branding|social media|ppc|google ads|creative agency|video production|content marketing|lead generation|appointment setting|booked (sales )?calls|cold email)\b/],
   ['trades', /\b(plumb\w*|roof\w*|hvac|heating|air condition\w*|electric(al|ian)s?|landscap\w*|lawn|pest control|janitorial|commercial cleaning|cleaning services?|painting|painters?|flooring|concrete|paving|asphalt|fencing|pool service|garage doors?|restoration|remodel\w*|general contractor|construction|handyman|pressure washing|window cleaning|locksmith|moving|junk removal|snow removal|signage|sign company|glass|gutters?|solar install\w*)\b/],
   ['pro-services', /\b(accounting|accountants?|bookkeep\w*|cpas?|tax (prep\w*|services?|firm)|law firm|attorneys?|legal services?|insurance|financial advis\w*|wealth management|consult\w*|staffing|recruit\w*|payroll|hr services|fractional|architects?|engineering firm|business coach\w*)\b/],
 ];
@@ -250,11 +250,20 @@ const NICHE_RULES = [
 export function nicheOf(profile = {}) {
   const explicit = String(profile.niche || '').toLowerCase();
   if (NICHE_TEMPLATES[explicit]) return explicit;
-  const offer = `${profile.defaultNiche || ''} ${profile.sellsTo || ''} ${profile.oneLiner || ''}`.toLowerCase();
-  for (const [n, re] of NICHE_RULES) if (re.test(offer)) return n;
-  const industry = String(Array.isArray(profile.industry) ? profile.industry.join(' ') : profile.industry || '').toLowerCase();
-  for (const [n, re] of NICHE_RULES) if (re.test(industry)) return n;
-  return 'trial-default';
+  // What they sell comes first in their sentence, who they sell to after it:
+  // "Bookkeeping for contractors" is pro-services, not trades.
+  const earliest = (text) => {
+    let best = null;
+    for (const [n, re] of NICHE_RULES) {
+      const m = re.exec(text);
+      if (m && (!best || m.index < best.at)) best = { n, at: m.index };
+    }
+    return best?.n || null;
+  };
+  const found = earliest(String(profile.defaultNiche || '').toLowerCase())
+    || earliest(`${profile.sellsTo || ''} ${profile.oneLiner || ''}`.toLowerCase())
+    || earliest(String(Array.isArray(profile.industry) ? profile.industry.join(' ') : profile.industry || '').toLowerCase());
+  return found || 'trial-default';
 }
 
 /** Fill only the client-level slots; lead slots stay. Throws TemplateError listing missing client slots. */

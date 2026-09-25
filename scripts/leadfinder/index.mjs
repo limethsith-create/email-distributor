@@ -278,13 +278,17 @@ export async function run({ env = process.env, fetchImpl = fetch, resolveMx = un
       }
     }
     if (cands.length < target) {
-      const kw = list(profile.industry)[0] || '';
-      for (const c of list(profile.cities)) {
-        if (cands.length >= target) break;
-        const [city, st] = c.includes('|') ? c.split('|') : [c.replace(/,\s*[A-Z]{2}$/, ''), (/,\s*([A-Z]{2})$/.exec(c) || [])[1] || list(profile.states)[0] || ''];
-        if (!st) continue;
-        const r = await overpassSearch(kw, city.trim(), st.trim(), { fetchImpl });
-        add(r.places.map((p) => ({ ...p, query: `${kw} in ${city.trim()}, ${st.trim()}` })));
+      // Every customer type the client listed (up to 3), not only the first.
+      const kws = list(profile.industry).slice(0, 3);
+      osm: for (const kw of kws.length ? kws : ['']) {
+        for (const c of list(profile.cities)) {
+          if (cands.length >= target) break osm;
+          const [city, st] = c.includes('|') ? c.split('|') : [c.replace(/,\s*[A-Z]{2}$/, ''), (/,\s*([A-Z]{2})$/.exec(c) || [])[1] || list(profile.states)[0] || ''];
+          if (!st) continue;
+          const r = await overpassSearch(kw, city.trim(), st.trim(), { fetchImpl });
+          if (r.error) log(`openstreetmap "${kw}" in ${city.trim()}: ${r.error}`);
+          add(r.places.map((p) => ({ ...p, query: `${kw} in ${city.trim()}, ${st.trim()}` })));
+        }
       }
     }
     log(`search: ${cands.length} candidates, ${placesTotal} Places requests`);

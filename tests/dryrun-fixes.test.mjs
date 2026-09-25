@@ -3,6 +3,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rdapLookup } from '@/lib/ext/porkbun';
 import { pickContacts } from '../scripts/leadfinder/lib.mjs';
+import { titleFits } from '@/lib/leadquality/rules.mjs';
+import { sanityCheck } from '@/lib/systems/sanity';
+import { nicheOf } from '@/lib/systems/copy';
 
 test('domain lookups: registry answers only; rdap.org refusals and TLDs without RDAP are "unknown"', async () => {
   const calls = [];
@@ -33,4 +36,36 @@ test('an email is only guessed for a real person, never an organisation name', (
   assert.deepEqual(out.map((c) => c.name), ['Andy Woods']);
   assert.equal(out[0].email, 'andy@example-it.com');
   assert.equal(pickContacts({ cards: [{ name: 'Sweco Norway', title: 'CEO' }] }, 'ncc.com', ['CEO']).length, 0);
+});
+
+const LIST = ['Owner', 'Founder', 'President', 'Managing Partner', 'Partner', 'Principal', 'CEO', 'Office Manager'];
+
+test('titles: one rule for finder and batch check — owner-level words count, other titles do not', () => {
+  assert.equal(titleFits('Founding Attorney', LIST), true);
+  assert.equal(titleFits('Managing Attorney', LIST), true);
+  assert.equal(titleFits('Senior Partner', LIST), true);
+  assert.equal(titleFits('Operations Manager', LIST), false);
+  assert.equal(titleFits('Firm Administrator', LIST), false);
+  assert.equal(titleFits('', LIST), true);
+  // A client who only wants office managers does not get owners by synonym.
+  assert.equal(titleFits('Founding Attorney', ['Office Manager']), false);
+});
+
+test('titles: the finder never picks a person the batch check would fail', () => {
+  const found = { cards: [{ name: 'Mary Stone', title: 'Operations Manager' }, { name: 'John Hale', title: 'Founding Attorney' }] };
+  const out = pickContacts(found, 'halelaw.com', LIST, { max: 1 });
+  assert.deepEqual(out.map((c) => c.name), ['John Hale']);
+  assert.equal(pickContacts({ cards: [{ name: 'Mary Stone', title: 'Operations Manager' }] }, 'x.com', LIST).length, 0);
+  const rows = [
+    { email: 'john@halelaw.com', title: 'Founding Attorney', state: 'TX', website: 'halelaw.com' },
+    { email: 'ann@cpa.com', title: 'Managing Attorney', state: 'TX', website: 'cpa.com' },
+    { email: 'bo@firm.com', title: 'Owner', state: 'TX', website: 'firm.com' },
+  ];
+  assert.equal(sanityCheck(rows, { titles: LIST }, { maxFail: 0, chains: new Set() }).failCount, 0);
+});
+
+test('copy niche: what the client sells, not who they sell to', () => {
+  assert.equal(nicheOf({ sellsTo: 'Bookkeeping for contractors and roofers' }), 'pro-services');
+  assert.equal(nicheOf({ defaultNiche: 'managed IT', industry: 'accountant, law firm' }), 'msp');
+  assert.equal(nicheOf({ sellsTo: 'IT support for law firms and accountants' }), 'msp');
 });

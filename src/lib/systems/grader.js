@@ -35,7 +35,7 @@ import { sendingDayNumber } from '@/lib/systems/ramp';
 import { nicheOf } from '@/lib/systems/copy';
 import { dayKeyIn, ET } from '@/lib/time';
 import {
-  titleTier, isRoleAddress, isFreemail, isDisposable, franchiseBrand, normState, keywords, stem,
+  titleTier, titleFits, isRoleAddress, isFreemail, isDisposable, franchiseBrand, normState, keywords, stem,
 } from '@/lib/leadquality/rules.mjs';
 
 const list = (v) => {
@@ -228,7 +228,7 @@ export function gradeLead(lead = {}, ctx = buildContext({}), { duplicateCompany 
   else if (tier >= 55) reasons.push(`Decision-maker title (${title})`);
   else if (tier > 0) reasons.push(`Title: ${title}`);
   else reasons.push('No title found');
-  if (title && ctx.titles.some((x) => x && (title.includes(x) || x.includes(title)))) { tpts += 4; reasons.push('Title is on your list'); }
+  if (title && ctx.titles.length && titleFits(title, ctx.titles)) { tpts += 4; reasons.push('Title is on your list'); }
   score += Math.min(20, tpts);
 
   // Named person (≤ 10)

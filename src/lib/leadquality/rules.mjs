@@ -233,6 +233,22 @@ export function titleTier(title) {
   return 25;
 }
 
+/**
+ * Does a title fit the client's list? One rule for the Lead Finder (who it
+ * picks), the List Sanity Check (what fails a batch) and the Lead Grader:
+ * a title that says one of the client's titles, or — when the client listed
+ * an owner-level title — any owner-level title in other words ("Founding
+ * Attorney", "Managing Attorney", "Senior Partner"). No title: unknown, it fits.
+ */
+export function titleFits(title, approved = []) {
+  const t = String(title || '').toLowerCase().trim();
+  if (!t) return true;
+  const list = (Array.isArray(approved) ? approved : String(approved || '').split(/[,\n;]+/)).map((x) => String(x).toLowerCase().trim()).filter(Boolean);
+  if (!list.length) return true;
+  if (list.some((a) => t.includes(a) || a.includes(t))) return true;
+  return titleTier(t) >= 85 && list.some((a) => titleTier(a) >= 100);
+}
+
 // ── names ────────────────────────────────────────────────────────────────────
 
 // Common US first names (public SSA popularity data, top names across

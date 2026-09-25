@@ -126,22 +126,43 @@ export function osmTagsFor(keyword) {
   return OSM_TAGS.filter(([re]) => re.test(k)).map(([, t]) => t);
 }
 
+// Words that say nothing about the trade: "Therapy Services" must not match "managed IT services".
+const GENERIC_WORDS = new Set(['services', 'service', 'solutions', 'solution', 'company', 'companies', 'group', 'inc', 'llc', 'co', 'the', 'and', 'of', 'for', 'in', 'near', 'me', 'best', 'local', 'business', 'businesses', 'professional', 'professionals', 'support', 'repair', 'repairs', 'provider', 'providers', 'firm', 'firms', 'agency', 'agencies']);
+
+/**
+ * The name pattern for a keyword: its telling words, in order, as one phrase
+ * ("managed IT services" → managed…it, "computer repair" → computer). Null
+ * when no word tells the trade apart ("IT support" is left to the office=it
+ * tag). POSIX regex for Overpass.
+ */
+export function namePattern(keyword, { loose = false } = {}) {
+  const words = String(keyword || '').toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').split(/[\s-]+/).filter(Boolean);
+  if (!words.length) return null;
+  if (loose) return `(^|[^a-z0-9])${words.join('[^a-z0-9]{0,3}')}`;
+  const telling = words.filter((w) => !GENERIC_WORDS.has(w));
+  if (!telling.length || telling.every((w) => w.length < 3)) return null;
+  const core = words.slice(words.indexOf(telling[0]), words.lastIndexOf(telling[telling.length - 1]) + 1);
+  // A short last word must end there ("managed it" is not "Managed Items"); a long one may run on ("plumb" → "plumbing").
+  const end = core[core.length - 1].length < 4 ? '([^a-z0-9]|$)' : '';
+  return `(^|[^a-z0-9])${core.join('[^a-z0-9]{0,3}')}${end}`;
+}
+
 /**
  * OpenStreetMap Overpass fallback (1 request / 5 s). One query per city:
  * the OSM tags for the industry, plus offices, shops and crafts with a
- * website whose name or tag matches the keyword.
+ * website whose name or tag matches the keyword's telling words.
  */
 export function overpassQuery(keyword, city, state) {
-  const kw = String(keyword).replace(/["\\]/g, '').split(/\s+/).filter((w) => w.length > 2).join('|') || keyword;
-  const tagged = osmTagsFor(keyword).map(([k, v]) => `  nwr["${k}"="${v}"]["website"](area.a);\n  nwr["${k}"="${v}"]["contact:website"](area.a);`).join('\n');
+  const tags = osmTagsFor(keyword);
+  // No tag and no telling word: match the whole phrase rather than nothing.
+  const pattern = namePattern(keyword) || (tags.length ? null : namePattern(keyword, { loose: true }));
+  const tagged = tags.map(([k, v]) => `  nwr["${k}"="${v}"]["website"](area.a);\n  nwr["${k}"="${v}"]["contact:website"](area.a);`).join('\n');
+  const named = pattern ? ['office', 'shop', 'craft', 'name'].map((k) => `  nwr["${k}"~"${pattern}",i]["website"](area.a);`).join('\n') : '';
   return `[out:json][timeout:60];
 area["ISO3166-2"="US-${state}"]->.s;
 area["name"="${String(city).replace(/["\\]/g, '')}"]["boundary"="administrative"](area.s)->.a;
 (
-${tagged ? `${tagged}\n` : ''}  nwr["office"~"${kw}",i]["website"](area.a);
-  nwr["shop"~"${kw}",i]["website"](area.a);
-  nwr["craft"~"${kw}",i]["website"](area.a);
-  nwr["name"~"${kw}",i]["website"](area.a);
+${[tagged, named].filter(Boolean).join('\n')}
 );
 out tags center 300;`;
 }
