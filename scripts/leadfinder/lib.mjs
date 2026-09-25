@@ -452,6 +452,9 @@ export function pickContacts(found, host, approvedTitles = [], { max = 1 } = {})
   for (const p of ranked) {
     if (out.length >= max) break;
     if (p.email) { out.push({ kind: 'person', ...p, candidates: [p.email], pattern: null, patternFrom: null }); continue; }
+    // Guessing an address costs a verifier credit and risks a bounce: only for a
+    // real person's name (known first name) — never "Sweco Norway"-style org names.
+    if (!looksLikeName(p.name, { strict: true })) continue;
     const { first, last } = splitName(p.name);
     // Inferred pattern + one fallback; else the three patterns that cover
     // ~90 % of small US companies (each candidate costs a verifier credit).

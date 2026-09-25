@@ -148,18 +148,37 @@ out tags center 300;`;
 
 let lastOverpassAt = 0;
 
+export const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+];
+
 export async function overpassSearch(keyword, city, state, { fetchImpl = fetch, minGapMs = 5000 } = {}) {
   const wait = lastOverpassAt + minGapMs - Date.now();
   if (wait > 0) await sleep(wait);
   lastOverpassAt = Date.now();
   try {
-    const res = await fetchImpl('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'AvianceBot/1.0 (+aviance.online/bot)' },
-      body: `data=${encodeURIComponent(overpassQuery(keyword, city, state))}`,
-      signal: AbortSignal.timeout(90000),
-    });
-    if (!res.ok) return { places: [], error: `overpass ${res.status}` };
+    // The main Overpass server is often busy (429/504); the public mirrors serve the same data.
+    let res = null;
+    let lastErr = null;
+    for (const endpoint of OVERPASS_ENDPOINTS) {
+      try {
+        res = await fetchImpl(endpoint, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'AvianceBot/1.0 (+aviance.online/bot)' },
+          body: `data=${encodeURIComponent(overpassQuery(keyword, city, state))}`,
+          signal: AbortSignal.timeout(90000),
+        });
+        if (res.ok) break;
+        lastErr = `overpass ${res.status}`;
+        if (![429, 502, 503, 504].includes(res.status)) break;
+      } catch (err) {
+        lastErr = `overpass ${err?.name === 'TimeoutError' ? 'timeout' : 'unreachable'}`;
+        res = null;
+      }
+    }
+    if (!res || !res.ok) return { places: [], error: lastErr || 'overpass unreachable' };
     const j = await res.json();
     const places = (j.elements || []).map((el) => {
       const t = el.tags || {};

@@ -9,7 +9,7 @@
  * Keys travel in the JSON body only and are never logged.
  */
 
-import { fetchJson } from '@/lib/ext/http';
+import { fetchJson, fetchExt } from '@/lib/ext/http';
 
 const BASE = 'https://api.porkbun.com/api/json/v3';
 
@@ -94,13 +94,30 @@ export async function rdapAvailable(name) {
  * 404 = free, 200 = taken (registeredAt from the `registration` event),
  * 429 = rate-limited (the caller backs off; nothing is retried here).
  */
+// Registries whose RDAP servers we call directly (IANA bootstrap, data.iana.org/rdap/dns.json);
+// any other TLD goes through rdap.org, which redirects to the registry when one exists.
+const RDAP_DIRECT = { com: 'https://rdap.verisign.com/com/v1/domain/', net: 'https://rdap.verisign.com/net/v1/domain/' };
+const RDAP_UA = 'AvianceBot/1.0 (+aviance.online/bot)';
+
+/**
+ * Is `name` registered? RDAP: 404 from the registry = free, 200 = taken.
+ * rdap.org refuses requests without a User-Agent (403), and answers 404 itself
+ * — without redirecting — when a TLD has no RDAP server (e.g. .co), which says
+ * nothing about the name: that is "unknown", never "free".
+ */
 export async function rdapLookup(name, { base = 'https://rdap.org/domain/', timeoutMs = 6000 } = {}) {
   try {
-    const res = await fetchJson(`${base}${encodeURIComponent(name)}`, { service: 'rdap', timeoutMs, retry: false, headers: { accept: 'application/rdap+json' } });
-    if (res.status === 404) return { status: 'free', registeredAt: null };
+    const tld = String(name).split('.').pop().toLowerCase();
+    const direct = RDAP_DIRECT[tld];
+    const url = `${direct || base}${encodeURIComponent(name)}`;
+    const res = await fetchExt(url, { service: 'rdap', timeoutMs, retry: false, headers: { accept: 'application/rdap+json', 'user-agent': RDAP_UA } });
+    const answeredByRegistry = Boolean(direct) || (res.url && !String(res.url).startsWith(base));
+    if (res.status === 404) return { status: answeredByRegistry ? 'free' : 'unknown', registeredAt: null };
     if (res.status === 429) return { status: 'limited', registeredAt: null };
     if (res.status === 200) {
-      const ev = (res.json?.events || []).find((e) => String(e?.eventAction || '').toLowerCase() === 'registration');
+      let json = null;
+      try { json = await res.json(); } catch {}
+      const ev = (json?.events || []).find((e) => String(e?.eventAction || '').toLowerCase() === 'registration');
       const at = ev && Number.isFinite(Date.parse(ev.eventDate)) ? new Date(ev.eventDate).toISOString() : null;
       return { status: 'taken', registeredAt: at };
     }

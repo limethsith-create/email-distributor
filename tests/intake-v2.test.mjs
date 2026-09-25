@@ -142,7 +142,7 @@ function serveApis({ places = [PLACE], idsPages = 3, rdap = {}, registeredAt = '
       const ids = Array.from({ length: 20 }, (_, i) => ({ id: `p${page}-${i}` }));
       return new Response(JSON.stringify({ places: ids, nextPageToken: page % idsPages ? `t${page}` : undefined }), { status: 200 });
     }
-    if (u.includes('rdap.org/domain/')) {
+    if (u.includes('rdap.org/domain/') || u.includes('rdap.verisign.com/')) { // .com/.net go straight to Verisign
       const name = decodeURIComponent(u.split('/domain/')[1]);
       if (name === 'acme-plumbing.com' || name === 'acme.com') return new Response(JSON.stringify({ events: [{ eventAction: 'registration', eventDate: registeredAt }] }), { status: 200 });
       const st = rdap[name] ?? 404;
@@ -637,7 +637,7 @@ test('shopping list waits politely when RDAP says 429, then goes out; Porkbun do
   globalThis.fetch = async (url, init) => {
     const u = String(url);
     if (u.includes('api.porkbun.com')) throw new Error('porkbun down');
-    if (u.includes('rdap.org') && limited && /try|use/.test(u)) return new Response('slow down', { status: 429 });
+    if ((u.includes('rdap.org') || u.includes('rdap.verisign.com')) && limited && /try|use/.test(u)) return new Response('slow down', { status: 429 });
     return apis(url, init);
   };
   const first = await runPriceScout('acme', { now: NOW, deadline: Date.now() + 60000 });
