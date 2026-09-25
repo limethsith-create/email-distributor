@@ -900,6 +900,23 @@ function overpassCount(stateCode, keywords, timeoutMs) {
   return countInState(stateCode, keywords, { timeoutMs });
 }
 
+/**
+ * The company's own spelling of its name, when the site shows one that is the
+ * domain's letters ("pivitstrategy.com" + "PivIT | PivIT Strategy: Managed IT"
+ * → "PivIT Strategy"). null when nothing matches — never a guess.
+ */
+export function nameFromSite(domain, { title = '', orgName = '' } = {}) {
+  const label = String(domain || '').split('.')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (label.length < 3) return null;
+  const letters = (t) => String(t).toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, '');
+  const pieces = [orgName, ...String(title || '').split(/\s+[|–—:-]\s+|\s*[|:]\s*/)].map((t) => squash(decodeEntities(t))).filter((t) => t && t.length <= 60);
+  for (const p of pieces) {
+    const l = letters(p);
+    if (l === label || l.replace(/(inc|llc|co|corp|ltd)$/, '') === label) return p.replace(/,?\s+(inc|llc|corp|ltd)\.?$/i, '');
+  }
+  return null;
+}
+
 /** Flags from the facts (warn = the owner should look; info = context). */
 export function buildFlags({ name, mainDomain, website, business, businessMatched, placesNote, homeError, registeredAt, agencyHit, now = new Date(), newSiteDays = 365, robotsBlocked = false }) {
   const flags = [];
@@ -927,7 +944,15 @@ async function finish(clientId, client, s, { now, R }) {
   const keywords = await cfg(clientId, 'INTAKE.agencyKeywords');
   const website = websiteOut(s.acc, { url: s.origin ? `${s.origin}/` : client.mainDomain ? `https://${client.mainDomain}/` : null, pagesRead: s.pagesRead, limits: R });
   const agencyHit = detectAgency([website.title, website.description, website.headline, ...website.services, application.web_sellsTo, application.notes].filter(Boolean).join(' '), keywords);
-  const name = client.name || client.mainDomain || clientId;
+  // A website application has no company field: the name was made from the
+  // domain ("Pivitstrategy"). The site's own spelling wins ("PivIT Strategy").
+  let name = client.name || client.mainDomain || clientId;
+  const siteName = application.web_companyNameFromDomain === 'yes' ? nameFromSite(client.mainDomain, { title: website.title, orgName: s.acc?.orgName }) : null;
+  if (siteName && siteName !== name) {
+    await updateClient(clientId, { name: siteName });
+    await logEvent(clientId, SYSTEM, 'name_from_site', { from: name, to: siteName });
+    name = siteName;
+  }
   const flags = buildFlags({
     name, mainDomain: client.mainDomain, website, business: s.business, businessMatched: s.businessMatched, placesNote: s.placesNote,
     homeError: s.homeError && s.homeError !== ROBOTS_BLOCKED ? s.homeError : null, robotsBlocked: s.homeError === ROBOTS_BLOCKED,

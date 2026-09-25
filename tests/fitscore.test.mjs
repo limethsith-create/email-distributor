@@ -109,3 +109,12 @@ test('helpers: years and team size are read, not guessed', () => {
   const f = scoreFit(base({ teamText: null, teamCount: 4 }));
   assert.equal(f.parts.find((p) => p.key === 'size').items[0].status, 'unknown', 'a short team page is a minimum, not the size');
 });
+
+test('company name: the website\'s own spelling replaces the one made from the domain, never a guess', async () => {
+  const { nameFromSite } = await import('@/lib/systems/research');
+  assert.equal(nameFromSite('pivitstrategy.com', { title: 'PivIT | PivIT Strategy: Managed IT Solutions' }), 'PivIT Strategy');
+  assert.equal(nameFromSite('acme-plumbing.com', { title: 'Acme Plumbing, LLC — Charlotte' }), 'Acme Plumbing');
+  assert.equal(nameFromSite('burgesscpas.com', { title: 'Home | Burgess Company' }), null, 'no piece spells the domain: keep the old name');
+  assert.equal(nameFromSite('ab.com', { title: 'AB' }), null);
+  assert.equal(nameFromSite('fernit.com', { orgName: 'Fern IT', title: 'Welcome' }), 'Fern IT');
+});
