@@ -155,8 +155,11 @@ export function classifySmtpError(error) {
  * Send a single email with deliverability-optimized headers.
  * @param {object} account - { email, appPassword|password, displayName, smtp? }
  * @param {object} mailOptions - { to, subject, html, text, replyTo, inReplyTo,
- *   references, touch, noTrack, transactional, headers }
+ *   references, touch, noTrack, transactional, headers, attachments, icalEvent }
  *   transactional: true → a 1:1 reply (no List-Unsubscribe headers, no pixel).
+ *   icalEvent: { method, filename, content } — a calendar invite (the Calendar's
+ *   confirmations): nodemailer adds it as a text/calendar part (mail apps show
+ *   "Add to calendar") and as an .ics attachment.
  * @returns {Promise<object>} { success, messageId, accepted, rejected, response,
  *   envelopeTime, messageTime, messageSize, ms, attempts } or on failure
  *   { success: false, error, kind, code, responseCode, command, response, ms, attempts }
@@ -203,6 +206,7 @@ export async function sendEmail(account, mailOptions) {
     ...(references.length ? { references: references.join(' ') } : {}),
     headers,
     ...(Array.isArray(mailOptions.attachments) && mailOptions.attachments.length ? { attachments: mailOptions.attachments } : {}),
+    ...(mailOptions.icalEvent && mailOptions.icalEvent.content ? { icalEvent: mailOptions.icalEvent } : {}),
   };
 
   let attempts = 0;

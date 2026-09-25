@@ -239,7 +239,15 @@ extension (it can pass 30). Rows of clients accepted before this feature (no
 acceptance email) say "Accepted — waiting for them to fill in the onboarding
 page".
 
-**Not built here**: the machine's own booking page from docs/CALENDAR.md
-(a separate contract). It plugs in where the booking line is chosen
-(`bookingLine()` in onboardcall.js) and, on the owner's "Yes", calls the same
-`markBooked`.
+**The Calendar** (docs/CALENDAR.md, built 2026-09-25 — see its "as built"
+section): with no `bookingUrl` the booking line links the machine's own
+booking page ("reply with two or three times" only when that link cannot be
+made). A time they ask for there counts as their answer (the reminders to
+book stop, never overdue while it waits for the owner) and shows as "They
+asked for … — say yes in the Calendar"; the owner's Yes books the call
+(`bookedBy: 'calendar'`). "Mark call booked", "Call done", "They didn't show"
+and calendar invites in the inbox keep the client's one calendar meeting in
+step. The onboarding page's own clock changed with it: one reminder track
+(its Day +2 / +4 reminders only after the call is done) and a Day +7 close
+that counts from their last sign of life and waits while a request or a
+booked call is pending.

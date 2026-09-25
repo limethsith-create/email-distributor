@@ -319,6 +319,8 @@ export function todosFor(ctx) {
   const oc = ctx.onboardCall;
   if (oc) {
     const who = client.contactName || client.name || id;
+    // A time they asked for on the booking page (docs/CALENDAR.md): the owner answers in the Calendar.
+    if (oc.requestedFor && !oc.proposedFor) push('meeting-request', `Say yes to ${who}'s call time — ${ownerWhen(oc.requestedFor)} (your time)`, `They asked ${ago(oc.requestedAt, now)} on the booking page · Yes, Suggest another time or Decline in the Calendar`, true, oc.requestedAt, { type: 'view', view: 'calendar', clientId: id, ...(oc.meetingId ? { meetingId: oc.meetingId } : {}) });
     if (oc.needsReply) push('onboard-reply', `Answer ${who} — they replied about the onboarding call`, `Reply ${ago(oc.lastReplyAt, now)} · it goes from ${oc.fromInbox || 'the onboarding inbox'}, in the same thread`, true, oc.lastReplyAt, view('detail', id, 'onboardCall'));
     else if (oc.status === 'overdue') push('onboard-overdue', `Get ${who} to book the onboarding call — it's overdue`, `Should have been booked by ${ownerWhen(oc.dueBy)} (your time) · ${oc.remindersSent} reminder${oc.remindersSent === 1 ? '' : 's'} sent`, true, oc.dueBy, view('detail', id, 'onboardCall'));
     if (oc.status === 'booked' && oc.bookedFor && now.getTime() > Date.parse(oc.bookedFor) + (oc.callMinutes || 30) * 60e3) {
@@ -442,6 +444,11 @@ function onboardingSimple(ctx, r) {
     if (!oc.bookedFor) return r('call_booked', 'Call booked — check your calendar for the time', 'Take the call, then mark it done', oc.needsReply, oc.bookedAt);
     if (now.getTime() > Date.parse(oc.bookedFor) + (oc.callMinutes || 30) * 60e3) return r('call_booked', 'Call booked — did it happen? Mark it', "Press Call done or They didn't show", true, oc.bookedFor);
     return r('call_booked', `Call booked for ${ownerWhen(oc.bookedFor)} your time`, oc.needsReply ? 'They wrote again — answer them' : `Nothing for you until the call (${ownerDayWord(oc.bookedFor, now)})`, oc.needsReply, oc.bookedAt);
+  }
+  // A time they asked for on the booking page waits for the owner's yes in the Calendar (docs/CALENDAR.md).
+  if (oc && oc.requestedFor && oc.status !== 'held') {
+    if (oc.proposedFor) return r('accepted', `You suggested ${ownerWhen(oc.proposedFor)} your time — waiting for them`, 'Nothing for you: they have a one-click link to say yes', oc.needsReply, oc.requestedAt);
+    return r('accepted', `They asked for ${ownerWhen(oc.requestedFor)} your time — say yes in the Calendar`, 'Open the Calendar: Yes, Suggest another time or Decline', true, oc.requestedAt);
   }
   if (trial.agreementAcceptedAt) return r('setting_up', 'Signed — checking the size of their market', 'Nothing for you yet', false, trial.agreementAcceptedAt);
   if (!oc) return r('accepted', 'Accepted — waiting for them to fill in the onboarding page', 'Nothing for you: we remind them', false, trial.onboardingSentAt);

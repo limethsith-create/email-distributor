@@ -453,3 +453,102 @@ Reload the board / trial after it when `newReplies` or `booked` > 0.
 
 Owner alerts (phone + email, not urgent): `onboard_reply`, `onboard_booked`,
 `onboard_overdue`, `onboard_cancelled`; push `url` = `/#trial/{id}`.
+
+---
+
+# Calendar (2026-09-25)
+
+Contract: docs/CALENDAR.md (its "as built" section lists every decision).
+Every meeting from anywhere is in one calendar: times the applicants ask for
+on the machine's booking page, the owner's "Mark call booked", calendar
+invites found in the onboarding inbox, meetings he adds, and busy blocks.
+Times are UTC ISO; each meeting also carries ready-made labels in Sri Lanka
+time, US Eastern and their zone.
+
+## `GET /api/mc/calendar?from=ISO&to=ISO[&all=1]`
+
+Defaults: `from` = now − 1 day, `to` = `from` + `CALENDAR.daysAhead` days
+(at most 62 days). `400 {error}` when `to` ≤ `from`.
+```jsonc
+{
+  "meetings": [ meeting ],        // held time in [from, to), by start; declined + cancelled only with all=1
+  "requests": [ meeting ],        // every request still waiting for a yes (any date), oldest ask first
+  "settings": { "hours": ["09:00","17:00"], "days": [1,2,3,4,5], "slotMinutes": 30, "ownerZone": "Asia/Colombo",
+                "usZone": "America/New_York", "meetingLink": null,
+                "bufferMinutes": 15, "maxPerDay": 6, "minNoticeHours": 12, "daysAhead": 14, "callMinutes": 30 },
+  "free": [ { "start": "ISO", "minutes": 30 } ]   // open times in the range: call hours, buffer, maxPerDay (no notice period)
+}
+```
+`meeting`:
+```jsonc
+{
+  "id": "m…", "clientId": "ecreek|null", "company": "eCreek IT|null", "person": "Sam Test|null", "email": "…|null",
+  "kind": "onboarding|other", "title": "Onboarding call — eCreek IT",
+  "start": "ISO", "end": "ISO", "minutes": 30,
+  "status": "requested|confirmed|held|no_show|declined|cancelled|blocked",
+  "source": "booking_page|owner|inbox|onboard_card",
+  "theirZone": "America/Denver|null", "note": "…", "declineReason": "…|null", "cancelReason": "…|null",
+  "proposed": "ISO|null",         // the owner's suggestion, waiting for them: the time HELD is `proposed` — draw it there
+  "createdAt": "ISO", "updatedAt": "ISO", "requestedAt": "ISO|null", "confirmedAt": "ISO|null", "sequence": 0,
+  "history": [ { "at": "ISO", "what": "requested|confirmed|suggested|accepted|moved|declined|held|no_show|cancelled|blocked|unblocked",
+                 "by": "them|owner|machine", "via?": "booking_page|inbox|onboard_card|owner", "from?": "ISO (old time)", "reason?": "…" } ],
+  "labels": { "owner": "Tue 6 Oct, 11:30 pm", "eastern": "Tue 6 Oct, 2:00 pm ET",
+              "theirs": "Tue 6 Oct, 12:00 pm MT|null", "proposed": "Wed 7 Oct 10:00 am ET = 7:30 pm Colombo|null" }
+}
+```
+
+## `POST /api/mc/calendar`
+
+One of (→ `{ ok, meeting }`):
+- `{ action: 'confirm', id }` — Yes to a request: they get the confirmation
+  (their zone + Eastern, `meetingLink` or "I'll send the link before the
+  call") with an .ics invite; an onboarding meeting books the onboarding call
+  (`bookedBy: 'calendar'`).
+- `{ action: 'suggest', id, start }` — another time for a request: they get
+  "how about …?" with a one-click "Yes, that works" link and the booking page.
+  The suggested time is held; their yes confirms it (alert `meeting_accepted`).
+- `{ action: 'decline', id, reason? }` — the reason goes to them (default
+  "that time doesn't work on my side."); the time is free again.
+- `{ action: 'move', id, start }` — a confirmed call (or a busy block) to a new
+  time; they get the new time and the updated invite.
+- `{ action: 'cancel', id, reason? }` — a request or a confirmed call; they
+  are told, and a confirmed call is cancelled in their calendar (.ics CANCEL).
+- `{ action: 'held', id }` · `{ action: 'noShow', id }` — after a confirmed
+  call (either can correct the other); kept in step with the onboarding card.
+- `{ action: 'add', clientId|null, title, start, minutes, kind?: 'onboarding' }`
+  — his own meeting, confirmed, nobody emailed. `kind: 'onboarding'` (with a
+  client) makes it that client's onboarding call.
+- `{ action: 'block', start, minutes }` (title "Busy") · `{ action: 'unblock', id }`.
+
+Errors in plain words: `400` (bad input, a time in the past), `404` (no such
+meeting / client), `409` (wrong status for the button, or the time overlaps
+another meeting), `502` (the email to them could not go — nothing changed,
+press again), `503` (the calendar was busy for a moment — press again).
+
+## What changes elsewhere
+
+- `onboardCall` (in `GET /api/mc/hub/{id}`) gains `requestedFor`,
+  `requestedAt`, `proposedFor` (set only while a request waits for the owner)
+  and `meetingId`. Its `label` reads "They asked for Tue 6 Oct, 11:30 pm (your
+  time) — say yes in the Calendar" or "You suggested … — waiting for them".
+- `simple` on board rows: "They asked for Tue 6 Oct, 11:30 pm your time — say
+  yes in the Calendar" with `needsYou: true`.
+- A new to-do `meeting-request:{id}` (urgent) with action
+  `{ type: 'view', view: 'calendar', clientId, meetingId }` — the hub opens
+  its Calendar tab on that request (new `view` value).
+- The trial's conversation (`onboardCall.thread`) shows the calendar emails
+  as `dir: 'out', kind: 'booking'`.
+- Owner alerts (phone + email, not urgent): `meeting_requested` ("Sam (eCreek
+  IT) asked for Tue 6 Oct 2:00 pm ET = 11:30 pm Colombo — say yes in the
+  Calendar"), `meeting_accepted` ("Sam (eCreek IT) said yes to …"); push
+  `url` = `/#calendar`.
+
+## Public (the applicant, signed link token)
+
+- `GET /c/{token}/book` — the booking page (HTML). `?tz=` one of the seven US
+  zones, `?change=1` shows the times under an existing request / booking.
+- `GET /api/c/book/slots?token=&tz=` → `{ zone, slots: [ { start, label } ], existing, closed }`
+- `POST /api/c/book` `{ token, start, note?, tz? }` → `{ ok, meeting }` · 409
+  (the time was just taken) · 400 · 401 · 429 (10 tries per link per hour).
+- `GET /c/{token}/book/accept?m={id}` — the suggested time with one "Yes, that
+  works" button (POST to the same address accepts).

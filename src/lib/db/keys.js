@@ -185,7 +185,8 @@ export const K = {
    * The acceptance email and the call it asks for (hash): sentAt, lastSentAt, subject,
    * fromInbox, messageIds (JSON, every Message-ID in the conversation), dueBy, openedAt,
    * firstReplyAt, lastReplyAt, lastOwnerReplyAt, bookedFor, bookedAt, bookedBy, bookingUid,
-   * heldAt, noShowAt, stoppedAt, cancelledAt, remindersSent, overdueAt, tomorrowSentFor.
+   * heldAt, noShowAt, stoppedAt, cancelledAt, remindersSent, overdueAt, tomorrowSentFor,
+   * and from the Calendar: meetingId, requestedFor, requestedAt, firstRequestAt, proposedFor, theirZone.
    * The status is worked out from these times, never stored.
    */
   onboardCall: (id) => `${c(id)}:onboardcall`,
@@ -196,6 +197,17 @@ export const K = {
   /** IMAP watermarks of the ONBOARDCALL inbox (hash): `{inbox}|{folder}` → {uidValidity, lastUid}. */
   onboardImap: () => 'onboardcall:imapstate',
   // ── end onboarding call ──
+
+  // ── Calendar (docs/CALENDAR.md) ──
+  /** Every meeting (hash): id → meeting JSON (times in UTC ISO). */
+  meetings: () => 'meetings',
+  /** Meetings by start time (sorted set): score = start ms, member = meeting id. */
+  meetingsByStart: () => 'meetings:byStart',
+  /** One writer at a time (string, NX + EX): a slot can never be given twice. */
+  calendarLock: () => 'meetings:lock',
+  /** Booking-page tries per link per hour (string counter, INCR + EX). */
+  bookRate: (tokenHash, hour) => `meetings:rate:${hour}:${tokenHash}`,
+  // ── end calendar ──
 };
 
 /**

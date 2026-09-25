@@ -637,6 +637,10 @@ test('every Stage A template renders with sample data; the agreement fills all b
     // Onboarding call (accepted_call, accepted_call_reminder, onboard_call_tomorrow, onboard_owner_reply)
     callMinutes: 30, bookingLine: 'Book a time that suits you: https://cal.com/limeth/onboarding', onboardingLink: 'https://x/c/t/onboard',
     threadSubject: "You're in — let's book your onboarding call", when: 'Tuesday, October 13 at 11:00 AM EDT', callDay: 'tomorrow', text: 'Tuesday works.\n\nLimeth',
+    // Calendar (meeting_received, meeting_confirmed, meeting_suggested, meeting_declined, meeting_moved, meeting_cancelled)
+    whenShort: 'Tue 13 Oct at 11:00 am ET', minutes: 30, linkLine: "I'll send the link before the call.", bookLink: 'https://x/c/t/book',
+    nextLine: 'If the time stops working, pick another here: https://x/c/t/book', asked: 'Tuesday at 2:00 pm', acceptLink: 'https://x/c/t/book/accept?m=m1',
+    cancelText: "I'm sorry — I've had to cancel our call on Tuesday 13 October at 11:00 am Eastern Time.",
   };
   for (const key of Object.keys(STAGE_A_TEMPLATES)) {
     const m = renderTemplate(key, sample);

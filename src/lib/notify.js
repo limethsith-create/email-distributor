@@ -172,9 +172,10 @@ export async function getAlertLog(limit = 200) {
  * inbox. The onboarding-call emails also pass `pixelUrl` (their one open
  * pixel), `linkify` (clickable links in the HTML part) and `inReplyTo` /
  * `references` so the conversation threads. The result carries the
- * Message-ID and the sending address so replies can be matched.
+ * Message-ID and the sending address so replies can be matched. The
+ * Calendar's emails pass `icalEvent` (an .ics invite or cancellation).
  */
-export async function notifyClient(clientId, key, vars = {}, { to = null, from = null, dedupe = key, attachments = null, pixelUrl = null, linkify = false, inReplyTo = null, references = null } = {}) {
+export async function notifyClient(clientId, key, vars = {}, { to = null, from = null, dedupe = key, attachments = null, pixelUrl = null, linkify = false, inReplyTo = null, references = null, icalEvent = null } = {}) {
   const { renderTemplate } = await import('@/lib/templates/client');
   const { getClient } = await import('@/lib/db/client');
   const client = await getClient(clientId);
@@ -220,6 +221,7 @@ export async function notifyClient(clientId, key, vars = {}, { to = null, from =
     html: `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;white-space:pre-wrap">${body}</div>${pixel}`,
     transactional: true, noTrack: true,
     ...(attachments ? { attachments } : {}),
+    ...(icalEvent ? { icalEvent } : {}),
     ...(inReplyTo ? { inReplyTo } : {}),
     ...(references && references.length ? { references } : {}),
   });

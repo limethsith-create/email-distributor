@@ -110,4 +110,10 @@ export const ALERTS = {
   onboard_overdue: { urgent: false, title: 'Onboarding call not booked yet: {person}' },
   onboard_cancelled: { urgent: false, title: 'Onboarding call cancelled: {person}' },
   // ── end onboarding call ──
+  // ── Calendar (docs/CALENDAR.md) ── phone + email, not urgent for the same reason: the
+  // Calendar's "waiting for your yes" list and the trial's to-do carry it until answered.
+  // {who} = "Sam (eCreek IT)", {when} = "Tue 30 Sep 2:00 pm ET = 11:30 pm Colombo".
+  meeting_requested: { urgent: false, title: '{who} asked for {when} — say yes in the Calendar' },
+  meeting_accepted: { urgent: false, title: '{who} said yes to {when}' },
+  // ── end calendar ──
 };

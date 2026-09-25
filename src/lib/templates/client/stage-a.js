@@ -218,4 +218,89 @@ If that time no longer works, reply to this email and we'll find another.
     subject: 'Re: {threadSubject}',
     body: '{text}',
   },
+
+  // ── Calendar (docs/CALENDAR.md) ──
+  // Same inbox as the onboarding call. {when} is their own time zone first, with
+  // Eastern beside it when they are elsewhere ("Tuesday 30 September at 1:00 pm
+  // Central Time (2:00 pm Eastern)"). {bookLink} is their booking page; {nextLine},
+  // {linkLine} and {cancelText} are whole sentences built by systems/calendar.js.
+  // Replies to a request thread under the acceptance email ({threadSubject});
+  // confirmations, moves and cancellations carry their own subject and an .ics.
+  meeting_received: {
+    from: 'onboard',
+    subject: 'Re: {threadSubject}',
+    body: `Hi {firstName},
+
+Got it — you asked for {when}. I'll confirm shortly.
+
+If you'd rather change it, pick another time here: {bookLink}
+
+{ownerName}`,
+  },
+
+  meeting_confirmed: {
+    from: 'onboard',
+    subject: 'Confirmed: our call on {whenShort}',
+    body: `Hi {firstName},
+
+Confirmed: our {minutes}-minute call is {when}.
+
+{linkLine}
+
+I've attached a calendar invite. {nextLine}
+
+{ownerName}`,
+  },
+
+  meeting_suggested: {
+    from: 'onboard',
+    subject: 'Re: {threadSubject}',
+    body: `Hi {firstName},
+
+Thanks for picking a time. {asked} doesn't work for me, I'm afraid — how about {when}?
+
+Yes, that works: {acceptLink}
+
+Or pick any other time here: {bookLink}
+
+{ownerName}`,
+  },
+
+  meeting_declined: {
+    from: 'onboard',
+    subject: 'Re: {threadSubject}',
+    body: `Hi {firstName},
+
+Sorry, I can't do {asked}: {reason}
+
+Please pick another time here: {bookLink}
+
+{ownerName}`,
+  },
+
+  meeting_moved: {
+    from: 'onboard',
+    subject: 'New time for our call: {whenShort}',
+    body: `Hi {firstName},
+
+I've had to move our call. The new time is {when}.
+
+{linkLine}
+
+The updated calendar invite is attached. {nextLine}
+
+{ownerName}`,
+  },
+
+  meeting_cancelled: {
+    from: 'onboard',
+    subject: 'Cancelled: our call on {whenShort}',
+    body: `Hi {firstName},
+
+{cancelText}
+
+{nextLine}
+
+{ownerName}`,
+  },
 };

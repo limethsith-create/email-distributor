@@ -467,6 +467,32 @@ export const DEFAULTS = {
     checkEveryMinutes: 2,
   },
   // ── end onboarding call ──
+  // ── Calendar (docs/CALENDAR.md) ── one machine-wide block. The machine's own booking
+  // page offers these times; the hub's Calendar tab shows every meeting.
+  CALENDAR: {
+    // The owner's call hours in US Eastern time. 09:00–17:00 Eastern is
+    // 6:30 pm – 2:30 am Sri Lanka time in US summer (EDT) and 7:30 pm – 3:30 am in
+    // US winter (EST). Sri Lanka has no daylight saving; the US does.
+    hours: ['09:00', '17:00'],
+    // Days calls can happen (0 = Sunday … 6 = Saturday, counted in US Eastern). US holidays are always closed.
+    days: [1, 2, 3, 4, 5],
+    // The booking page offers a start every slotMinutes (15 or 30). The call itself lasts ONBOARDCALL.callMinutes.
+    slotMinutes: 30,
+    // Minutes kept free after every meeting.
+    bufferMinutes: 15,
+    // Calls a day at most (US Eastern day). Busy blocks do not count.
+    maxPerDay: 6,
+    // No time sooner than this many hours from now is offered.
+    minNoticeHours: 12,
+    // How many days ahead the booking page shows.
+    daysAhead: 14,
+    // Your Zoom / Google Meet link, put in every confirmation. null → "I'll send the link before the call".
+    meetingLink: null,
+    // Your own time zone (the hub shows it first) and the US zone the hours above are in.
+    ownerZone: 'Asia/Colombo',
+    usZone: 'America/New_York',
+  },
+  // ── end calendar ──
   // US federal holidays, observed dates. Update once a year (one line per year).
   US_HOLIDAYS: [
     '2026-01-01', '2026-01-19', '2026-02-16', '2026-05-25', '2026-06-19', '2026-07-03',

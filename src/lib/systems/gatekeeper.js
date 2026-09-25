@@ -19,7 +19,7 @@ import { addPromise } from '@/lib/db/promises';
 import { mintToken, pageUrl, TTL } from '@/lib/pagetokens';
 import { dayKeyIn, daysBetween, addDays, ET } from '@/lib/time';
 import { io, truthy, asArray, firstNameOf, ownerName, sendClient, formatDay, nextUsBusinessDay, isPublicUrl } from '@/lib/systems/intake-io';
-import { sendAcceptance } from '@/lib/systems/onboardcall';
+import { sendAcceptance, readCall, onboardPageClock } from '@/lib/systems/onboardcall';
 
 const SYSTEM = 'gatekeeper';
 /** Earlier records in these states do not block a new application (no trial was ever run). */
@@ -513,15 +513,35 @@ export async function declineQueued(clientId, reasonText, { now = io.now() } = {
  * Day +2 / +4 reminders and the Day +7 close, counted in ET calendar days
  * from onboardingSentAt. A client who has accepted the agreement is waiting
  * on the Market Counter, not silent, and is never closed here.
+ *
+ * An applicant who got the onboarding-call email (onboardcall.onboardPageClock):
+ * one reminder track — the call's own reminders until the call is done, the
+ * page reminders only after it — and the close is extended, never early: it
+ * counts from their last sign of life (a reply, a time they asked for, the
+ * booked call, the call itself) and waits while a time they asked for is
+ * unanswered or a booked call is still ahead.
  */
 export async function runOnboardingNudge({ clientId, now = io.now() }) {
   const client = await getClient(clientId);
   if (!client || client.state !== 'onboarding') return { skipped: 'state' };
   const trial = await getTrial(clientId);
   if (trial.agreementAcceptedAt) return { skipped: 'accepted' };
-  const since = trial.onboardingSentAt || client.stateChangedAt || client.createdAt;
+  const sentAt = trial.onboardingSentAt || client.stateChangedAt || client.createdAt;
+  const clock = onboardPageClock(await readCall(clientId), sentAt, now);
+  const since = clock.from;
+  const moved = Date.parse(since) !== Date.parse(sentAt);
   const day = daysBetween(dayKeyIn(ET, new Date(since)), dayKeyIn(ET, now));
   const { reminderDays, closeDay } = await cfg(clientId, 'ONBOARD');
+
+  if (moved || clock.hold) {
+    // Tell the hub (and the log, once per new date) that the close moved.
+    const closesOn = clock.hold ? 'held' : addDays(dayKeyIn(ET, new Date(since)), closeDay);
+    if (trial.onboardingClosesOn !== closesOn) {
+      await kv.hset(K.trial(clientId), { onboardingClosesOn: closesOn });
+      await logEvent(clientId, SYSTEM, 'close_extended', { from: since, closesOn, why: clock.hold || 'they were in touch' });
+    }
+  }
+  if (clock.hold) return { day, sent: null, extended: true, hold: clock.hold };
 
   if (day >= closeDay) {
     await sendClient(clientId, 'closed_silent', { firstName: firstNameOf(client.contactName), ownerName: await ownerName(clientId) }, { dedupe: 'closed_silent' });
@@ -531,6 +551,8 @@ export async function runOnboardingNudge({ clientId, now = io.now() }) {
     return { closed: true, promoted: q.promoted };
   }
 
+  // One reminder track: the onboarding call's reminders own the time before the call.
+  if (!clock.reminders) return { day, sent: null, ...(moved ? { extended: true } : {}) };
   const due = reminderDays.filter((d) => day >= d).sort((a, b) => b - a)[0];
   if (due === undefined) return { day, sent: null };
   const sent = asArray(trial.onboardingRemindersSent).map(Number);

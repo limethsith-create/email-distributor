@@ -140,13 +140,15 @@ test('Approve sends exactly one accepted_call email from the ONBOARDCALL inbox, 
   assert.equal(toSam().length, 1);
 });
 
-test('no ONBOARDCALL.inbox → the owner sender; no booking link → "reply with times"', async () => {
+test('no ONBOARDCALL.inbox → the owner sender; no booking link → the machine\'s own booking page (docs/CALENDAR.md)', async () => {
   await pending();
   await approveApplication(ID, { now: MON });
   const m = toSam()[0];
   assert.match(m.from, /<owner@aviance\.test>$/);
-  assert.match(m.text, /Reply with two or three times that suit you and I'll confirm one\./);
-  assert.doesNotMatch(m.text, /Book a time/);
+  const link = m.text.match(/Book a time that suits you: https:\/\/app\.test\/c\/([^/\s]+)\/book\b/);
+  assert.ok(link, 'the booking page, not "reply with times"');
+  assert.equal((await readToken(link[1], { purpose: 'book' })).clientId, ID);
+  assert.doesNotMatch(m.text, /Reply with two or three times/);
   assert.equal((await onboardCallFor(ID, { now: MON })).bookingUrl, null);
 });
 
