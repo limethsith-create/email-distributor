@@ -242,9 +242,25 @@ Places + a quick market count). No AI: extracted facts only. Re-run:
   "website": { "url": "…", "title": "…", "description": "…", "headline": "…", "services": ["…"], "locations": ["Charlotte, NC"], "phones": ["…"], "emails": ["…"], "socials": { "linkedin": "…", "facebook": "…" }, "teamHint": "12 people on the team page|null", "yearsHint": "Since 2009|null", "pagesRead": 4 },
   "business": { "name": "…", "address": "…", "category": "Plumber", "rating": 4.7, "reviews": 128, "mapsUrl": "…", "phone": "…" } | null,
   "market": { "query": "property management companies in Charlotte, NC", "estimate": 1450, "source": "places|overpass" } | null,
-  "flags": [ { "level": "warn|info", "text": "Website mentions 'appointment setting' — could be an agency" } ]
+  "flags": [ { "level": "warn|info", "text": "Website mentions 'appointment setting' — could be an agency" } ],
+  "score": {                                          // Fit Score (systems/fitscore.js), null until research is done
+    "score": 82 | null,                               // points earned out of the points that could be checked, 0–100
+    "grade": "A|B|C|D" | null,                        // A ≥ 80, B ≥ 65, C ≥ 50 (FITSCORE.grades); any dealbreaker → D
+    "label": "Strong fit|Good fit|Borderline|Poor fit|Not a fit|Needs a look",
+    "confidence": 74,                                 // how many of the 100 points could be checked
+    "summary": "82/100 — strong fit (74 of 100 points checked). Strongest: …; weakest: ….",
+    "parts": [ { "key": "b2b|deal|size|proof|market|ready", "label": "Sells to businesses", "points": 18, "checked": 20, "max": 20, "pct": 90 | null,
+                 "items": [ { "text": "Website talks to businesses (9 mentions)", "status": "good|ok|bad|unknown", "max": 12, "points": 12 | null,
+                              "evidence": { "quote": "sentence from their site", "page": "/services" } | null, "known": true } ] } ],
+    "dealbreakers": [ { "text": "Sells cold outreach themselves (“cold email”) — a competitor", "evidence": { "quote": "…", "page": "/" } | null } ],
+    "questions": [ "How many people work at the company?" ]   // one per unknown, for the call
+  }
 }
 ```
+The board row of an applicant under review carries the short form:
+`row.fitScore = { score, grade, label, confidence } | null`, and the review
+to-do's detail says "fit score 82/100 (Strong fit)". When research finishes
+after the `new_application` alert, one `application_scored` alert follows.
 
 ## Domains + inboxes — `shopping` (in `GET /api/mc/clients/{id}/purchase` and `GET /api/mc/hub/{id}`)
 

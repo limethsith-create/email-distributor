@@ -67,6 +67,7 @@ export const ALERTS = {
   promo_expired: { urgent: false, title: 'Promo expired: {registrar} {code}' },
   booking_link_broken: { urgent: false, title: 'Booking link problem: {clientId}' },
   new_application: { urgent: true, title: 'New trial application: {company}' },
+  application_scored: { urgent: false, title: 'Fit score for {company}: {score}' },
   research_failed: { urgent: false, title: 'Applicant research could not finish: {clientId}' },
   // ── end Stage A ──
   // ── Stage B additions ──

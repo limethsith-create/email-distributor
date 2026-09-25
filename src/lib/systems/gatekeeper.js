@@ -387,6 +387,8 @@ async function holdForReview(clientId, app, { answers = [], fit = null, extras =
     body: `${app.contactName} <${app.contactEmail}> applied for a trial from the website.\n\n${fit?.summary || ''}${researchText ? `\n\n${researchText}` : ''}\n\n${lines}`,
     did: 'Saved it and held it for you. Approve or decline it on the Trials tab of the hub; they get an answer only when you press one.',
   });
+  // Research still running: its fit score follows in one application_scored alert (research.js finish).
+  await kv.hset(K.application(clientId), { alertedAt: io.now().toISOString() });
   return { outcome: 'review' };
 }
 

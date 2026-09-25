@@ -100,7 +100,9 @@ export const DEFAULTS = {
     // Lead-gen / outbound / SDR agencies are not trial clients (trial doc §2).
     agencyKeywords: ['lead gen', 'lead-gen', 'leadgen', 'lead generation', 'outbound agency', 'outbound sales agency',
       'sdr agency', 'sdr as a service', 'sdr-as-a-service', 'sales development agency', 'appointment setting',
-      'appointment setters', 'cold email agency', 'cold outreach agency', 'demand generation agency'],
+      'appointment setters', 'cold email agency', 'cold outreach agency', 'demand generation agency',
+      'cold email software', 'cold email platform', 'cold email tool', 'cold outreach software', 'cold outreach platform',
+      'email outreach platform', 'sales engagement platform', 'email warmup', 'email warm-up', 'b2b lead database'],
     applyPerHourPerIp: 5,
     applyClaimSeconds: 600,
   },
@@ -159,7 +161,7 @@ export const DEFAULTS = {
     userAgent: 'AvianceBot/1.0 (+aviance.online/bot)',
     pageTimeoutMs: 10_000,        // per page
     maxBytes: 1_000_000,          // per page; the rest is not read
-    pages: ['home', 'about', 'services', 'team', 'contact', 'locations'],
+    pages: ['home', 'about', 'services', 'team', 'contact', 'locations', 'industries', 'proof', 'pricing', 'careers'], // the last four only when the home page links to them
     inRequestMs: 12_000,          // how long POST /api/apply waits for research before alerting the owner without it
     maxServices: 12,
     maxLocations: 10,
@@ -169,6 +171,14 @@ export const DEFAULTS = {
     marketQueries: 2,             // "{customers} in {city}", "{customers} in {state}" — IDs-only (free)
     newSiteDays: 365,             // domain registered less than this many days ago → "very new site"
     prefill: true,                // fill empty onboarding fields from research (company name, address, cities, customers)
+  },
+  // ── Fit Score (systems/fitscore.js): the applicant against the owner's fit gate ──
+  FITSCORE: {
+    weights: { b2b: 20, deal: 20, size: 15, proof: 15, market: 15, ready: 15 }, // points per part (sum 100)
+    grades: { A: 80, B: 65, C: 50 }, // below C = D; any dealbreaker = D
+    minConfidence: 50,               // fewer checkable points than this → "Needs a look", not a grade
+    marketMin: 500,                  // fewer reachable companies → dealbreaker
+    marketGood: 1000,                // the owner's "at least 1,000 reachable companies"
   },
   // ── Intake v2: Domains (systems/domains.js) ──
   DOMAINS: {

@@ -103,6 +103,14 @@ export function applicationView(raw) {
   };
 }
 
+/** The research Fit Score (systems/fitscore.js) → the board's badge { score, grade, label, confidence }, or null. */
+export function scoreBadge(raw) {
+  const f = parseJ(raw, null);
+  if (!f || !f.label) return null;
+  return { score: typeof f.score === 'number' ? f.score : null, grade: f.grade || null, label: f.label, confidence: f.confidence ?? null };
+}
+const badgeText = (b) => (b ? `fit score ${b.score !== null ? `${b.score}/100` : '—'} (${b.label})` : '');
+
 const underReview = (ctx) => ctx.client.state === 'applied' && ctx.application?.review === 'pending';
 
 // ─── state label ──────────────────────────────────────────────────────────────
@@ -302,7 +310,7 @@ export function todosFor(ctx) {
     const a = ctx.application;
     const since = a.receivedAt || client.createdAt;
     push('review', `Review ${client.name || id}'s trial application`,
-      `${a.source === 'website' ? 'From the website' : 'Application'} ${ago(since, now)}${a.fit?.summary ? ` · ${a.fit.summary.charAt(0).toLowerCase()}${a.fit.summary.slice(1)}` : ''}`,
+      `${a.source === 'website' ? 'From the website' : 'Application'} ${ago(since, now)}${ctx.fitScore ? ` · ${badgeText(ctx.fitScore)}` : ''}${a.fit?.summary ? ` · ${a.fit.summary.charAt(0).toLowerCase()}${a.fit.summary.slice(1)}` : ''}`,
       Boolean(since) && now.getTime() - Date.parse(since) > 12 * 3600e3, since, view('detail', id, 'application'));
   }
   if (st === 'awaiting_purchase' && shopping.sentAt && !shopping.boughtAt) {
@@ -379,13 +387,14 @@ export async function loadContext(client, { alerts = null, now = new Date() } = 
   const inboxes = inboxesRaw.map(({ passwordEnc, ...r }) => ({ ...r, hasPassword: Boolean(passwordEnc) }));
   const hot = Object.values((await kv.hgetall(K.hot(id)).catch(() => null)) || {});
   const application = applicationView(await kv.hgetall(K.application(id)).catch(() => null));
+  const fitScore = application ? scoreBadge(await kv.hget(K.research(id), 'score').catch(() => null)) : null;
   const openAlerts = allAlerts.filter((a) => a.clientId === id && !a.acknowledged);
   return {
     client, trial: trial || {}, profile, domain, checks, shopping, inboxes,
     leads: extras.leadsByStatus || {}, lf, approval, sequence: sequence || {}, counters: extras.counters || {},
     bookings: extras.bookings || [], replies: extras.replies || [], repliesByKind: extras.repliesByKind || {}, hot,
     invoice: extras.invoice, promises: extras.promises || [], pacelog, reports: extras.reports || [], upcoming: extras.upcoming || [],
-    runState, application, alerts: openAlerts, day: extras.trialDay, health: extras.health, now: vnow, minMarket: await cfg(id, 'MIN_MARKET'),
+    runState, application, fitScore, alerts: openAlerts, day: extras.trialDay, health: extras.health, now: vnow, minMarket: await cfg(id, 'MIN_MARKET'),
   };
 }
 
@@ -396,6 +405,7 @@ export async function hubRow(client, { alerts, now = new Date() } = {}) {
   return {
     ...base,
     stateLabel: stateLabelFor(ctx),
+    fitScore: ctx.fitScore || null,
     contactName: client.contactName || null, contactEmail: client.contactEmail || null, website: client.website || null,
     todo: todosFor(ctx),
     systems: systemsFor(ctx),

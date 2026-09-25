@@ -6,7 +6,8 @@
 
 import { fetchJson } from '@/lib/ext/http';
 
-const URL = 'https://overpass-api.de/api/interpreter';
+/** The main server is often busy; the public mirrors serve the same data. */
+export const OVERPASS_URLS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
 
 const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\"]/g, '\\$&');
 
@@ -17,18 +18,24 @@ export function buildCountQuery(stateCode, keywords) {
 }
 
 /** Count of matching features in one state. Throws on failure. */
-export async function countInState(stateCode, keywords) {
-  const res = await fetchJson(URL, {
-    service: 'overpass',
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'AvianceBot/1.0 (+aviance.online/bot)' },
-    body: `data=${encodeURIComponent(buildCountQuery(stateCode, keywords))}`,
-    timeoutMs: 15000,
-    retry: false,
-  });
-  if (!res.ok || !res.json) throw new Error(`overpass ${res.status}`);
-  const el = (res.json.elements || []).find((e) => e.type === 'count');
-  const total = Number(el?.tags?.total);
-  if (!Number.isFinite(total)) throw new Error('overpass: no count in response');
-  return total;
+export async function countInState(stateCode, keywords, { timeoutMs = 15000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let last = 'overpass unreachable';
+  for (const url of OVERPASS_URLS) {
+    const left = deadline - Date.now();
+    if (left < 2000) break;
+    const res = await fetchJson(url, {
+      service: 'overpass',
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'AvianceBot/1.0 (+aviance.online/bot)' },
+      body: `data=${encodeURIComponent(buildCountQuery(stateCode, keywords))}`,
+      timeoutMs: Math.min(15000, left),
+      retry: false,
+    }).catch((err) => ({ ok: false, status: 0, error: err?.message }));
+    const el = res.ok ? (res.json?.elements || []).find((e) => e.type === 'count') : null;
+    const total = Number(el?.tags?.total);
+    if (Number.isFinite(total)) return total;
+    last = res.ok ? 'overpass: no count in response' : `overpass ${res.status || res.error || 'error'}`;
+  }
+  throw new Error(last);
 }

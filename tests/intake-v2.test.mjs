@@ -289,7 +289,7 @@ test('research run: crawl (robots honoured), Places, domain age, market preview,
   const id = await applied();
   await startResearch(id, { now: NOW });
   assert.equal((await getClient(id)).researchStep, 'running');
-  assert.deepEqual(await researchView(id), { status: 'pending', at: NOW.toISOString(), error: null, summary: null, website: null, business: null, market: null, flags: [] });
+  assert.deepEqual(await researchView(id), { status: 'pending', at: NOW.toISOString(), error: null, summary: null, website: null, business: null, market: null, flags: [], score: null });
 
   const r = await runResearch(id, { now: NOW, deadline: Date.now() + 60000 });
   assert.equal(r.status, 'done');
@@ -300,7 +300,7 @@ test('research run: crawl (robots honoured), Places, domain age, market preview,
   assert.ok(pageLog.every((p) => p.ua === 'AvianceBot/1.0 (+aviance.online/bot)' && p.redirect === 'manual' && p.service === 'crawl'));
 
   const v = await researchView(id);
-  assert.deepEqual(Object.keys(v), ['status', 'at', 'error', 'summary', 'website', 'business', 'market', 'flags']);
+  assert.deepEqual(Object.keys(v), ['status', 'at', 'error', 'summary', 'website', 'business', 'market', 'flags', 'score']);
   assert.deepEqual(Object.keys(v.website), ['url', 'title', 'description', 'headline', 'services', 'locations', 'phones', 'emails', 'socials', 'teamHint', 'yearsHint', 'pagesRead']);
   assert.deepEqual(Object.keys(v.business), ['name', 'address', 'category', 'rating', 'reviews', 'mapsUrl', 'phone']);
   assert.deepEqual(Object.keys(v.market), ['query', 'estimate', 'source']);
@@ -331,7 +331,15 @@ test('research run: crawl (robots honoured), Places, domain age, market preview,
   const before = pageLog.length + fetchLog.length;
   assert.equal((await runResearch(id, { now: NOW })).status, 'done');
   assert.equal(pageLog.length + fetchLog.length, before);
-  assert.match(researchLine(v), /^Research: Acme Plumbing is a plumber/);
+  assert.match(researchLine(v), /^Fit score: \d+\/100/);
+  assert.match(researchLine(v), /\nResearch: Acme Plumbing is a plumber/);
+  // The Fit Score came with the research: six parts, facts only, Google's 4.7★ from 128 reviews counted.
+  assert.equal(v.score.parts.length, 6);
+  assert.equal(typeof v.score.score, 'number');
+  assert.ok(v.score.confidence > 0 && v.score.confidence <= 100);
+  const reviews = v.score.parts.find((p) => p.key === 'proof').items.find((i) => /Google/.test(i.text));
+  assert.equal(reviews.text, 'Google: 4.7★ from 128 reviews');
+  assert.equal(reviews.status, 'good');
 });
 
 test('research is bounded per run and resumes where it stopped', async () => {

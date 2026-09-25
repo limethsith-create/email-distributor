@@ -96,7 +96,7 @@ export function mapWebsiteForm(raw = {}) {
     reviewAgreed: raw.agree === true || lc(raw.agree) === 'true' || lc(raw.agree) === 'yes' || lc(raw.agree) === 'on' ? 'yes' : 'no',
     notes: [raw.sell && `Sells: ${pick(raw.sell)}`, raw.then && `If it works: ${pick(raw.then)}`, raw.notes && `Notes: ${pick(raw.notes)}`, proof.length && `Open to: ${proof.join(', ')}`].filter(Boolean).join('\n').slice(0, 2000),
   };
-  const extras = { sellsTo: pick(raw.sell).slice(0, 400), city, state: state || '', valueBand: pick(raw.value), capacityBand: pick(raw.capacity), ifItWorks: pick(raw.then), calendarAnswer: pick(raw.calendar), companyNameFromDomain: 'yes' };
+  const extras = { sellsTo: pick(raw.sell).slice(0, 400), city, state: state || '', valueBand: pick(raw.value), capacityBand: pick(raw.capacity), ifItWorks: pick(raw.then), calendarAnswer: pick(raw.calendar), strangersAnswer: pick(raw.strangers), companyNameFromDomain: 'yes' };
   return { fields, extras, answers, mainDomain };
 }
 

@@ -37,17 +37,20 @@ import { cfg } from '@/lib/config';
 import { getClient, getProfile, getTrial, updateClient } from '@/lib/db/client';
 import { logEvent } from '@/lib/db/events';
 import { placesConfigured, textSearchIds, textSearchBusiness } from '@/lib/ext/places';
-import { buildCountQuery } from '@/lib/ext/overpass';
-import { fetchJson } from '@/lib/ext/http';
+import { countInState } from '@/lib/ext/overpass';
 import { rdapLookup } from '@/lib/ext/porkbun';
 import { isThrottled } from '@/lib/systems/usage';
 import { buildQueries, estimateFrom } from '@/lib/systems/market';
 import { detectAgency } from '@/lib/systems/gatekeeper';
 import { io, asArray, asObject, isPublicUrl } from '@/lib/systems/intake-io';
 import { STATES, stateCode, stateOfCity, isUsPostalAddress } from '@/lib/systems/usgeo';
+import { pageSignals, mergeSignals } from '@/lib/systems/fitsignals';
+import { scoreFit, fitScoreLine } from '@/lib/systems/fitscore';
 
 const SYSTEM = 'research';
-const KINDS = ['home', 'about', 'services', 'team', 'contact', 'locations'];
+const KINDS = ['home', 'about', 'services', 'team', 'contact', 'locations', 'industries', 'proof', 'pricing', 'careers'];
+/** Read only when the home page links to them (no blind guesses at /proof or /pricing). */
+const LINKED_ONLY = new Set(['industries', 'proof', 'pricing', 'careers']);
 /** After this many runs the research finishes with whatever it has (a site that always times out cannot loop forever). */
 const MAX_RUNS = 15;
 const ROBOTS_BLOCKED = 'robots.txt does not allow reading the site';
@@ -365,6 +368,10 @@ const LINK_PATTERNS = {
   team: /^\/(team|our-team|staff|our-staff|our-people|people|leadership|meet-the-team|meet-our-team|about\/team|about-us\/team|about\/our-team)\/?$/i,
   contact: /^\/(contact|contact-us|contactus)\/?$/i,
   locations: /^\/(locations?|service-areas?|areas-we-serve|areas-served|where-we-serve|our-locations)\/?$/i,
+  industries: /^\/(industries|industries-we-serve|who-we-serve|sectors|markets|clients-we-serve)\/?$/i,
+  proof: /^\/(testimonials?|reviews|case-studies|case-study|success-stories|our-clients|clients|portfolio|our-work)\/?$/i,
+  pricing: /^\/(pricing|plans|plans-and-pricing|packages|rates)\/?$/i,
+  careers: /^\/(careers?|jobs|join-us|join-our-team|work-with-us)\/?$/i,
 };
 
 const sameSite = (a, b) => String(a).replace(/^www\./, '') === String(b).replace(/^www\./, '');
@@ -419,6 +426,7 @@ export function extractPage(html, { url, kind = 'home' } = {}) {
   for (const e of schema.emails) { const c = cleanEmail(e); if (c) emails.push(c); }
 
   const { teamCount, teamText } = teamFacts(html, text, kind, schema);
+  const signals = pageSignals(lines.join('\n'), { hrefs: as.map((a) => a.href), page: base.pathname || '/' });
   return {
     title: squash(decodeEntities((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '')) || null,
     description: metaContent(html, 'description') || metaContent(html, 'og:description') || null,
@@ -433,6 +441,7 @@ export function extractPage(html, { url, kind = 'home' } = {}) {
     teamCount,
     teamText,
     yearsHint: yearsFacts(text, schema),
+    signals,
   };
 }
 
@@ -453,6 +462,7 @@ export function mergeFacts(acc, page, kind) {
   if (page.teamCount && !a.teamCount) a.teamCount = page.teamCount;
   a.teamText = a.teamText || page.teamText;
   a.yearsHint = a.yearsHint || page.yearsHint;
+  a.signals = mergeSignals(a.signals || {}, page.signals || {});
   return a;
 }
 
@@ -740,7 +750,7 @@ export async function runResearch(clientId, { now = io.now(), deadline = Date.no
           const page = extractPage(home.html, { url: home.url, kind: 'home' });
           s.acc = mergeFacts(s.acc, page, 'home');
           s.pagesRead = 1;
-          s.queue = (R.pages || KINDS).filter((k) => k !== 'home' && KINDS.includes(k)).map((k) => ({ kind: k, url: page.links[k] || pageUrlFor(s.origin, k) }));
+          s.queue = (R.pages || KINDS).filter((k) => k !== 'home' && KINDS.includes(k) && (!LINKED_ONLY.has(k) || page.links[k])).map((k) => ({ kind: k, url: page.links[k] || pageUrlFor(s.origin, k) }));
           s.step = 'pages';
         }
       }
@@ -885,21 +895,9 @@ async function marketStep(clientId, client, s, { deadline }) {
   return 'done';
 }
 
-/** ext/overpass countInState with a caller-chosen timeout (fits the tick / the apply request). */
-async function overpassCount(stateCode, keywords, timeoutMs) {
-  const res = await fetchJson('https://overpass-api.de/api/interpreter', {
-    service: 'overpass',
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'AvianceBot/1.0 (+aviance.online/bot)' },
-    body: `data=${encodeURIComponent(buildCountQuery(stateCode, keywords))}`,
-    timeoutMs,
-    retry: false,
-  });
-  if (!res.ok || !res.json) throw new Error(`overpass ${res.status}`);
-  const el = (res.json.elements || []).find((e) => e.type === 'count');
-  const total = Number(el?.tags?.total);
-  if (!Number.isFinite(total)) throw new Error('overpass: no count in response');
-  return total;
+/** ext/overpass countInState (main server, then mirrors) within the time this run has left. */
+function overpassCount(stateCode, keywords, timeoutMs) {
+  return countInState(stateCode, keywords, { timeoutMs });
 }
 
 /** Flags from the facts (warn = the owner should look; info = context). */
@@ -939,14 +937,35 @@ async function finish(clientId, client, s, { now, R }) {
   const profile = await getProfile(clientId);
   const customers = customerPhrase(profile.sellsTo || application.web_sellsTo || '');
   const prefilled = R.prefill ? await prefill(clientId, { business: s.businessMatched ? s.business : null, website, customers }) : [];
+  // Fit Score: their answers + what the site says, against the owner's fit gate.
+  let score = null;
+  try {
+    score = scoreFit({
+      now, application, customers, website, signals: s.acc?.signals || {}, teamCount: s.acc?.teamCount, teamText: s.acc?.teamText,
+      business: s.businessMatched ? s.business : null, placesNote: s.placesNote, market: s.market, registeredAt: s.registeredAt, agencyHit,
+      homeError: s.homeError, fit: await cfg(clientId, 'FIT'),
+    }, await cfg(clientId, 'FITSCORE'));
+  } catch (err) {
+    await logEvent(clientId, SYSTEM, 'score_failed', { error: String(err?.message || err).slice(0, 200) });
+  }
   await kv.hset(K.research(clientId), {
     status: 'done', step: 'done', at: now.toISOString(), error: '', summary,
-    website: J(website), business: J(s.business), market: J(s.market), flags: J(flags), prefilled: J(prefilled),
+    website: J(website), business: J(s.business), market: J(s.market), flags: J(flags), prefilled: J(prefilled), score: J(score),
     acc: '', queue: '', mkt: '',
   });
   await updateClient(clientId, { researchStep: '' });
-  await logEvent(clientId, SYSTEM, 'done', { pagesRead: s.pagesRead, business: Boolean(s.business), market: s.market?.estimate ?? null, flags: flags.length, prefilled });
-  return { status: 'done', summary, flags };
+  await logEvent(clientId, SYSTEM, 'done', { pagesRead: s.pagesRead, business: Boolean(s.business), market: s.market?.estimate ?? null, flags: flags.length, prefilled, score: score?.score ?? null, grade: score?.grade ?? null });
+  // The owner already had the application alert without the score (research ran past the request): send the score now.
+  if (score && application.alertedAt && application.review === 'pending' && client.state === 'applied') {
+    await io.alertOwner('application_scored', {
+      clientId,
+      scope: `${clientId}:score`,
+      vars: { company: name, score: typeof score.score === 'number' ? `${score.score}/100 (${score.label})` : score.label },
+      body: `${score.summary}${score.dealbreakers.length ? `\n\nDealbreakers:\n${score.dealbreakers.map((d) => `- ${d.text}`).join('\n')}` : ''}${score.questions.length ? `\n\nAsk them:\n${score.questions.slice(0, 4).map((q) => `- ${q}`).join('\n')}` : ''}`,
+      did: 'The full scorecard is on the application in the hub. Nothing was sent to them.',
+    }).catch(() => {});
+  }
+  return { status: 'done', summary, flags, score };
 }
 
 /**
@@ -992,6 +1011,7 @@ export function researchFromHash(raw) {
     business: asObject(raw.business),
     market: asObject(raw.market),
     flags: asArray(raw.flags).filter((f) => f && typeof f === 'object'),
+    score: raw.score ? asObject(raw.score) : null,
   };
 }
 
@@ -1005,5 +1025,5 @@ export function researchLine(view) {
   if (view.status === 'failed') return `Research: could not finish (${view.error || 'error'}) — see the hub.`;
   if (view.status !== 'done') return '';
   const warns = (view.flags || []).filter((f) => f.level === 'warn').map((f) => f.text);
-  return [`Research: ${view.summary || 'nothing found automatically.'}`, warns.length ? `Watch: ${warns.join('; ')}` : ''].filter(Boolean).join('\n');
+  return [fitScoreLine(view.score), `Research: ${view.summary || 'nothing found automatically.'}`, warns.length ? `Watch: ${warns.join('; ')}` : ''].filter(Boolean).join('\n');
 }
