@@ -23,6 +23,7 @@ import { getShopping } from '@/lib/systems/pricescout';
 import { researchView } from '@/lib/systems/research';
 import { deliverabilityView } from '@/lib/systems/deliverability';
 import { leadQualityView } from '@/lib/systems/grader';
+import { inquirySummary } from '@/lib/systems/inquiries';
 import { getState as leadfinderState } from '@/lib/systems/leadfinder';
 import { getApproval } from '@/lib/systems/approval';
 import { getPaceLog } from '@/lib/systems/pace';
@@ -412,6 +413,12 @@ export async function hubBoard({ now = new Date() } = {}) {
   const stages = STAGES.map((s) => ({ ...s, clients: board.clients.filter((c) => s.states.includes(c.state) && c.id !== 'aviance' && c.id !== '_test').map((c) => strip(byId.get(c.id))).filter(Boolean) }));
   const others = ['aviance', '_test'].map((id) => byId.get(id)).filter(Boolean).map(strip);
   const todos = rows.filter((r) => r.id !== '_test').flatMap((r) => r.todo);
+  const inquiries = await inquirySummary().catch(() => null);
+  for (const q of (inquiries?.latest || []).filter((x) => x.status === 'new')) {
+    todos.push({ id: `inquiry:${q.id}`, clientId: null, clientName: q.company, text: `New plan inquiry from ${q.company} — call them back`,
+      detail: `${q.name}${q.plan ? ` · ${q.plan[0].toUpperCase()}${q.plan.slice(1)}` : ''}${q.whenHost ? ` · booked for ${q.whenHost}` : ''}`,
+      urgent: true, since: q.at, action: { type: 'view', view: 'inquiry', inquiryId: q.id } });
+  }
   todos.push(...(await machineTodos(board, queue)));
   todos.sort((a, b) => Number(b.urgent) - Number(a.urgent) || String(a.since || '').localeCompare(String(b.since || '')));
   const migrations = (await kv.hgetall(K.migrations()).catch(() => ({}))) || {};
@@ -436,6 +443,7 @@ export async function hubBoard({ now = new Date() } = {}) {
     },
     stages,
     todos,
+    inquiries,
     alerts: alerts.filter((a) => !a.acknowledged).slice(0, 50).map((a) => ({ id: a.id, at: a.at, key: a.key, clientId: a.clientId, title: a.title, urgent: a.urgent, delivered: a.delivered })),
   };
 }

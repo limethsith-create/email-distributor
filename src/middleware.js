@@ -7,7 +7,7 @@
  *  - machine: /api/cron/* and /api/admin/export|import accept
  *             `Authorization: Bearer CRON_SECRET` (or `?token=` for the old
  *             pingers) — or an admin session.
- *  - site:    /api/apply answers the public website (SITE_ORIGINS) cross-origin.
+ *  - site:    /api/apply and /api/inquiry answer the public website (SITE_ORIGINS) cross-origin.
  *  - hub:     /api/mc/* also accepts `Authorization: Bearer <Supabase access
  *             token>` of an allowed hub admin, with CORS for the hub's origin.
  *  - admin:   everything else needs the ADMIN_SECRET session cookie.
@@ -21,7 +21,7 @@ import { verifyHubToken, bearerOf, isAllowedOrigin, isSiteOrigin, corsHeaders } 
 
 const PUBLIC = [
   /^\/mc\/login$/, /^\/api\/mc\/login$/, /^\/api\/mc\/logout$/,
-  /^\/api\/unsubscribe(\/|$)/, /^\/api\/track\//, /^\/api\/webhooks\//, /^\/api\/apply$/,
+  /^\/api\/unsubscribe(\/|$)/, /^\/api\/track\//, /^\/api\/webhooks\//, /^\/api\/apply$/, /^\/api\/inquiry$/,
   /^\/api\/c\//, /^\/c\//, /^\/api\/logo$/, /^\/apply$/,
   // Lead Finder job: the route checks LEADFINDER_TOKEN itself.
   /^\/api\/clients\/[^/]+\/profile$/,
@@ -44,8 +44,8 @@ export async function middleware(request) {
     return hubOrigin ? withCors(new NextResponse(null, { status: 204 }), hubOrigin) : new NextResponse(null, { status: 403 });
   }
 
-  // The public website posts trial applications cross-origin.
-  if (pathname === '/api/apply') {
+  // The public website posts trial applications and plan inquiries cross-origin.
+  if (pathname === '/api/apply' || pathname === '/api/inquiry') {
     const site = isSiteOrigin(origin) ? String(origin).replace(/\/+$/, '') : null;
     if (request.method === 'OPTIONS') return site ? withCors(new NextResponse(null, { status: 204 }), site) : new NextResponse(null, { status: 403 });
     return withCors(NextResponse.next(), site);

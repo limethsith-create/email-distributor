@@ -75,9 +75,10 @@ function esc(s) {
  *   body  what happened (plain text)
  *   did   what the system already did (one line)
  *   scope dedupe scope (default clientId or 'global')
+ *   url   hub path the phone notification opens (default the trial or /#alerts)
  * @returns {{sent:boolean, deduped?:boolean, channels?:object}}
  */
-export async function alertOwner(key, { clientId = null, vars = {}, body = '', did = '', scope = null, force = false } = {}) {
+export async function alertOwner(key, { clientId = null, vars = {}, body = '', did = '', scope = null, force = false, url = null } = {}) {
   const spec = ALERTS[key];
   if (!spec) throw new Error(`unknown alert ${key}`);
   const now = new Date();
@@ -114,7 +115,7 @@ export async function alertOwner(key, { clientId = null, vars = {}, body = '', d
   channels.push = await pushToOwner({
     title: spec.urgent ? `Urgent: ${title}` : title,
     body: String(body || title).replace(/\s+/g, ' ').slice(0, 180),
-    url: clientId ? `/#trial/${clientId}` : '/#alerts',
+    url: url || (clientId ? `/#trial/${clientId}` : '/#alerts'),
     tag: `${key}:${dedupeScope}`,
     urgent: Boolean(spec.urgent),
   });

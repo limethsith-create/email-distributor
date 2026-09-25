@@ -175,6 +175,9 @@ export const K = {
   trialLedger: () => 'system:trials:ledger', // clientId -> outcome snapshot (no personal data); survives deletion for KPIs
   testSkipPings: () => 'system:test:skippings', // legacy: now system:heartbeat.skipPingsUntil
   pushSubs: () => 'push:subs', // owner's phones/browsers for Web Push alerts (endpoint hash → subscription)
+  inquiries: () => 'inquiries', // plan inquiries from the website (id → record)
+  inquiryOrder: () => 'inquiries:order', // ids, newest first
+  applyRateInquiry: (ipHash, hour) => `inquiry:rate:${hour}:${ipHash}`,
   // ── end Stage D ──
 };
 

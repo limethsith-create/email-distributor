@@ -293,3 +293,16 @@ the home screen; iOS 16.4+). Under `/api/mc/push/*`, same auth as the rest:
 `{ok, count}` · `POST unsubscribe {endpoint}` · `GET status?endpoint=` → `{subscribed, count}` ·
 `POST test {endpoint?}` → `{ok, sent, failed}`. Payload: `{title, body, url, tag, urgent, at}`;
 `url` is `/#trial/{id}` or `/#alerts`; the same `tag` replaces the previous notification.
+
+## Plan inquiries (paid plans, no trial)
+
+The website's "Book a call" form posts to public `POST /api/inquiry` (CORS for
+SITE_ORIGINS). Each inquiry is saved, the owner gets `new_inquiry` (phone push
++ email; push `url` = `/#inquiry/{id}`), and nothing is sent to the enquirer.
+
+`GET /api/mc/hub` adds `inquiries: { counts: {new, contacted, won, lost}, open, latest: [ {id, at, name, company, plan, status, slotStart, whenHost} ] }`
+and, for each `new` one, a to-do `{ id: "inquiry:{id}", clientName: company, urgent: true, action: { type: "view", view: "inquiry", inquiryId } }`.
+
+`GET /api/mc/inquiries` → `{ inquiries: [record…] (newest first), counts }` where a record is
+`{ id, at, source, status: new|contacted|won|lost, statusAt, notes: [{at, text}], name, email, company, website, sells, plan: starter|growth|scale|null, slotStart, slotEnd (ISO), theirTz, whenTheirs, whenHost (text, owner's time), clientId?, trialOutcome? }`.
+`POST /api/mc/inquiries` `{action:'status', id, status, note?}` · `{action:'note', id, text}` · `{action:'toTrial', id}` (runs the Gatekeeper pre-approved → onboarding link or queue; returns `{ok, clientId, outcome}`).
