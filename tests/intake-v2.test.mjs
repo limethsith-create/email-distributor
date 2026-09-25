@@ -289,7 +289,7 @@ test('research run: crawl (robots honoured), Places, domain age, market preview,
   const id = await applied();
   await startResearch(id, { now: NOW });
   assert.equal((await getClient(id)).researchStep, 'running');
-  assert.deepEqual(await researchView(id), { status: 'pending', at: NOW.toISOString(), error: null, summary: null, website: null, business: null, market: null, flags: [], score: null });
+  assert.deepEqual(await researchView(id), { status: 'pending', at: NOW.toISOString(), error: null, summary: null, website: null, business: null, market: null, flags: [], score: null, deep: null });
 
   const r = await runResearch(id, { now: NOW, deadline: Date.now() + 60000 });
   assert.equal(r.status, 'done');
@@ -300,7 +300,7 @@ test('research run: crawl (robots honoured), Places, domain age, market preview,
   assert.ok(pageLog.every((p) => p.ua === 'AvianceBot/1.0 (+aviance.online/bot)' && p.redirect === 'manual' && p.service === 'crawl'));
 
   const v = await researchView(id);
-  assert.deepEqual(Object.keys(v), ['status', 'at', 'error', 'summary', 'website', 'business', 'market', 'flags', 'score']);
+  assert.deepEqual(Object.keys(v), ['status', 'at', 'error', 'summary', 'website', 'business', 'market', 'flags', 'score', 'deep']);
   assert.deepEqual(Object.keys(v.website), ['url', 'title', 'description', 'headline', 'services', 'locations', 'phones', 'emails', 'socials', 'teamHint', 'yearsHint', 'pagesRead']);
   assert.deepEqual(Object.keys(v.business), ['name', 'address', 'category', 'rating', 'reviews', 'mapsUrl', 'phone']);
   assert.deepEqual(Object.keys(v.market), ['query', 'estimate', 'source']);
@@ -396,7 +396,7 @@ test('research failure paths: unreachable site is a flag; an internal error mark
   assert.match(researchLine(fv), /^Research: could not finish/);
 });
 
-test('a website application carries the research line in its one new_application alert', async () => {
+test('a website application alerts the owner at once; the full research and its score follow in one application_scored alert', async () => {
   serveSite();
   serveApis();
   const site = {
@@ -406,13 +406,19 @@ test('a website application carries the research line in its one new_application
   };
   const r = await submitWebsiteApplication(site, { fetchText: async () => '' });
   assert.equal(r.outcome, 'review');
-  assert.equal(alerts.length, 1, 'one alert — research rides inside it');
+  assert.equal(alerts.length, 1, 'the application alert goes out without waiting for the whole-site research');
   assert.equal(alerts[0].key, 'new_application');
-  assert.match(alerts[0].body, /\nResearch: Acme Plumbing's website \(acme-plumbing\.com\) says: “Commercial plumbing, drain cleaning/);
-  assert.match(alerts[0].body, /OpenStreetMap count suggests about 140 property managers in North Carolina\./); // no Places key → OSM
   assert.equal(emails.length, 0);
+  // The rest runs right after the answer (researchToEnd in the route's after()).
+  const { researchToEnd } = await import('@/lib/systems/research');
+  assert.equal(await researchToEnd(r.clientId, 60_000), 'done');
+  const scored = alerts.filter((a) => a.key === 'application_scored');
+  assert.equal(scored.length, 1);
+  assert.match(scored[0].body, /\/100/);
   const v = await researchView(r.clientId);
   assert.equal(v.status, 'done');
+  assert.match(v.summary, /^Acme Plumbing's website \(acme-plumbing\.com\) says: “Commercial plumbing, drain cleaning/);
+  assert.match(v.summary, /OpenStreetMap count suggests about 140 property managers in North Carolina\./); // no Places key → OSM
   assert.deepEqual(v.market, { query: 'property managers in North Carolina', estimate: 140, source: 'overpass' });
   // Owner-created clients get research too (by the job).
   const { applyForTrial } = await import('@/lib/systems/gatekeeper');

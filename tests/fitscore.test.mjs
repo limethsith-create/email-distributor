@@ -80,8 +80,13 @@ test('dealbreakers from the fit gate make it D / Not a fit, the worst first', ()
   assert.ok(consumers.dealbreakers.some((d) => /consumers/.test(d.text)));
   const slow = scoreFit(base({ application: { ...GOOD_APP, meetWithin5Days: 'no', web_calendarAnswer: 'No — my calendar is tight' } }));
   assert.ok(slow.dealbreakers.some((d) => /five business days/.test(d.text)));
-  const banned = scoreFit(base({ signals: mergeSignals(signals(), pageSignals('CBD and cannabis dispensary supplies. Cannabis delivery.', { page: '/' })) }));
+  const banned = scoreFit(base({ application: { ...GOOD_APP, web_sellsTo: 'CBD and cannabis dispensary supplies for retail shops' } }));
   assert.ok(banned.dealbreakers.some((d) => /not allowed/.test(d.text)));
+  const bannedSite = scoreFit(base({ website: { pagesRead: 4, title: 'Green Leaf | Cannabis Dispensary Supplies', phones: ['1'] } }));
+  assert.ok(bannedSite.dealbreakers.some((d) => /not allowed/.test(d.text)), 'the site title says what they sell');
+  // An IT firm's article about crypto attacks is not a crypto business.
+  const article = scoreFit(base({ signals: mergeSignals(signals(), pageSignals('Cryptojacking and cryptocurrency-related attacks. Bitcoin ransom demands.', { page: '/cyber-attacks' })) }));
+  assert.ok(!article.dealbreakers.some((d) => /not allowed/.test(d.text)));
   const small = scoreFit(base({ market: { estimate: 300, query: 'x', source: 'places' } }));
   assert.ok(small.dealbreakers.some((d) => /Market too small/.test(d.text)));
   // The rough OpenStreetMap name count never turns anyone down.

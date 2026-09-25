@@ -45,7 +45,12 @@ import { detectAgency } from '@/lib/systems/gatekeeper';
 import { io, asArray, asObject, isPublicUrl } from '@/lib/systems/intake-io';
 import { STATES, stateCode, stateOfCity, isUsPostalAddress } from '@/lib/systems/usgeo';
 import { pageSignals, mergeSignals } from '@/lib/systems/fitsignals';
-import { scoreFit, fitScoreLine } from '@/lib/systems/fitscore';
+import { scoreFit, fitScoreLine, teamFrom } from '@/lib/systems/fitscore';
+import { nicheOf } from '@/lib/systems/copy';
+import zlib from 'node:zlib';
+import { parseSitemap, robotsSitemaps, pickPages, normUrl, pageLinks, deepFactsOf, mergeDeep, emptyDeep, pdfText, docFacts, countFacts, CAPS } from '@/lib/systems/deepsite';
+import { emailSetup, webHistory, lookalikes, outboundSignal } from '@/lib/systems/webintel';
+import { federalMoney, secFilings, captureList, yearlyCaptures, timeline, benchmarkFor, revenueRange, nameCandidates } from '@/lib/systems/bizintel';
 
 const SYSTEM = 'research';
 const KINDS = ['home', 'about', 'services', 'team', 'contact', 'locations', 'industries', 'proof', 'pricing', 'careers'];
@@ -326,8 +331,11 @@ const PERSON_NAME = /^(?:Dr\.\s)?[A-Z][a-z]+(?:\s[A-Z]\.)?(?:\s(?:[A-Z][a-z'’]
 /** { teamCount: n|null, teamText: 'Website says 25 employees'|null } */
 export function teamFacts(html, text, kind, schema) {
   let teamText = null;
-  const m = String(text).match(/\b(\d{1,4})\+?\s+(?:full[- ]time\s+)?(employees|staff members|team members|professionals|technicians|specialists|experts|people)\b/i)
-    || String(text).match(/\bteam of (\d{1,4})\+?\b/i);
+  // Their own staff only ("our 25 technicians", "a team of 25", "we employ 25 people") — not "2,000 professionals served".
+  const m = ['home', 'about', 'team', 'careers'].includes(kind) || kind === undefined
+    ? (String(text).match(/\b(?:our|we have|we employ|employs|with|staff of|over|more than)\s+(?:a\s+)?(?:team of\s+)?(\d{1,4})\+?\s+(?:full[- ]time\s+)?(employees|staff members|team members|professionals|technicians|engineers|specialists|experts|people)\b/i)
+      || String(text).match(/\bteam of (\d{1,4})\+?\b/i))
+    : null;
   if (m) {
     const n = Number(m[1]);
     if (n >= 2 && n <= 10000) teamText = m[2] ? `Website says ${m[0].replace(/\s+/g, ' ').trim()}` : `Website says a team of ${m[1]}${/\+/.test(m[0]) ? '+' : ''}`;
@@ -375,6 +383,35 @@ const LINK_PATTERNS = {
 };
 
 const sameSite = (a, b) => String(a).replace(/^www\./, '') === String(b).replace(/^www\./, '');
+
+/**
+ * The company name as the page writes it: the most repeated capitalised
+ * phrase that holds a word of the domain ("Burgess Company" on
+ * burgesscpas.com). Most repeated first, at most 3.
+ */
+export function brandPhrases(text, hostname) {
+  const label = String(hostname || '').replace(/^www\./, '').split('.')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (label.length < 4) return [];
+  const counts = new Map();
+  for (const m of String(text || '').matchAll(/\b([A-Z][A-Za-z'’.-]+(?:\s+(?:&\s+)?[A-Z][A-Za-z'’.-]+){0,3})/g)) {
+    const phrase = m[1].replace(/['’]s$/, '').replace(/[.,]+$/, '');
+    const words = phrase.toLowerCase().split(/\s+/);
+    if (!words.some((w) => w.replace(/[^a-z0-9]/g, '').length >= 4 && label.includes(w.replace(/[^a-z0-9]/g, '')))) continue;
+    counts.set(phrase, (counts.get(phrase) || 0) + 1);
+  }
+  // Trim to the name itself: from the first word of the domain to the last company word ("Accountant E-mail Burgess Company" → "Burgess Company").
+  const SUFFIX = /^(company|co|inc|llc|pc|pllc|group|partners|associates|technologies|technology|solutions|services|consulting|cpas?|systems|networks|it|law|firm|&)$/i;
+  const trimmed = new Map();
+  for (const [p, n] of counts) {
+    const w = p.split(/\s+/);
+    const i = w.findIndex((x) => { const c = x.toLowerCase().replace(/[^a-z0-9]/g, ''); return c.length >= 4 && label.includes(c); });
+    let j = i;
+    while (j + 1 < w.length && (SUFFIX.test(w[j + 1]) || label.includes(w[j + 1].toLowerCase().replace(/[^a-z0-9]/g, '')))) j += 1;
+    const name = w.slice(i, j + 1).join(' ');
+    trimmed.set(name, (trimmed.get(name) || 0) + n);
+  }
+  return [...trimmed.entries()].filter(([p, n]) => p.split(/\s+/).length >= 2 || n >= 3).sort((a, b) => b[1] - a[1] || b[0].length - a[0].length).slice(0, 3).map(([p]) => p);
+}
 
 /** Everything one page gives. `url` is the page's final URL. */
 export function extractPage(html, { url, kind = 'home' } = {}) {
@@ -427,6 +464,7 @@ export function extractPage(html, { url, kind = 'home' } = {}) {
 
   const { teamCount, teamText } = teamFacts(html, text, kind, schema);
   const signals = pageSignals(lines.join('\n'), { hrefs: as.map((a) => a.href), page: base.pathname || '/' });
+  const every = pageLinks(html, base.href);
   return {
     title: squash(decodeEntities((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '')) || null,
     description: metaContent(html, 'description') || metaContent(html, 'og:description') || null,
@@ -442,6 +480,10 @@ export function extractPage(html, { url, kind = 'home' } = {}) {
     teamText,
     yearsHint: yearsFacts(text, schema),
     signals,
+    copyright: (lines.find((l) => /(©|&copy;|copyright)\s*\d{4}/i.test(l)) || '').slice(0, 200) || null,
+    brand: brandPhrases(`${text} ${[...html.matchAll(/<img\b[^>]*\balt\s*=\s*["']([^"']{3,80})["']/gi)].map((m) => m[1]).join(' . ')}`, base.hostname),
+    siteLinks: every.links.filter((u) => { try { return sameSite(new URL(u).hostname, base.hostname); } catch { return false; } }).slice(0, 300),
+    docs: every.docs.filter((d) => { try { return sameSite(new URL(d.url).hostname, base.hostname); } catch { return false; } }).slice(0, 20),
   };
 }
 
@@ -450,7 +492,7 @@ const uniqCI = (arr) => { const seen = new Set(); const out = []; for (const v o
 /** Fold one page into the accumulated facts (first value wins for single fields). */
 export function mergeFacts(acc, page, kind) {
   const a = acc || { title: null, description: null, headline: null, orgName: null, svcChild: [], svcHead: [], svcItems: [], svcHome: [], locations: [], phones: [], emails: [], socials: {}, teamCount: null, teamText: null, yearsHint: null };
-  if (kind === 'home') { a.title = a.title || page.title; a.description = a.description || page.description; a.headline = a.headline || page.headline; }
+  if (kind === 'home') { a.title = a.title || page.title; a.description = a.description || page.description; a.headline = a.headline || page.headline; a.copyright = a.copyright || page.copyright; a.brand = a.brand || page.brand; }
   a.orgName = a.orgName || page.orgName;
   a.svcChild = uniqCI([...a.svcChild, ...page.services.child]);
   if (kind === 'services') { a.svcHead = uniqCI([...a.svcHead, ...page.services.headings]); a.svcItems = uniqCI([...a.svcItems, ...page.services.items]); }
@@ -463,6 +505,8 @@ export function mergeFacts(acc, page, kind) {
   a.teamText = a.teamText || page.teamText;
   a.yearsHint = a.yearsHint || page.yearsHint;
   a.signals = mergeSignals(a.signals || {}, page.signals || {});
+  a.siteLinks = [...new Set([...(a.siteLinks || []), ...(page.siteLinks || [])])].slice(0, 500);
+  a.docs = [...(a.docs || []), ...(page.docs || []).filter((d) => !(a.docs || []).some((x) => x.url === d.url))].slice(0, 20);
   return a;
 }
 
@@ -609,6 +653,17 @@ async function loadState(clientId) {
     mkt: asObject(raw.mkt),
     market: asObject(raw.market),
     attempts: Number(raw.attempts) || 0,
+    sitemaps: asArray(raw.sitemaps),
+    doneUrls: asArray(raw.doneUrls),
+    deepQueue: asArray(raw.deepQueue),
+    deepRead: Number(raw.deepRead) || 0,
+    sitemapUrls: Number(raw.sitemapUrls) || 0,
+    bfs: raw.bfs === '1',
+    deepAcc: asObject(raw.deepAcc),
+    docsDone: asArray(raw.docsDone),
+    intel: asObject(raw.intel),
+    money: asObject(raw.money),
+    timeline: asArray(raw.timeline),
   };
 }
 
@@ -618,6 +673,8 @@ async function saveState(clientId, s, extra = {}) {
     robots: J(s.robots), queue: J(s.queue), tried: J(s.tried), homeTried: J(s.homeTried), acc: J(s.acc), pagesRead: s.pagesRead,
     homeError: s.homeError || '', registeredAt: s.registeredAt || '', business: J(s.business), businessMatched: s.businessMatched ? '1' : '0',
     placesNote: s.placesNote || '', mkt: J(s.mkt), market: J(s.market), attempts: s.attempts,
+    sitemaps: J(s.sitemaps || []), doneUrls: J((s.doneUrls || []).slice(-400)), deepQueue: J(s.deepQueue || []), deepRead: s.deepRead || 0, sitemapUrls: s.sitemapUrls || 0,
+    bfs: s.bfs ? '1' : '0', deepAcc: J(s.deepAcc), docsDone: J(s.docsDone || []), intel: J(s.intel), money: J(s.money), timeline: J(s.timeline || []),
     ...extra,
   });
 }
@@ -644,6 +701,22 @@ async function readCapped(res, maxBytes) {
     return new TextDecoder('utf-8', { fatal: false }).decode(buf);
   }
   return String(await res.text()).slice(0, maxBytes);
+}
+
+/** GET a public document (PDF) as bytes, at most `maxBytes`. Never throws: { ok, bytes, error }. */
+export async function fetchBytes(url, { timeoutMs, maxBytes, userAgent }) {
+  try {
+    const res = await io.fetchExt(url, { service: 'crawl', usageField: 'docs', timeoutMs, retry: false, redirect: 'follow', publicOnly: true, headers: { 'user-agent': userAgent, accept: 'application/pdf,*/*;q=0.5' } });
+    if (res.status !== 200) return { ok: false, error: `HTTP ${res.status}` };
+    const type = String(res.headers?.get?.('content-type') || '');
+    if (type && !/pdf|octet-stream/i.test(type)) return { ok: false, error: `not a PDF (${type.split(';')[0]})` };
+    const size = Number(res.headers?.get?.('content-length')) || 0;
+    if (size > maxBytes) return { ok: false, error: 'too big' };
+    const buf = Buffer.from(await res.arrayBuffer());
+    return buf.length > maxBytes ? { ok: false, error: 'too big' } : { ok: true, bytes: buf };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err).slice(0, 80) };
+  }
 }
 
 /**
@@ -686,6 +759,37 @@ export async function startResearch(clientId, { now = io.now(), force = false } 
   await updateClient(clientId, { researchStep: 'running' });
   await logEvent(clientId, SYSTEM, 'started', {});
   return { started: true, status: 'pending' };
+}
+
+/**
+ * Keep running the research until it is done or `budgetMs` is spent (the
+ * apply and re-run routes call this in Next's after(), so research starts
+ * the second an application arrives and never waits for the heartbeat). When
+ * time runs out with work left, the next function carries on
+ * (/api/cron/research, RESEARCH.maxHops at most). Returns the last status.
+ */
+export async function researchToEnd(clientId, budgetMs = 50_000, { hop = 0 } = {}) {
+  const end = Date.now() + budgetMs;
+  let status = 'pending';
+  while (Date.now() < end - 3000) {
+    const r = await runResearch(clientId, { deadline: Math.min(end, Date.now() + 25_000) }).catch(() => ({ status: 'failed' }));
+    status = r.status;
+    if (status !== 'pending') break;
+  }
+  if (status === 'pending') await continueLater(clientId, hop + 1).catch(() => {});
+  return status;
+}
+
+/** Ask a fresh function to carry the research on (cron key in the header). */
+export async function continueLater(clientId, hop) {
+  const max = await cfg(clientId, 'RESEARCH.maxHops');
+  const secret = process.env.CRON_SECRET;
+  if (hop > max || !secret || globalThis.__blockSafeFetch) return false;
+  const base = (process.env.PUBLIC_BASE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')).replace(/\/+$/, '');
+  if (!base) return false;
+  await logEvent(clientId, SYSTEM, 'continued', { hop });
+  const res = await fetch(`${base}/api/cron/research?client=${encodeURIComponent(clientId)}&hop=${hop}`, { method: 'POST', headers: { authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(8000) }).catch(() => null);
+  return Boolean(res && res.status === 202);
 }
 
 /** Owner's "Re-run research" (for /api/mc/clients/{id}/intake). */
@@ -733,22 +837,25 @@ export async function runResearch(clientId, { now = io.now(), deadline = Date.no
         if (!rb.ok && !rb.status) { s.homeError = rb.error || 'no answer'; await saveState(clientId, s); continue; }
         s.origin = new URL(rb.url).origin;
         s.robots = rb.ok ? parseRobots(rb.html) : { allow: [], disallow: [] };
+        s.sitemaps = rb.ok ? robotsSitemaps(rb.html).slice(0, 5) : [];
         s.homeError = null;
         s.step = 'home';
       }
-      if (s.step === 'robots') s.step = 'rdap'; // every address tried and none answered: homeError says why
+      if (s.step === 'robots') s.step = 'intel'; // every address tried and none answered: homeError says why; DNS and history still work
       await saveState(clientId, s);
     }
     if (s.step === 'home') {
-      if (!robotsAllows(s.robots, '/')) { s.homeError = ROBOTS_BLOCKED; s.step = 'rdap'; }
+      if (!robotsAllows(s.robots, '/')) { s.homeError = ROBOTS_BLOCKED; s.step = 'intel'; }
       else {
         if (timeoutFor() < 2500) { await saveState(clientId, s); return { status: 'pending' }; }
         const home = await fetchPage(`${s.origin}/`, opts());
         s.tried = ['home'];
-        if (!home.ok) { s.homeError = home.error || 'no answer'; s.step = 'rdap'; }
+        if (!home.ok) { s.homeError = home.error || 'no answer'; s.step = 'intel'; }
         else {
           const page = extractPage(home.html, { url: home.url, kind: 'home' });
           s.acc = mergeFacts(s.acc, page, 'home');
+          s.deepAcc = mergeDeep(s.deepAcc, deepFactsOf(home.html, { url: home.url }));
+          s.doneUrls = [...new Set([...(s.doneUrls || []), normUrl(home.url), normUrl(`${s.origin}/`)])];
           s.pagesRead = 1;
           s.queue = (R.pages || KINDS).filter((k) => k !== 'home' && KINDS.includes(k) && (!LINKED_ONLY.has(k) || page.links[k])).map((k) => ({ kind: k, url: page.links[k] || pageUrlFor(s.origin, k) }));
           s.step = 'pages';
@@ -760,7 +867,7 @@ export async function runResearch(clientId, { now = io.now(), deadline = Date.no
     // 2. the other pages
     while (s.step === 'pages') {
       const next = s.queue[0];
-      if (!next) { s.step = 'rdap'; await saveState(clientId, s); break; }
+      if (!next) { s.step = R.deep ? 'discover' : 'intel'; await saveState(clientId, s); break; }
       if (timeoutFor() < 2500) { await saveState(clientId, s); return { status: 'pending' }; }
       s.queue = s.queue.slice(1);
       s.tried = [...new Set([...s.tried, next.kind])];
@@ -768,8 +875,142 @@ export async function runResearch(clientId, { now = io.now(), deadline = Date.no
       try { path = new URL(next.url).pathname; } catch {}
       if (robotsAllows(s.robots, path)) {
         const res = await fetchPage(next.url, opts());
-        if (res.ok) { s.acc = mergeFacts(s.acc, extractPage(res.html, { url: res.url, kind: next.kind }), next.kind); s.pagesRead += 1; }
+        if (res.ok) {
+          s.acc = mergeFacts(s.acc, extractPage(res.html, { url: res.url, kind: next.kind }), next.kind);
+          s.deepAcc = mergeDeep(s.deepAcc, deepFactsOf(res.html, { url: res.url }));
+          s.pagesRead += 1;
+        }
+        s.doneUrls = [...new Set([...(s.doneUrls || []), normUrl(next.url), ...(res.ok ? [normUrl(res.url)] : [])])];
       }
+      await saveState(clientId, s);
+    }
+
+    // 2b. the whole site: its sitemap (else every link it can reach), best pages first
+    if (s.step === 'discover') {
+      const maps = [...new Set([...(s.sitemaps || []), `${s.origin}/sitemap.xml`, `${s.origin}/sitemap_index.xml`, `${s.origin}/wp-sitemap.xml`])];
+      const urls = [];
+      let fetched = 0;
+      while (maps.length && fetched < R.deepSitemaps && urls.length < R.deepMaxPages * 4) {
+        if (timeoutFor() < 2500) break;
+        const sm = maps.shift();
+        fetched += 1;
+        let smPath = '/';
+        try { smPath = new URL(sm).pathname; } catch {}
+        if (!robotsAllows(s.robots, smPath)) continue;
+        const r = await fetchPage(sm, { ...opts(), accept: 'application/xml,text/xml;q=0.9,*/*;q=0.5' });
+        if (!r.ok) continue;
+        const parsed = parseSitemap(r.html);
+        if (parsed.index) maps.unshift(...parsed.locs.filter((u) => !/image|video|author|tag|category/i.test(u)).slice(0, 6));
+        else urls.push(...parsed.locs);
+        if (urls.length && !parsed.index && !maps.some((m) => (s.sitemaps || []).includes(m))) break; // a real list found; the rest are fallbacks
+      }
+      s.sitemapUrls = urls.length;
+      s.bfs = urls.length === 0;
+      s.deepQueue = pickPages([...urls, ...(s.acc?.siteLinks || [])], { origin: s.origin, done: s.doneUrls || [], max: R.deepMaxPages });
+      s.step = 'deep';
+      await saveState(clientId, s);
+    }
+
+    while (s.step === 'deep') {
+      if (!s.deepQueue.length || s.deepRead >= R.deepMaxPages) { s.step = 'docs'; await saveState(clientId, s); break; }
+      if (timeoutFor() < 3000) { await saveState(clientId, s); return { status: 'pending' }; }
+      const batch = s.deepQueue.splice(0, R.deepConcurrency);
+      const results = await Promise.all(batch.map(async (url) => {
+        let path = '/';
+        try { path = new URL(url).pathname; } catch {}
+        if (!robotsAllows(s.robots, path)) return { url, res: null };
+        return { url, res: await fetchPage(url, opts()) };
+      }));
+      for (const { url, res } of results) {
+        s.doneUrls = [...new Set([...(s.doneUrls || []), normUrl(url), ...(res?.ok ? [normUrl(res.url)] : [])])];
+        if (!res?.ok) continue;
+        s.deepRead += 1;
+        const kind = Object.entries(LINK_PATTERNS).find(([, re]) => { try { return re.test(new URL(res.url).pathname); } catch { return false; } })?.[0] || 'other';
+        const page = extractPage(res.html, { url: res.url, kind });
+        const facts = deepFactsOf(res.html, { url: res.url });
+        // A blog post is about the industry: its words must not count as what they sell (or their headcount).
+        if (facts.isPost) { page.signals = { words: page.signals?.words || 0 }; page.teamText = null; page.teamCount = null; page.yearsHint = null; }
+        s.acc = mergeFacts(s.acc, page, kind);
+        s.deepAcc = mergeDeep(s.deepAcc, facts);
+        // No sitemap: follow the links each page gives, best first, inside the page budget.
+        if (s.bfs) {
+          const room = R.deepMaxPages - s.deepRead - s.deepQueue.length;
+          if (room > 0) s.deepQueue.push(...pickPages(page.siteLinks || [], { origin: s.origin, done: [...s.doneUrls, ...s.deepQueue], max: room }));
+        }
+      }
+      await saveState(clientId, s);
+    }
+
+    // 2c. their documents (PDF brochures, capability statements, case studies)
+    if (s.step === 'docs') {
+      const todo = (s.acc?.docs || []).filter((d) => !(s.docsDone || []).includes(d.url)).slice(0, Math.max(0, R.deepMaxDocs - (s.docsDone || []).length));
+      for (const d of todo) {
+        if (timeoutFor() < 4000) { await saveState(clientId, s); return { status: 'pending' }; }
+        s.docsDone = [...(s.docsDone || []), d.url];
+        let path = '/';
+        try { path = new URL(d.url).pathname; } catch {}
+        if (!robotsAllows(s.robots, path)) continue;
+        const r = await fetchBytes(d.url, { timeoutMs: Math.min(12000, timeoutFor()), maxBytes: R.deepDocMaxBytes, userAgent: R.userAgent });
+        if (r.ok) {
+          const facts = docFacts({ url: d.url, linkText: d.text, ...pdfText(r.bytes, { inflate: zlib.inflateSync }) });
+          s.deepAcc = mergeDeep(s.deepAcc, null);
+          if (s.deepAcc.documents.length < CAPS.documents) s.deepAcc.documents.push(facts);
+          for (const name of facts.credentials) if (!s.deepAcc.credentials.some((c) => c.name === name) && s.deepAcc.credentials.length < CAPS.credentials) s.deepAcc.credentials.push({ name, quote: `In their document “${facts.title}”`, page: path });
+        }
+        await saveState(clientId, s);
+      }
+      s.step = 'intel';
+      await saveState(clientId, s);
+    }
+
+    // 2d. outside the website: their email setup, the site's history, look-alike domains
+    if (s.step === 'intel') {
+      if (domain && R.deep) {
+        if (left() < 14000) { await saveState(clientId, s); return { status: 'pending' }; }
+        const [email, history, looks] = await Promise.allSettled([emailSetup(domain), webHistory(domain, { timeoutMs: 8000 }), lookalikes(domain)]);
+        s.intel = {
+          email: email.status === 'fulfilled' ? email.value : null,
+          history: history.status === 'fulfilled' ? history.value : null,
+          lookalikes: looks.status === 'fulfilled' ? looks.value : null,
+        };
+      }
+      s.step = R.deep ? 'money' : 'rdap';
+      await saveState(clientId, s);
+    }
+
+    // 2e. money on the public record: PPP loans (→ payroll), federal contracts and grants, SEC filings
+    if (s.step === 'money') {
+      if (left() < 22000) { await saveState(clientId, s); return { status: 'pending' }; }
+      const application = (await kv.hgetall(K.application(clientId)).catch(() => null)) || {};
+      const siteName = nameFromSite(domain, { title: s.acc?.title, orgName: s.acc?.orgName });
+      const names = nameCandidates({ domain, siteName, orgName: s.deepAcc?.org?.name || s.acc?.orgName, title: s.acc?.title, copyright: s.acc?.copyright, brand: s.acc?.brand || [], business: s.businessMatched ? s.business : null, clientName: client.name });
+      // Every state they have an office in: the headquarters is not always where the applicant sits.
+      const fromAddr = (s.deepAcc?.addresses || []).map((a) => (a.match(/\b([A-Z]{2})\.?\s+\d{5}/) || [])[1]);
+      const fromLoc = (s.acc?.locations || []).map((l) => String(l).split(',').pop().trim());
+      const states = [...new Set([application.web_state, ...fromAddr, ...fromLoc].map((x) => (x ? stateCode(x) : null)).filter(Boolean))].slice(0, 4);
+      const state = states[0] || null;
+      const [fed, sec] = await Promise.allSettled([
+        federalMoney({ names, state, states, timeoutMs: Math.min(9000, Math.floor((left() - 4000) / 2)) }),
+        secFilings(names[0] || client.name, { userAgent: R.secUserAgent, timeoutMs: Math.min(8000, left() - 1500) }),
+      ]);
+      s.money = { federal: fed.status === 'fulfilled' ? fed.value : null, sec: sec.status === 'fulfilled' ? sec.value : null, names, states };
+      s.step = 'history';
+      await saveState(clientId, s);
+    }
+
+    // 2f. history: the home page once a year since it first went online
+    if (s.step === 'history') {
+      if (domain) {
+        if (left() < 12000) { await saveState(clientId, s); return { status: 'pending' }; }
+        try {
+          const caps = yearlyCaptures(await captureList(domain, { timeoutMs: Math.min(12000, left() - 6000) }), R.historySnapshots);
+          s.timeline = await timeline(caps, { timeoutMs: Math.min(8000, left() - 1500) });
+        } catch (err) {
+          s.timeline = null;
+          await logEvent(clientId, SYSTEM, 'history_failed', { error: String(err?.message || err).slice(0, 120) });
+        }
+      }
+      s.step = 'rdap';
       await saveState(clientId, s);
     }
 
@@ -958,7 +1199,18 @@ async function finish(clientId, client, s, { now, R }) {
     homeError: s.homeError && s.homeError !== ROBOTS_BLOCKED ? s.homeError : null, robotsBlocked: s.homeError === ROBOTS_BLOCKED,
     registeredAt: s.registeredAt, agencyHit, now, newSiteDays: R.newSiteDays,
   });
-  const summary = buildSummary({ name, host: client.mainDomain, website, business: s.business, businessMatched: s.businessMatched, market: s.market });
+  const deep = deepOut(s, website);
+  if (deep?.money) {
+    // Revenue: a range from public facts only (headcount and/or PPP payroll), with its basis — never a single guessed number.
+    const team = teamFrom({ employees: application.employees, teamText: s.acc?.teamText, teamCount: s.acc?.teamCount, people: deep.people.length, schemaEmployees: deep.company?.employees });
+    const bench = benchmarkFor({ niche: nicheOf({ ...(await getProfile(clientId)), sellsTo: application.web_sellsTo }), text: `${application.web_sellsTo || ''} ${website.title || ''} ${website.description || ''}` });
+    deep.money.revenue = revenueRange({ headcount: team?.n || null, headcountExact: Boolean(team?.exact), payroll: deep.money.federal?.payroll || null, bench });
+    deep.money.benchmark = bench ? bench.label : null;
+  }
+  const outbound = outboundSignal(s.intel?.lookalikes || []);
+  if (outbound) flags.push(outbound);
+  if (deep && deep.emailSetup?.dmarc === 'missing') flags.push({ level: 'info', text: `${client.mainDomain} has no DMARC record (their own email security is basic)` });
+  const summary = [buildSummary({ name, host: client.mainDomain, website, business: s.business, businessMatched: s.businessMatched, market: s.market }), deep ? deepLine(deep) : ''].filter(Boolean).join(' ');
   const profile = await getProfile(clientId);
   const customers = customerPhrase(profile.sellsTo || application.web_sellsTo || '');
   const prefilled = R.prefill ? await prefill(clientId, { business: s.businessMatched ? s.business : null, website, customers }) : [];
@@ -968,18 +1220,18 @@ async function finish(clientId, client, s, { now, R }) {
     score = scoreFit({
       now, application, customers, website, signals: s.acc?.signals || {}, teamCount: s.acc?.teamCount, teamText: s.acc?.teamText,
       business: s.businessMatched ? s.business : null, placesNote: s.placesNote, market: s.market, registeredAt: s.registeredAt, agencyHit,
-      homeError: s.homeError, fit: await cfg(clientId, 'FIT'),
+      homeError: s.homeError, fit: await cfg(clientId, 'FIT'), deep,
     }, await cfg(clientId, 'FITSCORE'));
   } catch (err) {
     await logEvent(clientId, SYSTEM, 'score_failed', { error: String(err?.message || err).slice(0, 200) });
   }
   await kv.hset(K.research(clientId), {
     status: 'done', step: 'done', at: now.toISOString(), error: '', summary,
-    website: J(website), business: J(s.business), market: J(s.market), flags: J(flags), prefilled: J(prefilled), score: J(score),
-    acc: '', queue: '', mkt: '',
+    website: J(website), business: J(s.business), market: J(s.market), flags: J(flags), prefilled: J(prefilled), score: J(score), deep: J(deep),
+    acc: '', queue: '', mkt: '', deepAcc: '', deepQueue: '', doneUrls: '', docsDone: '',
   });
   await updateClient(clientId, { researchStep: '' });
-  await logEvent(clientId, SYSTEM, 'done', { pagesRead: s.pagesRead, business: Boolean(s.business), market: s.market?.estimate ?? null, flags: flags.length, prefilled, score: score?.score ?? null, grade: score?.grade ?? null });
+  await logEvent(clientId, SYSTEM, 'done', { pagesRead: s.pagesRead, deepPages: s.deepRead || 0, facts: deep?.facts ?? null, business: Boolean(s.business), market: s.market?.estimate ?? null, flags: flags.length, prefilled, score: score?.score ?? null, grade: score?.grade ?? null });
   // The owner already had the application alert without the score (research ran past the request): send the score now.
   if (score && application.alertedAt && application.review === 'pending' && client.state === 'applied') {
     await io.alertOwner('application_scored', {
@@ -991,6 +1243,63 @@ async function finish(clientId, client, s, { now, R }) {
     }).catch(() => {});
   }
   return { status: 'done', summary, flags, score };
+}
+
+/** The deep record the hub shows (docs/HUB-API.md "research.deep"), or null when the deep pass did not run. */
+export function deepOut(s, website = {}) {
+  const d = s.deepAcc;
+  if (!d && !s.intel) return null;
+  const dd = d || emptyDeep();
+  const posts = (dd.posts || []).filter((p) => p.date).map((p) => p.date).sort();
+  const intel = s.intel || {};
+  const out = {
+    pagesRead: (s.pagesRead || 0) + (s.deepRead || 0),
+    sitemapPages: s.sitemapUrls || 0,
+    words: dd.words || 0,
+    people: dd.people || [],
+    clients: dd.clients || [],
+    testimonials: dd.testimonials || [],
+    caseStudies: dd.caseStudies || [],
+    credentials: dd.credentials || [],
+    industries: dd.industries || [],
+    prices: dd.prices || [],
+    addresses: dd.addresses || [],
+    jobs: dd.jobs || [],
+    blog: { posts: (dd.posts || []).length, dated: posts.length, first: posts[0] || null, latest: posts[posts.length - 1] || null, recent: (dd.posts || []).filter((p) => p.date).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5) },
+    tech: dd.tech || [],
+    forms: dd.forms || 0,
+    company: dd.org ? { name: dd.org.name || null, founded: dd.org.foundingDate || null, employees: dd.org.employees ?? null, rating: dd.org.rating ?? null, reviews: dd.org.reviews ?? null } : null,
+    documents: dd.documents || [],
+    emailSetup: intel.email || null,
+    history: intel.history || ((s.timeline || [])[0] ? { firstSeen: s.timeline[0].date, lastSeen: s.timeline[s.timeline.length - 1].date, monthsCaptured: null, years: Math.max(0, new Date().getUTCFullYear() - s.timeline[0].year) } : null),
+    lookalikes: intel.lookalikes || [],
+    timeline: s.timeline || [],
+    money: s.money || null,
+    offers: dd.offers || { ctas: [], promos: [], magnets: [], plans: [] },
+    ads: (dd.tech || []).filter((t) => t.kind === 'ads').map((t) => t.name),
+  };
+  out.facts = countFacts(dd) + (out.emailSetup ? 2 + (out.emailSetup.senders || []).length + (out.emailSetup.verifiedTools || []).length : 0)
+    + (out.history?.firstSeen ? 2 : 0) + (out.lookalikes || []).length
+    + (out.timeline || []).reduce((n, y) => n + [y.title, y.headline, y.description].filter(Boolean).length, 0)
+    + (out.money?.federal ? (out.money.federal.ppp || []).length * 2 + (out.money.federal.contracts || []).length * 2 + (out.money.federal.grants || []).length * 2 + (out.money.federal.payroll ? 1 : 0) : 0)
+    + (out.money?.sec ? (out.money.sec.filings || []).length : 0)
+    + (website.services || []).length + (website.locations || []).length + (website.phones || []).length + (website.emails || []).length + Object.keys(website.socials || {}).length;
+  return out;
+}
+
+/** One sentence on how much the deep pass found. */
+export function deepLine(d) {
+  if (!d || !d.pagesRead) return '';
+  const parts = [`Read ${d.pagesRead} page${d.pagesRead === 1 ? '' : 's'}${d.documents.length ? ` and ${d.documents.length} document${d.documents.length === 1 ? '' : 's'}` : ''} (${d.words.toLocaleString('en-US')} words): ${d.facts} facts`];
+  const bits = [
+    d.people.length ? `${d.people.length} named ${d.people.length === 1 ? 'person' : 'people'}` : null,
+    d.clients.length ? `${d.clients.length} named client${d.clients.length === 1 ? '' : 's'}` : null,
+    d.testimonials.length ? `${d.testimonials.length} testimonial${d.testimonials.length === 1 ? '' : 's'}` : null,
+    d.caseStudies.length ? `${d.caseStudies.length} case stud${d.caseStudies.length === 1 ? 'y' : 'ies'}` : null,
+    d.credentials.length ? `${d.credentials.length} certification${d.credentials.length === 1 ? '' : 's'} / partner${d.credentials.length === 1 ? '' : 's'}` : null,
+    d.history?.firstSeen ? `online since ${d.history.firstSeen.slice(0, 4)}` : null,
+  ].filter(Boolean);
+  return `${parts[0]}${bits.length ? ` — ${bits.join(', ')}` : ''}.`;
 }
 
 /**
@@ -1037,6 +1346,7 @@ export function researchFromHash(raw) {
     market: asObject(raw.market),
     flags: asArray(raw.flags).filter((f) => f && typeof f === 'object'),
     score: raw.score ? asObject(raw.score) : null,
+    deep: raw.deep ? asObject(raw.deep) : null,
   };
 }
 

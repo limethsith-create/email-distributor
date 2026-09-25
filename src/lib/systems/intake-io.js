@@ -145,6 +145,7 @@ export const io = {
   imapFindMessage,
   imapFetchAttachments,
   dns: {
+    real: true, // the live resolver (tests swap the whole object; webintel refuses the real one in tests)
     resolveTxt: (name, ms = 4000) => withTimeout(dnsp.resolveTxt(name), ms, `TXT ${name}`),
     resolveMx: (name, ms = 4000) => withTimeout(dnsp.resolveMx(name), ms, `MX ${name}`),
     resolve4: (name, ms = 4000) => withTimeout(dnsp.resolve4(name), ms, `A ${name}`),

@@ -257,6 +257,40 @@ Places + a quick market count). No AI: extracted facts only. Re-run:
   }
 }
 ```
+`research.deep` — the full company file (Research v3, systems/deepsite.js,
+webintel.js, bizintel.js), null when the deep pass did not run:
+```jsonc
+"deep": {
+  "facts": 212, "pagesRead": 48, "sitemapPages": 130, "words": 31240,
+  "people": [ { "name": "Jane Hill", "title": "Founder & CEO", "page": "/team" } ],
+  "clients": [ { "name": "Smith & Lowe Law", "page": "/" } ], "testimonials": [ { "quote": "…", "by": "Ann Lowe", "page": "/" } ],
+  "caseStudies": [ { "title": "…", "page": "/case-studies/x" } ], "industries": ["law firms"],
+  "credentials": [ { "name": "SOC 2", "quote": "…", "page": "/about" } ], "prices": [ { "text": "$129 per user per month", "page": "/pricing" } ],
+  "addresses": ["100 Main St, Charlotte, NC 28202"], "jobs": [ { "title": "Account Executive", "sales": true, "page": "/careers" } ],
+  "blog": { "posts": 30, "dated": 28, "first": "2019-02-01", "latest": "2026-08-01", "recent": [ … ] },
+  "tech": [ { "name": "HubSpot", "kind": "crm / marketing" } ], "forms": 6, "ads": ["Meta Pixel"],
+  "company": { "name": "Hill IT", "founded": "2011", "employees": 18, "rating": null, "reviews": null } | null,
+  "documents": [ { "url": "…pdf", "title": "Capabilities", "pages": 2, "words": 800, "credentials": ["CMMC"], "industries": [], "excerpt": "…" } ],
+  "offers": { "ctas": ["Get a free network assessment"], "promos": [ { "offer": "No long-term contracts", "quote": "…", "page": "/pricing" } ],
+              "magnets": [ { "title": "…guide", "page": "/" } ], "plans": [ { "name": "Essentials", "price": "$99 per user / month", "page": "/pricing" } ] },
+  "emailSetup": { "mailHost": "Microsoft 365", "mailHosts": […], "spf": true, "senders": ["HubSpot"], "dmarc": "quarantine|none|reject|missing", "verifiedTools": ["DocuSign"] } | null,
+  "history": { "firstSeen": "2012-03-04", "lastSeen": "…", "monthsCaptured": 120, "years": 14 } | null,
+  "timeline": [ { "year": 2012, "date": "2012-06-01", "title": "…", "headline": "…", "description": "…", "url": "https://web.archive.org/web/…", "changed": ["title"] } ],
+  "lookalikes": [ { "domain": "gethillit.com", "registeredAt": "…", "mail": true, "pointsHome": true } ],
+  "money": {
+    "federal": { "searched": ["Hill IT"], "state": "NC", "ppp": [ { "amount": 150000, "date": "2020-04-20", "forgiven": true, "recipient": "HILL IT LLC" } ] | null,
+                 "payroll": { "annual": 720000, "fromLoan": 150000, "loanDate": "…", "basis": "…" } | null,
+                 "contracts": [ { "amount": 250000, "agency": "…", "date": "…", "what": "…" } ] | null, "grants": [ … ] | null, "federalTotal": 250000 | null, "errors": [] } | null,
+    "sec": { "total": 0, "filings": [ { "form": "D", "date": "…", "entity": "…", "url": "…" } ], "raisedMoney": false } | null,
+    "revenue": [ { "low": 2520000, "high": 4500000, "basis": "18 people × $140,000–$250,000 revenue per employee …", "floor": false, "year": 2019 } ] | null,
+    "benchmark": "IT services / MSPs" | null
+  }
+}
+```
+Research runs the moment an application arrives (after() in /api/apply,
+RESEARCH.* limits) and hands over to a fresh function when it needs more time
+(`POST /api/cron/research?client=&hop=`, cron key, RESEARCH.maxHops).
+
 The board row of an applicant under review carries the short form:
 `row.fitScore = { score, grade, label, confidence } | null`, and the review
 to-do's detail says "fit score 82/100 (Strong fit)". When research finishes

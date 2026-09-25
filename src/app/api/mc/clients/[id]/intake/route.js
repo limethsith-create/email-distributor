@@ -23,10 +23,11 @@ import { startSetupCheck, runSetupCheck, readChecks, sendWelcome } from '@/lib/s
 import { runBookingTest } from '@/lib/systems/bookingtest';
 import { asArray } from '@/lib/systems/intake-io';
 import { approveApplication, declineApplication } from '@/lib/systems/gatekeeper';
-import { rerunResearch } from '@/lib/systems/research';
+import { after } from 'next/server';
+import { rerunResearch, researchToEnd } from '@/lib/systems/research';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 export async function GET(_req, { params }) {
   const id = assertClientId(params.id);
@@ -59,7 +60,12 @@ export async function POST(request, { params }) {
   try {
     switch (body.action) {
       case 'rerunResearch':
-        return Response.json({ ok: true, result: await rerunResearch(id, { deadline }) });
+      {
+        const result = await rerunResearch(id, { deadline });
+        // The whole-site pass takes longer than one request: it carries on right after the answer.
+        if (result.status === 'pending') { try { after(() => researchToEnd(id, 52_000)); } catch { /* tests */ } }
+        return Response.json({ ok: true, result });
+      }
       case 'approveApplication':
         return Response.json({ ok: true, ...(await approveApplication(id)) });
       case 'declineApplication':

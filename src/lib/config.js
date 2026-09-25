@@ -171,6 +171,16 @@ export const DEFAULTS = {
     marketQueries: 2,             // "{customers} in {city}", "{customers} in {state}" — IDs-only (free)
     newSiteDays: 365,             // domain registered less than this many days ago → "very new site"
     prefill: true,                // fill empty onboarding fields from research (company name, address, cities, customers)
+    // Research v3 ("everything about the business"): the whole site, its documents, its email setup, history and look-alikes.
+    deep: true,
+    deepMaxPages: 60,             // pages read beyond the first ones (sitemap first, else following links)
+    deepConcurrency: 5,           // pages fetched at once from the applicant's site
+    deepSitemaps: 6,              // sitemap files read at most (an index counts)
+    deepMaxDocs: 5,               // PDFs read at most
+    deepDocMaxBytes: 6_000_000,   // a bigger PDF is listed, not read
+    maxHops: 4,                   // research runs that may hand over to a fresh function (≈ 50 s each)
+    historySnapshots: 6,          // Wayback Machine home-page captures read (one per year, first and latest always)
+    secUserAgent: 'AvianceBot/1.0 (aviance.online; research@aviance.online)', // SEC asks every client to name itself and a contact
   },
   // ── Fit Score (systems/fitscore.js): the applicant against the owner's fit gate ──
   FITSCORE: {

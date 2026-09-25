@@ -25,6 +25,9 @@
  * market everyone already emails, a repeat trial.
  */
 
+import { SIGNAL_RULES } from '@/lib/systems/fitsignals';
+
+const PROHIBITED = new RegExp(SIGNAL_RULES.prohibited.source, 'g');
 const clip = (s, n = 90) => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 const low = (s) => String(s || '').toLowerCase();
 const numOr = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
@@ -57,12 +60,16 @@ export function yearsFrom(hint, now = new Date()) {
 }
 
 /** People count from the application, the "team of 25" text, or the team page (a lower bound). */
-export function teamFrom({ employees, teamText, teamCount }) {
+export function teamFrom({ employees, teamText, teamCount, people = 0, schemaEmployees = null }) {
   const e = numOr(employees);
   if (e !== null && e > 0) return { n: e, source: 'their answer', exact: true };
   const m = String(teamText || '').match(/(\d{1,5})/);
   if (m) return { n: Number(m[1]), source: clip(teamText, 60), exact: true };
+  const se = numOr(schemaEmployees);
+  if (se !== null && se > 0) return { n: se, source: 'their website’s company data', exact: true };
   const c = numOr(teamCount);
+  const p = numOr(people) || 0;
+  if (p > (c || 0)) return { n: p, source: `${p} named people on their website`, exact: false };
   if (c !== null && c > 0) return { n: c, source: `${c} people on their team page`, exact: false };
   return null;
 }
@@ -96,6 +103,8 @@ export function scoreFit(x = {}, opts = {}) {
   const marketMin = Number(opts.marketMin) || 500;
   const marketGood = Number(opts.marketGood) || 1000;
   const siteRead = !x.homeError && (Number(web.pagesRead) || 0) > 0;
+  const deep = x.deep || null;
+  const warnings = [];
 
   const parts = Object.fromEntries(PARTS.map(([k, label]) => [k, { key: k, label, items: [] }]));
   const dealbreakers = [];
@@ -155,7 +164,7 @@ export function scoreFit(x = {}, opts = {}) {
   else item('deal', { max: 8, status: 'unknown', text: 'Website shows no pricing signs either way' });
 
   // ── 3. Size and age ──────────────────────────────────────────────────────
-  const team = teamFrom({ employees: a.employees, teamText: x.teamText, teamCount: x.teamCount });
+  const team = teamFrom({ employees: a.employees, teamText: x.teamText, teamCount: x.teamCount, people: deep?.people?.length || 0, schemaEmployees: deep?.company?.employees });
   const { employeesMin: eMin, employeesMax: eMax } = fitRules;
   if (!team) item('size', { max: 7, status: 'unknown', text: 'How many people work there: not found', ask: 'How many people work at the company?' });
   else if (team.n >= eMin && team.n <= eMax) item('size', { max: 7, share: 1, status: 'good', text: `About ${team.n} people (${team.source}) — inside ${eMin}–${eMax}` });
@@ -163,18 +172,21 @@ export function scoreFit(x = {}, opts = {}) {
   else if (!team.exact) item('size', { max: 7, status: 'unknown', text: `${team.source} — the page may not list everyone`, ask: 'How many people work at the company?' });
   else item('size', { max: 7, share: team.n >= 3 ? 0.4 : 0, status: 'bad', text: `About ${team.n} people (${team.source}) — smaller than ${eMin}` });
 
-  const years = yearsFrom(web.yearsHint, now);
+  const founded = deep?.company?.founded ? yearsFrom(deep.company.founded, now) : null;
+  const years = yearsFrom(web.yearsHint, now) ?? founded;
+  const seenYears = deep?.history?.firstSeen ? numOr(deep.history.years) : null;
   const domainYears = x.registeredAt && Number.isFinite(Date.parse(x.registeredAt)) ? (now.getTime() - Date.parse(x.registeredAt)) / (365.25 * 86400e3) : null;
-  const age = years ?? (domainYears !== null ? Math.floor(domainYears) : null);
-  const ageSrc = years !== null ? `website: ${clip(web.yearsHint, 40)}` : domainYears !== null ? `domain registered ${String(x.registeredAt).slice(0, 10)}` : '';
+  const age = years ?? seenYears ?? (domainYears !== null ? Math.floor(domainYears) : null);
+  const ageSrc = years !== null ? (web.yearsHint ? `website: ${clip(web.yearsHint, 40)}` : `founded ${deep.company.founded}`) : seenYears !== null ? `website online since ${deep.history.firstSeen.slice(0, 4)} (Wayback Machine)` : domainYears !== null ? `domain registered ${String(x.registeredAt).slice(0, 10)}` : '';
   if (age === null) item('size', { max: 5, status: 'unknown', text: 'How long in business: not found', ask: 'How long has the company been selling?' });
   else if (age >= 3) item('size', { max: 5, share: 1, status: 'good', text: `In business about ${age} year${age === 1 ? '' : 's'} (${ageSrc})` });
   else if (age >= 1) item('size', { max: 5, share: 0.6, status: 'ok', text: `In business about ${age} year${age === 1 ? '' : 's'} (${ageSrc})` });
   else item('size', { max: 5, share: 0, status: 'bad', text: `Very new — under a year (${ageSrc})` });
 
-  const locs = (web.locations || []).length;
-  const growth = sig.hiring || sig.careersPage;
-  if (growth || locs >= 2) item('size', { max: 3, share: 1, status: 'good', text: [growth ? 'Hiring' : null, locs >= 2 ? `${locs} locations` : null].filter(Boolean).join(' · '), evidence: ev(sig.hiring) || ev(sig.careersPage) });
+  const locs = Math.max((web.locations || []).length, (deep?.addresses || []).length);
+  const openJobs = deep?.jobs || [];
+  const growth = sig.hiring || sig.careersPage || openJobs.length;
+  if (growth || locs >= 2) item('size', { max: 3, share: 1, status: 'good', text: [openJobs.length ? `Hiring (${openJobs.length} open role${openJobs.length === 1 ? '' : 's'}${openJobs.some((j) => j.sales) ? ', including sales' : ''})` : growth ? 'Hiring' : null, locs >= 2 ? `${locs} locations` : null].filter(Boolean).join(' · '), evidence: openJobs[0] ? { quote: openJobs.slice(0, 3).map((j) => j.title).join(' · '), page: openJobs[0].page } : ev(sig.hiring) || ev(sig.careersPage) });
   else item('size', { max: 3, status: 'unknown', text: 'No sign of hiring or more than one location' });
 
   // ── 4. Already wins strangers ────────────────────────────────────────────
@@ -185,9 +197,18 @@ export function scoreFit(x = {}, opts = {}) {
   else item('proof', { max: 7, status: 'unknown', text: 'Selling to strangers: not answered', ask: 'Has anyone outside your network ever bought from you?' });
 
   const proofSig = sig.proof || sig.proofPage;
+  const nT = deep?.testimonials?.length || 0;
+  const nC = deep?.caseStudies?.length || 0;
+  const nK = deep?.clients?.length || 0;
+  const counted = [nT ? `${nT} testimonial${nT === 1 ? '' : 's'}` : null, nC ? `${nC} case stud${nC === 1 ? 'y' : 'ies'}` : null, nK ? `${nK} named client${nK === 1 ? '' : 's'}` : null].filter(Boolean);
   if (!siteRead) item('proof', { max: 4, status: 'unknown', text: 'Testimonials and case studies: the site could not be read' });
+  else if (counted.length) item('proof', { max: 4, share: 1, status: 'good', text: `Website shows ${counted.join(', ')}`, evidence: deep.testimonials[0] ? { quote: deep.testimonials[0].quote, page: deep.testimonials[0].page } : deep.caseStudies[0] ? { quote: deep.caseStudies[0].title, page: deep.caseStudies[0].page } : { quote: deep.clients.slice(0, 5).map((c) => c.name).join(', '), page: deep.clients[0].page } });
   else if (proofSig) item('proof', { max: 4, share: 1, status: 'good', text: 'Website shows testimonials, case studies or clients', evidence: ev(sig.proof) || ev(sig.proofPage) });
   else item('proof', { max: 4, share: 0.25, status: 'bad', text: 'No testimonials, case studies or client names on the website' });
+
+  const creds = deep?.credentials || [];
+  if (creds.length) item('proof', { max: 2, share: 1, status: 'good', text: `Certifications, partners or awards: ${creds.slice(0, 6).map((c) => c.name).join(', ')}${creds.length > 6 ? ` (+${creds.length - 6})` : ''}`, evidence: { quote: creds[0].quote, page: creds[0].page } });
+  else if (deep && siteRead) item('proof', { max: 2, status: 'unknown', text: 'No certifications, partners or awards named on the site' });
 
   const words = Number(sig.words) || 0;
   if (!siteRead) item('proof', { max: 3, status: 'unknown', text: 'Website content: the site could not be read' });
@@ -247,6 +268,18 @@ export function scoreFit(x = {}, opts = {}) {
   else if (/just testing|see what happens/.test(then)) item('ready', { max: 3, share: 0, status: 'bad', text: 'If it works: “just testing” — no plan to buy', ask: 'What would these 30 days need to show for you to start on day 31?' });
   else item('ready', { max: 3, share: 0.5, status: 'ok', text: `If it works: “${clip(a.web_ifItWorks, 50)}”` });
 
+  const CRM = /hubspot|salesforce|pardot|marketo|pipedrive|zoho|activecampaign|keap|gohighlevel/i;
+  const tools = [...new Set([...(deep?.tech || []).filter((t) => t.kind === 'crm / marketing' || t.kind === 'booking' || t.kind === 'visitor tracking').map((t) => t.name), ...(deep?.emailSetup?.senders || []).filter((n) => CRM.test(n))])];
+  if (tools.length) item('ready', { max: 2, share: 1, status: 'good', text: `Runs sales tools: ${tools.slice(0, 5).join(', ')}` });
+  else if (deep) item('ready', { max: 2, status: 'unknown', text: 'No CRM or booking tool seen on their site or email setup' });
+
+  // Someone may already be cold-emailing for them (the fit gate's "nobody else emailing").
+  const sending = (deep?.lookalikes || []).filter((l) => l.mail && l.pointsHome);
+  if (sending.length) warnings.push({ text: `Look-alike sending domain${sending.length === 1 ? '' : 's'} ${sending.map((l) => l.domain).join(', ')} — someone may already cold-email for them`, evidence: null });
+  const salesEmail = (deep?.emailSetup?.senders || []).filter((n) => /outreach|salesloft/i.test(n));
+  if (salesEmail.length) warnings.push({ text: `Their email allows ${salesEmail.join(', ')} — a sales-email tool; ask who uses it`, evidence: null });
+  if (sending.length || salesEmail.length) questions.push(`Is anyone emailing prospects for you right now${sending.length ? ` (${sending[0].domain})` : ''}?`);
+
   const bookingSig = sig.booking;
   const phones = (web.phones || []).length;
   if (!siteRead) item('ready', { max: 4, status: 'unknown', text: 'How buyers reach them: the site could not be read' });
@@ -255,7 +288,11 @@ export function scoreFit(x = {}, opts = {}) {
   else item('ready', { max: 4, share: 0, status: 'bad', text: 'Website has no phone number or booking link' });
 
   // ── dealbreakers from outside the six parts ──────────────────────────────
-  if (sig.prohibited && sig.prohibited.n >= 2) breaker('Industry cold email is not allowed for (gambling, cannabis, payday loans, …)', ev(sig.prohibited));
+  // Judged on what they SELL (their own answer, the site's title, headline and services) — an IT firm writing about crypto attacks is not a crypto firm.
+  const identity = [sells, web.title, web.description, web.headline, ...(web.services || [])].filter(Boolean).join(' . ');
+  PROHIBITED.lastIndex = 0;
+  const banned = PROHIBITED.exec(identity.toLowerCase());
+  if (banned) breaker(`Industry cold email is not allowed for (“${banned[0]}”: gambling, cannabis, payday loans, crypto …)`, { quote: clip(identity.slice(Math.max(0, banned.index - 50), banned.index + 70), 140), page: null });
   const usState = a.web_state || null;
   const usLoc = locs > 0 || (b?.address && /\b[A-Z]{2}\s+\d{5}\b/.test(b.address));
   if (low(a.usBased) === 'no') breaker('Not US-based (their answer)');
@@ -300,7 +337,7 @@ export function scoreFit(x = {}, opts = {}) {
   else if (thin && blankSite) summary = `${scoreText} — needs a look: ${siteRead ? `their website says almost nothing (${words} words)` : 'their website could not be read'}, so the score rests on their answers. Check them before approving.`;
   else if (thin) summary = `${scoreText} — needs a look: only ${confidence} of 100 points could be checked. Ask the questions below.`;
   else summary = `${scoreText} — ${label.toLowerCase()} (${confidence} of 100 points checked).${ranked.length > 1 ? ` Strongest: ${ranked[0].label.toLowerCase()}; weakest: ${ranked[ranked.length - 1].label.toLowerCase()}.` : ''}`;
-  return { score, grade, label, confidence, summary, parts: out, dealbreakers, questions: [...new Set(questions)].slice(0, 8) };
+  return { score, grade, label, confidence, summary, parts: out, dealbreakers, warnings, questions: [...new Set(questions)].slice(0, 8) };
 }
 
 /** One line for the owner's alert. */
