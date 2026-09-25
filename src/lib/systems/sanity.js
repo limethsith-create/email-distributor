@@ -9,12 +9,22 @@
  * More than LIST.maxFail failing rows → the batch is rejected and the Lead
  * Finder is re-dispatched with the failing pattern excluded (leadfinder.js).
  * The sampled rows are what the approval page shows ("20 companies we found").
+ *
+ * Leads v2: with a grade context (`ctx`, systems/grader.js) every sampled row
+ * is also graded, and the grader's pattern rejects count as failures — role
+ * address, no named person, chain / franchise, outside the area, too big or
+ * too small, excluded title — each under its grader reason. Verification
+ * results never fail a row (a batch arrives unverified by design).
  */
 
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { hostOf } from '@/lib/db/leads';
 import { chainHosts } from '@/lib/systems/listfiles';
+import { gradeLead } from '@/lib/systems/grader';
+
+/** Grader reject reasons that say the batch's search pattern is wrong → sanity failure name. */
+const GRADER_FAILS = { role: 'role', no_name: 'no_name', chain: 'chain', out_of_area: 'state', size: 'size', excluded_title: 'title' };
 
 const US_STATES = new Set('AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC'.split(' '));
 const STATE_NAMES = new Set(['alabama', 'alaska', 'arizona', 'arkansas', 'california', 'colorado', 'connecticut', 'delaware', 'florida', 'georgia', 'hawaii', 'idaho', 'illinois', 'indiana', 'iowa', 'kansas', 'kentucky', 'louisiana', 'maine', 'maryland', 'massachusetts', 'michigan', 'minnesota', 'mississippi', 'missouri', 'montana', 'nebraska', 'nevada', 'new hampshire', 'new jersey', 'new mexico', 'new york', 'north carolina', 'north dakota', 'ohio', 'oklahoma', 'oregon', 'pennsylvania', 'rhode island', 'south carolina', 'south dakota', 'tennessee', 'texas', 'utah', 'vermont', 'virginia', 'washington', 'west virginia', 'wisconsin', 'wyoming', 'district of columbia']);
@@ -33,8 +43,18 @@ function titleMatches(title, approved) {
   return approved.some((a) => t.includes(a) || a.includes(t));
 }
 
-/** Checks for one row → array of failure reasons. */
-export function checkRow(lead, profile = {}, { chains = new Set() } = {}) {
+/** Checks for one row → array of failure reasons (+ the grader's pattern rejects when `ctx` is given). */
+export function checkRow(lead, profile = {}, { chains = new Set(), ctx = null } = {}) {
+  const fails = baseChecks(lead, profile, { chains });
+  if (ctx) {
+    const g = gradeLead({ ...lead, verifyStatus: 'pending' }, ctx);
+    const f = g.rejectReason && GRADER_FAILS[g.rejectReason];
+    if (f && !fails.includes(f)) fails.push(f);
+  }
+  return fails;
+}
+
+function baseChecks(lead, profile = {}, { chains = new Set() } = {}) {
   const fails = [];
   const approved = list(profile.titles);
   const excluded = list(profile.excludedTitles);
@@ -67,12 +87,13 @@ function sampleOf(rows, n, rng) {
  * Pure check of one batch.
  * @returns {{sample, failures: [{row, reasons}], failCount, reject, exclude}}
  */
-export function sanityCheck(leads, profile = {}, { sampleSize = 20, maxFail = 2, rng = Math.random, chains = null } = {}) {
-  const chainSet = chains || chainHosts();
+export function sanityCheck(leads, profile = {}, { sampleSize = 20, maxFail = 2, rng = Math.random, chains = null, ctx = null } = {}) {
+  let chainSet = chains;
+  if (!chainSet) { try { chainSet = chainHosts(); } catch { chainSet = new Set(); } }
   const sample = sampleOf(leads, sampleSize, rng);
   const failures = [];
   for (const row of sample) {
-    const reasons = checkRow(row, profile, { chains: chainSet });
+    const reasons = checkRow(row, profile, { chains: chainSet, ctx });
     if (reasons.length) failures.push({ row, reasons });
   }
   const reject = failures.length > maxFail;
@@ -94,6 +115,7 @@ export function displayRow(l) {
     company: l.company || '', first_name: l.first_name || '', name: l.name || '', title: l.title || '',
     city: l.city || '', state: l.state || '', website: l.website || '', email: l.email || '',
     riskLevel: l.riskLevel || '', score: l.score ?? null, types: list(l.types).slice(0, 3),
+    grade: l.grade || null, reasons: Array.isArray(l.reasons) ? l.reasons.slice(0, 4) : [], verifyStatus: l.verifyStatus || null,
   };
 }
 

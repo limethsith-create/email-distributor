@@ -1,0 +1,84 @@
+{
+  "name": "Home services / trades trial sequences (a trade selling to commercial customers)",
+  "niche": "trades",
+  "version": 2,
+  "source": "Copy v2 (docs/research/v2-leads-copy.md): for plumbing, roofing, HVAC, electrical, cleaning, landscaping and other trades whose prospects are property managers, facility managers, offices and other businesses. Plain text, no links in email 1, one reply CTA, four touches. No claim about the client beyond {oneLiner} / {proof}.",
+  "footer": "{SenderName}\n{ClientCompany}\n{postalAddress}\n\nNot the right fit? Just reply STOP and I will not email you again.",
+  "defaultFramework": "problem-first",
+  "subjectBank": ["{niche} for {Company}", "repairs at {Company}", "who you call", "backup crew", "{Company} maintenance", "quick site check", "rush jobs", "one idea"],
+  "frameworks": {
+    "problem-first": {
+      "label": "Problem first",
+      "why": "Names the pain every property or facility manager knows (small repairs waiting until they are big), then one line on the offer, then an easy question.",
+      "variants": [
+        { "id": "trades-a1", "firstLineSet": "A", "subjects": { "d0": "repairs at {Company}" } },
+        { "id": "trades-b1", "firstLineSet": "B", "subjects": { "d0": "who you call" } }
+      ],
+      "backupVariants": [
+        { "id": "trades-c2", "firstLineSet": "C", "subjects": { "d0": "{Company} maintenance" } },
+        { "id": "trades-d2", "firstLineSet": "D", "subjects": { "d0": "rush jobs" } }
+      ],
+      "touches": [
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\nFor a lot of {ICP}, small repairs wait weeks for a crew and then turn into big ones.\n\n{oneLiner}\n\nWho do you call today when something needs fixing at {Company}?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, one more thought.\n\nThe jobs that hurt are the ones that wait. A crew that turns up when it says it will keeps a small problem small.\n\nWorth a short call to see if {ClientCompany} could be that crew for {Company}?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "{niche} for {Company}", "body": "{FirstName}, a different angle.\n\nMost {ICP} keep a short list of trades they trust for the jobs that cannot wait. Getting on that list is all {ClientCompany} is after.\n\nOpen to a 15-minute call next week?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} work comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+      ]
+    },
+    "question-led": {
+      "label": "Question led",
+      "why": "Asks how they handle the work today; either answer is easy to write back.",
+      "variants": [
+        { "id": "trades-q-a1", "firstLineSet": "A", "subjects": { "d0": "who you call" } },
+        { "id": "trades-q-b1", "firstLineSet": "B", "subjects": { "d0": "{niche} for {Company}" } }
+      ],
+      "backupVariants": [
+        { "id": "trades-q-c2", "firstLineSet": "C", "subjects": { "d0": "backup crew" } },
+        { "id": "trades-q-d2", "firstLineSet": "D", "subjects": { "d0": "repairs at {Company}" } }
+      ],
+      "touches": [
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\n{oneLiner}\n\nDo you have a {niche} crew you like for {Company}, or is it a new search each time?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, asking because the answer tells me quickly whether this is worth your time.\n\nIf you already have a crew you like, no need to change. If not, {ClientCompany} would be glad to be the next one you try.\n\nWhich is it at {Company}?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "backup crew", "body": "{FirstName}, one practical thought.\n\nEven {ICP} with a trusted crew need a second name for the week that crew is booked solid.\n\nWould it help to have {ClientCompany} on file for {Company}?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} work comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+      ]
+    },
+    "quick-idea": {
+      "label": "Quick idea",
+      "why": "One small, practical idea first (a yearly walk-through); the ask is to send what it covers.",
+      "variants": [
+        { "id": "trades-qi-a1", "firstLineSet": "A", "subjects": { "d0": "quick site check" } },
+        { "id": "trades-qi-b1", "firstLineSet": "B", "subjects": { "d0": "one idea" } }
+      ],
+      "backupVariants": [
+        { "id": "trades-qi-c2", "firstLineSet": "C", "subjects": { "d0": "{Company} maintenance" } },
+        { "id": "trades-qi-d2", "firstLineSet": "D", "subjects": { "d0": "rush jobs" } }
+      ],
+      "touches": [
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\nOne idea for {Company}: a short walk-through of your sites once a year, so small problems get caught before they turn into rush jobs.\n\n{oneLiner}\n\nWant me to send over what that walk-through covers?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, a walk-through like that is quick to do and easy to put off.\n\n{ClientCompany} can book one in at a time that suits you.\n\nWould that be useful for {Company}?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "rush jobs", "body": "{FirstName}, a second idea.\n\nOne number to call for rush {niche} jobs saves a round of phone calls when something goes wrong.\n\nOpen to {ClientCompany} being that number for {Company}?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} work comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+      ]
+    },
+    "local-proof": {
+      "label": "Local proof",
+      "why": "Leads with one true proof line the client gave us; used only when the profile has one.",
+      "needs": ["proof"],
+      "variants": [
+        { "id": "trades-lp-a1", "firstLineSet": "A", "subjects": { "d0": "repairs at {Company}" } },
+        { "id": "trades-lp-b1", "firstLineSet": "B", "subjects": { "d0": "who you call" } }
+      ],
+      "backupVariants": [
+        { "id": "trades-lp-c2", "firstLineSet": "C", "subjects": { "d0": "{Company} maintenance" } },
+        { "id": "trades-lp-d2", "firstLineSet": "D", "subjects": { "d0": "backup crew" } }
+      ],
+      "touches": [
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\n{proof}\n\n{oneLiner}\n\nWorth a short call to see if the same would help {Company}?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, happy to share how that works for {ICP} like {Company}, in plain terms.\n\nWould a short call next week suit you?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "{niche} for {Company}", "body": "{FirstName}, a different angle.\n\nMost {ICP} keep a short list of trades they trust for the jobs that cannot wait. Getting on that list is all {ClientCompany} is after.\n\nOpen to a 15-minute call next week?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} work comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+      ]
+    }
+  }
+}

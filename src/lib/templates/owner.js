@@ -90,6 +90,10 @@ export const ALERTS = {
   emergency_resolved: { urgent: false, title: 'Deliverability back to normal: {clientId}' },
   booking_unmatched: { urgent: false, title: 'Booking could not be matched to a prospect: {clientId}' },
   trial_ended_quiet: { urgent: true, title: 'Trial ended — client quiet 14 business days: {clientId}' },
+  // Leads + Copy v2
+  verify_no_keys: { urgent: true, title: 'No email verifier key set — {clientId} has no sendable leads' },
+  verify_failing: { urgent: false, title: 'Email verifier not answering: {service}' },
+  verify_budget_out: { urgent: false, title: 'Free verification credits used up today ({pending} leads waiting)' },
   // ── end Stage C ──
   // ── Stage D additions ──
   build_behind: { urgent: false, title: 'Build behind at Day −7: {clientId} — {what}' },

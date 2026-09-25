@@ -1,0 +1,84 @@
+{
+  "name": "Agency trial sequences (marketing / web / SEO agencies selling to small businesses)",
+  "niche": "agency",
+  "version": 2,
+  "source": "Copy v2 (docs/research/v2-leads-copy.md): plain text, no links in email 1, one reply CTA, four touches. No claim about the client beyond {oneLiner} / {proof}; no result promised.",
+  "footer": "{SenderName}\n{ClientCompany}\n{postalAddress}\n\nNot the right fit? Just reply STOP and I will not email you again.",
+  "defaultFramework": "problem-first",
+  "subjectBank": ["{Company} website", "{Company} on Google", "new customers", "reviews at {Company}", "one idea", "where customers find you", "{Company} online"],
+  "frameworks": {
+    "problem-first": {
+      "label": "Problem first",
+      "why": "Most small businesses live on referrals while the website sits idle; names that, then one line on the offer, then an easy question.",
+      "variants": [
+        { "id": "agency-a1", "firstLineSet": "A", "subjects": { "d0": "{Company} website" } },
+        { "id": "agency-b1", "firstLineSet": "B", "subjects": { "d0": "new customers" } }
+      ],
+      "backupVariants": [
+        { "id": "agency-c2", "firstLineSet": "C", "subjects": { "d0": "{Company} online" } },
+        { "id": "agency-d2", "firstLineSet": "D", "subjects": { "d0": "where customers find you" } }
+      ],
+      "touches": [
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\nFor a lot of {ICP}, most new work still comes from referrals, and the website does little on its own.\n\n{oneLiner}\n\nIs the website bringing in much work for {Company} right now?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, one more thought.\n\nSites that bring in little work are usually missing one or two simple things, not a whole rebuild.\n\nWorth a short call to see what that would take for {Company}?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "{Company} on Google", "body": "{FirstName}, a different angle.\n\nWhen someone nearby searches for what you do, the top few results get most of the calls. It is worth knowing where {Company} shows up.\n\nWant me to check and send you a short note on it?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+      ]
+    },
+    "question-led": {
+      "label": "Question led",
+      "why": "Asks where their customers come from today; any answer opens a conversation.",
+      "variants": [
+        { "id": "agency-q-a1", "firstLineSet": "A", "subjects": { "d0": "where customers find you" } },
+        { "id": "agency-q-b1", "firstLineSet": "B", "subjects": { "d0": "new customers" } }
+      ],
+      "backupVariants": [
+        { "id": "agency-q-c2", "firstLineSet": "C", "subjects": { "d0": "{Company} website" } },
+        { "id": "agency-q-d2", "firstLineSet": "D", "subjects": { "d0": "{Company} online" } }
+      ],
+      "touches": [
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\n{oneLiner}\n\nWhere do most new customers find {Company} today, referrals, Google or something else?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, asking because the answer tells me quickly whether this is worth your time.\n\nIf referrals keep you busy, no need to change. If you want more of the work to come from search, that is what {ClientCompany} does.\n\nWhich is it at {Company}?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "{Company} on Google", "body": "{FirstName}, one practical check.\n\nSearch for your main service plus your town and see where {Company} lands. Many {ICP} are surprised by what they find.\n\nWant {ClientCompany} to run that check and send you the results?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+      ]
+    },
+    "quick-idea": {
+      "label": "Quick idea",
+      "why": "One small idea they could use even without us (a page per service); the ask is to send an outline.",
+      "variants": [
+        { "id": "agency-qi-a1", "firstLineSet": "A", "subjects": { "d0": "one idea" } },
+        { "id": "agency-qi-b1", "firstLineSet": "B", "subjects": { "d0": "{Company} website" } }
+      ],
+      "backupVariants": [
+        { "id": "agency-qi-c2", "firstLineSet": "C", "subjects": { "d0": "{Company} online" } },
+        { "id": "agency-qi-d2", "firstLineSet": "D", "subjects": { "d0": "new customers" } }
+      ],
+      "touches": [
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\nOne idea for {Company}: a page for each main service you offer, so people searching for that exact job find you first.\n\n{oneLiner}\n\nWant me to send over a short outline?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, pages like that are quick to write and easy to put off.\n\n{ClientCompany} can draft them with you.\n\nWould that be useful for {Company}?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "reviews at {Company}", "body": "{FirstName}, a second idea.\n\nA short text after each job asking for a Google review tends to lift the count quickly. More reviews help you show up higher.\n\nOpen to {ClientCompany} setting that up for {Company}?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+      ]
+    },
+    "local-proof": {
+      "label": "Local proof",
+      "why": "Leads with one true proof line the client gave us; used only when the profile has one.",
+      "needs": ["proof"],
+      "variants": [
+        { "id": "agency-lp-a1", "firstLineSet": "A", "subjects": { "d0": "{Company} website" } },
+        { "id": "agency-lp-b1", "firstLineSet": "B", "subjects": { "d0": "new customers" } }
+      ],
+      "backupVariants": [
+        { "id": "agency-lp-c2", "firstLineSet": "C", "subjects": { "d0": "{Company} online" } },
+        { "id": "agency-lp-d2", "firstLineSet": "D", "subjects": { "d0": "{Company} on Google" } }
+      ],
+      "touches": [
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\n{proof}\n\n{oneLiner}\n\nWorth a short call to see if the same would help {Company}?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, happy to share how that works for {ICP} like {Company}, in plain terms.\n\nWould a short call next week suit you?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "{Company} on Google", "body": "{FirstName}, a different angle.\n\nWhen someone nearby searches for what you do, the top few results get most of the calls. It is worth knowing where {Company} shows up.\n\nWant me to check and send you a short note on it?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+      ]
+    }
+  }
+}

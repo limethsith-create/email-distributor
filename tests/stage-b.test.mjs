@@ -363,7 +363,8 @@ test('first-line rule table: 20 patterns, city and no-city forms, never a blank'
   assert.match(firstLineFor({ company: 'Top Roof', city: 'Austin', types: ['roofing_contractor'] }, 'C'), /roofing teams around Austin/);
   assert.throws(() => firstLineFor({ city: 'Austin' }));
   assert.equal(nicheOf({ industry: 'Managed IT services' }), 'msp');
-  assert.equal(nicheOf({ industry: 'commercial roofing' }), 'trial-default');
+  assert.equal(nicheOf({ industry: 'commercial roofing' }), 'trades'); // Copy v2: trades niche
+  assert.equal(nicheOf({ industry: 'bakery' }), 'trial-default');
 });
 
 test('copy engine builds A/B in the default.json shape, fills client slots, passes the checker', async () => {
@@ -491,7 +492,8 @@ test('webhook: a bad batch is rejected, the finder re-dispatched with the exclus
 
 test('webhook insert: blocklist / suppression / other client skipped, A/B alternates, tz from state', async () => {
   __reset();
-  await trialClient('acme');
+  // Leads v2: a lead outside the client's states is rejected (out of area), so this client targets all three.
+  await trialClient('acme', { profile: { ...PROFILE, states: 'TX, CA, CO' } });
   await trialClient('other');
   await addToBlocklist('acme', 'blocked.com');
   await kv.sadd(K.suppression(), 'stop@gone.com');
@@ -733,8 +735,9 @@ test('crawler: contact choice, guess patterns, scoring, tz, filters', () => {
   assert.deepEqual([c.kind, c.name, c.email, c.titleApproved], ['person', 'Dana Reyes', 'dana@smiledental.com', true]);
   const c2 = LF.pickContact({ ...found, ld: { people: [], orgs: [] }, people: [] }, 'smiledental.com');
   assert.deepEqual([c2.kind, c2.email], ['email', 'jane@smiledental.com']);
+  // Leads v2: a role address is never a contact.
   const c3 = LF.pickContact({ mailtos: [{ email: 'info@x.com' }], emails: [], ld: { people: [], orgs: [] }, people: [] }, 'x.com');
-  assert.deepEqual([c3.kind, c3.email, c3.source], ['role', 'info@x.com', 'mailto']);
+  assert.equal(c3, null);
   assert.deepEqual(LF.guessPatterns('jane', 'smith', 'x.com'), ['jane@x.com', 'jane.smith@x.com', 'jsmith@x.com', 'janes@x.com', 'j.smith@x.com']);
   assert.deepEqual(LF.splitName('Mark O. Lee'), { first: 'mark', last: 'lee', firstDisplay: 'Mark' });
   assert.equal(LF.scoreLead({ dreamMatch: 1, hasNamedPerson: true, titleApproved: true }), 5);
@@ -756,7 +759,9 @@ test('crawler: contact choice, guess patterns, scoring, tz, filters', () => {
   assert.deepEqual(dropped, { duplicate_host: 1, no_website: 1, chain: 1, blocklist: 1, excluded_pattern: 1 });
 });
 
-test('crawler pipeline step: named owner with no email → guessed + Reoon-checked; robots honoured', async () => {
+test('crawler pipeline step: named owner with no email → guessed candidates, pending for the app verifier; robots honoured', async () => {
+  // Leads v2: the job never calls a paid verifier; the app's waterfall checks
+  // the candidates in order (tests/leads-copy-v2.test.mjs).
   const pages = {
     'https://joes.com/robots.txt': 'User-agent: *\nDisallow: /team',
     'https://joes.com/': '<p>Joe Bloggs, Owner</p>',
@@ -764,26 +769,21 @@ test('crawler pipeline step: named owner with no email → guessed + Reoon-check
   const fetched = [];
   const fetchImpl = async (url) => {
     fetched.push(url);
-    if (url.startsWith('https://emailverifier.reoon.com/')) {
-      const email = decodeURIComponent(/email=([^&]+)/.exec(url)[1]);
-      return { ok: true, json: async () => ({ status: email === 'joe.bloggs@joes.com' ? 'safe' : 'invalid' }) };
-    }
     if (pages[url] == null) return { ok: false, status: 404, headers: { get: () => 'text/html' }, text: async () => '' };
     return { ok: true, status: 200, headers: { get: () => (url.endsWith('.txt') ? 'text/plain' : 'text/html') }, text: async () => pages[url] };
   };
-  const { reoonBudget } = await import('../scripts/leadfinder/verify.mjs');
-  const reoon = reoonBudget(20);
-  const lead = await buildLead({ company: "Joe's Plumbing", website: 'https://joes.com', host: 'joes.com', city: 'Austin', state: 'TX', types: ['plumber'], placeId: 'p1', source: 'places' }, { reoon, reoonKey: 'k', fetchImpl, resolveMx: async () => [{ exchange: 'mx.joes.com', priority: 1 }] });
-  assert.equal(lead.email, 'joe.bloggs@joes.com');
-  assert.equal(lead.riskLevel, 'safe');
+  const crawl = { delayMs: 0 };
+  const lead = await buildLead({ company: "Joe's Plumbing", website: 'https://joes.com', host: 'joes.com', city: 'Austin', state: 'TX', types: ['plumber'], placeId: 'p1', source: 'places' }, { fetchImpl, crawl, resolveMx: async () => [{ exchange: 'mx.joes.com', priority: 1 }] });
+  assert.equal(lead.email, 'joe@joes.com'); // {first}@ — the most common pattern at 1–10 person companies
+  assert.deepEqual(lead.emailCandidates, ['jbloggs@joes.com', 'joe.bloggs@joes.com']);
+  assert.equal(lead.emailGuessed, true);
+  assert.equal(lead.verifyStatus, 'pending');
+  assert.equal(lead.riskLevel, 'risky');
   assert.equal(lead.first_name, 'Joe');
   assert.equal(lead.titleApproved, true);
   assert.equal(lead.tz, 'America/Chicago');
-  assert.equal(reoon.used, 2);
   assert.ok(!fetched.includes('https://joes.com/team'));
-  // No Reoon credits left → first@ guess kept but marked risky.
-  const lead2 = await buildLead({ company: "Joe's Plumbing", website: 'https://joes.com', host: 'joes.com', state: 'TX', placeId: 'p1', source: 'places' }, { reoon: reoonBudget(0), reoonKey: 'k', fetchImpl, resolveMx: async () => [{ exchange: 'mx', priority: 1 }] });
-  assert.deepEqual([lead2.email, lead2.riskLevel], ['joe@joes.com', 'risky']);
+  assert.ok(!fetched.some((u) => /reoon|hunter|zerobounce/.test(u)));
   // No MX → dropped.
-  assert.equal(await buildLead({ company: 'Dead', website: 'https://dead.com', host: 'dead.com', placeId: 'p2', source: 'places' }, { reoon: reoonBudget(0), fetchImpl: async (u) => (u === 'https://dead.com/' ? { ok: true, status: 200, headers: { get: () => 'text/html' }, text: async () => '<p>Ann Moss, Owner</p>' } : { ok: false, status: 404, headers: { get: () => '' }, text: async () => '' }), resolveMx: async () => { const e = new Error('x'); e.code = 'ENOTFOUND'; throw e; } }), null);
+  assert.equal(await buildLead({ company: 'Dead', website: 'https://dead.com', host: 'dead.com', placeId: 'p2', source: 'places' }, { crawl, fetchImpl: async (u) => (u === 'https://dead.com/' ? { ok: true, status: 200, headers: { get: () => 'text/html' }, text: async () => '<p>Ann Moss, Owner</p>' } : { ok: false, status: 404, headers: { get: () => '' }, text: async () => '' }), resolveMx: async () => { const e = new Error('x'); e.code = 'ENOTFOUND'; throw e; } }), null);
 });

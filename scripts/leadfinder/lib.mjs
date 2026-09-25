@@ -1,17 +1,29 @@
-// Lead Finder — pure helpers (SPEC §7.2). No network, no dependencies, so
-// every function here is unit-tested on HTML fixtures (tests/stage-b.test.mjs).
+// Lead Finder — pure helpers (SPEC §7.2, Leads v2). No network, no npm
+// dependencies, so every function here is unit-tested on HTML fixtures
+// (tests/stage-b.test.mjs, tests/leads-copy-v2.test.mjs).
+//
+// v2: decision-maker discovery (JSON-LD Person, "Name, Title" patterns, team
+// cards, "I'm Jane, the owner", LinkedIn profile links as name hints only —
+// LinkedIn itself is never fetched), facts for the first line (services,
+// years in business, a named service page), website quality and intent
+// signals, email pattern inference, and role addresses never kept.
+
+import {
+  TITLE_WORDS, titleTier, looksLikeName, cleanPersonName, splitName as splitNameRule, isRoleAddress as isRoleRule, isFreemail,
+  inferPattern, candidateEmails, nameFromEmail, nameFromLinkedinSlug, FRANCHISE_TEXT_RE, FIRST_NAMES, normState,
+} from '../../src/lib/leadquality/rules.mjs';
 
 export const USER_AGENT = 'AvianceBot/1.0 (+aviance.online/bot)';
+/** Fallback paths when the home page links to nothing useful (the home page is always read first). */
 export const CRAWL_PATHS = ['/', '/about', '/about-us', '/contact', '/team', '/our-team'];
+export const EXTRA_PATHS = ['/contact-us', '/leadership', '/staff', '/meet-the-team', '/our-staff', '/company', '/who-we-are'];
 
-export const APPROVED_TITLE_WORDS = [
-  'owner', 'co-owner', 'founder', 'co-founder', 'president', 'ceo', 'chief executive officer', 'managing partner',
-  'principal', 'managing director', 'general manager', 'partner', 'director', 'vice president', 'vp', 'coo', 'cfo',
-  'cto', 'chief operating officer', 'chief financial officer', 'chief technology officer', 'office manager', 'operations manager',
-];
-const OWNER_TITLES = ['owner', 'co-owner', 'founder', 'co-founder', 'president', 'ceo', 'chief executive officer', 'principal', 'managing partner'];
-const ROLE_LOCALS = new Set(['info', 'hello', 'contact', 'office', 'admin', 'sales', 'support', 'team', 'mail', 'enquiries', 'inquiries', 'help', 'service', 'reception', 'frontdesk', 'billing', 'accounts', 'careers', 'jobs', 'hr', 'marketing']);
-const BAD_EMAIL_RE = /\.(png|jpe?g|gif|webp|svg|css|js)$|@(example|domain|email|sentry|wixpress|sentry-next)\.|^(u00|x22)/i;
+export const APPROVED_TITLE_WORDS = TITLE_WORDS;
+const OWNER_TITLES = ['owner', 'co-owner', 'founder', 'co-founder', 'president', 'ceo', 'chief executive officer', 'principal', 'managing partner', 'proprietor'];
+const BAD_EMAIL_RE = /\.(png|jpe?g|gif|webp|svg|css|js)$|@(example|domain|email|sentry|wixpress|sentry-next|yourdomain|company|mysite|website)\.|^(u00|x22)|^[0-9a-f]{16,}@/i;
+
+export const splitName = splitNameRule;
+export const isRoleAddress = isRoleRule;
 
 // ── hosts, states, tz ────────────────────────────────────────────────────────
 
@@ -108,6 +120,16 @@ export function htmlToText(html) {
     .trim();
 }
 
+/** Finer lines than htmlToText (also split at cells, links, bold): one card field per line. */
+export function htmlToLines(html) {
+  return decodeEntities(String(html || '')
+    .replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6]|tr|td|th|section|article|span|header|footer|figcaption|dt|dd|strong|b|a|em|i)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' '))
+    .split('\n').map((l) => l.replace(/[ \t]+/g, ' ').trim()).filter(Boolean);
+}
+
 const safeDecode = (s) => { try { return decodeURIComponent(s); } catch { return s; } };
 const cleanEmail = (e) => safeDecode(String(e || '')).trim().replace(/^mailto:/i, '').split('?')[0].replace(/[.,;:]+$/, '').toLowerCase();
 const validEmail = (e) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/.test(e) && !BAD_EMAIL_RE.test(e);
@@ -143,8 +165,16 @@ function walkLd(node, out) {
     out.people.push({ name: String(node.name).trim(), title: node.jobTitle ? String(node.jobTitle).trim() : '', email: node.email ? cleanEmail(node.email) : '' });
   }
   // Organization / LocalBusiness and its many subtypes (Dentist, Plumber, LegalService…): any non-Person node with contact facts.
-  if (!type.includes('person') && type.length && (node.email || node.telephone || node.address || node.numberOfEmployees || type.some((t) => /organization|business|corporation|service/.test(t)))) {
-    out.orgs.push({ name: node.name ? String(node.name) : '', email: node.email ? cleanEmail(node.email) : '', employees: node.numberOfEmployees?.value ?? node.numberOfEmployees ?? null });
+  if (!type.includes('person') && type.length && (node.email || node.telephone || node.address || node.numberOfEmployees || node.foundingDate || node.aggregateRating || type.some((t) => /organization|business|corporation|service/.test(t)))) {
+    const rating = node.aggregateRating || {};
+    out.orgs.push({
+      name: node.name ? String(node.name) : '',
+      email: node.email ? cleanEmail(node.email) : '',
+      employees: node.numberOfEmployees?.value ?? node.numberOfEmployees ?? null,
+      foundingDate: node.foundingDate ? String(node.foundingDate) : '',
+      rating: Number(rating.ratingValue) || null,
+      reviews: Number(rating.reviewCount || rating.ratingCount) || null,
+    });
   }
   for (const [k, v] of Object.entries(node)) {
     if (['founder', 'employee', 'employees', 'member', 'members', 'author', '@graph', 'contactPoint', 'owns', 'subOrganization'].includes(k) || typeof v === 'object') walkLd(v, out);
@@ -163,35 +193,60 @@ export function extractJsonLd(html) {
   return out;
 }
 
-const NAME = "([A-Z][a-z]+(?:[ -][A-Z]\\.?)?(?:\\s(?:Mc|Mac|O')?[A-Z][a-z'’-]+){1,2})";
+const NAME = "([A-Z][a-z]+(?:[ -][A-Z]\\.?)?(?:\\s(?:Mc|Mac|O'|De|Van |Di|La)?[A-Z][a-z'’-]+){1,2})";
 // Case-insensitive title words inside a case-SENSITIVE pattern (names must be Capitalised).
 const ci = (s) => s.replace(/[a-z]/gi, (ch) => `[${ch.toLowerCase()}${ch.toUpperCase()}]`);
-const TITLE_ALT = APPROVED_TITLE_WORDS.slice().sort((a, b) => b.length - a.length).map((t) => ci(t).replace(/-/g, '[- ]?')).join('|');
+const TITLE_ALT = TITLE_WORDS.slice().sort((a, b) => b.length - a.length).map((t) => ci(t).replace(/[/]/g, '\\/').replace(/-/g, '[- ]?')).join('|');
 const CO = ci('co') + '-?';
-const BY = `(?:${['founded', 'owned', 'started', 'run', 'led'].map(ci).join('|')})\\s+${ci('by')}`;
+const BY = `(?:${['founded', 'owned', 'started', 'run', 'led', 'established'].map(ci).join('|')})\\s+${ci('by')}`;
+const CRED = ',?\\s*(?:DDS|DMD|MD|DVM|CPA|Esq\\.?|PhD|PE|EA|CFP|Jr\\.?|Sr\\.?|II|III)';
+const TITLE_GROUP = `((?:${CO})?(?:${TITLE_ALT})(?:\\s*(?:&|and|/)\\s*(?:${TITLE_ALT}))?)`;
+
+function pushPerson(out, name, title) {
+  let n = name.trim().replace(/\s+/g, ' ');
+  // "Meet Jane Smith, Owner" — drop leading filler words, keep the name.
+  while (/^(Our|The|Meet|About|Contact|Team|Home|Hi|Hello|Welcome|Read|Learn|Call|Email|Owner|Founder|President|Director|Partner|By|And|With)\s/.test(n)) n = n.replace(/^\S+\s/, '');
+  if (n.split(' ').length < 2 || !looksLikeName(n)) return;
+  if (!out.some((p) => p.name === n)) out.push({ name: n, title: title.trim().toLowerCase().replace(/\s+/g, ' ') });
+}
 
 /** Owner / president / founder names near title words in visible text → [{name, title}] */
 export function extractPeople(html) {
   const text = htmlToText(html);
   const out = [];
-  const push = (name, title) => {
-    let n = name.trim().replace(/\s+/g, ' ');
-    // "Meet Jane Smith, Owner" — drop leading filler words, keep the name.
-    while (/^(Our|The|Meet|About|Contact|Team|Home|Hi|Hello|Welcome|Read|Learn|Call|Email|Owner|Founder|President|Director|Partner)\s/.test(n)) n = n.replace(/^\S+\s/, '');
-    if (n.split(' ').length < 2) return;
-    if (!out.some((p) => p.name === n)) out.push({ name: n, title: title.trim().toLowerCase().replace(/\s+/g, ' ') });
-  };
-  const p0 = new RegExp(`${NAME}\\s*(?:,|–|—|-|\\||\\()\\s*((?:${CO})?(?:${TITLE_ALT})(?:\\s*(?:&|and|/)\\s*(?:${TITLE_ALT}))?)(?![a-z])`, 'g');
-  const p1 = new RegExp(`(?<![A-Za-z])((?:${CO})?(?:${TITLE_ALT}))\\s*(?::|,|–|—|-)\\s*${NAME}`, 'g');
-  const p2 = new RegExp(`(?<![A-Za-z])${BY}\\s+${NAME}`, 'g');
+  const p0 = new RegExp(`${NAME}(?:${CRED})?\\s*(?:,|–|—|-|\\||\\()\\s*${TITLE_GROUP}(?![a-z])`, 'g');
+  const p1 = new RegExp(`(?<![A-Za-z])${TITLE_GROUP}\\s*(?::|,|–|—|-)\\s*(?:${ci('dr')}\\.?\\s+)?${NAME}`, 'g');
+  const p2 = new RegExp(`(?<![A-Za-z])${BY}\\s+(?:${ci('dr')}\\.?\\s+)?${NAME}`, 'g');
+  const p3 = new RegExp(`(?:I'm|I am|My name is)\\s+${NAME},?\\s+(?:and I(?:'m| am)\\s+)?(?:the |a |your )?(?:proud )?${TITLE_GROUP}(?![a-z])`, 'g');
+  const p4 = new RegExp(`${NAME}\\s+(?:is|has been|serves as)\\s+(?:the |our )?(?:proud )?${TITLE_GROUP}\\s+(?:of|at|and)\\b`, 'g');
   for (const line of text.split('\n')) {
     let m;
-    p0.lastIndex = 0;
-    while ((m = p0.exec(line))) push(m[1], m[2]);
-    p1.lastIndex = 0;
-    while ((m = p1.exec(line))) push(m[2], m[1]);
+    for (const [re, ni, ti] of [[p0, 1, 2], [p1, 2, 1], [p3, 1, 2], [p4, 1, 2]]) {
+      re.lastIndex = 0;
+      while ((m = re.exec(line))) pushPerson(out, m[ni], m[ti]);
+    }
     p2.lastIndex = 0;
-    while ((m = p2.exec(line))) push(m[1], 'founder');
+    while ((m = p2.exec(line))) pushPerson(out, m[1], 'founder');
+  }
+  return out;
+}
+
+/**
+ * Team cards: a line that is only a person's name, followed by a line that is
+ * only a title ("<h3>Jane Smith</h3><p>Owner</p>").
+ */
+export function extractTeamCards(html) {
+  const lines = htmlToLines(html);
+  const out = [];
+  for (let i = 0; i < lines.length - 1; i++) {
+    const nameLine = lines[i].replace(/^(?:Dr\.?|Mr\.?|Mrs\.?|Ms\.?)\s+/, '');
+    if (nameLine.length > 40 || !looksLikeName(nameLine)) continue;
+    const t = lines[i + 1];
+    if (t.split(/\s+/).length > 7 || /[.!?]$/.test(t)) continue;
+    const tier = titleTier(t);
+    if (tier <= 25) continue;
+    const { clean } = cleanPersonName(nameLine);
+    if (!out.some((p) => p.name === clean)) out.push({ name: clean, title: t.toLowerCase().replace(/\s+/g, ' ') });
   }
   return out;
 }
@@ -205,13 +260,111 @@ export function extractEmployeeHint(html) {
   return Number.isFinite(n) && n > 0 && n < 100000 ? n : null;
 }
 
-export function splitName(name) {
-  const parts = String(name || '').replace(/\b[A-Z]\.\s*/g, '').trim().split(/\s+/).filter(Boolean);
-  const clean = (s) => s.toLowerCase().normalize('NFKD').replace(/[^a-z]/g, '');
-  return { first: clean(parts[0] || ''), last: clean(parts[parts.length - 1] || ''), firstDisplay: parts[0] || '' };
+/** Same-site links with their text: [{path, text}] (no fragments, no files). */
+export function extractLinks(html, host) {
+  const out = [];
+  const re = /<a\b[^>]*href\s*=\s*["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m;
+  while ((m = re.exec(String(html || '')))) {
+    let href = decodeEntities(m[1]).trim();
+    if (/^(mailto|tel|javascript|sms):/i.test(href)) continue;
+    if (/^https?:\/\//i.test(href)) {
+      if (hostOf(href) !== host) continue;
+      href = href.replace(/^https?:\/\/[^/]+/i, '') || '/';
+    } else if (href.startsWith('//')) continue;
+    else if (!href.startsWith('/')) href = `/${href.replace(/^\.\//, '')}`;
+    href = href.split('?')[0].replace(/\/+$/, '') || '/';
+    if (/\.(pdf|jpe?g|png|gif|svg|webp|zip|docx?|xlsx?|mp4|mov)$/i.test(href) || href.length > 120) continue;
+    const text = htmlToText(m[2]).replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (!out.some((l) => l.path === href)) out.push({ path: href, text });
+  }
+  return out;
 }
 
-/** first@, first.last@, flast@, firstl@, f.last@ — in that order (SPEC §7.2 step 4). */
+const PEOPLE_PAGE_RE = /(^|\/)(about|about-us|our-story|who-we-are|team|our-team|meet|staff|our-staff|leadership|management|people|owners?|founders?|our-people|company|history)(\/|-|$)/i;
+const PEOPLE_TEXT_RE = /\b(about|team|staff|leadership|meet|our story|who we are|our people|management|owner|founder)\b/i;
+const CONTACT_PAGE_RE = /(^|\/)(contact|contact-us|get-in-touch|reach-us)(\/|-|$)/i;
+
+/** The pages worth reading after the home page, best first (people pages, then contact), max `max`. */
+export function pagesToCrawl(links = [], max = 6) {
+  const scored = [];
+  for (const l of links) {
+    if (l.path === '/') continue;
+    let s = 0;
+    if (PEOPLE_PAGE_RE.test(l.path)) s += 3;
+    if (PEOPLE_TEXT_RE.test(l.text)) s += 2;
+    if (CONTACT_PAGE_RE.test(l.path) || /\bcontact\b/i.test(l.text)) s += 1;
+    if (/blog|news|post|article|tag|category|privacy|terms|login|cart|shop/i.test(l.path)) s -= 5;
+    if (s > 0) scored.push({ path: l.path, s, depth: l.path.split('/').length });
+  }
+  scored.sort((a, b) => b.s - a.s || a.depth - b.depth);
+  const picked = scored.slice(0, max).map((x) => x.path);
+  for (const p of [...CRAWL_PATHS.slice(1), ...EXTRA_PATHS]) {
+    if (picked.length >= max) break;
+    if (!picked.includes(p)) picked.push(p);
+  }
+  return picked.slice(0, max);
+}
+
+const SERVICE_STOP = /^(services?|our services|home|about|contact|blog|faq|reviews?|gallery|careers|financing|specials|coupons|areas? served|service areas?|locations?|residential|commercial|more|view all|learn more|read more|get a quote|free estimate|schedule|book now|call now|menu|portfolio|projects|testimonials|resources|team|privacy policy|terms)$/i;
+
+/** Call-to-action and filler words that mean a link label is a button, not a service name. */
+export const SERVICE_CTA = /\b(now|today|call|free|here|more|click|book|get|schedule|learn|view|read|contact|quote|estimate|near me|24\/7|best|top|cheap|affordable|#1|us)\b/i;
+
+/** Service names from /services/… links and nav text: ['drain cleaning', 'water heaters'] (lower-case, ≤ 4 words). */
+export function extractServices(links = []) {
+  const out = [];
+  for (const l of links) {
+    if (!/\/(services?|what-we-do|solutions|practice-areas?|specialties)\/[a-z0-9-]+/i.test(l.path)) continue;
+    const label = (l.text || l.path.split('/').pop().replace(/-/g, ' ')).toLowerCase().replace(/[^a-z0-9 &'-]/g, ' ').replace(/\s+/g, ' ').trim();
+    const words = label.split(' ');
+    if (!label || words.length > 4 || label.length < 4 || SERVICE_STOP.test(label) || SERVICE_CTA.test(label) || /\d{3,}/.test(label)) continue;
+    if (!out.some((s) => s.label === label)) out.push({ label, path: l.path });
+  }
+  return out.slice(0, 12);
+}
+
+/**
+ * Facts and signals from one page: copyright year, founding year, hiring,
+ * expansion, viewport, street address, franchise disclaimer, LinkedIn
+ * profile slugs (name hints only), meta description.
+ */
+export function extractFacts(html) {
+  const raw = String(html || '');
+  const text = htmlToText(raw);
+  const facts = {};
+  const years = [...text.matchAll(/(?:©|&copy;|\(c\)|copyright)\s*(?:\d{4}\s*[-–]\s*)?(\d{4})/gi)].map((m) => Number(m[1])).filter((y) => y > 1990 && y < 2100);
+  if (years.length) facts.copyrightYear = Math.max(...years);
+  const since = /\b(?:since|established in|est\.?|founded in|serving (?:[A-Z][a-z]+(?: [A-Z][a-z]+)? )?since|in business since)\s+(19[0-9]{2}|20[0-2][0-9])\b/i.exec(text);
+  if (since) facts.since = Number(since[1]);
+  const yrs = /\b(?:over|more than|nearly|for)?\s*(\d{1,3})\+?\s+years\s+(?:of\s+)?(?:experience|in business|serving|of service)/i.exec(text);
+  if (yrs && Number(yrs[1]) >= 2 && Number(yrs[1]) <= 150) facts.yearsClaim = Number(yrs[1]);
+  facts.viewport = /<meta[^>]+name\s*=\s*["']viewport["']/i.test(raw);
+  const desc = /<meta[^>]+name\s*=\s*["']description["'][^>]*content\s*=\s*["']([^"']{10,300})["']/i.exec(raw);
+  if (desc) facts.metaDescription = decodeEntities(desc[1]).trim();
+  facts.hiring = /\b(now hiring|we(?:'re| are) hiring|join our team|open positions|career opportunities|apply now|job openings)\b/i.test(text);
+  facts.expansion = /\b(new location|now open in|grand opening|now serving|second location|newest location|expanded to)\b/i.test(text);
+  facts.hasAddress = /\b\d{2,6}\s+[A-Z0-9][A-Za-z0-9.' ]{2,40}\s(?:St|Street|Ave|Avenue|Rd|Road|Blvd|Boulevard|Dr|Drive|Ln|Lane|Way|Pkwy|Parkway|Hwy|Highway|Ct|Court|Pl|Place|Cir|Circle|Trl|Suite)\b/.test(text);
+  facts.hasPhone = /\(?\b\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}\b/.test(text);
+  facts.franchise = FRANCHISE_TEXT_RE.test(text);
+  facts.linkedinHints = [...new Set([...raw.matchAll(/https?:\/\/(?:[a-z]+\.)?linkedin\.com\/in\/[A-Za-z0-9-]+/gi)].map((m) => nameFromLinkedinSlug(m[0])).filter(Boolean))].slice(0, 10);
+  return facts;
+}
+
+/** Merge per-page facts (first seen wins, flags OR-ed, newest copyright). */
+export function mergeFacts(a = {}, b = {}) {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b)) {
+    if (v == null || v === '') continue;
+    if (typeof v === 'boolean') out[k] = Boolean(out[k] || v);
+    else if (k === 'copyrightYear') out[k] = Math.max(Number(out[k]) || 0, v);
+    else if (k === 'linkedinHints') out[k] = [...new Set([...(out[k] || []), ...v])].slice(0, 10);
+    else if (out[k] == null || out[k] === '') out[k] = v;
+  }
+  return out;
+}
+
+/** first@, first.last@, flast@, firstl@, f.last@ — in that order (SPEC §7.2 step 4; v1 order, kept for reference). */
 export function guessPatterns(first, last, host) {
   if (!first || !host) return [];
   const f = first.toLowerCase();
@@ -221,10 +374,6 @@ export function guessPatterns(first, last, host) {
   return [...new Set(out)];
 }
 
-export function isRoleAddress(email) {
-  return ROLE_LOCALS.has(String(email || '').split('@')[0].toLowerCase());
-}
-
 export function titleApproved(title, approvedTitles = []) {
   const t = String(title || '').toLowerCase();
   if (!t) return false;
@@ -232,44 +381,106 @@ export function titleApproved(title, approvedTitles = []) {
   return list.some((a) => t.includes(a) || a.includes(t));
 }
 
+// ── contact choice ───────────────────────────────────────────────────────────
+
+const onHostOf = (host) => (e) => hostOf(e) === host || hostOf(e).endsWith(`.${host}`);
+
 /**
- * Pick the best contact from one site's findings (SPEC §7.2 step 3):
- * named person with an approved title → named person → role address.
- * @returns {{kind: 'person'|'role'|'email', name?, title?, email?, source}} | null
+ * Every named person on the site, ranked best first: approved title (client
+ * profile) → decision-maker tier → has an own address → name source.
+ * Returns [{name, title, tier, approved, email, emailSource, nameSource}].
  */
-export function pickContact({ mailtos = [], emails = [], ld = { people: [], orgs: [] }, people = [] }, host, approvedTitles = []) {
-  const onHost = (e) => hostOf(e) === host || hostOf(e).endsWith(`.${host}`);
-  const found = new Map(); // email → source
-  for (const m of mailtos) found.set(m.email, 'mailto');
-  for (const p of ld.people) if (p.email && !found.has(p.email)) found.set(p.email, 'jsonld');
-  for (const o of ld.orgs) if (o.email && !found.has(o.email)) found.set(o.email, 'jsonld');
-  for (const e of emails) if (!found.has(e)) found.set(e, 'text');
-  const persons = [...ld.people.map((p) => ({ ...p, from: 'jsonld' })), ...people.map((p) => ({ ...p, email: '', from: 'text' }))]
-    .filter((p) => p.name && splitName(p.name).first);
-  // A person's own address: listed on the person, or first-name-ish on the host.
-  const emailFor = (p) => {
-    if (p.email && validEmail(p.email)) return p.email;
-    const { first, last } = splitName(p.name);
-    for (const e of found.keys()) {
-      const local = e.split('@')[0];
-      if (onHost(e) && !isRoleAddress(e) && (local === first || local.startsWith(`${first}.`) || local === `${first[0]}${last}` || local === `${first}${last[0] || ''}`)) return e;
-    }
-    return '';
-  };
-  const ranked = persons
-    .map((p) => ({ ...p, approved: titleApproved(p.title, approvedTitles), email: emailFor(p) }))
-    .sort((a, b) => (b.approved - a.approved) || (Boolean(b.email) - Boolean(a.email)));
-  if (ranked.length) {
-    const p = ranked[0];
-    return { kind: 'person', name: p.name, title: p.title || '', email: p.email || '', source: p.email ? (found.get(p.email) || p.from) : 'guess', titleApproved: p.approved };
+export function rankPeople(found, host, approvedTitles = []) {
+  const { mailtos = [], emails = [], ld = { people: [], orgs: [] }, people = [], cards = [], linkedinHints = [] } = found;
+  const onHost = onHostOf(host);
+  const addr = new Map(); // email → source
+  for (const m of mailtos) addr.set(m.email, 'mailto');
+  for (const p of ld.people) if (p.email && !addr.has(p.email)) addr.set(p.email, 'jsonld');
+  for (const o of ld.orgs) if (o.email && !addr.has(o.email)) addr.set(o.email, 'jsonld');
+  for (const e of emails) if (!addr.has(e)) addr.set(e, 'text');
+  const src = [
+    ...ld.people.map((p) => ({ ...p, from: 'jsonld' })),
+    ...people.map((p) => ({ ...p, email: '', from: 'text' })),
+    ...cards.map((p) => ({ ...p, email: '', from: 'team' })),
+  ].filter((p) => p.name && looksLikeName(p.name));
+  const byName = new Map();
+  for (const p of src) {
+    const key = cleanPersonName(p.name).clean.toLowerCase();
+    const prev = byName.get(key);
+    if (!prev || (!prev.title && p.title) || (!prev.email && p.email)) byName.set(key, { ...prev, ...p, name: cleanPersonName(p.name).clean, title: p.title || prev?.title || '', email: p.email || prev?.email || '' });
   }
-  const personal = [...found.keys()].filter((e) => onHost(e) && !isRoleAddress(e));
-  if (personal.length) return { kind: 'email', email: personal[0], source: found.get(personal[0]) };
-  const roles = [...found.keys()].filter((e) => isRoleAddress(e)).sort((a, b) => ['info', 'hello', 'contact'].indexOf(b.split('@')[0]) - ['info', 'hello', 'contact'].indexOf(a.split('@')[0]));
-  const role = roles.find(onHost) || roles[0];
-  if (role) return { kind: 'role', email: role, source: found.get(role) };
-  const any = [...found.keys()][0];
-  return any ? { kind: 'email', email: any, source: found.get(any) } : null;
+  const hints = new Set(linkedinHints.map((h) => h.toLowerCase()));
+  const emailFor = (p) => {
+    if (p.email && validEmail(p.email) && !isRoleAddress(p.email)) return { email: p.email, source: addr.get(p.email) || 'jsonld' };
+    const { first, last } = splitName(p.name);
+    for (const [e, s] of addr) {
+      const local = e.split('@')[0];
+      const mine = !isRoleAddress(e) && (local === first || local === `${first}.${last}` || local === `${first}${last}` || local === `${first}_${last}`
+        || local === `${first[0]}${last}` || local === `${first}${last[0] || ''}` || local === `${first[0]}.${last}`);
+      if (mine && (onHost(e) || isFreemail(e))) return { email: e, source: s };
+    }
+    return { email: '', source: '' };
+  };
+  return [...byName.values()]
+    .map((p) => {
+      const own = emailFor(p);
+      return {
+        name: p.name, title: p.title || '', tier: titleTier(p.title), approved: titleApproved(p.title, approvedTitles),
+        email: own.email, emailSource: own.source, nameSource: p.from, linkedinHint: hints.has(p.name.toLowerCase()),
+      };
+    })
+    .sort((a, b) => (Number(b.approved) - Number(a.approved)) || (b.tier - a.tier) || (Boolean(b.email) - Boolean(a.email))
+      || (Number(b.linkedinHint) - Number(a.linkedinHint)) || ((a.nameSource === 'jsonld' ? 0 : 1) - (b.nameSource === 'jsonld' ? 0 : 1)));
+}
+
+/**
+ * Pick the contact(s) for one company (SPEC §7.2 step 3, v2): a named
+ * person, best-titled first; a personal address on the host with no name
+ * found (the first name is taken from the address when it is one); never a
+ * role address. Returns up to `max` contacts or [].
+ *  {kind: 'person'|'email', name, title, tier, email, emailSource, candidates[], pattern, patternFrom}
+ */
+export function pickContacts(found, host, approvedTitles = [], { max = 1 } = {}) {
+  const ranked = rankPeople(found, host, approvedTitles);
+  const onHost = onHostOf(host);
+  const known = [];
+  const all = new Set([...(found.mailtos || []).map((m) => m.email), ...(found.emails || []), ...(found.ld?.people || []).map((p) => p.email).filter(Boolean)]);
+  for (const p of ranked) if (p.email) known.push({ email: p.email, name: p.name });
+  for (const e of all) if (onHost(e) && !isRoleAddress(e) && !known.some((k) => k.email === e)) known.push({ email: e, name: nameFromEmail(e) || '' });
+  const inferred = inferPattern(known, host);
+  const out = [];
+  for (const p of ranked) {
+    if (out.length >= max) break;
+    if (p.email) { out.push({ kind: 'person', ...p, candidates: [p.email], pattern: null, patternFrom: null }); continue; }
+    const { first, last } = splitName(p.name);
+    // Inferred pattern + one fallback; else the three patterns that cover
+    // ~90 % of small US companies (each candidate costs a verifier credit).
+    const candidates = candidateEmails(first, last, host, { pattern: inferred?.pattern || null, max: inferred ? 2 : 3 });
+    if (!candidates.length) continue;
+    out.push({ kind: 'person', ...p, email: candidates[0], emailSource: inferred ? 'pattern' : 'guess', candidates, pattern: inferred?.pattern || null, patternFrom: inferred?.from || null });
+  }
+  if (out.length) return out;
+  // No named person: a personal address on the host (first name from the address when it is one).
+  const personal = [...all].filter((e) => onHost(e) && !isRoleAddress(e));
+  for (const e of personal) {
+    if (out.length >= max) break;
+    const local = e.split('@')[0];
+    const fromEmail = nameFromEmail(e);
+    const firstOnly = FIRST_NAMES.has(local) ? local[0].toUpperCase() + local.slice(1) : '';
+    out.push({ kind: 'email', name: fromEmail || '', firstName: fromEmail ? fromEmail.split(' ')[0] : firstOnly, title: '', tier: 0, approved: false, email: e, emailSource: (found.mailtos || []).some((m) => m.email === e) ? 'mailto' : 'text', candidates: [e], pattern: null, patternFrom: null, nameSource: fromEmail ? 'email' : (firstOnly ? 'email-first' : '') });
+  }
+  return out;
+}
+
+/**
+ * v1 compatibility: the single best contact, or null. Role addresses are
+ * never returned (v2 rule).
+ */
+export function pickContact(found, host, approvedTitles = []) {
+  const [c] = pickContacts(found, host, approvedTitles, { max: 1 });
+  if (!c) return null;
+  if (c.kind === 'person') return { kind: 'person', name: c.name, title: c.title || '', email: c.emailSource === 'guess' || c.emailSource === 'pattern' ? '' : c.email, source: c.emailSource === 'guess' || c.emailSource === 'pattern' ? 'guess' : c.emailSource, titleApproved: c.approved };
+  return { kind: 'email', email: c.email, source: c.emailSource };
 }
 
 // ── scoring ──────────────────────────────────────────────────────────────────
@@ -295,7 +506,7 @@ export function dreamMatch(lead, dreams = []) {
   return n;
 }
 
-/** SPEC §7.2 step 6. */
+/** SPEC §7.2 step 6 (the v1 score; the app's Lead Grader gives the 0–100 grade). */
 export function scoreLead(lead) {
   return (Number(lead.dreamMatch) || 0) + (lead.hasNamedPerson ? 2 : 0) + (lead.titleApproved ? 2 : 0) - (lead.isRole ? 3 : 0) - (lead.riskLevel === 'catchall' ? 2 : 0);
 }
@@ -325,6 +536,78 @@ export function buildQueries(profile = {}, { widen = false } = {}) {
     if (widen) for (const st of adjacentStates(states.length ? states : cities.map((c) => (/,\s*([A-Z]{2})$/.exec(c) || [])[1]).filter(Boolean))) out.push(`${kw} in ${st}, USA`);
   }
   return [...new Set(out)];
+}
+
+// Other words people and Google use for the same kind of business: a second
+// phrasing returns a different top 60 (Text Search's cap per query).
+const KEYWORD_VARIANTS = [
+  [/dent/, ['dentist', 'dental clinic', 'family dentistry']],
+  [/law|attorney|lawyer/, ['law firm', 'attorney', 'lawyer']],
+  [/account|cpa|bookkeep|tax/, ['accounting firm', 'CPA firm', 'bookkeeping service']],
+  [/insurance/, ['insurance agency', 'insurance broker']],
+  [/real estate|realt/, ['real estate agency', 'real estate broker']],
+  [/property manag/, ['property management company', 'HOA management company']],
+  [/medical|clinic|doctor|physician/, ['medical clinic', 'family practice', 'doctor office']],
+  [/chiropract/, ['chiropractor', 'chiropractic clinic']],
+  [/veterinar|vet /, ['veterinarian', 'animal hospital']],
+  [/restaurant/, ['restaurant', 'cafe']],
+  [/manufactur/, ['manufacturer', 'machine shop', 'fabrication shop']],
+  [/construct|contractor|builder/, ['general contractor', 'construction company', 'home builder']],
+  [/plumb/, ['plumber', 'plumbing company']],
+  [/roof/, ['roofing contractor', 'roofer']],
+  [/hvac|heating|air condition/, ['HVAC contractor', 'heating and air conditioning']],
+  [/electric/, ['electrician', 'electrical contractor']],
+  [/marketing|advertis/, ['marketing agency', 'advertising agency']],
+  [/\bit\b|managed it|msp|computer/, ['IT services', 'managed IT services', 'computer repair']],
+  [/logistic|trucking|freight/, ['trucking company', 'logistics company']],
+  [/salon|spa/, ['hair salon', 'day spa']],
+  [/gym|fitness/, ['gym', 'fitness studio']],
+  [/church/, ['church']],
+  [/school|daycare|child care/, ['private school', 'daycare']],
+];
+
+/** Up to `max` other phrasings of an industry keyword (never the keyword itself). */
+export function keywordVariants(kw, max = 2) {
+  const k = String(kw || '').toLowerCase();
+  const hit = KEYWORD_VARIANTS.find(([re]) => re.test(k));
+  return hit ? hit[1].filter((v) => v.toLowerCase() !== k).slice(0, max) : [];
+}
+
+/**
+ * The search plan: the buildQueries grid (city / zip / state queries) with
+ * the city each belongs to, then the same cities with other phrasings of the
+ * keyword. Returns [{ q, kw, city, state, variant }].
+ */
+export function queryPlan(profile = {}, { widen = false } = {}) {
+  const keywords = list(profile.industry).slice(0, 3);
+  const cities = list(profile.cities);
+  const states = list(profile.states);
+  const cityOf = (c) => (c.includes('|') ? c.split('|') : [c.replace(/,\s*[A-Z]{2}$/, ''), (/,\s*([A-Z]{2})$/.exec(c) || [])[1] || states[0] || '']).map((s) => String(s).trim());
+  const byQuery = new Map();
+  for (const kw of keywords) for (const c of cities) { const [city, st] = cityOf(c); byQuery.set(`${kw} in ${city}${st ? `, ${st}` : ''}`, { kw, city, state: st }); }
+  const out = buildQueries(profile, { widen }).map((q) => ({ q, ...(byQuery.get(q) || { kw: '', city: '', state: '' }), variant: false }));
+  const seen = new Set(out.map((x) => x.q.toLowerCase()));
+  for (const kw of keywords) {
+    for (const v of keywordVariants(kw)) {
+      for (const c of cities) {
+        const [city, st] = cityOf(c);
+        const q = `${v} in ${city}${st ? `, ${st}` : ''}`;
+        if (!seen.has(q.toLowerCase())) { seen.add(q.toLowerCase()); out.push({ q, kw: v, city, state: st, variant: true }); }
+      }
+    }
+  }
+  return out;
+}
+
+/** The states a lead may be in: the profile's states + the states of its cities (+ neighbours when widened). */
+export function areaStates(profile = {}, { widen = false } = {}) {
+  const out = new Set(list(profile.states).map(normState).filter(Boolean));
+  for (const c of list(profile.cities)) {
+    const st = c.includes('|') ? c.split('|')[1] : (/,\s*([A-Za-z]{2})\s*$/.exec(c) || [])[1];
+    if (normState(st)) out.add(normState(st));
+  }
+  if (widen) for (const s of adjacentStates([...out])) out.add(s);
+  return out;
 }
 
 // US state neighbours (for the one-time "widen to adjacent states" retry).
