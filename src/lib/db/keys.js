@@ -180,6 +180,19 @@ export const K = {
   applyRateInquiry: (ipHash, hour) => `inquiry:rate:${hour}:${ipHash}`,
   // ── end Stage D ──
 
+  // ── Google Meet (docs/REPLYBOT-MEET.md §3) ──
+  /**
+   * The owner's Google connection (hash): clientIdEnc, clientSecretEnc, refreshTokenEnc
+   * (ENC_KEY-encrypted, never returned by any API), account, scope, connectedAt, brokenAt,
+   * brokenReason, updatedAt.
+   */
+  google: () => 'google:oauth',
+  /** The current Google access token (string, encrypted, EX until about a minute before it expires). */
+  googleAccess: () => 'google:access',
+  /** A consent-screen `state` waiting for its callback (string, EX 10 min, one use; key = the state's SHA-256). */
+  googleState: (hash) => `google:state:${hash}`,
+  // ── end Google Meet ──
+
   // ── Onboarding call (docs/ONBOARD-CALL.md) ──
   /**
    * The acceptance email and the call it asks for (hash): sentAt, lastSentAt, subject,

@@ -6,8 +6,9 @@
 
 import { kv } from '@vercel/kv';
 
-const EXCLUDE = [/^session:/, /^jobs:claim:/, /:token:/, /^throttle:/, /^claim:/, /^lead:.*:claim$/, /_lock$/];
-const SECRET_FIELDS = new Set(['passwordEnc', 'password', 'appPassword']);
+const EXCLUDE = [/^session:/, /^jobs:claim:/, /:token:/, /^throttle:/, /^claim:/, /^lead:.*:claim$/, /_lock$/, /^google:(access$|state:)/];
+// The Google keys and token (google:oauth) stay in Redis too: after a restore the owner reconnects.
+const SECRET_FIELDS = new Set(['passwordEnc', 'password', 'appPassword', 'clientIdEnc', 'clientSecretEnc', 'refreshTokenEnc']);
 
 function stripSecrets(obj) {
   if (!obj || typeof obj !== 'object') return obj;

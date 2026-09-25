@@ -102,6 +102,10 @@ export const ALERTS = {
   decision_made: { urgent: false, title: '{clientId} chose: {choice}' },
   new_inquiry: { urgent: true, title: 'New plan inquiry: {company} — call {when}' },
   // ── end Stage D ──
+  // ── Google Meet (docs/REPLYBOT-MEET.md §3) ── once per broken connection (not urgent: calls
+  // are still confirmed, their emails just carry no Meet link until he reconnects).
+  google_disconnected: { urgent: false, title: 'Google Meet disconnected ({account}) — reconnect it in Settings' },
+  // ── end Google Meet ──
   // ── Onboarding call (docs/ONBOARD-CALL.md) ── phone + email (not urgent: the hub's own
   // to-do for the trial clears itself once answered/booked, an urgent alert would linger).
   // Scope is per message / booking, so each one alerts exactly once.

@@ -224,7 +224,9 @@ the red dot), push `url` = `/#calendar`.
 **Not built** — no nudge to the owner when a request sits unanswered (the
 red dot stays); unanswered requests whose time has passed stay in `requests`
 until declined; nothing is written to an outside calendar (the invites put
-the call in the applicant's calendar; the owner's is the hub).
+the call in the applicant's calendar; the owner's is the hub). *Since
+2026-09-25: with Google connected, confirmed calls also go on the owner's
+Google Calendar with a Meet link — docs/REPLYBOT-MEET.md §3.*
 
 **To set** — `CALENDAR.meetingLink` (the owner's Zoom / Google Meet link;
 until then confirmations say "I'll send the link before the call"), and a

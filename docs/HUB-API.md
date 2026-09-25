@@ -475,7 +475,8 @@ Defaults: `from` = now − 1 day, `to` = `from` + `CALENDAR.daysAhead` days
   "requests": [ meeting ],        // every request still waiting for a yes (any date), oldest ask first
   "settings": { "hours": ["09:00","17:00"], "days": [1,2,3,4,5], "slotMinutes": 30, "ownerZone": "Asia/Colombo",
                 "usZone": "America/New_York", "meetingLink": null,
-                "bufferMinutes": 15, "maxPerDay": 6, "minNoticeHours": 12, "daysAhead": 14, "callMinutes": 30 },
+                "bufferMinutes": 15, "maxPerDay": 6, "minNoticeHours": 12, "daysAhead": 14, "callMinutes": 30,
+                "googleMeet": "not_set_up|ready_to_connect|connected|broken" },
   "free": [ { "start": "ISO", "minutes": 30 } ]   // open times in the range: call hours, buffer, maxPerDay (no notice period)
 }
 ```
@@ -490,6 +491,9 @@ Defaults: `from` = now − 1 day, `to` = `from` + `CALENDAR.daysAhead` days
   "theirZone": "America/Denver|null", "note": "…", "declineReason": "…|null", "cancelReason": "…|null",
   "proposed": "ISO|null",         // the owner's suggestion, waiting for them: the time HELD is `proposed` — draw it there
   "createdAt": "ISO", "updatedAt": "ISO", "requestedAt": "ISO|null", "confirmedAt": "ISO|null", "sequence": 0,
+  "meetLink": "https://meet.google.com/…|null",   // Google Meet: show a big "Join Google Meet" button
+  "googleEventId": "…|null",                      // its event on the owner's Google Calendar
+  "meetError": "Google isn't connected|null",     // no link: show "No Meet link — {meetError}"
   "history": [ { "at": "ISO", "what": "requested|confirmed|suggested|accepted|moved|declined|held|no_show|cancelled|blocked|unblocked",
                  "by": "them|owner|machine", "via?": "booking_page|inbox|onboard_card|owner", "from?": "ISO (old time)", "reason?": "…" } ],
   "labels": { "owner": "Tue 6 Oct, 11:30 pm", "eastern": "Tue 6 Oct, 2:00 pm ET",
@@ -501,8 +505,8 @@ Defaults: `from` = now − 1 day, `to` = `from` + `CALENDAR.daysAhead` days
 
 One of (→ `{ ok, meeting }`):
 - `{ action: 'confirm', id }` — Yes to a request: they get the confirmation
-  (their zone + Eastern, `meetingLink` or "I'll send the link before the
-  call") with an .ics invite; an onboarding meeting books the onboarding call
+  (their zone + Eastern, the call's Google Meet link, else `meetingLink`, else
+  "I'll send the link before the call") with an .ics invite; an onboarding meeting books the onboarding call
   (`bookedBy: 'calendar'`).
 - `{ action: 'suggest', id, start }` — another time for a request: they get
   "how about …?" with a one-click "Yes, that works" link and the booking page.
@@ -542,6 +546,61 @@ press again), `503` (the calendar was busy for a moment — press again).
   IT) asked for Tue 6 Oct 2:00 pm ET = 11:30 pm Colombo — say yes in the
   Calendar"), `meeting_accepted` ("Sam (eCreek IT) said yes to …"); push
   `url` = `/#calendar`.
+
+## Google Meet — Settings › Google Meet (2026-09-25)
+
+Contract: docs/REPLYBOT-MEET.md §3 (its "as built" lists every decision); the
+owner's steps to show in the hub: docs/GOOGLE-SETUP.md. Once connected, every
+call that is confirmed (Yes, their "Yes, that works", `add` with a client) gets
+an event on his Google Calendar with a Meet link, made before the confirmation
+email, so the email and the .ics carry the link. `move` moves the event;
+`cancel` / `decline` delete it. Google failing never blocks a button: the call
+is confirmed, the email says "I'll send the link before the call", and the
+meeting has `meetError`.
+
+`GET /api/mc/google` →
+```jsonc
+{
+  "status": "not_set_up|ready_to_connect|connected|broken",
+  "account": "owner@gmail.com|null",        // connected / broken only
+  "redirectUri": "https://email-distributor.vercel.app/api/google/callback",  // show with a Copy button
+  "hasClient": true, "clientFrom": "saved|env|null",
+  "connectedAt": "ISO|null", "brokenAt": "ISO|null",
+  "problem": "the connection was removed or has expired|null",   // broken only, plain words
+  "encKey": true                              // false: the keys cannot be saved (ENC_KEY missing)
+}
+```
+The Client ID, the Client secret and the tokens are never in any answer.
+
+`POST /api/mc/google`, one of:
+- `{ action: 'saveClient', clientId, clientSecret }` → `{ ok, …status }` ·
+  400 (not a Google Client ID / empty secret) · 409 (set on the server
+  instead) · 503 (no ENC_KEY). A different Client ID disconnects the old
+  account.
+- `{ action: 'connect' }` → `{ url }`: open it in the same tab
+  (`location.href = url`). Google sends him back to
+  `https://aviance.store/#settings/google?connected=1`, or `?error=<code>`
+  (`state`, `denied`, `calendar_permission`, `exchange`, `not_set_up`,
+  `no_refresh_token`, `google_down`, `google`, `no_code`, `server`; plain
+  words for each in docs/GOOGLE-SETUP.md "If something goes wrong"). The link
+  works for 10 minutes, once. 409 before the keys are saved.
+- `{ action: 'disconnect' }` → `{ ok, revoked, …status }` (the saved keys
+  stay; status `ready_to_connect`).
+- `{ action: 'test' }` → `{ ok: true, meetLink, removed }` (a 15-minute event
+  with a Meet tomorrow, deleted straight away; `note` when it could not be
+  deleted) · 409 not connected / broken · 502 `{ error }` Google's refusal in
+  plain words (for example "The Google Calendar API is not turned on in your
+  Google Cloud project (step 2 of the guide).").
+
+`GET /api/google/callback?code&state` is public (Google calls it) and only
+ever redirects (303) as above.
+
+Hub: a meeting with `meetLink` → "Join Google Meet"; without one and with
+`meetError` → "No Meet link — {meetError}"; `settings.googleMeet` in
+`GET /api/mc/calendar` tells the Calendar whether to point at Settings ›
+Google Meet. Alert `google_disconnected` ("Google Meet disconnected
+(owner@gmail.com) — reconnect it in Settings"), phone + email, once per
+broken connection, push `url` = `/#settings/google`.
 
 ## Public (the applicant, signed link token)
 

@@ -129,6 +129,102 @@ meeting gets a real Google Meet link and an event on his Google Calendar.
   - `GET /api/google/callback?code&state` — public; checks `state`, swaps the code for tokens, stores them, redirects to `https://aviance.store/#settings/google?connected=1` (or `?error=…`). Must be added to middleware PUBLIC and must not reveal anything on a bad state.
 - Hub meetings (`GET /api/mc/calendar`) gain `meetLink`, `googleEventId`.
 
+### §3 — as built (Machine B, 2026-09-25)
+
+Everything above holds. Code: `src/lib/ext/google.js` (OAuth, tokens, the
+Calendar calls, the hooks the Calendar uses), the hooks in
+`src/lib/systems/calendar.js`, routes `src/app/api/mc/google/route.js` and
+`src/app/api/google/callback/route.js` (in middleware PUBLIC), alert
+`google_disconnected` (`templates/owner.js`), keys `google:oauth`,
+`google:access`, `google:state:{sha256}` (`db/keys.js`); tests
+`tests/google-meet.test.mjs`; the owner's steps `docs/GOOGLE-SETUP.md`.
+Endpoints in `docs/HUB-API.md` (Calendar › Google Meet). **(+)** = slightly
+beyond the text above.
+
+**Connecting**
+- Consent URL: `client_id`, `redirect_uri`, `response_type=code`, `scope`
+  (`…/auth/calendar.events openid email`), `access_type=offline`,
+  `prompt=consent`, `include_granted_scopes=true`, `state`. The state is 24
+  random bytes; only its SHA-256 is a key (EX 10 min). One use: read + DEL
+  (the DEL decides between two racing callbacks), and also refused when its
+  own timestamp is older than 10 minutes. A callback without a good state
+  never reaches Google and changes nothing.
+- The callback always answers 303 to `https://aviance.store/#settings/google`
+  (`HUB_URL` env overrides the site) with `?connected=1` or `?error=` one of
+  `state | denied | google | no_code | not_set_up | exchange | google_down |
+  calendar_permission | no_refresh_token | server`. **(+)**
+  `calendar_permission`: Google lets the user untick the calendar box, and a
+  connection without `calendar.events` is refused, not stored.
+- The account shown is the `email` in the id_token from the token endpoint
+  (straight from Google over TLS, so no signature check is needed), else the
+  userinfo endpoint.
+- The client: the env pair wins only when both are set. **(+)** Pasting while
+  it is set → 409 (the pasted values would not be used). The Client ID must end
+  in `.apps.googleusercontent.com`. A different Client ID forgets (and revokes)
+  the old connection, since tokens only work with their own client. The same ID
+  with a new secret keeps it. No `ENC_KEY` → 503, nothing stored.
+- Encrypted in KV: the Client ID, the Client secret, the refresh token and the
+  cached access token. None is ever returned. **(+)** They are also left out of
+  the backup export (after a restore the owner reconnects).
+- **(+)** The status also has `clientFrom` (`env|saved`), `brokenAt`, `problem`
+  (plain words when broken) and `encKey`.
+
+**Tokens**
+- The access token is cached for `expires_in − 60 s`. A 401 from the Calendar
+  API refreshes once and tries again.
+- `invalid_grant` / `invalid_client` / `unauthorized_client` on refresh →
+  `broken`: the refresh token is deleted and `brokenAt` is set with HSETNX,
+  so exactly one `google_disconnected` alert goes out (phone + email, not
+  urgent, push url `/#settings/google`). Nothing more is sent to Google until
+  he reconnects. A timeout or 5xx is not "broken".
+- Disconnect revokes the refresh token (best effort) and forgets the tokens
+  and the account. The pasted client stays (→ `ready_to_connect`).
+
+**Meetings**
+- The owner's Yes, **(+)** their "Yes, that works" on a suggestion, and `add`
+  with a client all make the event before the email: insert on `primary`,
+  `conferenceDataVersion=1`, `sendUpdates=none`, start/end as `…Z`, attendee =
+  the client (displayName = the person), `requestId` = the meeting id, **(+)**
+  `extendedProperties.private.avianceMeetingId`. Description: "Onboarding call
+  with Sam Test (eCreek IT), booked through Aviance." + "In the hub:
+  https://aviance.store/#trial/{clientId}" (`/#calendar` without a client). A
+  conference still `pending` is looked at up to twice more, 1 s apart.
+- A meeting that already has an event (they asked to move a confirmed call
+  and he says Yes again) is patched, keeping the same Meet. If the event was
+  deleted by hand in Google Calendar, a new one is made with a new request id.
+- Time limits: each Google call ≤ 8 s, one button press ≤ 15 s in all. An
+  insert is never retried automatically, so there are no double events.
+- If the email fails after the event was made (502, still a request), the event
+  is kept on the request. The next Yes patches that event instead of making a
+  second one.
+- Move → patch, after the email went (the Meet link does not change). Cancel,
+  or decline of a call that has an event → delete, after the email went. A
+  cancellation from their calendar found in the inbox deletes it, and "Mark
+  call booked" at a new time patches it. Held / no-show → nothing.
+- `meetError` is plain words; the hub shows "No Meet link — {meetError}".
+  Examples: "Google isn't connected", "Google is disconnected — reconnect it in
+  Settings › Google Meet", "Google didn't answer in time", "The Google Calendar
+  API is not turned on in your Google Cloud project (step 2 of the guide)",
+  "Google was still making the Meet link". It is null when there is a link.
+  **(+)** It is also null when Google was never set up but
+  `CALENDAR.meetingLink` is, because his own link went out.
+- Emails, .ics (`LOCATION` and description) and the booking page use the
+  meeting's `meetLink`, else `CALENDAR.meetingLink`, else "I'll send the link
+  before the call."
+- A failed patch or delete is logged (`google` events `move_failed`,
+  `delete_failed`) but not shown to him: the Meet link still works, and the
+  event may stay at the old time in his Google Calendar.
+- **(+)** `GET /api/mc/calendar` `settings.googleMeet` = the status word.
+
+**Not built**
+- The day-before reminder (onboardcall.js) does not repeat the link.
+- There is no "make the Meet now" button for a call confirmed while Google
+  was down. The hub shows why there is no link, and he sends one by hand.
+- The client is an attendee, so a Google-calendar user may also see the event
+  in their own calendar (Google emails nothing), next to our .ics invite.
+- Events made before a disconnect stay in his Google Calendar. Later moves and
+  cancels cannot reach them (logged).
+
 ## 4. Hub
 
 - **Messages** — on every trial page, a clear "Messages" section (right

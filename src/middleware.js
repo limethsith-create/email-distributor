@@ -3,7 +3,8 @@
  *
  *  - public:  client pages and their APIs (signed tokens), unsubscribe,
  *             open tracking, webhooks (verify their own tokens), /api/apply,
- *             the login page.
+ *             the login page, the Google sign-in return (/api/google/callback,
+ *             checks its own one-use state).
  *  - machine: /api/cron/* and /api/admin/export|import accept
  *             `Authorization: Bearer CRON_SECRET` (header only: a ?token= in
  *             the address would land in logs) — or an admin session.
@@ -25,6 +26,8 @@ const PUBLIC = [
   /^\/api\/c\//, /^\/c\//, /^\/api\/logo$/, /^\/apply$/,
   // Lead Finder job: the route checks LEADFINDER_TOKEN itself.
   /^\/api\/clients\/[^/]+\/profile$/,
+  // Google sends the owner back here after "Allow": the route checks its one-use `state` itself.
+  /^\/api\/google\/callback$/,
 ];
 const MACHINE = [/^\/api\/cron\//, /^\/api\/admin\/(export|import)$/];
 const HUB_API = /^\/api\/mc\//;

@@ -18,6 +18,11 @@
  *  - syncFromOnboardCall: "Mark call booked" / "Call done" / "They didn't show"
  *    on the onboarding card and calendar invites found in the inbox land in the
  *    same calendar (one meeting per client's onboarding call, no emails).
+ *  - Google Meet (docs/REPLYBOT-MEET.md §3, lib/ext/google.js): a call being
+ *    confirmed gets an event on the owner's Google Calendar with a Meet link
+ *    BEFORE its email is built (the email and the .ics carry the link); a move
+ *    patches it, a cancel / decline deletes it. Google failing never blocks a
+ *    meeting: it is confirmed with the fallback words and carries `meetError`.
  *
  * Times are stored in UTC ISO and turned into wall clocks only with
  * Intl.DateTimeFormat + timeZone (zonedToUtc for the other way), so US
@@ -44,6 +49,7 @@ import { io, firstNameOf, ownerName, asObject, isPublicUrl, weekdayOf } from '@/
 import { STATES, stateCode, stateOfCity } from '@/lib/systems/usgeo';
 import { partsIn, addDays, hhmmToMin, tzForState } from '@/lib/time';
 import * as call from '@/lib/systems/onboardcall';
+import * as google from '@/lib/ext/google';
 
 const SYSTEM = 'calendar';
 const DAY_MS = 864e5;
@@ -471,7 +477,7 @@ async function meetingVars(m, s, t, tag) {
     when: theirWhen(t, tz, s),
     whenShort: theirShort(t, tz),
     minutes: Number(m.minutes) || s.callMinutes,
-    linkLine: s.meetingLink ? `Join here: ${s.meetingLink}` : "I'll send the link before the call.",
+    linkLine: linkOf(m, s) ? `Join here: ${linkOf(m, s)}` : "I'll send the link before the call.",
     bookLink: bookLink || '(reply to this email)',
     nextLine: bookLink ? `If the time stops working, pick another here: ${bookLink}` : 'If the time stops working, reply to this email.',
   };
@@ -483,9 +489,9 @@ async function inviteFor(m, s, { method = 'REQUEST', now }) {
   const organizer = { email: sender?.email || '', name: await ownerName(m.clientId) };
   const description = [
     m.kind === 'onboarding' ? `Our ${m.minutes}-minute onboarding call.` : `Our ${m.minutes}-minute call.`,
-    s.meetingLink ? `Join here: ${s.meetingLink}` : "I'll send the link before the call.",
+    linkOf(m, s) ? `Join here: ${linkOf(m, s)}` : "I'll send the link before the call.",
   ].join('\n');
-  const content = buildIcs({ method, uid: m.id, sequence: m.sequence || 0, start: m.start, minutes: m.minutes, title: m.title, description, location: s.meetingLink || '', organizer, attendee: { email: m.email, name: m.person }, now });
+  const content = buildIcs({ method, uid: m.id, sequence: m.sequence || 0, start: m.start, minutes: m.minutes, title: m.title, description, location: linkOf(m, s) || '', organizer, attendee: { email: m.email, name: m.person }, now });
   return { method: method === 'CANCEL' ? 'CANCEL' : 'REQUEST', filename: method === 'CANCEL' ? 'cancel.ics' : 'invite.ics', content };
 }
 
@@ -497,6 +503,16 @@ async function inviteFor(m, s, { method = 'REQUEST', now }) {
 async function emailClient(m, key, vars, { icalEvent = null, dedupe = null, now }) {
   if (!m.clientId || !m.email) return { skipped: 'no client email' };
   return call.sendCallEmail(m.clientId, key, { firstName: firstNameOf(m.person) || 'there', ownerName: await ownerName(m.clientId), ...vars }, { icalEvent, dedupe, now });
+}
+
+// ─── Google Meet (docs/REPLYBOT-MEET.md §3) ──────────────────────────────────
+
+/** The link a meeting's emails and invite carry: its own Google Meet, else CALENDAR.meetingLink, else none ("I'll send the link before the call"). */
+function linkOf(m, s) { return m?.meetLink || s.meetingLink || null; }
+
+/** A call being confirmed gets its Meet first. Never throws: without one, `meetError` says why. */
+async function withMeet(m, s) {
+  return { ...m, ...(await google.meetFor(m, { fixedLink: s.meetingLink })) };
 }
 
 // ─── the booking page ────────────────────────────────────────────────────────
@@ -529,7 +545,7 @@ export async function bookingPageData(clientId, { tz = null, now = io.now() } = 
     clientId, closed: !pageOpen(client, raw), held: Boolean(raw.heldAt && String(raw.heldAt) !== '0'),
     company: client ? client.name || client.mainDomain || clientId : '', firstName: firstNameOf(client?.contactName),
     zone, zoneName: zoneInfo(zone).name, zones: US_ZONES.map(({ tz: z, name }) => ({ tz: z, name })),
-    callMinutes: s.callMinutes, daysAhead: s.daysAhead, meetingLink: existing?.status === 'confirmed' ? s.meetingLink : null,
+    callMinutes: s.callMinutes, daysAhead: s.daysAhead, meetingLink: existing?.status === 'confirmed' ? linkOf(existing, s) : null,
     existing: publicMeeting(existing, zone), slots: [], days: [],
   };
   if (base.closed) return base;
@@ -631,11 +647,12 @@ export async function acceptSuggestion(clientId, meetingId, { now = io.now() } =
     const around = await meetingsBetween(t - DAY_MS, t + DAY_MS);
     if (clashWith(around, t, m.minutes, m.id)) throw new CalendarError('Sorry — that time has just been taken. Please pick another.', 409);
     const at = now.toISOString();
-    const next = await saveMeeting({
+    // Its Google Meet before it is saved: the confirmation below carries the link.
+    const next = await saveMeeting(await withMeet({
       ...m, status: 'confirmed', start: m.proposed, proposed: null, confirmedAt: at, updatedAt: at,
       sequence: m.confirmedAt ? (Number(m.sequence) || 0) + 1 : Number(m.sequence) || 0,
       history: [...(m.history || []), step('accepted', 'them', now, { from: m.start }), step('confirmed', 'them', now)],
-    });
+    }, s));
     if (next.kind === 'onboarding') await call.syncCallFromMeeting(clientId, next, { now });
     return { meeting: next };
   });
@@ -698,15 +715,22 @@ async function confirm(id, s, now) {
   if (t <= now.getTime()) throw new CalendarError('That time has already passed — suggest another time instead.', 409);
   await assertFree(t, m.minutes, m.id, s);
   const at = now.toISOString();
-  const next = {
+  // The Google Meet first, so the email and the invite carry its link.
+  const next = await withMeet({
     ...m, status: 'confirmed', proposed: null, confirmedAt: at, updatedAt: at,
     // A time already in their calendar (they asked to move it) is updated, not added.
     sequence: m.confirmedAt ? (Number(m.sequence) || 0) + 1 : Number(m.sequence) || 0,
     history: [...(m.history || []), step('confirmed', 'owner', now)],
-  };
+  }, s);
   try {
     await emailClient(next, 'meeting_confirmed', await meetingVars(next, s, t, 'ok'), { icalEvent: next.email ? await inviteFor(next, s, { now }) : null, dedupe: `meeting_confirmed:${next.id}:${next.start}:${next.sequence}`, now });
-  } catch (err) { throw sendFailed(err); }
+  } catch (err) {
+    // Still a request, but its new Google event is kept on it: pressing Yes again reuses it (no second event).
+    if (next.googleEventId && next.googleEventId !== m.googleEventId) {
+      try { await saveMeeting({ ...m, googleEventId: next.googleEventId, meetLink: next.meetLink || null }); } catch {}
+    }
+    throw sendFailed(err);
+  }
   return next;
 }
 
@@ -739,7 +763,8 @@ async function decline(id, reason, s, now) {
     const ics = m.confirmedAt && m.email ? await inviteFor({ ...next, start: lastConfirmedStart(m) }, s, { method: 'CANCEL', now }) : null;
     await emailClient(next, 'meeting_declined', { asked: theirAsked(msOf(m.start), zoneOf(m, s)), reason: why, bookLink: v.bookLink }, { icalEvent: ics, now });
   } catch (err) { throw sendFailed(err); }
-  return next;
+  // A call that had been confirmed leaves his Google Calendar too (after the email went).
+  return { ...next, ...(await google.dropMeet(next)) };
 }
 /** The time that was last confirmed (what sits in their calendar). */
 const lastConfirmedStart = (m) => {
@@ -761,7 +786,8 @@ async function move(id, start, s, now) {
       await emailClient(next, 'meeting_moved', await meetingVars(next, s, t, 'mv'), { icalEvent: next.email ? await inviteFor(next, s, { now }) : null, dedupe: `meeting_moved:${next.id}:${next.start}:${next.sequence}`, now });
     } catch (err) { throw sendFailed(err); }
   }
-  return next;
+  // His Google Calendar follows (same Meet link — the email above already carries it).
+  return { ...next, ...(await google.moveMeet(next)) };
 }
 
 /** Cancel (the owner's side): they are told, and a confirmed time is removed from their calendar (METHOD:CANCEL). */
@@ -779,7 +805,7 @@ async function cancel(id, reason, s, now) {
     const ics = m.confirmedAt && m.email ? await inviteFor({ ...next, start: m.status === 'confirmed' ? m.start : lastConfirmedStart(m) }, s, { method: 'CANCEL', now }) : null;
     await emailClient(next, 'meeting_cancelled', { when: v.when, whenShort: v.whenShort, cancelText, nextLine }, { icalEvent: ics, dedupe: `meeting_cancelled:${m.id}:${next.sequence}`, now });
   } catch (err) { throw sendFailed(err); }
-  return next;
+  return { ...next, ...(await google.dropMeet(next)) };
 }
 
 /** Call done / they didn't show (a slip can be corrected either way). */
@@ -809,7 +835,9 @@ async function addMeeting(body, s, now) {
   if (!title) throw new CalendarError('Give the meeting a title.');
   await assertFree(t, minutes, null, s);
   const theirZone = client ? await zoneOfClient(client.id) : null;
-  return newMeeting({ client, kind, title, start: iso(t), minutes, status: 'confirmed', source: 'owner', theirZone, note: String(body.note || '').trim().slice(0, NOTE_MAX), now, by: 'owner' });
+  const m = newMeeting({ client, kind, title, start: iso(t), minutes, status: 'confirmed', source: 'owner', theirZone, note: String(body.note || '').trim().slice(0, NOTE_MAX), now, by: 'owner' });
+  // With a client: a Google Meet too (Google sends nobody anything; the hub shows the link).
+  return client ? withMeet(m, s) : m;
 }
 
 async function block(body, s, now) {
@@ -896,6 +924,9 @@ export async function syncFromOnboardCall(clientId, what, { start = null, source
       if (!current || current.status !== 'confirmed') return current;
       m = { ...current, status: 'cancelled', updatedAt: at, history: [...(current.history || []), step('cancelled', by, now, { via: source })] };
     } else return current;
+    // A call with a Google event: a new time moves it, their cancellation removes it (no emails either way).
+    if (m.googleEventId && m.status === 'cancelled') m = { ...m, ...(await google.dropMeet(m)) };
+    else if (m.googleEventId && current?.start !== m.start) m = { ...m, ...(await google.moveMeet(m)) };
     m = await saveMeeting(m);
     await call.linkMeeting(clientId, m.id);
     await logEvent(clientId, SYSTEM, `synced_${what}`, { meetingId: m.id, start: m.start, source });
@@ -911,6 +942,8 @@ export function hubMeeting(m, s = normaliseCalendar()) {
   const tz = m.theirZone || null;
   return {
     ...m,
+    // Google Meet: the link to join, its event on his Google Calendar, and why there is no link (plain words) — null when none.
+    meetLink: m.meetLink || null, googleEventId: m.googleEventId || null, meetError: m.meetError || null,
     end: t == null ? null : iso(t + (Number(m.minutes) || 30) * 60e3),
     labels: t == null ? null : {
       owner: `${shortDay(t, s.ownerZone)}, ${clockIn(t, s.ownerZone)}`,
@@ -934,9 +967,10 @@ export async function calendarView({ from = null, to = null, all = false, now = 
   let toMs = msOf(to) ?? fromMs + s.daysAhead * DAY_MS;
   if (toMs <= fromMs) throw new CalendarError('`to` must be after `from`.');
   if (toMs - fromMs > 62 * DAY_MS) toMs = fromMs + 62 * DAY_MS;
-  const [inRange, ahead] = await Promise.all([
+  const [inRange, ahead, googleMeet] = await Promise.all([
     meetingsBetween(fromMs - DAY_MS, toMs + DAY_MS),
     meetingsBetween(now.getTime() - 90 * DAY_MS, now.getTime() + 400 * DAY_MS),
+    google.googleState(),
   ]);
   const shown = inRange.filter((m) => {
     const t = msOf(m.start);
@@ -949,7 +983,7 @@ export async function calendarView({ from = null, to = null, all = false, now = 
   return {
     meetings: shown.map((m) => hubMeeting(m, s)),
     requests: requests.map((m) => hubMeeting(m, s)),
-    settings: { hours: s.hours, days: s.days, slotMinutes: s.slotMinutes, ownerZone: s.ownerZone, usZone: s.usZone, meetingLink: s.meetingLink, bufferMinutes: s.bufferMinutes, maxPerDay: s.maxPerDay, minNoticeHours: s.minNoticeHours, daysAhead: s.daysAhead, callMinutes: s.callMinutes },
+    settings: { hours: s.hours, days: s.days, slotMinutes: s.slotMinutes, ownerZone: s.ownerZone, usZone: s.usZone, meetingLink: s.meetingLink, bufferMinutes: s.bufferMinutes, maxPerDay: s.maxPerDay, minNoticeHours: s.minNoticeHours, daysAhead: s.daysAhead, callMinutes: s.callMinutes, googleMeet },
     free,
   };
 }
