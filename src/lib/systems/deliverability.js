@@ -97,5 +97,12 @@ export async function deliverabilityView(clientId, { now = new Date() } = {}) {
       stopAt: num(bounce.max),
       halved: c.bounceHalved === '1',
     },
+    // The Day 1 limits, so the hub's chart lines always match the real settings.
+    gates: {
+      seedPlacement: num(await cfg(clientId, 'CANARY.gate')),
+      mailTesterMin: num(await cfg(clientId, 'PLACEMENT.minScore')),
+      spamAssassinMax: num(await cfg(clientId, 'PLACEMENT.maxSpamAssassin')),
+      spamTestRequired: Boolean(await cfg(clientId, 'PLACEMENT.gate')),
+    },
   };
 }

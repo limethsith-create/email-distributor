@@ -634,14 +634,16 @@ test('bounce 1.5–2 %: caps halved + alert, sending continues; 3 green business
 test('deliverabilityView: warm-up pool, newest 10 placement tests, blacklists, bounce — from stored values only', async () => {
   await circle();
   const deps = { rng: () => 0.5, send: async () => ({ success: true, messageId: '<x@x>' }) };
-  await runWarmupSend({ now: new Date(), deadline: Date.now() + 20_000, deps });
+  // A fixed weekday 11:00 ET: warm-up only sends 07:00–22:00, so the real clock would fail this at night.
+  await runWarmupSend({ now: NOW, deadline: Date.now() + 20_000, deps });
   for (let i = 0; i < 12; i++) await kv.lpush(K.placement('acme'), JSON.stringify({ at: `2026-10-${String(i + 1).padStart(2, '0')}T12:00:00Z`, day: `2026-10-${String(i + 1).padStart(2, '0')}`, tool: i % 2 ? 'seed' : 'mail-tester', inbox: i % 2 ? null : 'ann@acme-trial.com', score: i % 2 ? null : 9, inboxRate: i % 2 ? 0.9 : null, pass: true, detail: ['SPF pass'], reportUrl: null }));
   await kv.hset(K.domain('acme'), { blacklist: 'clean', blacklists: JSON.stringify({ checkedAt: NOW.toISOString(), listed: [], warnings: [], clean: 9, unknown: ['multi.uribl.com'], lists: ['a', 'b'] }) });
   await kv.hset(K.client('acme'), { bounceRate7d: '0.0120', bounceSent7d: 250 });
   await setOverride(null, 'EXTERNAL_WARMUP.name', 'AutoMailer (free)');
   await setOverride(null, 'EXTERNAL_WARMUP.perDay', 5);
-  const v = await deliverabilityView('acme');
-  assert.deepEqual(Object.keys(v).sort(), ['blacklists', 'bounce', 'placement', 'warmup']);
+  const v = await deliverabilityView('acme', { now: NOW });
+  assert.deepEqual(Object.keys(v).sort(), ['blacklists', 'bounce', 'gates', 'placement', 'warmup']);
+  assert.deepEqual(v.gates, { seedPlacement: 0.85, mailTesterMin: 8, spamAssassinMax: 2, spamTestRequired: true }, 'the Day 1 limits come from config');
   assert.equal(v.warmup.pool, 7);
   assert.equal(v.warmup.helpers, 4);
   assert.ok(v.warmup.todayPairs > 0);

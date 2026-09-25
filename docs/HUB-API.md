@@ -267,7 +267,8 @@ Places + a quick market count). No AI: extracted facts only. Re-run:
   "warmup": { "pool": 14, "helpers": 10, "providers": { "gmail": 4, "yahoo": 2, … }, "todayPairs": 11, "external": { "name": "…", "status": "connected|not connected" } | null },
   "placement": [ { "at": "ISO", "tool": "mail-tester|seed", "score": 9.1, "inboxRate": 0.9, "detail": ["SPF pass", "DKIM pass", …], "reportUrl": "https://…|null" } ],   // newest first, max 10
   "blacklists": { "checkedAt": "ISO", "listed": ["…"], "clean": 7, "lists": ["bl.spamcop.net", …] },
-  "bounce": { "rate7d": 0.012, "pauseAt": 0.015, "stopAt": 0.02 }
+  "bounce": { "rate7d": 0.012, "pauseAt": 0.015, "stopAt": 0.02 },
+  "gates": { "seedPlacement": 0.85, "mailTesterMin": 8, "spamAssassinMax": 2, "spamTestRequired": true }   // the Day 1 limits (from config)
 }
 ```
 
