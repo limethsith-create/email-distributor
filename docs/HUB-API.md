@@ -284,3 +284,12 @@ Places + a quick market count). No AI: extracted facts only. Re-run:
   "sample": [ { "email": "…", "name": "…", "title": "…", "company": "…", "city": "…", "grade": "A", "score": 87, "reasons": ["Owner title", "Verified email", "Matches dream customer"] } ]   // top 25
 }
 ```
+
+## Phone alerts (Web Push)
+
+Every owner alert is also pushed to the owner's phones (the hub installed on
+the home screen; iOS 16.4+). Under `/api/mc/push/*`, same auth as the rest:
+`GET key` → `{publicKey}` (503 without VAPID keys) · `POST subscribe {subscription, device}` →
+`{ok, count}` · `POST unsubscribe {endpoint}` · `GET status?endpoint=` → `{subscribed, count}` ·
+`POST test {endpoint?}` → `{ok, sent, failed}`. Payload: `{title, body, url, tag, urgent, at}`;
+`url` is `/#trial/{id}` or `/#alerts`; the same `tag` replaces the previous notification.

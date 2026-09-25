@@ -174,6 +174,7 @@ export const K = {
   paceLogRead: (id) => `${c(id)}:pacelog`, // Stage C's Pace Check log (list of {at, day, test, fix}); read-only here
   trialLedger: () => 'system:trials:ledger', // clientId -> outcome snapshot (no personal data); survives deletion for KPIs
   testSkipPings: () => 'system:test:skippings', // legacy: now system:heartbeat.skipPingsUntil
+  pushSubs: () => 'push:subs', // owner's phones/browsers for Web Push alerts (endpoint hash → subscription)
   // ── end Stage D ──
 };
 

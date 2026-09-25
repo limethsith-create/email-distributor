@@ -19,6 +19,7 @@ import { parseAccount, getSmtpAccounts, loadAccounts } from '@/lib/smtp-accounts
 import { ALERTS } from '@/lib/templates/owner';
 import { fill } from '@/lib/templates/render';
 import { dayKeyIn, partsIn, OWNER_TZ } from '@/lib/time';
+import { pushToOwner } from '@/lib/push';
 
 const DEFAULT_OWNER_EMAIL = 'limethsith@gmail.com';
 const LOG_CAP = 1000;
@@ -109,6 +110,14 @@ export async function alertOwner(key, { clientId = null, vars = {}, body = '', d
   ].join('\n').trim();
 
   const channels = { email: await sendOwnerEmail(`[Aviance] ${title}`, text) };
+  // Phone notification (hub home-screen app) for every alert — the owner's main channel.
+  channels.push = await pushToOwner({
+    title: spec.urgent ? `Urgent: ${title}` : title,
+    body: String(body || title).replace(/\s+/g, ' ').slice(0, 180),
+    url: clientId ? `/#trial/${clientId}` : '/#alerts',
+    tag: `${key}:${dedupeScope}`,
+    urgent: Boolean(spec.urgent),
+  });
   if (spec.urgent) channels.telegram = await sendTelegram(`${spec.urgent ? '🔴 ' : ''}${title}\n\n${text}`);
   const delivered = Object.values(channels).some((c) => c.ok);
 
