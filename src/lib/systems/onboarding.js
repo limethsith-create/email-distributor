@@ -88,10 +88,11 @@ export function blockItem(s) {
 export async function urlResponds(url) {
   if (!isPublicUrl(url)) return { ok: false, status: null, error: 'not a public web address' };
   try {
-    const res = await io.fetchExt(url, { timeoutMs: 8000, retry: false, redirect: 'follow', headers: { 'user-agent': 'Mozilla/5.0 (compatible; AvianceBot/1.0; +aviance.online/bot)' } });
+    const res = await io.fetchExt(url, { timeoutMs: 8000, retry: false, redirect: 'follow', publicOnly: true, headers: { 'user-agent': 'Mozilla/5.0 (compatible; AvianceBot/1.0; +aviance.online/bot)' } });
     return { ok: res.status === 200, status: res.status };
   } catch (err) {
-    return { ok: false, status: null, error: String(err?.message || err).slice(0, 120) };
+    // Never echo network errors back to the page (they would map the machine's network).
+    return { ok: false, status: null, error: err?.code === 'EBLOCKED' ? 'not a public web address' : 'no answer' };
   }
 }
 

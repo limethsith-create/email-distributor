@@ -18,10 +18,11 @@
  *    written to `inbox_health` and the handler never throws.
  *
  * Trigger:
- * - GET /api/cron/check-bounces?token=CRON_SECRET  (or Authorization: Bearer CRON_SECRET)
+ * - GET /api/cron/check-bounces with Authorization: Bearer CRON_SECRET (header only)
  * - n8n or external cron (every 1-2 hours)
  */
 
+import { cronAuthorized } from '@/lib/auth/session';
 import { ImapFlow } from 'imapflow';
 import { kv } from '@vercel/kv';
 import { getSmtpAccounts, getOwnAddresses, loadAccounts } from '@/lib/smtp-accounts';
@@ -547,16 +548,7 @@ async function checkAllBounces() {
 
 export async function GET(request) {
   // Auth check (same pattern as check-replies)
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const { searchParams } = new URL(request.url);
-    const tokenParam = searchParams.get('token');
-    const authHeader = request.headers.get('authorization');
-
-    if (authHeader !== `Bearer ${cronSecret}` && tokenParam !== cronSecret) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-  }
+  if (!cronAuthorized(request)) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
     const result = await checkAllBounces();

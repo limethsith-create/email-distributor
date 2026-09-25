@@ -655,7 +655,7 @@ export async function fetchPage(url, { timeoutMs, maxBytes, userAgent, accept = 
   try {
     for (let hop = 0; hop < 4; hop++) {
       if (!isPublicUrl(current)) return { ok: false, status: null, url: current, error: 'not a public web address' };
-      const res = await io.fetchExt(current, { service: 'crawl', usageField: 'pages', timeoutMs, retry: false, redirect: 'manual', headers: { 'user-agent': userAgent, accept } });
+      const res = await io.fetchExt(current, { service: 'crawl', usageField: 'pages', timeoutMs, retry: false, redirect: 'manual', publicOnly: true, headers: { 'user-agent': userAgent, accept } });
       const status = Number(res.status) || 0;
       if (status >= 300 && status < 400) {
         const loc = res.headers?.get?.('location');

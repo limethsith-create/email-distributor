@@ -1,8 +1,10 @@
 /**
  * POST /api/apply — public trial application (SPEC §6.1). Accepts JSON or a
  * form post with the application answers; runs the Gatekeeper and answers
- * with a plain status the applicant can read. Applications from the public
- * website are held for the owner's review (systems/webapply.js); the site
+ * with a plain status the applicant can read. Every public application —
+ * the website's nine questions or the Gatekeeper's own shape — is held for
+ * the owner's review (systems/webapply.js): nothing public decides by itself,
+ * so no onboarding link or email goes out before the owner presses Approve. The site
  * calls this cross-origin (CORS in middleware). Public; guarded
  * by a honeypot field and a per-IP hourly limit (IP stored hashed only).
  */
@@ -11,8 +13,7 @@ import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { cfg } from '@/lib/config';
 import { sha256 } from '@/lib/crypto';
-import { applyForTrial } from '@/lib/systems/gatekeeper';
-import { submitWebsiteApplication } from '@/lib/systems/webapply';
+import { submitWebsiteApplication, submitFormApplication } from '@/lib/systems/webapply';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -52,7 +53,7 @@ export async function POST(request) {
     if (n > (await cfg(null, 'INTAKE.applyPerHourPerIp'))) return Response.json({ ok: false, error: 'Too many applications from this address. Please try again later.' }, { status: 429 });
   } catch {}
 
-  const result = isWebsiteForm(body) ? await submitWebsiteApplication(body) : await applyForTrial(body, { source: 'form' });
+  const result = isWebsiteForm(body) ? await submitWebsiteApplication(body) : await submitFormApplication(body);
   if (!result.ok) return Response.json({ ok: false, errors: result.errors }, { status: 400 });
   return Response.json({ ok: true, outcome: result.outcome, message: MESSAGES[result.outcome] || MESSAGES.manual });
 }

@@ -174,7 +174,7 @@ export async function checkBlacklist(domain) {
 /** GET https://{domain} must land (2xx) on the main domain. Warn only. */
 export async function checkRedirect(domain, mainDomain) {
   try {
-    const res = await io.fetchExt(`https://${domain}`, { timeoutMs: 8000, retry: false, redirect: 'follow' });
+    const res = await io.fetchExt(`https://${domain}`, { timeoutMs: 8000, retry: false, redirect: 'follow', publicOnly: true });
     const host = String(new URL(res.url || `https://${domain}`).hostname).replace(/^www\./, '');
     if (res.status >= 200 && res.status < 300 && host === String(mainDomain).replace(/^www\./, '')) return { status: 'pass', detail: `→ ${res.url}` };
     return { status: 'warn', detail: `https://${domain} ends at ${res.url || domain} (${res.status})` };

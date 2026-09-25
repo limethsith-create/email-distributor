@@ -50,6 +50,7 @@
  *    replies are seen overnight too).
  */
 
+import { cronAuthorized } from '@/lib/auth/session';
 import { kv } from '@vercel/kv';
 import { sendEmail } from '@/lib/mailer';
 import { getSequence, varsFor, renderTouch, sequenceReady, TemplateError } from '@/lib/systems/sequence';
@@ -135,11 +136,7 @@ async function withRetries(fn, attempts = 3) {
 }
 
 function isAuthorized(request) {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) return true;
-  const authHeader = request.headers.get('authorization');
-  const tokenParam = new URL(request.url).searchParams.get('token');
-  return authHeader === `Bearer ${cronSecret}` || tokenParam === cronSecret;
+  return cronAuthorized(request);
 }
 
 // ─── Lock ─────────────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@
  * unsubscribed or is mid-send.
  *
  * Destructive and not used by the UI, so every call requires the CRON_SECRET
- * (Authorization: Bearer <secret> or ?token=<secret>) when one is configured.
+ * (Authorization: Bearer <secret>; header only) when one is configured.
  *
  * POST { action:'remove', statuses:['skipped_dedup'], dryRun?:true }
  * POST { action:'remove', emails:['a@b.com', ...] }
@@ -16,6 +16,7 @@
  * GET                                          // count of archived leads
  */
 
+import { cronAuthorized } from '@/lib/auth/session';
 import crypto from 'crypto';
 import { kv } from '@vercel/kv';
 import { promises as dns } from 'node:dns';
@@ -32,19 +33,9 @@ const SUPPRESSION_KEY = 'suppression';
 // ─────────────────────────────────────────────────────────────
 // AUTH
 // ─────────────────────────────────────────────────────────────
-function safeEqual(a, b) {
-  const ba = Buffer.from(String(a || ''));
-  const bb = Buffer.from(String(b || ''));
-  return ba.length > 0 && ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
-}
 
 function authorized(request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
-  const bearer = String(request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
-  let token = '';
-  try { token = new URL(request.url).searchParams.get('token') || ''; } catch {}
-  return safeEqual(bearer, secret) || safeEqual(token, secret);
+  return cronAuthorized(request);
 }
 
 function unauthorized() {

@@ -5,8 +5,8 @@
  *             open tracking, webhooks (verify their own tokens), /api/apply,
  *             the login page.
  *  - machine: /api/cron/* and /api/admin/export|import accept
- *             `Authorization: Bearer CRON_SECRET` (or `?token=` for the old
- *             pingers) — or an admin session.
+ *             `Authorization: Bearer CRON_SECRET` (header only: a ?token= in
+ *             the address would land in logs) — or an admin session.
  *  - site:    /api/apply and /api/inquiry answer the public website (SITE_ORIGINS) cross-origin.
  *  - hub:     /api/mc/* also accepts `Authorization: Bearer <Supabase access
  *             token>` of an allowed hub admin, with CORS for the hub's origin.
@@ -16,7 +16,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { SESSION_COOKIE, verifySession, secretMatches } from '@/lib/auth/session';
+import { SESSION_COOKIE, verifySession, cronAuthorized } from '@/lib/auth/session';
 import { verifyHubToken, bearerOf, isAllowedOrigin, isSiteOrigin, corsHeaders } from '@/lib/auth/supabase';
 
 const PUBLIC = [
@@ -35,7 +35,7 @@ function withCors(res, origin) {
 }
 
 export async function middleware(request) {
-  const { pathname, searchParams } = request.nextUrl;
+  const { pathname } = request.nextUrl;
   const origin = request.headers.get('origin');
   const hubOrigin = HUB_API.test(pathname) && isAllowedOrigin(origin) ? String(origin).replace(/\/+$/, '') : null;
 
@@ -64,16 +64,13 @@ export async function middleware(request) {
         res.headers.set('x-hub-user', v.email);
         return withCors(res, hubOrigin);
       }
-      return withCors(NextResponse.json({ error: `Unauthorized: ${v.error}` }, { status: 401 }), hubOrigin);
+      // The reason stays on the server (it would help an attacker); the hub only needs "sign in again".
+      return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }), hubOrigin);
     }
   }
 
   if (MACHINE.some((re) => re.test(pathname))) {
-    const secret = process.env.CRON_SECRET;
-    const header = request.headers.get('authorization') || '';
-    if (secretMatches(header, secret ? `Bearer ${secret}` : '') || secretMatches(searchParams.get('token'), secret)) {
-      return NextResponse.next();
-    }
+    if (cronAuthorized(request)) return NextResponse.next();
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

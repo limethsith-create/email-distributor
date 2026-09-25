@@ -4,13 +4,21 @@
  */
 
 import { countUsage } from '@/lib/systems/usage';
+import { safeFetch } from '@/lib/safefetch';
 
-export async function fetchExt(url, { service = null, usageField = 'calls', timeoutMs = 10_000, retry = true, ...init } = {}) {
+/**
+ * `publicOnly: true` for any address that came from outside (an applicant's
+ * website, a client's calendar link): goes through lib/safefetch.js, which
+ * refuses private / internal addresses on every hop (SSRF).
+ */
+export async function fetchExt(url, { service = null, usageField = 'calls', timeoutMs = 10_000, retry = true, publicOnly = false, ...init } = {}) {
   let lastErr;
   for (let attempt = 0; attempt < (retry ? 2 : 1); attempt++) {
     if (attempt) await new Promise((r) => setTimeout(r, 2000));
     try {
-      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+      const res = publicOnly
+        ? await safeFetch(url, { method: init.method, headers: init.headers, body: init.body, redirect: init.redirect === 'manual' ? 'manual' : 'follow', timeoutMs })
+        : await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
       if (service) await countUsage(service, usageField, 1);
       if ((res.status >= 500 || res.status === 429) && attempt === 0 && retry) { lastErr = new Error(`${service || url} ${res.status}`); continue; }
       return res;

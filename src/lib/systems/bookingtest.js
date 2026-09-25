@@ -127,7 +127,7 @@ export async function runBookingTest(clientId, { now = io.now(), force = false }
   let html = '';
   try {
     if (!isPublicUrl(url)) throw new Error('not a public web address');
-    const res = await io.fetchExt(url, { timeoutMs: 10000, retry: false, redirect: 'follow', headers: { 'user-agent': 'Mozilla/5.0 (compatible; AvianceBot/1.0; +aviance.online/bot)' } });
+    const res = await io.fetchExt(url, { timeoutMs: 10000, retry: false, redirect: 'follow', publicOnly: true, headers: { 'user-agent': 'Mozilla/5.0 (compatible; AvianceBot/1.0; +aviance.online/bot)' } });
     status = res.status;
     finalUrl = res.url || url;
     html = (await res.text()).slice(0, 500_000);

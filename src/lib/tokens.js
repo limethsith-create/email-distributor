@@ -16,10 +16,16 @@ export const TRACKING_BASE_URL = (
   'https://email-distributor.vercel.app'
 ).replace(/\/+$/, '');
 
-/** Secret for signed tokens (falls back to CRON_SECRET, then a fixed string). */
-const TOKEN_SECRET = process.env.TRACKING_SECRET || process.env.CRON_SECRET || 'aviance-tracking';
+/**
+ * Secret for signed tokens: TRACKING_SECRET, else CRON_SECRET. In production
+ * there is no public fallback (anyone could forge unsubscribe / open links
+ * with a key printed in the source); tests and local runs use a dev key.
+ */
+const TOKEN_SECRET = process.env.TRACKING_SECRET || process.env.CRON_SECRET
+  || (process.env.VERCEL_ENV === 'production' ? null : 'aviance-tracking-dev');
 
 function hmac(payload) {
+  if (!TOKEN_SECRET) throw new Error('TRACKING_SECRET / CRON_SECRET is not set');
   return crypto.createHmac('sha256', TOKEN_SECRET).update(payload).digest('base64url').slice(0, 22);
 }
 

@@ -155,3 +155,24 @@ test('POST /api/apply takes the website form as-is', async () => {
   const noSiteRes = await POST(new Request('http://x/api/apply', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(site({ website: 'not-a-website' })) }));
   assert.deepEqual(Object.keys((await noSiteRes.json()).errors), ['website'], 'only the website is reported — the site has no company field');
 });
+
+test('security: a public POST in the Gatekeeper shape can no longer skip the review (no onboarding link, no email)', async () => {
+  const { POST } = await import('@/app/api/apply/route');
+  const perfect = { companyName: 'Perfect Co', contactName: 'Eve', contactEmail: 'victim@anyone.com', website: 'perfect-co.com', usBased: 'yes', employees: 20, dealValue: 9000, soldToStrangers: 'yes', dreamCustomers: ['a', 'b', 'c'], meetWithin5Days: 'yes', slotsPerWeek: 8, nobodyElseEmailing: 'yes', reviewAgreed: 'yes' };
+  const res = await POST(new Request('http://x/api/apply', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': '9.9.9.9' }, body: JSON.stringify(perfect) }));
+  const body = await res.json();
+  assert.equal(body.outcome, 'review');
+  const all = await kv.hgetall('client:perfect-co:application');
+  assert.equal(all.review, 'pending');
+  assert.equal((await getClient('perfect-co')).state, 'applied');
+  assert.equal(emails.length, 0, 'nothing is emailed to the address they typed');
+  assert.ok(alerts.some((a) => a.key === 'new_application'));
+  const fit = JSON.parse(all.fit);
+  assert.equal(fit.verdict, 'fit');
+  assert.ok(fit.lines.some((l) => l.rule === 'employees' && l.status === 'pass'));
+  // A missing answer is unknown, never a pass.
+  const thin = await POST(new Request('http://x/api/apply', { method: 'POST', headers: { 'content-type': 'application/json', 'x-forwarded-for': '9.9.9.8' }, body: JSON.stringify({ companyName: 'Thin Co', contactName: 'T', contactEmail: 't@thin-co.com', website: 'thin-co.com' }) }));
+  assert.equal((await thin.json()).outcome, 'review');
+  const thinFit = JSON.parse((await kv.hgetall('client:thin-co:application')).fit);
+  assert.ok(thinFit.lines.filter((l) => l.status === 'unknown').length >= 6);
+});

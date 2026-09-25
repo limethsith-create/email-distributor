@@ -2,8 +2,9 @@
  * Replies cleanup - permanently purge junk (bounce / DSN / raw-MIME) entries
  * from KV so they never come back.
  *
- *   GET /api/replies/cleanup?token=CRON_SECRET            -> dry run (lists what WOULD be removed)
- *   GET /api/replies/cleanup?token=CRON_SECRET&confirm=1  -> actually deletes them
+ *   GET /api/replies/cleanup            -> dry run (lists what WOULD be removed)
+ *   GET /api/replies/cleanup?confirm=1  -> actually deletes them
+ *   (both with Authorization: Bearer CRON_SECRET)
  *
  * Uses the same predicates the Replies tab uses to hide junk, so what a dry
  * run lists is exactly what gets deleted — with two safety rails on top:
@@ -16,6 +17,7 @@
  *      record from the tab, but it can never delete one.
  */
 
+import { cronAuthorized } from '@/lib/auth/session';
 import { kv } from '@vercel/kv';
 import { isJunkReply, isJunkConversation } from '@/lib/junk-filter';
 import { getLeadsByEmail } from '@/lib/leads-db';
@@ -67,15 +69,8 @@ function wasSent(lead) {
 }
 
 export async function GET(request) {
-  const cronSecret = process.env.CRON_SECRET;
+  if (!cronAuthorized(request)) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   const { searchParams } = new URL(request.url);
-  if (cronSecret) {
-    const token = searchParams.get('token');
-    const authHeader = request.headers.get('authorization');
-    if (authHeader !== 'Bearer ' + cronSecret && token !== cronSecret) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-  }
   const confirm = searchParams.get('confirm') === '1';
 
   try {

@@ -13,7 +13,7 @@
  */
 
 import { cfg } from '@/lib/config';
-import { applyForTrial, normaliseDomain, findRepeat, fetchSiteText, detectAgency } from '@/lib/systems/gatekeeper';
+import { applyForTrial, normaliseDomain, findRepeat, fetchSiteText, detectAgency, normaliseApplication, FIT_RULES } from '@/lib/systems/gatekeeper';
 
 const US_STATES = 'AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC'.split(' ');
 const STATE_NAMES = {
@@ -150,4 +150,39 @@ export async function submitWebsiteApplication(raw, { now = new Date(), fetchTex
     now,
     review: { answers, fit, extras },
   });
+}
+
+/**
+ * POST /api/apply in the Gatekeeper's own shape (the machine's /apply page, or
+ * anyone posting JSON). Public input never decides by itself: it is held for
+ * the owner exactly like a website application, with the Gatekeeper's rules
+ * as the fit verdict (a missing answer is "unknown", never a pass).
+ */
+export async function submitFormApplication(raw, { now = new Date(), fetchText = fetchSiteText } = {}) {
+  const app = normaliseApplication(raw);
+  const fit = await cfg(null, 'FIT');
+  const keywords = await cfg(null, 'INTAKE.agencyKeywords');
+  const yn = (v) => (v === true ? 'Yes' : v === false ? 'No' : '');
+  const answers = [
+    ['Company', app.companyName], ['Name', app.contactName], ['Email', app.contactEmail], ['Website', app.website],
+    ['US-based', yn(app.usBased)], ['People', app.employees ?? ''], ['A new customer is worth (year one)', app.dealValue != null ? `$${app.dealValue}` : ''],
+    ['Has sold to strangers', yn(app.soldToStrangers)], ['Three dream customers', app.dreamCustomers.join(' · ')],
+    ['Can meet within five business days', yn(app.meetWithin5Days)], ['Open slots a week', app.slotsPerWeek ?? ''],
+    ['Nobody else cold-emailing for them', yn(app.nobodyElseEmailing)], ['Agreed to the honest review', yn(app.reviewAgreed)], ['Notes', app.notes],
+  ].map(([q, a]) => ({ q, a: String(a ?? '').slice(0, 600) })).filter((x) => x.a);
+
+  const repeat = app.mainDomain ? await findRepeat(app.mainDomain).catch(() => null) : null;
+  let siteText = '';
+  try { siteText = app.mainDomain ? await fetchText(app.mainDomain) : ''; } catch { siteText = ''; }
+  const agencyHit = detectAgency(`${siteText} ${app.companyName} ${app.notes}`, keywords);
+  const missing = { us_based: app.usBased === null, employees: app.employees === null, deal_value: app.dealValue === null, sold_to_strangers: app.soldToStrangers === null, meet_within_5_days: app.meetWithin5Days === null, slots_per_week: app.slotsPerWeek === null, nobody_else_emailing: app.nobodyElseEmailing === null, review_agreed: app.reviewAgreed === null };
+  const lines = [{ rule: 'one_trial_ever', label: 'First trial for this company', status: repeat ? 'fail' : 'pass', note: repeat ? `${app.mainDomain} already had a trial (${repeat.id}, ${repeat.state})` : `${app.mainDomain || 'no domain'} has not had one` }];
+  for (const r of FIT_RULES) {
+    const status = missing[r.id] ? 'unknown' : r.test(app, fit, { agencyHit }) ? 'pass' : 'fail';
+    lines.push({ rule: r.id, label: r.id.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()), status, note: status === 'fail' ? r.reason(app, fit, { agencyHit }) : status === 'unknown' ? 'Not answered' : 'OK' });
+  }
+  const fails = lines.filter((l) => l.status === 'fail');
+  const unknown = lines.filter((l) => l.status === 'unknown').length;
+  const verdict = { verdict: fails.length ? 'fails' : 'fit', summary: fails.length ? `Fails ${fails.length} check${fails.length === 1 ? '' : 's'}: ${fails.map((f) => f.label).join(', ')}` : `Looks like a fit${unknown ? ` — ${unknown} check${unknown === 1 ? '' : 's'} unknown` : ''}`, lines };
+  return applyForTrial(raw, { source: 'form', now, review: { answers, fit: verdict, extras: {} } });
 }

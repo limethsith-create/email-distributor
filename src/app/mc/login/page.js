@@ -15,8 +15,9 @@ export default function LoginPage() {
     const body = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) { setError(body.error || 'Sign-in failed'); return; }
+    // Only back into Mission Control on this site ("//evil.com" or "/\\evil.com" would leave it).
     const next = new URLSearchParams(window.location.search).get('next') || '/mc';
-    window.location.href = next.startsWith('/') ? next : '/mc';
+    window.location.href = /^\/mc(?:[/?#]|$)/.test(next) && !/[\\\r\n\t]/.test(next) ? next : '/mc';
   }
 
   return (

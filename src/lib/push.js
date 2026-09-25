@@ -26,8 +26,20 @@ export function vapid() {
 
 const idOf = (endpoint) => sha256(String(endpoint || '')).slice(0, 32);
 
+/** The browsers' own push services — the machine never posts alerts anywhere else. */
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /^android\.googleapis\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /^web\.push\.apple\.com$/, /(^|\.)push\.apple\.com$/, /\.notify\.windows\.com$/];
+
+export function pushHostAllowed(endpoint) {
+  try {
+    const u = new URL(String(endpoint));
+    return u.protocol === 'https:' && !u.username && !u.password && PUSH_HOSTS.some((re) => re.test(u.hostname));
+  } catch {
+    return false;
+  }
+}
+
 function validSubscription(sub) {
-  return sub && typeof sub.endpoint === 'string' && /^https:\/\//.test(sub.endpoint)
+  return sub && typeof sub.endpoint === 'string' && pushHostAllowed(sub.endpoint)
     && sub.keys && typeof sub.keys.p256dh === 'string' && typeof sub.keys.auth === 'string';
 }
 

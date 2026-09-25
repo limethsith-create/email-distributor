@@ -1,9 +1,10 @@
 /**
  * CSV export of the leads hash. Dumps PII, nothing in the UI calls it — so it
- * requires the CRON_SECRET (Authorization: Bearer <secret> or ?token=<secret>)
+ * requires the CRON_SECRET (Authorization: Bearer <secret>; header only)
  * whenever one is configured.
  */
 
+import { cronAuthorized } from '@/lib/auth/session';
 import crypto from 'crypto';
 import { kv } from '@vercel/kv';
 import { getAllLeads } from '@/lib/leads-db';
@@ -22,17 +23,9 @@ const COLS = [
   'quality_score', 'quality_reason', 'bounced_at', 'bounce_reason',
 ];
 
-function safeEqual(a, b) {
-  const ba = Buffer.from(String(a || ''));
-  const bb = Buffer.from(String(b || ''));
-  return ba.length > 0 && ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
-}
 
-function authorized(request, searchParams) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
-  const bearer = String(request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').trim();
-  return safeEqual(bearer, secret) || safeEqual(searchParams.get('token') || '', secret);
+function authorized(request) {
+  return cronAuthorized(request);
 }
 
 function esc(v) {

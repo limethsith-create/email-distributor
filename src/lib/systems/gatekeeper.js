@@ -132,7 +132,7 @@ export function evaluateFit(app, fit, ctx = {}) {
 export async function fetchSiteText(domain) {
   if (!isPublicUrl(`https://${domain}`)) return '';
   try {
-    const res = await io.fetchExt(`https://${domain}`, { timeoutMs: 6000, retry: false, redirect: 'follow', headers: { 'user-agent': 'AvianceBot/1.0 (+aviance.online/bot)' } });
+    const res = await io.fetchExt(`https://${domain}`, { timeoutMs: 6000, retry: false, redirect: 'follow', publicOnly: true, headers: { 'user-agent': 'AvianceBot/1.0 (+aviance.online/bot)' } });
     const html = (await res.text()).slice(0, 200_000);
     const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '';
     const desc = (html.match(/<meta[^>]+name=["']description["'][^>]*content=["']([^"']*)["']/i) || [])[1] || '';

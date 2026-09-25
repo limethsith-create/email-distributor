@@ -7,10 +7,11 @@
  * auto-reply phase always finishes inside the function's budget.
  *
  * Trigger:
- * - GET /api/cron/check-replies?token=CRON_SECRET  (or Authorization: Bearer CRON_SECRET)
+ * - GET /api/cron/check-replies with Authorization: Bearer CRON_SECRET (header only)
  * - n8n or external cron (every 1-2 hours)
  */
 
+import { cronAuthorized } from '@/lib/auth/session';
 import { checkAllReplies } from '@/lib/reply-checker';
 
 export const maxDuration = 120;
@@ -20,16 +21,7 @@ const RUN_BUDGET_MS = 100_000;
 
 export async function GET(request) {
   // Auth check
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const { searchParams } = new URL(request.url);
-    const tokenParam = searchParams.get('token');
-    const authHeader = request.headers.get('authorization');
-
-    if (authHeader !== `Bearer ${cronSecret}` && tokenParam !== cronSecret) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-  }
+  if (!cronAuthorized(request)) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
     const result = await checkAllReplies({ deadlineMs: Date.now() + RUN_BUDGET_MS });
