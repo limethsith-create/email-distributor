@@ -256,4 +256,45 @@ const learning = {
   },
 };
 
-export const JOBS = [emergency, send, reminders, clientWatch, noshow, notnow, pace, replies, hotChaser, bounces, bookings, learning].map(onClientClock);
+// ── Leads + Copy v2: the verification waterfall ─────────────────────────────
+// Leads exist from `warming` on (the Lead Finder runs during the build weeks),
+// so verification runs from then, while the client has leads waiting
+// (client.verifyPending, set when a batch lands) and not before
+// client.verifyNextDueAt (tomorrow when every free budget is spent).
+const VERIFY_STATES = ['warming', 'ready', 'sending', 'paused', 'extension', 'converted'];
+
+const leadVerify = {
+  name: 'lead-verify',
+  scope: 'client',
+  cost: 2,
+  minBudgetMs: 9_000,
+  claimTtl: 600,
+  async due({ client, now }) {
+    if (!inStates(client, VERIFY_STATES) || client.verifyPending !== '1') return null;
+    if (client.verifyNextDueAt && Date.parse(client.verifyNextDueAt) > now.getTime()) return null;
+    return bucketKey(partsIn(ET, now), await ccfg(client.id, 'VERIFY.everyMin'));
+  },
+  async run({ clientId, client, now, deadline }) {
+    const { runVerify } = await import('@/lib/systems/verify');
+    return runVerify(clientId, { now, deadline, client });
+  },
+};
+
+const leadVerifyDaily = {
+  name: 'lead-verify-daily',
+  scope: 'client',
+  cost: 3,
+  minBudgetMs: 8_000,
+  claimTtl: 2 * 86400,
+  async due({ client, now }) {
+    if (!inStates(client, VERIFY_STATES)) return null;
+    return dailyAt(partsIn(ET, now), '00:10');
+  },
+  async run({ clientId, now }) {
+    const { runVerifyDaily } = await import('@/lib/systems/verify');
+    const r = await runVerifyDaily(clientId, { now });
+    return { ...r, _clientFields: r.queued ? { verifyPending: '1', verifyNextDueAt: '' } : {} };
+  },
+};
+
+export const JOBS = [emergency, send, reminders, clientWatch, noshow, notnow, pace, replies, hotChaser, bounces, bookings, learning, leadVerify, leadVerifyDaily].map(onClientClock);

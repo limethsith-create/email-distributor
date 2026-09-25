@@ -1,0 +1,84 @@
+{
+  "name": "Professional services trial sequences (accounting, bookkeeping, legal, insurance, consulting, staffing)",
+  "niche": "pro-services",
+  "version": 2,
+  "source": "Copy v2 (docs/research/v2-leads-copy.md): plain text, no links in email 1, one reply CTA, four touches. No claim about the client beyond {oneLiner} / {proof}; no result promised.",
+  "footer": "{SenderName}\n{ClientCompany}\n{postalAddress}\n\nNot the right fit? Just reply STOP and I will not email you again.",
+  "defaultFramework": "problem-first",
+  "subjectBank": ["{niche} at {Company}", "question for {Company}", "busy season", "one idea", "{Company} paperwork", "off your plate"],
+  "frameworks": {
+    "problem-first": {
+      "label": "Problem first",
+      "why": "The owner doing the paperwork at night is a pain almost every small business recognises; one line on the offer, then an easy question.",
+      "variants": [
+        { "id": "pro-a1", "firstLineSet": "A", "subjects": { "d0": "{niche} at {Company}" } },
+        { "id": "pro-b1", "firstLineSet": "B", "subjects": { "d0": "off your plate" } }
+      ],
+      "backupVariants": [
+        { "id": "pro-c2", "firstLineSet": "C", "subjects": { "d0": "{Company} paperwork" } },
+        { "id": "pro-d2", "firstLineSet": "D", "subjects": { "d0": "busy season" } }
+      ],
+      "touches": [
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\nFor a lot of {ICP}, the paperwork slips in busy months, and the owner ends up catching up at night.\n\n{oneLiner}\n\nIs that how it goes at {Company}, or do you have it covered?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, one more thought.\n\nThe real cost is rarely the fee. It is the hours you spend on it instead of on running {Company}.\n\nWorth a short call to see if {ClientCompany} could take some of that off your plate?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "busy season", "body": "{FirstName}, a different angle.\n\nMost {ICP} only look for help with {niche} when something goes wrong. It is easier to set up before the busy season.\n\nWould a 15-minute call next week be useful?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+      ]
+    },
+    "question-led": {
+      "label": "Question led",
+      "why": "Asks who handles the work today; in-house or outside, the answer is easy to write back.",
+      "variants": [
+        { "id": "pro-q-a1", "firstLineSet": "A", "subjects": { "d0": "question for {Company}" } },
+        { "id": "pro-q-b1", "firstLineSet": "B", "subjects": { "d0": "{niche} at {Company}" } }
+      ],
+      "backupVariants": [
+        { "id": "pro-q-c2", "firstLineSet": "C", "subjects": { "d0": "off your plate" } },
+        { "id": "pro-q-d2", "firstLineSet": "D", "subjects": { "d0": "{Company} paperwork" } }
+      ],
+      "touches": [
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\n{oneLiner}\n\nWho handles {niche} for {Company} today, someone in-house or an outside firm?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, asking because the answer tells me quickly whether this is worth your time.\n\nIf an outside firm is doing well by you, no need to change. If it sits with you or a busy staff member, {ClientCompany} can take it on.\n\nWhich is it at {Company}?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "question for {Company}", "body": "{FirstName}, one practical check.\n\nIt is worth knowing how many hours a month {niche} takes you. For many {ICP}, the honest number is higher than they think.\n\nWant {ClientCompany} to help you work it out?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+      ]
+    },
+    "quick-idea": {
+      "label": "Quick idea",
+      "why": "Offers a short review of how the work is handled today; the ask is to send what it covers.",
+      "variants": [
+        { "id": "pro-qi-a1", "firstLineSet": "A", "subjects": { "d0": "one idea" } },
+        { "id": "pro-qi-b1", "firstLineSet": "B", "subjects": { "d0": "{niche} at {Company}" } }
+      ],
+      "backupVariants": [
+        { "id": "pro-qi-c2", "firstLineSet": "C", "subjects": { "d0": "off your plate" } },
+        { "id": "pro-qi-d2", "firstLineSet": "D", "subjects": { "d0": "busy season" } }
+      ],
+      "touches": [
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\nOne idea for {Company}: a 20-minute review of how {niche} is handled today, to spot what could come off your plate.\n\n{oneLiner}\n\nWant me to send over what the review covers?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, a review like that is quick to do and easy to put off.\n\n{ClientCompany} can run it with you at a time that suits.\n\nWould that be useful for {Company}?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "busy season", "body": "{FirstName}, a second idea.\n\nThe weeks before the busy season are the easiest time to hand {niche} over, while nothing is pressing.\n\nOpen to a 15-minute call to see if that fits {Company}?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+      ]
+    },
+    "local-proof": {
+      "label": "Local proof",
+      "why": "Leads with one true proof line the client gave us; used only when the profile has one.",
+      "needs": ["proof"],
+      "variants": [
+        { "id": "pro-lp-a1", "firstLineSet": "A", "subjects": { "d0": "{niche} at {Company}" } },
+        { "id": "pro-lp-b1", "firstLineSet": "B", "subjects": { "d0": "off your plate" } }
+      ],
+      "backupVariants": [
+        { "id": "pro-lp-c2", "firstLineSet": "C", "subjects": { "d0": "{Company} paperwork" } },
+        { "id": "pro-lp-d2", "firstLineSet": "D", "subjects": { "d0": "question for {Company}" } }
+      ],
+      "touches": [
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\n{proof}\n\n{oneLiner}\n\nWorth a short call to see if the same would help {Company}?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, happy to share how that works for {ICP} like {Company}, in plain terms.\n\nWould a short call next week suit you?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "busy season", "body": "{FirstName}, a different angle.\n\nMost {ICP} only look for help with {niche} when something goes wrong. It is easier to set up before the busy season.\n\nWould a 15-minute call next week be useful?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+      ]
+    }
+  }
+}

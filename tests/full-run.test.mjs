@@ -97,6 +97,16 @@ async function milestones() {
 async function prepare() {
   __reset();
   installWorld();
+  // Leads v2: a lead is sendable only once an email verifier said `valid`.
+  // One free-tier verifier (Reoon) is "configured" and answers `safe` for the
+  // test prospects; its daily budget is lifted so the whole list verifies
+  // during the build weeks (the real free tier is 20 a day).
+  process.env.REOON_API_KEY = 'sim-reoon';
+  const worldFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => (String(url).startsWith('https://emailverifier.reoon.com/')
+    ? new Response(JSON.stringify({ status: 'safe', is_safe_to_send: true }), { status: 200 })
+    : worldFetch(url, init));
+  await setOverride(null, 'VERIFY.services', { reoon: { daily: 5000, monthly: null } });
   await setOverride(null, 'OWNER.signerName', 'Limeth Sith');
   await setOverride(null, 'OWNER.address', '1 Owner Rd, Colombo');
   await setOverride(null, 'REVIEW.clutchUrl', 'https://clutch.co/profile/aviance');

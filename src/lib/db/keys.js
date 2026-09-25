@@ -142,6 +142,13 @@ export const K = {
   learnStats: (id) => `${c(id)}:learnstats`,
   /** Learning Library raw counters per niche (hash, flat fields; aggregate only, survives deletion). */
   learningRaw: (niche) => `learning:${niche}:raw`,
+  // Leads + Copy v2
+  /** Lead quality rollup (hash): data (JSON, HUB-API `leadQuality` + sendableUnsent), builtAt. */
+  leadQuality: (id) => `${c(id)}:leadquality`,
+  /** Verification queue (sorted set): email, score = −(grade score) so the best leads are checked first. */
+  verifyQueue: (id) => `${c(id)}:verifyq`,
+  /** Domain facts from the verifiers (hash, global — technical facts, no personal data): host → {catchall, by, at}. */
+  verifyDomains: () => 'verify:domains',
   // ── end Stage C ──
 
   // ── Stage D additions (report, close, Mission Control) ──

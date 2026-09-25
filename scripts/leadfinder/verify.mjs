@@ -1,10 +1,19 @@
-// Lead Finder — address checks (SPEC §7.2 steps 4–5): syntax → MX → Reoon.
+// Lead Finder — the free, local address checks (SPEC §7.2 steps 4–5, Leads
+// v2): syntax → disposable domain → MX. The paid-per-credit API verifiers
+// (Reoon, Hunter, …) run in the app's verification waterfall
+// (src/lib/systems/verify.js), which owns the keys and the daily / monthly
+// free budgets; every lead this job posts is `verifyStatus: pending` until
+// that waterfall has checked it. SMTP "handshake" checks are not attempted:
+// GitHub-hosted runners and Vercel cannot open outbound port 25, and Google
+// Workspace / Microsoft 365 answer them unreliably anyway.
 import { Resolver } from 'node:dns/promises';
+import { syntaxOk as syntaxRule, isDisposable } from '../../src/lib/leadquality/rules.mjs';
 
 const resolver = new Resolver({ timeout: 4000, tries: 2 });
 const mxCache = new Map();
 
-export const syntaxOk = (e) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(String(e || ''));
+export const syntaxOk = syntaxRule;
+export { isDisposable };
 
 /** 'mx' | 'none' | 'timeout' for a domain (cached per run). */
 export async function mxStatus(domain, { resolveMx = (d) => resolver.resolveMx(d) } = {}) {
@@ -20,37 +29,16 @@ export async function mxStatus(domain, { resolveMx = (d) => resolver.resolveMx(d
   return status;
 }
 
-/**
- * Reoon single verify (power mode). Maps to 'valid' | 'invalid' | 'catchall' | 'unknown'.
- * https://emailverifier.reoon.com/api/v1/verify?email=…&key=…&mode=power
- */
-export async function reoonVerify(email, { apiKey, fetchImpl = fetch } = {}) {
-  try {
-    const url = `https://emailverifier.reoon.com/api/v1/verify?email=${encodeURIComponent(email)}&key=${encodeURIComponent(apiKey)}&mode=power`;
-    const res = await fetchImpl(url, { signal: AbortSignal.timeout(30000) });
-    if (!res.ok) return { status: 'unknown', raw: `http ${res.status}` };
-    const j = await res.json();
-    const s = String(j.status || '').toLowerCase();
-    if (s === 'safe' || s === 'valid') return { status: 'valid', raw: s };
-    if (s === 'catch_all' || s === 'catchall' || j.is_catch_all === true) return { status: 'catchall', raw: s };
-    if (['invalid', 'disabled', 'disposable', 'spamtrap'].includes(s)) return { status: 'invalid', raw: s };
-    if (s === 'role_account' && j.is_deliverable) return { status: 'valid', raw: s };
-    return { status: 'unknown', raw: s };
-  } catch (err) {
-    return { status: 'unknown', raw: err.message };
-  }
-}
+export function clearMxCache() { mxCache.clear(); }
 
 /**
- * A shared Reoon budget for the run (free daily credits handed over by the
- * app). `take()` returns false when none are left.
+ * Local verdict for one address: 'invalid' (bad syntax, disposable, no mail
+ * server) or 'pending' (passes; the app's API waterfall decides).
  */
-export function reoonBudget(n) {
-  let left = Math.max(0, Number(n) || 0);
-  let used = 0;
-  return {
-    take() { if (left <= 0) return false; left--; used++; return true; },
-    get used() { return used; },
-    get left() { return left; },
-  };
+export async function localCheck(email, { resolveMx } = {}) {
+  if (!syntaxOk(email)) return { status: 'invalid', reason: 'syntax' };
+  if (isDisposable(email)) return { status: 'invalid', reason: 'disposable' };
+  const mx = await mxStatus(String(email).split('@')[1], resolveMx ? { resolveMx } : {});
+  if (mx === 'none') return { status: 'invalid', reason: 'no_mx' };
+  return { status: 'pending', mx };
 }

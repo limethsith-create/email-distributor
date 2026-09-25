@@ -29,13 +29,15 @@ import { getInboxHealth, recordSendSuccess, recordSendFailure, updateInboxHealth
 import { partsIn, dayKeyIn, ET, isWeekday, hhmmToMin, trialDay, addDays } from '@/lib/time';
 import { guardOutbound, unsubscribeHeaders } from '@/lib/systems/compliance';
 import { checkEmail } from '@/lib/systems/copycheck';
-import { leadVars, clientVars } from '@/lib/systems/copy';
+import { leadVars, clientVars, exemptWordsFor } from '@/lib/systems/copy';
 import { recordLearning } from '@/lib/systems/learning';
 import { textToHtml, indexMessageId, renderTemplate } from '@/lib/systems/outbound';
 import {
   deps, alert, isTrialClient, lower, parseJson, truthy, listField, leadWindowOpen,
   getRunState, patchRunState, heartbeatAfterSend, nicheOf, requestBounceScan, ccfg } from '@/lib/systems/stagec-common';
 import { fill } from '@/lib/templates/render';
+import { buildContext, isSendable } from '@/lib/systems/grader';
+import { sendingDayNumber } from '@/lib/systems/ramp';
 
 export const TOUCHES = ['d0', 'd3', 'd7', 'd10'];
 const DAY_MS = 864e5;
@@ -429,7 +431,8 @@ const SAMPLE_LEAD = { first_name: 'Sam', company: 'Sample Company', city: 'Dover
  */
 export async function copyGate(clientId, { built, seq, touch, lead, ctx, account, variant }) {
   const maxWords = await ccfg(clientId, 'COPY.maxWords');
-  const check = (b) => checkEmail({ subject: b.subject, body: b.body, text: b.text, touch, fromName: account.displayName }, ctx.profile, { maxWords });
+  const exemptWords = exemptWordsFor(lead); // Copy v2: the prospect's own name/company is not "copy"
+  const check = (b) => checkEmail({ subject: b.subject, body: b.body, text: b.text, touch, fromName: account.displayName, exemptWords }, ctx.profile, { maxWords });
   const res = check(built);
   if (res.ok) return { ok: true };
   const failures = res.failures.map((f) => f.rule);
@@ -458,6 +461,14 @@ async function attempt(clientId, { account, lead: candidate, touch, ctx, now }) 
   if (!lead || nextTouch(lead) !== touch || (touch === 'd0' && lead.status !== 'unsent') || (touch !== 'd0' && lead.status !== 'in_sequence')) {
     await release();
     return { skipped: true, reason: 'lead moved on' };
+  }
+
+  // Gate 0 (Leads v2): a first touch only to a sendable lead — graded A/B and
+  // verified; never risky / catch-all in sending days 1–7. Not final: the
+  // lead stays unsent (verification or a regrade may still change it).
+  if (touch === 'd0' && ctx.sendGate && !isSendable(lead, ctx.sendGate)) {
+    await release();
+    return { skipped: true, reason: 'not sendable yet' };
   }
 
   // Gate 1: suppression + blocklist (lead-specific, final).
@@ -671,9 +682,15 @@ async function runSenderOnce(clientId, { now = new Date(), deadline = Date.now()
   for (const { lead, touch, at } of expired.slice(0, 40)) {
     await saveLeadPatch(clientId, lead.email, { status: 'done', expiredAt: now.toISOString(), expiredTouch: touch, expiredReason: `${touch} was due ${new Date(at).toISOString().slice(0, 10)}, more than ${graceDays} days ago` });
   }
-  const { open: fresh, poolSize } = orderFresh(unsent, { pace, now, window });
+  // Leads v2 week-one rule: only verified A/B leads (see grader.isSendable).
+  const sendGate = buildContext({}, {
+    sendingDay: trial.day1Date ? sendingDayNumber(trial.day1Date, day) : 0,
+    sendable: await ccfg(clientId, 'GRADE.sendable'),
+    allowRiskyAfterDay: await ccfg(clientId, 'SEND.allowRiskyAfterDay'),
+  });
+  const { open: fresh, poolSize } = orderFresh(unsent.filter((l) => isSendable(l, sendGate)), { pace, now, window });
 
-  const ctx = { client, profile, trial, health, seqs, inboxEmails, niche: nicheOf(client, profile) };
+  const ctx = { client, profile, trial, health, seqs, inboxEmails, niche: nicheOf(client, profile), sendGate };
   const results = { sent: 0, details: [], skipped: 0, failed: 0 };
   let tried = 0;
   const used = new Set();

@@ -185,7 +185,7 @@ test('sender: one email per inbox per tick, counters, threading, no double send'
   assert.equal(sent.length, 1);
   const m = sent[0];
   assert.equal(m.noTrack, true);
-  assert.match(m.subject, /idea for .* Inc$/);
+  assert.match(m.subject, /idea for [A-Z][a-z]+$/); // Copy v2 writes the company without its legal suffix ("Alpha", not "Alpha Inc")
   assert.match(m.text, /1 Main St, Dover, DE 19901/);
   assert.match(m.headers['List-Unsubscribe'], /\/api\/unsubscribe\?t=/);
   assert.equal(m.headers['List-Unsubscribe-Post'], 'List-Unsubscribe=One-Click');
@@ -726,8 +726,14 @@ test('jobs: every Stage C client job skips aviance and wrong states', async () =
   const { JOBS } = await import('@/lib/joblist/stage-c');
   for (const job of JOBS.filter((j) => j.scope === 'client')) {
     assert.equal(await job.due({ client: { id: 'aviance', state: 'sending' }, now: NOW }), null, job.name);
+    // Leads v2: lead verification runs from `warming` (the list is built then); every other Stage C job waits.
+    if (job.name.startsWith('lead-verify')) continue;
     assert.equal(await job.due({ client: { id: 'acme', state: 'warming' }, now: NOW }), null, job.name);
   }
+  const lv = JOBS.find((j) => j.name === 'lead-verify');
+  assert.equal(await lv.due({ client: { id: 'acme', state: 'warming' }, now: NOW }), null); // nothing waiting
+  assert.ok(await lv.due({ client: { id: 'acme', state: 'warming', verifyPending: '1' }, now: NOW }));
+  assert.equal(await lv.due({ client: { id: 'acme', state: 'declined', verifyPending: '1' }, now: NOW }), null);
   const send = JOBS.find((j) => j.name === 'send');
   assert.equal(await send.due({ client: { id: 'acme', state: 'sending' }, now: NOW }), '2026-10-06T11:00');
   assert.equal(await send.due({ client: { id: 'acme', state: 'sending' }, now: new Date('2026-10-12T15:00:00Z') }), null); // holiday

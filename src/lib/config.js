@@ -49,6 +49,9 @@ export const DEFAULTS = {
     smokeTestSends: 50,
     smokeTestBounceMax: 0.03,
     trackOpens: false,
+    // Leads + Copy v2 (Stage C): risky / catch-all addresses are never sent in
+    // sending days 1–7; from this sending day on they may be (null = never).
+    allowRiskyAfterDay: null,
   },
   FRESH_MIN_SHARE: 0.4,
   FOLLOWUP_GRACE_DAYS: 7,
@@ -193,6 +196,38 @@ export const DEFAULTS = {
   EMERGENCY_C: { burnedCanary: 0.50, maxWindowDays: 7, verifyPerTick: 25 },
   LEARNING: { minSends: 20 },
   REPLIES_C: { maxMessagesPerRun: 30, firstScanDays: 7 },
+  // Leads + Copy v2 — verification waterfall (systems/verify.js). Free
+  // allowances as published on 2026-09-25 (docs/research/v2-leads-copy.md);
+  // daily ones first (they do not roll over), then monthly, then one-time
+  // packs. A service with no key in the environment is skipped. null = no
+  // limit of that kind (the service's own "out of credits" answer stops it).
+  VERIFY: {
+    order: ['quickemail', 'verifalia', 'reoon', 'mailboxvalidator', 'zerobounce', 'hunter', 'tomba', 'proofy'],
+    services: {
+      quickemail: { daily: 100, monthly: null },
+      verifalia: { daily: 25, monthly: null },
+      reoon: { daily: 20, monthly: 600 },
+      mailboxvalidator: { daily: null, monthly: 300 },
+      zerobounce: { daily: null, monthly: 100 },
+      hunter: { daily: null, monthly: 100 },
+      tomba: { daily: null, monthly: 50 },
+      proofy: { daily: null, monthly: null },
+      anymailfinder: { daily: null, monthly: null, total: 500 }, // catch-all resolver only (one-time credits)
+    },
+    catchallResolver: 'anymailfinder',
+    perRun: 4,              // leads checked per run of the lead-verify job
+    everyMin: 5,            // job cadence while leads wait
+    timeoutMs: 15000,       // per API call
+    catchallCacheDays: 30,  // a domain found catch-all is not re-checked for this long
+    unknownRetryHours: 48,  // an "unknown" answer is retried once after this
+    maxAttempts: 2,
+    failAlertStreak: 3,     // errors in a row from one service → verify_failing
+  },
+  // Lead Grader (systems/grader.js): score ≥ A → A, ≥ B → B, else C.
+  // findOvershoot: the Lead Finder collects need × this many contacts, because
+  // some will fail verification or sit on catch-all domains (~30 % of B2B mail
+  // servers are catch-all per Dropcontact — docs/research/v2-leads-copy.md).
+  GRADE: { A: 70, B: 50, sendable: ['A', 'B'], sampleSize: 25, rollupEveryMin: 10, findOvershoot: 1.5 },
   // ── end Stage C ──
   // ── Stage D additions ──
   REVIEW: { clutchUrl: null }, // "to set": review requests block + config_missing until filled
