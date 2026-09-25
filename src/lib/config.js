@@ -162,7 +162,7 @@ export const DEFAULTS = {
     pageTimeoutMs: 10_000,        // per page
     maxBytes: 1_000_000,          // per page; the rest is not read
     pages: ['home', 'about', 'services', 'team', 'contact', 'locations', 'industries', 'proof', 'pricing', 'careers'], // the last four only when the home page links to them
-    inRequestMs: 12_000,          // how long POST /api/apply waits for research before alerting the owner without it
+    inRequestMs: 5_000,           // how long POST /api/apply waits for research before alerting the owner without it (the rest runs right after the answer; the score follows in application_scored)
     maxServices: 12,
     maxLocations: 10,
     maxPhones: 5,

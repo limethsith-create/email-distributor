@@ -13,10 +13,27 @@ import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { cfg } from '@/lib/config';
 import { sha256 } from '@/lib/crypto';
+import { after } from 'next/server';
 import { submitWebsiteApplication, submitFormApplication } from '@/lib/systems/webapply';
+import { runResearch } from '@/lib/systems/research';
+
+/**
+ * Finish the applicant research after the answer has gone back to the
+ * website (Vercel keeps the function alive for `after`). The per-minute
+ * research job still picks up anything left, but research must not depend
+ * on the heartbeat being set up.
+ */
+async function finishResearch(clientId, budgetMs = 45_000) {
+  const end = Date.now() + budgetMs;
+  while (Date.now() < end - 3000) {
+    const r = await runResearch(clientId, { deadline: Math.min(end, Date.now() + 20_000) }).catch(() => ({ status: 'failed' }));
+    if (r.status !== 'pending') return r.status;
+  }
+  return 'pending';
+}
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const MESSAGES = {
   onboarding: "You're in. Check your inbox for a link to one page — your details and the agreement.",
@@ -55,5 +72,8 @@ export async function POST(request) {
 
   const result = isWebsiteForm(body) ? await submitWebsiteApplication(body) : await submitFormApplication(body);
   if (!result.ok) return Response.json({ ok: false, errors: result.errors }, { status: 400 });
+  if (result.clientId && result.outcome === 'review') {
+    try { after(() => finishResearch(result.clientId)); } catch { /* not inside a request (tests): the research job finishes it */ }
+  }
   return Response.json({ ok: true, outcome: result.outcome, message: MESSAGES[result.outcome] || MESSAGES.manual });
 }

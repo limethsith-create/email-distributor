@@ -1,4 +1,5 @@
 // Test-only module hooks: '@/…' → src/…, '@vercel/kv' → the in-memory fake,
+// 'next/server' → a stand-in with `after`,
 // src/**/*.js treated as ES modules, and .json imported as a default export.
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
@@ -10,6 +11,7 @@ const src = path.join(root, 'src');
 
 export async function resolve(specifier, context, next) {
   if (specifier === '@vercel/kv') return { url: pathToFileURL(path.join(root, 'tests/fake-kv.mjs')).href, shortCircuit: true };
+  if (specifier === 'next/server') return { url: pathToFileURL(path.join(root, 'tests/fake-next-server.mjs')).href, shortCircuit: true };
   if (specifier.startsWith('@/')) {
     let p = path.join(src, specifier.slice(2));
     if (!path.extname(p)) p = existsSync(p) && statSync(p).isDirectory() ? path.join(p, 'index.js') : `${p}.js`;

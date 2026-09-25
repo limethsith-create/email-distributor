@@ -148,6 +148,8 @@ test('POST /api/apply takes the website form as-is', async () => {
   assert.equal(res.status, 200);
   assert.equal(body.outcome, 'review');
   assert.match(body.message, /A person reads every one/);
+  // The research is finished right after the answer (not left to the heartbeat).
+  assert.ok((globalThis.__after || []).length >= 1, 'research continues after the response');
   const hp = await POST(new Request('http://x/api/apply', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(site({ company_url2: 'http://spam' })) }));
   assert.equal((await hp.json()).ok, true); // honeypot: silently accepted, nothing stored
   const bad = await POST(new Request('http://x/api/apply', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(site({ email: 'nope', website: 'x.com' })) }));
