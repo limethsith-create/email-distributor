@@ -1,0 +1,3172 @@
+{
+ "step": "10-purchase-found",
+ "what": "The owner buys the domain and two inboxes in his CheapInboxes account. CheapInboxes tells the machine (webhook); the machine finds the purchase and links it to Ridgeline IT.",
+ "at": "2026-10-07T02:42:01.150Z",
+ "check": null,
+ "board": {
+  "machine": {
+   "ok": true,
+   "baseUrl": "https://machine.test",
+   "heartbeat": {
+    "lastTickAt": null,
+    "ageSec": null,
+    "source": null,
+    "lastSendAt": null
+   },
+   "activeTrials": 1,
+   "maxActiveTrials": 3,
+   "extensions": 0,
+   "openAlerts": 3,
+   "usage": {
+    "redis": {
+     "used": null,
+     "limit": 500000,
+     "pct": null
+    },
+    "places": {
+     "used": 1,
+     "limit": 1000,
+     "pct": 0
+    },
+    "reoon": {
+     "used": null,
+     "limit": 600,
+     "pct": null,
+     "remaining": null
+    }
+   },
+   "setup": {
+    "migrated": false,
+    "encKey": true,
+    "cronSecret": true,
+    "telegram": false,
+    "healthchecks": false,
+    "ownerInbox": true
+   },
+   "queue": [],
+   "others": []
+  },
+  "stages": [
+   {
+    "key": "intake",
+    "label": "Applied & queued",
+    "states": [
+     "applied",
+     "queued"
+    ],
+    "clients": []
+   },
+   {
+    "key": "onboard",
+    "label": "Onboarding",
+    "states": [
+     "onboarding"
+    ],
+    "clients": []
+   },
+   {
+    "key": "setup",
+    "label": "Buying & setup",
+    "states": [
+     "awaiting_purchase",
+     "setup_check"
+    ],
+    "clients": [
+     {
+      "id": "ridgelineit",
+      "name": "Ridgeline IT",
+      "state": "awaiting_purchase",
+      "plan": "trial",
+      "trialDay": null,
+      "day1Date": null,
+      "day30Date": null,
+      "health": "green",
+      "healthReasons": [],
+      "five": {
+       "sent": null,
+       "replies": null,
+       "positive": null,
+       "booked": null,
+       "qualified": null
+      },
+      "inboxRate": null,
+      "lastJobAt": "2026-10-06T18:20:12.400Z",
+      "openAlerts": 3,
+      "urgentAlerts": 0,
+      "extension": false,
+      "stateLabel": "Waiting for you to buy — 8 h ago",
+      "simple": {
+       "step": "setting_up",
+       "label": "Setting up their inboxes (about 2 days)",
+       "next": "Nothing for you: the domain and inboxes connect by themselves, then warm-up starts",
+       "needsYou": false,
+       "since": "2026-10-07T02:42:00.000Z",
+       "person": "Dana Whitfield",
+       "company": "Ridgeline IT",
+       "dayOf30": null,
+       "needsReply": false
+      },
+      "fitScore": {
+       "score": 94,
+       "grade": "A",
+       "label": "Strong fit",
+       "confidence": 97
+      },
+      "contactName": "Dana Whitfield",
+      "contactEmail": "dana@ridgelineit.com",
+      "website": "https://www.ridgelineit.com/",
+      "todo": [],
+      "systems": [
+       {
+        "key": "intake",
+        "label": "Intake",
+        "status": "ok",
+        "line": "Agreement accepted 2026-10-06 by Dana Whitfield",
+        "detail": []
+       },
+       {
+        "key": "market",
+        "label": "Market count",
+        "status": "ok",
+        "line": "1,800 matching companies (minimum 1,000)",
+        "detail": [
+         "checked 2026-10-06"
+        ]
+       },
+       {
+        "key": "purchase",
+        "label": "Domain & inboxes",
+        "status": "working",
+        "line": "Setting up getridgelineit.com — about 48 hours",
+        "detail": [
+         "You bought it: done",
+         "Domain live + spam protection set: waiting",
+         "2 inboxes created: waiting",
+         "Connected to our system: waiting",
+         "Warm-up started: waiting"
+        ]
+       },
+       {
+        "key": "setup",
+        "label": "Setup checks",
+        "status": "off",
+        "line": "Runs when you paste the logins",
+        "detail": []
+       },
+       {
+        "key": "warmup",
+        "label": "Warm-up",
+        "status": "off",
+        "line": "Starts when the inboxes are in",
+        "detail": []
+       },
+       {
+        "key": "list",
+        "label": "Lead list",
+        "status": "off",
+        "line": "Starts with warm-up",
+        "detail": []
+       },
+       {
+        "key": "copy",
+        "label": "Copy & approval",
+        "status": "off",
+        "line": "Built during warm-up",
+        "detail": []
+       },
+       {
+        "key": "canary",
+        "label": "Placement & ramp",
+        "status": "off",
+        "line": "Runs during warm-up",
+        "detail": []
+       },
+       {
+        "key": "sending",
+        "label": "Sending",
+        "status": "off",
+        "line": "Starts on Day 1",
+        "detail": []
+       },
+       {
+        "key": "replies",
+        "label": "Replies",
+        "status": "off",
+        "line": "Read every few minutes once sending starts",
+        "detail": []
+       },
+       {
+        "key": "calls",
+        "label": "Calls",
+        "status": "off",
+        "line": "Watches the calendar once sending starts",
+        "detail": []
+       },
+       {
+        "key": "reports",
+        "label": "Reports & decision",
+        "status": "off",
+        "line": "Friday updates start at Day −14",
+        "detail": []
+       },
+       {
+        "key": "closing",
+        "label": "Close-out",
+        "status": "off",
+        "line": "Runs after Day 30",
+        "detail": []
+       }
+      ],
+      "nextUp": null
+     }
+    ]
+   },
+   {
+    "key": "build",
+    "label": "Warm-up & build",
+    "states": [
+     "warming",
+     "ready"
+    ],
+    "clients": []
+   },
+   {
+    "key": "live",
+    "label": "Sending",
+    "states": [
+     "sending",
+     "paused",
+     "extension"
+    ],
+    "clients": []
+   },
+   {
+    "key": "decide",
+    "label": "Deciding",
+    "states": [
+     "deciding"
+    ],
+    "clients": []
+   },
+   {
+    "key": "won",
+    "label": "Converted",
+    "states": [
+     "converted"
+    ],
+    "clients": []
+   },
+   {
+    "key": "closing",
+    "label": "Not now & closing",
+    "states": [
+     "not_now",
+     "retired"
+    ],
+    "clients": []
+   },
+   {
+    "key": "ended",
+    "label": "Ended",
+    "states": [
+     "declined",
+     "closed_silent",
+     "deleted"
+    ],
+    "clients": []
+   }
+  ],
+  "todos": [
+   {
+    "id": "machine-setup",
+    "clientId": null,
+    "clientName": "Machine",
+    "text": "Finish the machine setup: Telegram, Healthchecks",
+    "detail": "Settings in Vercel — see docs/PROGRESS.md",
+    "urgent": false,
+    "since": null,
+    "action": {
+     "type": "none"
+    }
+   },
+   {
+    "id": "machine-migrate",
+    "clientId": null,
+    "clientName": "Machine",
+    "text": "Run first-time setup (moves the Aviance inboxes into the database)",
+    "detail": "",
+    "urgent": false,
+    "since": null,
+    "action": {
+     "type": "api",
+     "method": "POST",
+     "path": "/api/mc/setup",
+     "body": {
+      "action": "migrate"
+     }
+    }
+   }
+  ],
+  "inquiries": {
+   "counts": {
+    "new": 0,
+    "contacted": 0,
+    "won": 0,
+    "lost": 0
+   },
+   "open": 0,
+   "latest": []
+  },
+  "alerts": [
+   {
+    "id": "1791340920300-z50lzt",
+    "at": "2026-10-07T02:42:00.300Z",
+    "key": "purchase_found",
+    "clientId": "ridgelineit",
+    "title": "We found getridgelineit.com — connecting it to Ridgeline IT",
+    "urgent": false,
+    "delivered": true
+   },
+   {
+    "id": "1790949720250-egq7ex",
+    "at": "2026-10-02T14:02:00.250Z",
+    "key": "meeting_requested",
+    "clientId": "ridgelineit",
+    "title": "Dana (Ridgeline IT) asked for Tue 6 Oct 11:00 am ET = 8:30 pm Colombo — say yes in the Calendar",
+    "urgent": false,
+    "delivered": true
+   },
+   {
+    "id": "1790946600550-zsmdx0",
+    "at": "2026-10-02T13:10:00.550Z",
+    "key": "bot_replied",
+    "clientId": "ridgelineit",
+    "title": "Auto-replied to Dana (Ridgeline IT): sent the booking link and the next open times",
+    "urgent": false,
+    "delivered": true
+   }
+  ]
+ },
+ "detail": {
+  "row": {
+   "id": "ridgelineit",
+   "name": "Ridgeline IT",
+   "state": "awaiting_purchase",
+   "plan": "trial",
+   "trialDay": null,
+   "day1Date": null,
+   "day30Date": null,
+   "health": "green",
+   "healthReasons": [],
+   "five": {
+    "sent": null,
+    "replies": null,
+    "positive": null,
+    "booked": null,
+    "qualified": null
+   },
+   "inboxRate": null,
+   "lastJobAt": "2026-10-06T18:20:12.400Z",
+   "openAlerts": 0,
+   "urgentAlerts": 0,
+   "extension": false,
+   "stateLabel": "Waiting for you to buy — 8 h ago",
+   "simple": {
+    "step": "setting_up",
+    "label": "Setting up their inboxes (about 2 days)",
+    "next": "Nothing for you: the domain and inboxes connect by themselves, then warm-up starts",
+    "needsYou": false,
+    "since": "2026-10-07T02:42:00.000Z",
+    "person": "Dana Whitfield",
+    "company": "Ridgeline IT",
+    "dayOf30": null,
+    "needsReply": false
+   },
+   "fitScore": {
+    "score": 94,
+    "grade": "A",
+    "label": "Strong fit",
+    "confidence": 97
+   },
+   "contactName": "Dana Whitfield",
+   "contactEmail": "dana@ridgelineit.com",
+   "website": "https://www.ridgelineit.com/",
+   "todo": [],
+   "systems": [
+    {
+     "key": "intake",
+     "label": "Intake",
+     "status": "ok",
+     "line": "Agreement accepted 2026-10-06 by Dana Whitfield",
+     "detail": []
+    },
+    {
+     "key": "market",
+     "label": "Market count",
+     "status": "ok",
+     "line": "1,800 matching companies (minimum 1,000)",
+     "detail": [
+      "checked 2026-10-06"
+     ]
+    },
+    {
+     "key": "purchase",
+     "label": "Domain & inboxes",
+     "status": "working",
+     "line": "Setting up getridgelineit.com — about 48 hours",
+     "detail": [
+      "You bought it: done",
+      "Domain live + spam protection set: waiting",
+      "2 inboxes created: waiting",
+      "Connected to our system: waiting",
+      "Warm-up started: waiting"
+     ]
+    },
+    {
+     "key": "setup",
+     "label": "Setup checks",
+     "status": "off",
+     "line": "Runs when you paste the logins",
+     "detail": []
+    },
+    {
+     "key": "warmup",
+     "label": "Warm-up",
+     "status": "off",
+     "line": "Starts when the inboxes are in",
+     "detail": []
+    },
+    {
+     "key": "list",
+     "label": "Lead list",
+     "status": "off",
+     "line": "Starts with warm-up",
+     "detail": []
+    },
+    {
+     "key": "copy",
+     "label": "Copy & approval",
+     "status": "off",
+     "line": "Built during warm-up",
+     "detail": []
+    },
+    {
+     "key": "canary",
+     "label": "Placement & ramp",
+     "status": "off",
+     "line": "Runs during warm-up",
+     "detail": []
+    },
+    {
+     "key": "sending",
+     "label": "Sending",
+     "status": "off",
+     "line": "Starts on Day 1",
+     "detail": []
+    },
+    {
+     "key": "replies",
+     "label": "Replies",
+     "status": "off",
+     "line": "Read every few minutes once sending starts",
+     "detail": []
+    },
+    {
+     "key": "calls",
+     "label": "Calls",
+     "status": "off",
+     "line": "Watches the calendar once sending starts",
+     "detail": []
+    },
+    {
+     "key": "reports",
+     "label": "Reports & decision",
+     "status": "off",
+     "line": "Friday updates start at Day −14",
+     "detail": []
+    },
+    {
+     "key": "closing",
+     "label": "Close-out",
+     "status": "off",
+     "line": "Runs after Day 30",
+     "detail": []
+    }
+   ],
+   "nextUp": null
+  },
+  "profile": {
+   "companyName": "Ridgeline IT",
+   "postalAddress": "2100 South Blvd, Suite 300, Charlotte, NC 28203",
+   "cities": [
+    "Charlotte, NC",
+    "Raleigh, NC",
+    "Greenville, SC"
+   ],
+   "defaultIcp": "law firms and CPA firms",
+   "sellsTo": "We run managed IT and cybersecurity for law firms and CPA firms with 10–75 staff in the Carolinas.",
+   "senderName": "Dana Whitfield",
+   "senderTitle": "Director of Client Success",
+   "senderPrefix": "dana",
+   "calendarUrlCheckedAt": "2026-10-06T18:05:00.400Z",
+   "calendarUrl": "https://cal.com/ridgeline-it/intro",
+   "hotLeadEmail": "dana@ridgelineit.com",
+   "suppressCustomers": [
+    "hollisgrantlaw.com",
+    "Carolina Tax Partners"
+   ],
+   "competitors": [
+    "Queen City IT",
+    "bluegrid-it.com"
+   ],
+   "proofLine": "We look after 30 law and CPA firms in Charlotte and Raleigh.",
+   "defaultNiche": "managed IT",
+   "industry": "law firm, accounting firm",
+   "states": [
+    "NC",
+    "SC"
+   ],
+   "sizeMin": "10",
+   "sizeMax": "75",
+   "titles": [
+    "Managing Partner",
+    "Office Manager",
+    "Firm Administrator",
+    "Owner"
+   ],
+   "excludedTitles": [
+    "Intern",
+    "Paralegal"
+   ],
+   "dreamCustomers": [
+    {
+     "name": "Moore & Van Allen",
+     "website": "mvalaw.com"
+    },
+    {
+     "name": "Dixon Hughes",
+     "website": "dhg.com"
+    },
+    {
+     "name": "Wyrick Robbins",
+     "website": "wyrick.com"
+    }
+   ],
+   "capacityPerWeek": "6",
+   "winCondition": "Three real conversations with firm owners we do not know yet.",
+   "industryKeywords": [
+    "law firm",
+    "accounting firm"
+   ],
+   "suppressNames": [
+    "Carolina Tax Partners",
+    "Queen City IT"
+   ],
+   "onboardingSavedAt": "2026-10-06T18:05:00.400Z",
+   "marketEstimate": 1800,
+   "marketCheckedAt": "2026-10-06T18:20:00.000Z",
+   "marketSource": "places",
+   "marketRound": "widened"
+  },
+  "trial": {
+   "onboardingSentAt": "2026-10-02T03:30:00.000Z",
+   "onboardingClosesOn": "2026-10-13",
+   "agreementAcceptedAt": "2026-10-06T18:20:00.000Z",
+   "agreementName": "Dana Whitfield",
+   "agreementTitle": "Director of Client Success",
+   "agreementIp": "98.24.1.7",
+   "agreementVersion": "2026-09-12",
+   "agreementHash": "9a24b00ef34ae52a2668adc7bd4cf34fdf2ddcc078376c3c859a9374c9b667c0",
+   "agreementText": "The Aviance 30-Day Trial — Agreement\nBetween Aviance (“we”) and Ridgeline IT (“you”). Effective 6 October 2026.\n\n1. What this is. A 30-day cold email trial. We build and run a small outbound campaign in your name, book sales calls onto your calendar, and hand you a written report of what your market said. It costs you nothing. It is not a paid plan; it is how you decide whether to buy one.\n\n2. What we do. Register one sending domain and two inboxes. Research and verify a list of 300–500 contacts matching the customer profile you approve. Write a three-email sequence you approve. Send for 30 days. Handle every reply. Book, confirm and remind every meeting, and chase no-shows for 14 days. Send you a written update every Friday, and on day 29 a report covering the numbers, every reply we received and what it means.\n\n3. What you do. Approve the customer profile and the copy on the kickoff call. Keep at least five open slots a week on the calendar you give us, and be able to take a booked meeting within five business days. Reply to any hot lead we hand you within one business day. Give us the postal address for the email footer. Authorise us to send email in your company’s name, from the trial domain, using only copy you approved.\n\n4. The two promises. First: we will contact the approved list and give you the written report — that is guaranteed. Second: if no qualified booked call has been held by the end of the 30 days, we keep sending at our cost until one is, for up to 30 further days, after which the trial ends. Both promises hold while you hold up clause 3. If you stop responding for five business days, the trial ends and the promises end with it.\n\n5. What counts as a qualified booked call. All four must be true: the company matches the approved profile; the attendee holds an approved title; they attended; they booked in response to outreach describing your offer. Budget, timeline, level of interest and whether they buy do not affect whether a call counts. No-shows do not count; we re-book them for 14 days. You may flag a call as not qualifying within 24 business hours, in writing, stating which criterion it failed.\n\n6. The exchange. The trial is free, so its price is proof. You agree to: (a) leave a review of the trial on Clutch, or a platform we both agree, within seven days of the day-30 call. That review may be positive or negative, must be your honest opinion, and must begin with the words “I received this service for free for my review.” We will never ask you to change or remove it; (b) if at least one qualified call was held, allow us to quote you by name, title and company, using words you approve in writing before publication; (c) allow us to publish the trial’s numbers — companies contacted, replies, calls booked — as a case study, anonymised if you prefer; (d) give us ten minutes at the end for an honest debrief, whatever the outcome. We will never publish anything you have not approved in writing, and we will never ask you to say anything you do not mean.\n\n7. Day 31. On the day-30 call you decide whether to continue on one of our plans: Starter $2,497 for 10 guaranteed booked calls a month, Growth $3,997 for 20, or Scale $8,497 for 50 — month to month, 14 days’ notice to cancel, no setup fee, on the terms published at aviance.online. We will recommend one of them based on what the trial measured and how many calls a week you told us you can handle. If you continue, the trial domain, inboxes and list carry into your plan and campaigns stay live. If you don’t, we retire the trial domain and inboxes within seven days and never use them for anyone else. There is no obligation to continue and nothing to cancel.\n\n8. Ownership and data. Your leads, replies and booked meetings are yours, exported on request, whether or not you continue. The sending domain and inboxes are registered by us and stay ours. Our methods, templates and tools stay ours. We do not sell or share your data.\n\n9. Limits. One trial per company. One profile, one sequence, one segment. We may end the trial if the outreach would breach Google’s sending rules or ours, or if clause 3 is not met.\n\n10. Where we are. Aviance is run from Sri Lanka. Working hours in your time zone: 09:00–17:00 US Eastern, Monday to Friday. Replies are handled inside those hours; hot leads the same day.\n\nSigned for Aviance: Limeth Sith\nSigned for Ridgeline IT: Dana Whitfield, Director of Client Success, 6 October 2026"
+  },
+  "domain": {
+   "name": null,
+   "setupPhase": null,
+   "setupPassedAt": null,
+   "setupFailedAt": null,
+   "checks": {
+    "spf": null,
+    "dkim": null,
+    "dmarc": null,
+    "mx": null,
+    "autorenew": null,
+    "blacklist": null,
+    "redirect": null,
+    "smtp": null,
+    "imap": null,
+    "twostep": null,
+    "loopback": null
+   },
+   "dmarcPassRate7d": null,
+   "blacklist": null,
+   "retiredAt": null
+  },
+  "shopping": {
+   "domainCandidates": [
+    {
+     "name": "getridgelineit.com",
+     "available": true,
+     "source": "rdap",
+     "score": 83
+    },
+    {
+     "name": "ridgelineithq.com",
+     "available": true,
+     "source": "rdap",
+     "score": 82
+    },
+    {
+     "name": "tryridgelineit.com",
+     "available": true,
+     "source": "rdap",
+     "score": 81
+    },
+    {
+     "name": "ridgelineitco.com",
+     "available": true,
+     "source": "rdap",
+     "score": 80
+    },
+    {
+     "name": "useridgelineit.com",
+     "available": true,
+     "source": "rdap",
+     "score": 79
+    },
+    {
+     "name": "ridgelineitusa.com",
+     "available": true,
+     "source": "rdap",
+     "score": 78
+    },
+    {
+     "name": "joinridgelineit.com",
+     "available": true,
+     "source": "rdap",
+     "score": 78
+    },
+    {
+     "name": "heyridgelineit.com",
+     "available": true,
+     "source": "rdap",
+     "score": 77
+    },
+    {
+     "name": "withridgelineit.com",
+     "available": true,
+     "source": "rdap",
+     "score": 77
+    },
+    {
+     "name": "ridgelineitapp.com",
+     "available": true,
+     "source": "rdap",
+     "score": 76
+    },
+    {
+     "name": "ridgelineitlabs.com",
+     "available": true,
+     "source": "rdap",
+     "score": 76
+    },
+    {
+     "name": "ridgelineitmail.com",
+     "available": true,
+     "source": "rdap",
+     "score": 73
+    }
+   ],
+   "chosenDomain": "getridgelineit.com",
+   "backups": [
+    "ridgelineithq.com",
+    "tryridgelineit.com"
+   ],
+   "registrarQuotes": [
+    {
+     "registrar": "spaceship",
+     "name": "Spaceship",
+     "price": 9.08,
+     "renewal": 10.18,
+     "seenAt": "2026-09-25T00:00:00.000Z",
+     "source": "table",
+     "unconfirmed": false,
+     "url": "https://www.spaceship.com/domain-search/?query=getridgelineit.com&tab=domains"
+    },
+    {
+     "registrar": "porkbun",
+     "name": "Porkbun",
+     "price": 10.37,
+     "renewal": 11.08,
+     "seenAt": "2026-10-06T18:20:10.100Z",
+     "source": "live",
+     "unconfirmed": false,
+     "url": "https://porkbun.com/checkout/search?q=getridgelineit.com"
+    },
+    {
+     "registrar": "cloudflare",
+     "name": "Cloudflare",
+     "price": 10.46,
+     "renewal": 10.46,
+     "seenAt": "2026-09-25T00:00:00.000Z",
+     "source": "table",
+     "unconfirmed": false,
+     "url": "https://domains.cloudflare.com/?domain=getridgelineit.com"
+    },
+    {
+     "registrar": "dynadot",
+     "name": "Dynadot",
+     "price": 10.88,
+     "renewal": 10.88,
+     "seenAt": "2026-09-25T00:00:00.000Z",
+     "source": "table",
+     "unconfirmed": false,
+     "url": "https://www.dynadot.com/domain/search?domain=getridgelineit.com"
+    },
+    {
+     "registrar": "namecheap",
+     "name": "Namecheap",
+     "price": 11.48,
+     "renewal": 18.68,
+     "seenAt": "2026-09-25T00:00:00.000Z",
+     "source": "table",
+     "unconfirmed": false,
+     "url": "https://www.namecheap.com/domains/registration/results/?domain=getridgelineit.com"
+    }
+   ],
+   "inboxQuotes": [
+    {
+     "id": "cheapinboxes",
+     "name": "CheapInboxes",
+     "url": "https://www.cheapinboxes.com/",
+     "pricePerMonth": 3.5,
+     "seenAt": "2026-09-25"
+    }
+   ],
+   "senderAddresses": [
+    "dana@getridgelineit.com",
+    "dwhitfield@getridgelineit.com"
+   ],
+   "total": 16.08,
+   "unconfirmed": [],
+   "autoBought": null,
+   "offers": [
+    {
+     "domain": "getridgelineit.com",
+     "tld": "com",
+     "available": true,
+     "score": 83,
+     "why": "long (14), 'get' + brand, .com",
+     "prices": [
+      {
+       "registrar": "Spaceship",
+       "firstYear": 9.08,
+       "renewal": 10.18,
+       "promo": {
+        "code": "COM67",
+        "firstYear": 3.8,
+        "note": "limited time, no end date shown"
+       },
+       "url": "https://www.spaceship.com/domain-search/?query=getridgelineit.com&tab=domains",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Porkbun",
+       "firstYear": 10.37,
+       "renewal": 11.08,
+       "promo": null,
+       "url": "https://porkbun.com/checkout/search?q=getridgelineit.com",
+       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "source": "live"
+      },
+      {
+       "registrar": "Cloudflare",
+       "firstYear": 10.46,
+       "renewal": 10.46,
+       "promo": null,
+       "url": "https://domains.cloudflare.com/?domain=getridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Dynadot",
+       "firstYear": 10.88,
+       "renewal": 10.88,
+       "promo": {
+        "code": "899COM",
+        "firstYear": 8.99,
+        "note": "limited quantity; help page dated 29 May 2026, not re-checked"
+       },
+       "url": "https://www.dynadot.com/domain/search?domain=getridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Namecheap",
+       "firstYear": 11.48,
+       "renewal": 18.68,
+       "promo": {
+        "code": "NEWCOM679",
+        "firstYear": 6.99,
+        "note": "first order of a new customer only"
+       },
+       "url": "https://www.namecheap.com/domains/registration/results/?domain=getridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      }
+     ],
+     "best": {
+      "registrar": "Spaceship",
+      "firstYear": 9.08,
+      "renewal": 10.18,
+      "url": "https://www.spaceship.com/domain-search/?query=getridgelineit.com&tab=domains",
+      "promo": {
+       "code": "COM67",
+       "firstYear": 3.8,
+       "note": "limited time, no end date shown"
+      }
+     }
+    },
+    {
+     "domain": "ridgelineithq.com",
+     "tld": "com",
+     "available": true,
+     "score": 82,
+     "why": "long (13), brand + 'hq', .com",
+     "prices": [
+      {
+       "registrar": "Spaceship",
+       "firstYear": 9.08,
+       "renewal": 10.18,
+       "promo": {
+        "code": "COM67",
+        "firstYear": 3.8,
+        "note": "limited time, no end date shown"
+       },
+       "url": "https://www.spaceship.com/domain-search/?query=ridgelineithq.com&tab=domains",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Porkbun",
+       "firstYear": 10.37,
+       "renewal": 11.08,
+       "promo": null,
+       "url": "https://porkbun.com/checkout/search?q=ridgelineithq.com",
+       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "source": "live"
+      },
+      {
+       "registrar": "Cloudflare",
+       "firstYear": 10.46,
+       "renewal": 10.46,
+       "promo": null,
+       "url": "https://domains.cloudflare.com/?domain=ridgelineithq.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Dynadot",
+       "firstYear": 10.88,
+       "renewal": 10.88,
+       "promo": {
+        "code": "899COM",
+        "firstYear": 8.99,
+        "note": "limited quantity; help page dated 29 May 2026, not re-checked"
+       },
+       "url": "https://www.dynadot.com/domain/search?domain=ridgelineithq.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Namecheap",
+       "firstYear": 11.48,
+       "renewal": 18.68,
+       "promo": {
+        "code": "NEWCOM679",
+        "firstYear": 6.99,
+        "note": "first order of a new customer only"
+       },
+       "url": "https://www.namecheap.com/domains/registration/results/?domain=ridgelineithq.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      }
+     ],
+     "best": {
+      "registrar": "Spaceship",
+      "firstYear": 9.08,
+      "renewal": 10.18,
+      "url": "https://www.spaceship.com/domain-search/?query=ridgelineithq.com&tab=domains",
+      "promo": {
+       "code": "COM67",
+       "firstYear": 3.8,
+       "note": "limited time, no end date shown"
+      }
+     }
+    },
+    {
+     "domain": "tryridgelineit.com",
+     "tld": "com",
+     "available": true,
+     "score": 81,
+     "why": "long (14), 'try' + brand, .com",
+     "prices": [
+      {
+       "registrar": "Spaceship",
+       "firstYear": 9.08,
+       "renewal": 10.18,
+       "promo": {
+        "code": "COM67",
+        "firstYear": 3.8,
+        "note": "limited time, no end date shown"
+       },
+       "url": "https://www.spaceship.com/domain-search/?query=tryridgelineit.com&tab=domains",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Porkbun",
+       "firstYear": 10.37,
+       "renewal": 11.08,
+       "promo": null,
+       "url": "https://porkbun.com/checkout/search?q=tryridgelineit.com",
+       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "source": "live"
+      },
+      {
+       "registrar": "Cloudflare",
+       "firstYear": 10.46,
+       "renewal": 10.46,
+       "promo": null,
+       "url": "https://domains.cloudflare.com/?domain=tryridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Dynadot",
+       "firstYear": 10.88,
+       "renewal": 10.88,
+       "promo": {
+        "code": "899COM",
+        "firstYear": 8.99,
+        "note": "limited quantity; help page dated 29 May 2026, not re-checked"
+       },
+       "url": "https://www.dynadot.com/domain/search?domain=tryridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Namecheap",
+       "firstYear": 11.48,
+       "renewal": 18.68,
+       "promo": {
+        "code": "NEWCOM679",
+        "firstYear": 6.99,
+        "note": "first order of a new customer only"
+       },
+       "url": "https://www.namecheap.com/domains/registration/results/?domain=tryridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      }
+     ],
+     "best": {
+      "registrar": "Spaceship",
+      "firstYear": 9.08,
+      "renewal": 10.18,
+      "url": "https://www.spaceship.com/domain-search/?query=tryridgelineit.com&tab=domains",
+      "promo": {
+       "code": "COM67",
+       "firstYear": 3.8,
+       "note": "limited time, no end date shown"
+      }
+     }
+    },
+    {
+     "domain": "ridgelineitco.com",
+     "tld": "com",
+     "available": true,
+     "score": 80,
+     "why": "long (13), brand + 'co', .com",
+     "prices": [
+      {
+       "registrar": "Spaceship",
+       "firstYear": 9.08,
+       "renewal": 10.18,
+       "promo": {
+        "code": "COM67",
+        "firstYear": 3.8,
+        "note": "limited time, no end date shown"
+       },
+       "url": "https://www.spaceship.com/domain-search/?query=ridgelineitco.com&tab=domains",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Porkbun",
+       "firstYear": 10.37,
+       "renewal": 11.08,
+       "promo": null,
+       "url": "https://porkbun.com/checkout/search?q=ridgelineitco.com",
+       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "source": "live"
+      },
+      {
+       "registrar": "Cloudflare",
+       "firstYear": 10.46,
+       "renewal": 10.46,
+       "promo": null,
+       "url": "https://domains.cloudflare.com/?domain=ridgelineitco.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Dynadot",
+       "firstYear": 10.88,
+       "renewal": 10.88,
+       "promo": {
+        "code": "899COM",
+        "firstYear": 8.99,
+        "note": "limited quantity; help page dated 29 May 2026, not re-checked"
+       },
+       "url": "https://www.dynadot.com/domain/search?domain=ridgelineitco.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Namecheap",
+       "firstYear": 11.48,
+       "renewal": 18.68,
+       "promo": {
+        "code": "NEWCOM679",
+        "firstYear": 6.99,
+        "note": "first order of a new customer only"
+       },
+       "url": "https://www.namecheap.com/domains/registration/results/?domain=ridgelineitco.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      }
+     ],
+     "best": {
+      "registrar": "Spaceship",
+      "firstYear": 9.08,
+      "renewal": 10.18,
+      "url": "https://www.spaceship.com/domain-search/?query=ridgelineitco.com&tab=domains",
+      "promo": {
+       "code": "COM67",
+       "firstYear": 3.8,
+       "note": "limited time, no end date shown"
+      }
+     }
+    },
+    {
+     "domain": "useridgelineit.com",
+     "tld": "com",
+     "available": true,
+     "score": 79,
+     "why": "long (14), 'use' + brand, .com",
+     "prices": [
+      {
+       "registrar": "Spaceship",
+       "firstYear": 9.08,
+       "renewal": 10.18,
+       "promo": {
+        "code": "COM67",
+        "firstYear": 3.8,
+        "note": "limited time, no end date shown"
+       },
+       "url": "https://www.spaceship.com/domain-search/?query=useridgelineit.com&tab=domains",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Porkbun",
+       "firstYear": 10.37,
+       "renewal": 11.08,
+       "promo": null,
+       "url": "https://porkbun.com/checkout/search?q=useridgelineit.com",
+       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "source": "live"
+      },
+      {
+       "registrar": "Cloudflare",
+       "firstYear": 10.46,
+       "renewal": 10.46,
+       "promo": null,
+       "url": "https://domains.cloudflare.com/?domain=useridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Dynadot",
+       "firstYear": 10.88,
+       "renewal": 10.88,
+       "promo": {
+        "code": "899COM",
+        "firstYear": 8.99,
+        "note": "limited quantity; help page dated 29 May 2026, not re-checked"
+       },
+       "url": "https://www.dynadot.com/domain/search?domain=useridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Namecheap",
+       "firstYear": 11.48,
+       "renewal": 18.68,
+       "promo": {
+        "code": "NEWCOM679",
+        "firstYear": 6.99,
+        "note": "first order of a new customer only"
+       },
+       "url": "https://www.namecheap.com/domains/registration/results/?domain=useridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      }
+     ],
+     "best": {
+      "registrar": "Spaceship",
+      "firstYear": 9.08,
+      "renewal": 10.18,
+      "url": "https://www.spaceship.com/domain-search/?query=useridgelineit.com&tab=domains",
+      "promo": {
+       "code": "COM67",
+       "firstYear": 3.8,
+       "note": "limited time, no end date shown"
+      }
+     }
+    },
+    {
+     "domain": "ridgelineitusa.com",
+     "tld": "com",
+     "available": true,
+     "score": 78,
+     "why": "long (14), brand + 'usa', .com",
+     "prices": [
+      {
+       "registrar": "Spaceship",
+       "firstYear": 9.08,
+       "renewal": 10.18,
+       "promo": {
+        "code": "COM67",
+        "firstYear": 3.8,
+        "note": "limited time, no end date shown"
+       },
+       "url": "https://www.spaceship.com/domain-search/?query=ridgelineitusa.com&tab=domains",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Porkbun",
+       "firstYear": 10.37,
+       "renewal": 11.08,
+       "promo": null,
+       "url": "https://porkbun.com/checkout/search?q=ridgelineitusa.com",
+       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "source": "live"
+      },
+      {
+       "registrar": "Cloudflare",
+       "firstYear": 10.46,
+       "renewal": 10.46,
+       "promo": null,
+       "url": "https://domains.cloudflare.com/?domain=ridgelineitusa.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Dynadot",
+       "firstYear": 10.88,
+       "renewal": 10.88,
+       "promo": {
+        "code": "899COM",
+        "firstYear": 8.99,
+        "note": "limited quantity; help page dated 29 May 2026, not re-checked"
+       },
+       "url": "https://www.dynadot.com/domain/search?domain=ridgelineitusa.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Namecheap",
+       "firstYear": 11.48,
+       "renewal": 18.68,
+       "promo": {
+        "code": "NEWCOM679",
+        "firstYear": 6.99,
+        "note": "first order of a new customer only"
+       },
+       "url": "https://www.namecheap.com/domains/registration/results/?domain=ridgelineitusa.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      }
+     ],
+     "best": {
+      "registrar": "Spaceship",
+      "firstYear": 9.08,
+      "renewal": 10.18,
+      "url": "https://www.spaceship.com/domain-search/?query=ridgelineitusa.com&tab=domains",
+      "promo": {
+       "code": "COM67",
+       "firstYear": 3.8,
+       "note": "limited time, no end date shown"
+      }
+     }
+    },
+    {
+     "domain": "joinridgelineit.com",
+     "tld": "com",
+     "available": true,
+     "score": 78,
+     "why": "long (15), 'join' + brand, .com",
+     "prices": [
+      {
+       "registrar": "Spaceship",
+       "firstYear": 9.08,
+       "renewal": 10.18,
+       "promo": {
+        "code": "COM67",
+        "firstYear": 3.8,
+        "note": "limited time, no end date shown"
+       },
+       "url": "https://www.spaceship.com/domain-search/?query=joinridgelineit.com&tab=domains",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Porkbun",
+       "firstYear": 10.37,
+       "renewal": 11.08,
+       "promo": null,
+       "url": "https://porkbun.com/checkout/search?q=joinridgelineit.com",
+       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "source": "live"
+      },
+      {
+       "registrar": "Cloudflare",
+       "firstYear": 10.46,
+       "renewal": 10.46,
+       "promo": null,
+       "url": "https://domains.cloudflare.com/?domain=joinridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Dynadot",
+       "firstYear": 10.88,
+       "renewal": 10.88,
+       "promo": {
+        "code": "899COM",
+        "firstYear": 8.99,
+        "note": "limited quantity; help page dated 29 May 2026, not re-checked"
+       },
+       "url": "https://www.dynadot.com/domain/search?domain=joinridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Namecheap",
+       "firstYear": 11.48,
+       "renewal": 18.68,
+       "promo": {
+        "code": "NEWCOM679",
+        "firstYear": 6.99,
+        "note": "first order of a new customer only"
+       },
+       "url": "https://www.namecheap.com/domains/registration/results/?domain=joinridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      }
+     ],
+     "best": {
+      "registrar": "Spaceship",
+      "firstYear": 9.08,
+      "renewal": 10.18,
+      "url": "https://www.spaceship.com/domain-search/?query=joinridgelineit.com&tab=domains",
+      "promo": {
+       "code": "COM67",
+       "firstYear": 3.8,
+       "note": "limited time, no end date shown"
+      }
+     }
+    },
+    {
+     "domain": "heyridgelineit.com",
+     "tld": "com",
+     "available": true,
+     "score": 77,
+     "why": "long (14), 'hey' + brand, .com",
+     "prices": [
+      {
+       "registrar": "Spaceship",
+       "firstYear": 9.08,
+       "renewal": 10.18,
+       "promo": {
+        "code": "COM67",
+        "firstYear": 3.8,
+        "note": "limited time, no end date shown"
+       },
+       "url": "https://www.spaceship.com/domain-search/?query=heyridgelineit.com&tab=domains",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Porkbun",
+       "firstYear": 10.37,
+       "renewal": 11.08,
+       "promo": null,
+       "url": "https://porkbun.com/checkout/search?q=heyridgelineit.com",
+       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "source": "live"
+      },
+      {
+       "registrar": "Cloudflare",
+       "firstYear": 10.46,
+       "renewal": 10.46,
+       "promo": null,
+       "url": "https://domains.cloudflare.com/?domain=heyridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Dynadot",
+       "firstYear": 10.88,
+       "renewal": 10.88,
+       "promo": {
+        "code": "899COM",
+        "firstYear": 8.99,
+        "note": "limited quantity; help page dated 29 May 2026, not re-checked"
+       },
+       "url": "https://www.dynadot.com/domain/search?domain=heyridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      },
+      {
+       "registrar": "Namecheap",
+       "firstYear": 11.48,
+       "renewal": 18.68,
+       "promo": {
+        "code": "NEWCOM679",
+        "firstYear": 6.99,
+        "note": "first order of a new customer only"
+       },
+       "url": "https://www.namecheap.com/domains/registration/results/?domain=heyridgelineit.com",
+       "confirmedAt": "2026-09-25T00:00:00.000Z",
+       "source": "table"
+      }
+     ],
+     "best": {
+      "registrar": "Spaceship",
+      "firstYear": 9.08,
+      "renewal": 10.18,
+      "url": "https://www.spaceship.com/domain-search/?query=heyridgelineit.com&tab=domains",
+      "promo": {
+       "code": "COM67",
+       "firstYear": 3.8,
+       "note": "limited time, no end date shown"
+      }
+     }
+    }
+   ],
+   "registrars": [
+    {
+     "name": "Spaceship",
+     "why": "Lowest .com list price and renewal; free WHOIS privacy. Some reports of new accounts held for an ID check.",
+     "url": "https://www.spaceship.com/domain-search/?tab=pricing"
+    },
+    {
+     "name": "Porkbun",
+     "why": "Same price to renew, strong reputation, and the only registrar with a keyless price API (refreshed live).",
+     "url": "https://porkbun.com/products/domains"
+    },
+    {
+     "name": "Cloudflare",
+     "why": "Sells at cost, no mark-up at renewal. The domain must use Cloudflare DNS — fine for Google Workspace and for CheapInboxes.",
+     "url": "https://www.cloudflare.com/products/registrar/"
+    },
+    {
+     "name": "Dynadot",
+     "why": "Same price to renew, nothing added at checkout, free privacy; cheapest .co first year.",
+     "url": "https://www.dynadot.com/domain/prices"
+    },
+    {
+     "name": "Namecheap",
+     "why": "Well-known and reliable; renewal is dear ($18.68) but auto-renew is off anyway.",
+     "url": "https://www.namecheap.com/domains/"
+    }
+   ],
+   "inboxes": {
+    "provider": "CheapInboxes",
+    "url": "https://www.cheapinboxes.com/",
+    "perInbox": 3.5,
+    "count": 2,
+    "monthly": 7,
+    "notes": "Google Workspace Business Starter with admin access, month-to-month (card charged 5 days before renewal, cancel with 7 days' notice), no setup fee. Public API: yes (not used yet). Warm-up: none included — our Warm-up Engine does it. App passwords appear in their API's credential output but the site does not promise them: ask support (WhatsApp) to confirm before the first order.",
+    "steps": [
+     "Keep getridgelineit.com on Cloudflare DNS: bought at Cloudflare it already is; bought elsewhere, add it to your free Cloudflare account and switch the nameservers at the registrar. DNS stays in your hands for the setup checks.",
+     "Sign in at https://app.cheapinboxes.com (first time: create the account and add a card).",
+     "New order (https://app.cheapinboxes.com/add): import your own domain getridgelineit.com (free) and choose Google Workspace.",
+     "DNS: pick the Cloudflare option and paste a Cloudflare API token limited to getridgelineit.com (Zone Read + DNS Edit). CheapInboxes adds MX, SPF, DKIM and DMARC. This choice cannot be changed later.",
+     "Add 2 users: Dana Whitfield → dana@getridgelineit.com; Dana Whitfield → dwhitfield@getridgelineit.com. Skip the sequencer connection.",
+     "If offered, forward the website getridgelineit.com to ridgelineit.com.",
+     "Pay 2 × $3.50 = $7.00 a month (no setup fee).",
+     "When the inboxes show Active (10 minutes to 48 hours), copy each app password (16 letters). None shown: sign in as the user, turn on 2-Step Verification and create one at https://myaccount.google.com/apppasswords.",
+     "Paste getridgelineit.com, both inboxes and their app passwords below, tick \"auto-renew is OFF\" and save — the setup checks start at once."
+    ]
+   },
+   "totals": {
+    "domainFirstYear": 9.08,
+    "inboxesMonthly": 7,
+    "firstMonth": 16.08
+   },
+   "builtAt": "2026-10-06T18:20:10.100Z",
+   "sentAt": "2026-10-06T18:20:10.100Z",
+   "boughtAt": "2026-10-07T02:42:00.000Z",
+   "domain": {}
+  },
+  "inboxes": [],
+  "leadsByStatus": {
+   "unsent": 0,
+   "in_sequence": 0,
+   "replied": 0,
+   "bounced": 0,
+   "suppressed": 0,
+   "notnow": 0,
+   "done": 0
+  },
+  "leadfinder": {},
+  "sequence": {
+   "active": null,
+   "version": null,
+   "approvedAt": null,
+   "approvalMode": null,
+   "round": 0,
+   "changes": [],
+   "sentAt": null
+  },
+  "counters": {},
+  "repliesByKind": {},
+  "replies": [],
+  "bookings": [],
+  "pacelog": [],
+  "reports": [],
+  "invoice": null,
+  "promises": [
+   {
+    "id": "pmuqen92y2b8",
+    "text": "Answer the trial application within 1 business day",
+    "dueAt": "2026-10-02T23:59:00Z",
+    "madeAt": "2026-10-02T03:30:00.250Z",
+    "doneAt": "2026-10-02T03:30:00.250Z"
+   }
+  ],
+  "upcoming": [],
+  "events": [
+   {
+    "at": "2026-10-07T02:42:00.550Z",
+    "system": "notify",
+    "event": "alert_sent",
+    "detail": {
+     "key": "purchase_found",
+     "title": "We found getridgelineit.com — connecting it to Ridgeline IT",
+     "channels": {
+      "email": "ok",
+      "push": "push not configured"
+     }
+    }
+   },
+   {
+    "at": "2026-10-07T02:42:00.300Z",
+    "system": "autobuy",
+    "event": "linked",
+    "detail": {
+     "domain": "getridgelineit.com",
+     "by": "match"
+    }
+   },
+   {
+    "at": "2026-10-06T18:20:13.600Z",
+    "system": "autobuy",
+    "event": "shopping_list",
+    "detail": {
+     "domain": "getridgelineit.com",
+     "alternatives": 3,
+     "searches": 4
+    }
+   },
+   {
+    "at": "2026-10-06T18:20:12.400Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "setup_in_progress",
+     "to": "dana@ridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-06T18:20:12.150Z",
+    "system": "pricescout",
+    "event": "shopping_list_sent",
+    "detail": {
+     "chosenDomain": "getridgelineit.com",
+     "total": 16.08,
+     "unconfirmed": 0
+    }
+   },
+   {
+    "at": "2026-10-06T18:20:12.150Z",
+    "system": "notify",
+    "event": "alert_sent",
+    "detail": {
+     "key": "shopping_list",
+     "title": "Shopping list ready: Ridgeline IT",
+     "channels": {
+      "email": "ok",
+      "push": "push not configured",
+      "telegram": "telegram not configured"
+     }
+    }
+   },
+   {
+    "at": "2026-10-06T18:20:10.100Z",
+    "system": "market",
+    "event": "passed",
+    "detail": {
+     "estimate": 1800,
+     "override": false
+    }
+   },
+   {
+    "at": "2026-10-06T18:20:10.100Z",
+    "system": "state",
+    "event": "changed",
+    "detail": {
+     "from": "onboarding",
+     "to": "awaiting_purchase",
+     "reason": "market 1800"
+    }
+   },
+   {
+    "at": "2026-10-06T18:20:10.100Z",
+    "system": "market",
+    "event": "counted",
+    "detail": {
+     "round": "widened",
+     "source": "places",
+     "unique": 600,
+     "count": 0,
+     "estimate": 1800
+    }
+   },
+   {
+    "at": "2026-10-06T18:20:05.600Z",
+    "system": "market",
+    "event": "widened",
+    "detail": {
+     "states": [
+      "GA",
+      "TN",
+      "VA"
+     ],
+     "estimateSoFar": 900
+    }
+   },
+   {
+    "at": "2026-10-06T18:20:05.600Z",
+    "system": "market",
+    "event": "counted",
+    "detail": {
+     "round": "base",
+     "source": "places",
+     "unique": 300,
+     "count": 0,
+     "estimate": 900
+    }
+   },
+   {
+    "at": "2026-10-06T18:20:01.100Z",
+    "system": "market",
+    "event": "started",
+    "detail": {
+     "source": "places",
+     "queries": [
+      "law firm Charlotte, NC",
+      "accounting firm Charlotte, NC",
+      "law firm Raleigh, NC",
+      "accounting firm Raleigh, NC",
+      "law firm Greenville, SC"
+     ]
+    }
+   },
+   {
+    "at": "2026-10-06T18:20:01.100Z",
+    "system": "blocklist",
+    "event": "added",
+    "detail": {
+     "source": "onboarding",
+     "emails": 0,
+     "domains": 2,
+     "names": 2,
+     "resolvedNames": 0
+    }
+   },
+   {
+    "at": "2026-10-06T18:20:00.250Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "agreement_copy",
+     "to": "dana@ridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-06T18:20:00.000Z",
+    "system": "onboarding",
+    "event": "agreement_accepted",
+    "detail": {
+     "name": "Dana Whitfield",
+     "title": "Director of Client Success",
+     "ip": "98.24.1.7",
+     "hash": "9a24b00ef34ae52a2668adc7bd4cf34fdf2ddcc078376c3c859a9374c9b667c0",
+     "version": "2026-09-12"
+    }
+   },
+   {
+    "at": "2026-10-06T18:05:00.400Z",
+    "system": "onboarding",
+    "event": "saved",
+    "detail": {
+     "fields": [
+      "companyName",
+      "senderName",
+      "senderTitle",
+      "senderPrefix",
+      "calendarUrlCheckedAt",
+      "calendarUrl",
+      "postalAddress",
+      "hotLeadEmail",
+      "suppressCustomers",
+      "competitors",
+      "sellsTo",
+      "proofLine",
+      "defaultNiche",
+      "defaultIcp",
+      "industry",
+      "cities",
+      "states",
+      "sizeMin",
+      "sizeMax",
+      "titles"
+     ],
+     "errors": [],
+     "blocklistAdded": 2
+    }
+   },
+   {
+    "at": "2026-10-06T15:40:00.300Z",
+    "system": "gatekeeper",
+    "event": "close_extended",
+    "detail": {
+     "from": "2026-10-06T15:40:00.000Z",
+     "closesOn": "2026-10-13",
+     "why": "they were in touch"
+    }
+   },
+   {
+    "at": "2026-10-06T15:40:00.000Z",
+    "system": "calendar",
+    "event": "owner_held",
+    "detail": {
+     "meetingId": "mmur1805c91eb6a69da",
+     "start": "2026-10-06T15:00:00.000Z",
+     "status": "held"
+    }
+   },
+   {
+    "at": "2026-10-06T15:40:00.000Z",
+    "system": "onboardcall",
+    "event": "calendar_held",
+    "detail": {
+     "meetingId": "mmur1805c91eb6a69da",
+     "start": "2026-10-06T15:00:00.000Z"
+    }
+   },
+   {
+    "at": "2026-10-05T13:30:00.550Z",
+    "system": "onboardcall",
+    "event": "day_before_sent",
+    "detail": {
+     "bookedFor": "2026-10-06T15:00:00.000Z"
+    }
+   },
+   {
+    "at": "2026-10-05T13:30:00.550Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "onboard_call_tomorrow",
+     "to": "dana@ridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-02T14:30:01.050Z",
+    "system": "calendar",
+    "event": "owner_confirm",
+    "detail": {
+     "meetingId": "mmur1805c91eb6a69da",
+     "start": "2026-10-06T15:00:00.000Z",
+     "status": "confirmed"
+    }
+   },
+   {
+    "at": "2026-10-02T14:30:01.050Z",
+    "system": "onboardcall",
+    "event": "calendar_confirmed",
+    "detail": {
+     "meetingId": "mmur1805c91eb6a69da",
+     "start": "2026-10-06T15:00:00.000Z"
+    }
+   },
+   {
+    "at": "2026-10-02T14:30:01.050Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "meeting_confirmed",
+     "to": "dana@ridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-02T14:30:00.800Z",
+    "system": "google",
+    "event": "event_created",
+    "detail": {
+     "meetingId": "mmur1805c91eb6a69da",
+     "eventId": "gev1",
+     "meet": true
+    }
+   },
+   {
+    "at": "2026-10-02T14:02:00.800Z",
+    "system": "gatekeeper",
+    "event": "close_extended",
+    "detail": {
+     "from": "2026-10-02T14:02:00.000Z",
+     "closesOn": "held",
+     "why": "a time they asked for waits for your yes in the Calendar"
+    }
+   },
+   {
+    "at": "2026-10-02T14:02:00.500Z",
+    "system": "notify",
+    "event": "alert_sent",
+    "detail": {
+     "key": "meeting_requested",
+     "title": "Dana (Ridgeline IT) asked for Tue 6 Oct 11:00 am ET = 8:30 pm Colombo — say yes in the Calendar",
+     "channels": {
+      "email": "ok",
+      "push": "push not configured"
+     }
+    }
+   },
+   {
+    "at": "2026-10-02T14:02:00.250Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "meeting_received",
+     "to": "dana@ridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-02T14:02:00.000Z",
+    "system": "calendar",
+    "event": "requested",
+    "detail": {
+     "meetingId": "mmur1805c91eb6a69da",
+     "start": "2026-10-06T15:00:00.000Z"
+    }
+   },
+   {
+    "at": "2026-10-02T14:02:00.000Z",
+    "system": "onboardcall",
+    "event": "calendar_requested",
+    "detail": {
+     "meetingId": "mmur1805c91eb6a69da",
+     "start": "2026-10-06T15:00:00.000Z"
+    }
+   },
+   {
+    "at": "2026-10-02T13:10:00.800Z",
+    "system": "notify",
+    "event": "alert_sent",
+    "detail": {
+     "key": "bot_replied",
+     "title": "Auto-replied to Dana (Ridgeline IT): sent the booking link and the next open times",
+     "channels": {
+      "email": "ok",
+      "push": "push not configured"
+     }
+    }
+   },
+   {
+    "at": "2026-10-02T13:10:00.550Z",
+    "system": "replybot",
+    "event": "answered",
+    "detail": {
+     "rule": "wants_time",
+     "email": true,
+     "messageId": "<MSGID_1>"
+    }
+   },
+   {
+    "at": "2026-10-02T13:10:00.550Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "bot_reply",
+     "to": "dana@ridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-02T13:10:00.300Z",
+    "system": "onboardcall",
+    "event": "reply_received",
+    "detail": {
+     "from": "dana@ridgelineit.com",
+     "subject": "Re: You're in — let's book your onboarding call",
+     "rule": "wants_time",
+     "bot": "queued"
+    }
+   },
+   {
+    "at": "2026-10-02T13:10:00.300Z",
+    "system": "replybot",
+    "event": "queued",
+    "detail": {
+     "rule": "wants_time",
+     "answerAfter": "2026-10-02T13:08:00.000Z"
+    }
+   },
+   {
+    "at": "2026-10-02T11:50:00.000Z",
+    "system": "onboardcall",
+    "event": "opened",
+    "detail": {}
+   },
+   {
+    "at": "2026-10-02T03:30:00.250Z",
+    "system": "gatekeeper",
+    "event": "onboarding_sent",
+    "detail": {}
+   },
+   {
+    "at": "2026-10-02T03:30:00.250Z",
+    "system": "state",
+    "event": "changed",
+    "detail": {
+     "from": "applied",
+     "to": "onboarding",
+     "reason": "fit passed"
+    }
+   },
+   {
+    "at": "2026-10-02T03:30:00.250Z",
+    "system": "onboardcall",
+    "event": "acceptance_sent",
+    "detail": {
+     "messageId": "<MSGID_2>",
+     "from": "hello@aviance.test"
+    }
+   },
+   {
+    "at": "2026-10-02T03:30:00.250Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "accepted_call",
+     "to": "dana@ridgelineit.com"
+    }
+   }
+  ],
+  "jobs": {
+   "aviance-send": null,
+   "aviance-replies": null,
+   "aviance-eod-report": null,
+   "onboarding-nudge": {
+    "at": "2026-10-06T15:40:00.300Z",
+    "ms": 0,
+    "ok": true,
+    "by": "check"
+   },
+   "research": null,
+   "market": null,
+   "pricescout": {
+    "at": "2026-10-06T18:20:12.400Z",
+    "ms": 2300,
+    "ok": true,
+    "by": "check"
+   },
+   "purchase-nudge": null,
+   "setup-check": null,
+   "welcome": null,
+   "auth": null,
+   "blacklist": null,
+   "booking-test": null,
+   "booking-reminder": null,
+   "warmup-daily-scaled": null,
+   "canary": null,
+   "placement": null,
+   "ramp": null,
+   "leadfinder-start": null,
+   "leadfinder-refill": null,
+   "approval": null,
+   "readiness": null,
+   "emergency": null,
+   "send": null,
+   "reminders": null,
+   "client-watch": null,
+   "noshow": null,
+   "notnow": null,
+   "pace": null,
+   "replies": null,
+   "hot-chaser": null,
+   "bounces": null,
+   "bookings": null,
+   "lead-verify": null,
+   "lead-verify-daily": null,
+   "day1-notice": null,
+   "cancel-inboxes": null,
+   "invoice": null,
+   "wrapup": null,
+   "friday": null,
+   "day-jobs": null
+  },
+  "holds": {
+   "legalHoldAt": null,
+   "sendHold": null,
+   "emergencyActive": false,
+   "emergencyHalved": false,
+   "pausedReason": null
+  },
+  "application": {
+   "receivedAt": "2026-10-01T19:40:00.000Z",
+   "source": "website",
+   "review": "approved",
+   "decidedAt": "2026-10-02T03:30:00.000Z",
+   "decision": "approve",
+   "declineReason": null,
+   "answers": [
+    {
+     "q": "Name",
+     "a": "Dana Whitfield"
+    },
+    {
+     "q": "Work email",
+     "a": "Dana@RidgelineIT.com"
+    },
+    {
+     "q": "Company website",
+     "a": "https://www.ridgelineit.com/"
+    },
+    {
+     "q": "City / state",
+     "a": "Charlotte, NC"
+    },
+    {
+     "q": "What do you sell, and who to?",
+     "a": "Managed IT and cybersecurity for law firms and accounting firms with 10–75 staff in the Carolinas"
+    },
+    {
+     "q": "What is a new customer worth in the first year?",
+     "a": "$5,000–$20,000"
+    },
+    {
+     "q": "How many sales calls a week could you actually take?",
+     "a": "5–10 a week"
+    },
+    {
+     "q": "Has anyone outside your network ever bought from you?",
+     "a": "Yes — cold buyers already"
+    },
+    {
+     "q": "Could you take a booked meeting within five business days?",
+     "a": "Yes"
+    },
+    {
+     "q": "If the trial books you a call, what then?",
+     "a": "Move to Growth — 20 calls a month"
+    },
+    {
+     "q": "Anything we should know?",
+     "a": "We tried LinkedIn ads in 2024; not much came of it."
+    },
+    {
+     "q": "Agreed to the quote + honest review",
+     "a": "Yes"
+    },
+    {
+     "q": "Open to (optional)",
+     "a": "Intro to one peer"
+    }
+   ],
+   "fit": {
+    "verdict": "fit",
+    "summary": "Looks like a fit — 3 checks unknown",
+    "lines": [
+     {
+      "rule": "one_trial_ever",
+      "label": "First trial for this company",
+      "status": "pass",
+      "note": "ridgelineit.com has not had one"
+     },
+     {
+      "rule": "us_based",
+      "label": "US-based",
+      "status": "pass",
+      "note": "They sell from Charlotte, NC"
+     },
+     {
+      "rule": "employees",
+      "label": "5–50 people",
+      "status": "unknown",
+      "note": "The website form does not ask for headcount"
+     },
+     {
+      "rule": "deal_value",
+      "label": "Customer worth ≥ $2,000 in year one",
+      "status": "pass",
+      "note": "They said $5,000–$20,000"
+     },
+     {
+      "rule": "sold_to_strangers",
+      "label": "Has sold to strangers before",
+      "status": "pass",
+      "note": "They said \"Yes — cold buyers already\""
+     },
+     {
+      "rule": "dream_customers",
+      "label": "Three dream customers",
+      "status": "unknown",
+      "note": "Collected on the onboarding page"
+     },
+     {
+      "rule": "meet_within_5_days",
+      "label": "Can meet within five business days",
+      "status": "pass",
+      "note": "They said \"Yes\""
+     },
+     {
+      "rule": "slots_per_week",
+      "label": "At least 5 open slots a week",
+      "status": "pass",
+      "note": "They said 5–10 a week"
+     },
+     {
+      "rule": "nobody_else_emailing",
+      "label": "Nobody else cold-emailing for them",
+      "status": "unknown",
+      "note": "The website form does not ask"
+     },
+     {
+      "rule": "review_agreed",
+      "label": "Agreed to the quote + honest review",
+      "status": "pass",
+      "note": "Ticked the box"
+     },
+     {
+      "rule": "not_agency",
+      "label": "Not a lead-gen / outbound agency",
+      "status": "pass",
+      "note": "Website title and their answers checked"
+     }
+    ]
+   },
+   "research": {
+    "status": "done",
+    "at": "2026-10-01T19:40:12.760Z",
+    "error": null,
+    "summary": "Ridgeline IT is a computer support and services in Charlotte, NC (4.8★, 61 Google reviews). The website lists services such as Managed IT services, Cybersecurity and Cloud backup and recovery, names Charlotte, NC and Raleigh, NC, says “Founded in 2012” and shows 4 people on the team page. A quick Google Maps count suggests at least 360 law firms and accounting firms in Charlotte, NC. Read 22 pages and 1 document (1,111 words): 110 facts — 4 named people, 3 named clients, 1 testimonial, 2 case studies, 8 certifications / partners, online since 2013.",
+    "website": {
+     "url": "https://www.ridgelineit.com/",
+     "title": "Ridgeline IT | Managed IT for Law & Accounting Firms in Charlotte",
+     "description": "Managed IT, cybersecurity and cloud for law firms and accounting firms in Charlotte and Raleigh.",
+     "headline": "Managed IT that law firms and accounting firms trust",
+     "services": [
+      "Managed IT services",
+      "Cybersecurity",
+      "Cloud backup and recovery",
+      "Compliance for law and CPA firms"
+     ],
+     "locations": [
+      "Charlotte, NC",
+      "Raleigh, NC"
+     ],
+     "phones": [
+      "(704) 555-0142"
+     ],
+     "emails": [
+      "info@ridgelineit.com"
+     ],
+     "socials": {
+      "linkedin": "https://www.linkedin.com/company/ridgeline-it",
+      "facebook": "https://www.facebook.com/ridgelineit"
+     },
+     "teamHint": "4 people on the team page",
+     "yearsHint": "Founded in 2012",
+     "pagesRead": 8
+    },
+    "business": {
+     "name": "Ridgeline IT",
+     "address": "2100 South Blvd Suite 300, Charlotte, NC 28203, USA",
+     "category": "Computer support and services",
+     "rating": 4.8,
+     "reviews": 61,
+     "mapsUrl": "https://maps.google.com/?cid=4411",
+     "phone": "(704) 555-0142"
+    },
+    "market": {
+     "query": "law firms and accounting firms in Charlotte, NC",
+     "estimate": 360,
+     "source": "places",
+     "capped": true
+    },
+    "flags": [],
+    "score": {
+     "score": 94,
+     "grade": "A",
+     "label": "Strong fit",
+     "confidence": 97,
+     "summary": "94/100 — strong fit (97 of 100 points checked). Strongest: sells to businesses; weakest: market.",
+     "parts": [
+      {
+       "key": "b2b",
+       "label": "Sells to businesses",
+       "points": 20,
+       "checked": 20,
+       "max": 20,
+       "pct": 100,
+       "items": [
+        {
+         "text": "They sell to “law firms and accounting firms with 10–75 staff in the caro…” — businesses",
+         "status": "good",
+         "max": 8,
+         "evidence": null,
+         "known": true,
+         "points": 8
+        },
+        {
+         "text": "Website talks to businesses (37 mentions)",
+         "status": "good",
+         "max": 12,
+         "evidence": {
+          "quote": "Ridgeline IT | Managed IT for Law & Accounting Firms in Charlotte",
+          "page": "/"
+         },
+         "known": true,
+         "points": 12
+        }
+       ]
+      },
+      {
+       "key": "deal",
+       "label": "Deal size",
+       "points": 20,
+       "checked": 20,
+       "max": 20,
+       "pct": 100,
+       "items": [
+        {
+         "text": "A new customer is worth $5,000–$20,000 in year one",
+         "status": "good",
+         "max": 12,
+         "evidence": null,
+         "known": true,
+         "points": 12
+        },
+        {
+         "text": "Website sells ongoing or quoted work (plans, contracts, consultations)",
+         "status": "good",
+         "max": 8,
+         "evidence": {
+          "quote": "Ridgeline IT | Managed IT for Law & Accounting Firms in Charlotte",
+          "page": "/"
+         },
+         "known": true,
+         "points": 8
+        }
+       ]
+      },
+      {
+       "key": "size",
+       "label": "Size and age",
+       "points": 15,
+       "checked": 15,
+       "max": 15,
+       "pct": 100,
+       "items": [
+        {
+         "text": "About 16 people (Website lists 16 employees (schema.org)) — inside 5–50",
+         "status": "good",
+         "max": 7,
+         "evidence": null,
+         "known": true,
+         "points": 7
+        },
+        {
+         "text": "In business about 14 years (website: Founded in 2012)",
+         "status": "good",
+         "max": 5,
+         "evidence": null,
+         "known": true,
+         "points": 5
+        },
+        {
+         "text": "Hiring (2 open roles, including sales) · 2 locations",
+         "status": "good",
+         "max": 3,
+         "evidence": {
+          "quote": "Account Executive (B2B sales) · Help Desk Technician",
+          "page": "/careers"
+         },
+         "known": true,
+         "points": 3
+        }
+       ]
+      },
+      {
+       "key": "proof",
+       "label": "Already wins strangers",
+       "points": 15.1,
+       "checked": 15.1,
+       "max": 15,
+       "pct": 100,
+       "items": [
+        {
+         "text": "They already sell to strangers (“Yes — cold buyers already”)",
+         "status": "good",
+         "max": 5.3,
+         "evidence": null,
+         "known": true,
+         "points": 5.3
+        },
+        {
+         "text": "Website shows 1 testimonial, 2 case studies, 3 named clients",
+         "status": "good",
+         "max": 3,
+         "evidence": {
+          "quote": "They moved our whole office over a weekend and nobody lost a file.",
+          "page": "/"
+         },
+         "known": true,
+         "points": 3
+        },
+        {
+         "text": "Certifications, partners or awards: Microsoft Partner, Microsoft Solutions Partner, SOC 2, Veteran-owned, HIPAA, FINRA / SEC (+2)",
+         "status": "good",
+         "max": 1.5,
+         "evidence": {
+          "quote": "in Charlotte, Ridgeline IT is a team of 16 people. We are a Microsoft Solutions Partner for Modern Work, SOC 2 aligned and veteran-owned. We serve law",
+          "page": "/about"
+         },
+         "known": true,
+         "points": 1.5
+        },
+        {
+         "text": "A real website (1,111 words across 8 pages)",
+         "status": "good",
+         "max": 2.3,
+         "evidence": null,
+         "known": true,
+         "points": 2.3
+        },
+        {
+         "text": "Google: 4.8★ from 61 reviews",
+         "status": "good",
+         "max": 3,
+         "evidence": null,
+         "known": true,
+         "points": 3
+        }
+       ]
+      },
+      {
+       "key": "market",
+       "label": "Market",
+       "points": 8,
+       "checked": 12,
+       "max": 15,
+       "pct": 67,
+       "items": [
+        {
+         "text": "At least 360 companies to reach — Google lists at most 60 per search, so there are more; the full count runs after they sign",
+         "status": "ok",
+         "max": 8,
+         "evidence": null,
+         "known": true,
+         "points": 4
+        },
+        {
+         "text": "Clear buyer: “law firms and accounting firms with 10–75 staff in the caro…”",
+         "status": "good",
+         "max": 4,
+         "evidence": null,
+         "known": true,
+         "points": 4
+        },
+        {
+         "text": "Three dream customers: not asked yet",
+         "status": "unknown",
+         "max": 3,
+         "evidence": null,
+         "known": false,
+         "points": null
+        }
+       ]
+      },
+      {
+       "key": "ready",
+       "label": "Ready for calls",
+       "points": 13.2,
+       "checked": 14.9,
+       "max": 15,
+       "pct": 89,
+       "items": [
+        {
+         "text": "Can take a meeting within five business days",
+         "status": "good",
+         "max": 3.5,
+         "evidence": null,
+         "known": true,
+         "points": 3.5
+        },
+        {
+         "text": "Can take 5–10 calls a week",
+         "status": "good",
+         "max": 3.5,
+         "evidence": null,
+         "known": true,
+         "points": 3.5
+        },
+        {
+         "text": "If it works: “Move to Growth — 20 calls a month”",
+         "status": "good",
+         "max": 2.6,
+         "evidence": null,
+         "known": true,
+         "points": 2.6
+        },
+        {
+         "text": "Runs sales tools: HubSpot",
+         "status": "good",
+         "max": 1.8,
+         "evidence": null,
+         "known": true,
+         "points": 1.8
+        },
+        {
+         "text": "Website has a phone number, no booking link",
+         "status": "ok",
+         "max": 3.5,
+         "evidence": null,
+         "known": true,
+         "points": 1.8
+        }
+       ]
+      }
+     ],
+     "dealbreakers": [],
+     "warnings": [],
+     "questions": [
+      "Name three companies that would be perfect customers.",
+      "Is anyone else cold-emailing this same list for you right now?"
+     ]
+    },
+    "deep": {
+     "pagesRead": 22,
+     "sitemapPages": 22,
+     "words": 1111,
+     "people": [
+      {
+       "name": "Marcus Hale",
+       "title": "Founder & CEO",
+       "page": "/team"
+      },
+      {
+       "name": "Dana Whitfield",
+       "title": "Director of Client Success",
+       "page": "/team"
+      },
+      {
+       "name": "Priya Raman",
+       "title": "Service Desk Lead",
+       "page": "/team"
+      },
+      {
+       "name": "Tom Becker",
+       "title": "Network Engineer",
+       "page": "/team"
+      }
+     ],
+     "clients": [
+      {
+       "name": "Hollis & Grant Law",
+       "page": "/"
+      },
+      {
+       "name": "Carolina Tax Partners",
+       "page": "/"
+      },
+      {
+       "name": "Queen City Family Law",
+       "page": "/"
+      }
+     ],
+     "testimonials": [
+      {
+       "quote": "They moved our whole office over a weekend and nobody lost a file.",
+       "by": "Renee Hollis, Hollis & Grant Law",
+       "page": "/"
+      }
+     ],
+     "caseStudies": [
+      {
+       "title": "How Hollis & Grant Law moved 40 people over one weekend",
+       "page": "/case-studies/law-firm-office-move"
+      },
+      {
+       "title": "Carolina Tax Partners recovered from ransomware in six hours",
+       "page": "/case-studies/cpa-ransomware-recovery"
+      }
+     ],
+     "credentials": [
+      {
+       "name": "Microsoft Partner",
+       "quote": "in Charlotte, Ridgeline IT is a team of 16 people. We are a Microsoft Solutions Partner for Modern Work, SOC 2 aligned and veteran-owned. We serve law",
+       "page": "/about"
+      },
+      {
+       "name": "Microsoft Solutions Partner",
+       "quote": "te, Ridgeline IT is a team of 16 people. We are a Microsoft Solutions Partner for Modern Work, SOC 2 aligned and veteran-owned. We serve law firms and",
+       "page": "/about"
+      },
+      {
+       "name": "SOC 2",
+       "quote": "ople. We are a Microsoft Solutions Partner for Modern Work, SOC 2 aligned and veteran-owned. We serve law firms and accounting firms in North Carolina",
+       "page": "/about"
+      },
+      {
+       "name": "Veteran-owned",
+       "quote": "rosoft Solutions Partner for Modern Work, SOC 2 aligned and veteran-owned. We serve law firms and accounting firms in North Carolina and South Carolin",
+       "page": "/about"
+      },
+      {
+       "name": "HIPAA",
+       "quote": "ction, phishing training with KnowBe4, and 24/7 monitoring. HIPAA and FINRA ready. 2100 South Blvd, Suite 300, Charlotte, NC 28203 Call (704) 555-0142",
+       "page": "/services/cybersecurity"
+      },
+      {
+       "name": "FINRA / SEC",
+       "quote": "shing training with KnowBe4, and 24/7 monitoring. HIPAA and FINRA ready. 2100 South Blvd, Suite 300, Charlotte, NC 28203 Call (704) 555-0142 · info@ri",
+       "page": "/services/cybersecurity"
+      },
+      {
+       "name": "Microsoft 365 / Azure",
+       "quote": "dies Pricing Careers Blog Contact Cloud backup and recovery Microsoft 365 backup and disaster recovery for law firms. Restores in under an hour. 2100",
+       "page": "/services/cloud-backup"
+      },
+      {
+       "name": "CMMC",
+       "quote": "In their document “Ridgeline IT Capabilities”",
+       "page": "/downloads/ridgeline-capabilities.pdf"
+      }
+     ],
+     "industries": [
+      "law firms",
+      "accounting",
+      "cpa firms"
+     ],
+     "prices": [
+      {
+       "text": "$99 per user / month",
+       "page": "/pricing"
+      },
+      {
+       "text": "$149 per user / month",
+       "page": "/pricing"
+      }
+     ],
+     "addresses": [
+      "2100 South Blvd, Suite 300, Charlotte, NC 28203"
+     ],
+     "jobs": [
+      {
+       "title": "Account Executive (B2B sales)",
+       "page": "/careers",
+       "sales": true
+      },
+      {
+       "title": "Help Desk Technician",
+       "page": "/careers",
+       "sales": false
+      }
+     ],
+     "blog": {
+      "posts": 5,
+      "dated": 5,
+      "first": "2025-11-18",
+      "latest": "2026-08-04",
+      "recent": [
+       {
+        "page": "/blog/wisp-template",
+        "date": "2026-08-04",
+        "title": "A WISP your CPA firm can use"
+       },
+       {
+        "page": "/blog/clio-security",
+        "date": "2026-06-03",
+        "title": "Locking down Clio for small firms"
+       },
+       {
+        "page": "/blog/m365-backup",
+        "date": "2026-04-22",
+        "title": "Why Microsoft 365 is not a backup"
+       },
+       {
+        "page": "/blog/phishing-season",
+        "date": "2026-02-10",
+        "title": "Tax season is phishing season"
+       },
+       {
+        "page": "/blog/office-move-checklist",
+        "date": "2025-11-18",
+        "title": "The office move checklist"
+       }
+      ]
+     },
+     "tech": [
+      {
+       "name": "Google Analytics",
+       "kind": "analytics"
+      },
+      {
+       "name": "HubSpot",
+       "kind": "crm / marketing"
+      }
+     ],
+     "forms": 1,
+     "company": {
+      "name": "Ridgeline IT",
+      "founded": "2012",
+      "employees": 16,
+      "rating": null,
+      "reviews": null
+     },
+     "documents": [
+      {
+       "url": "https://www.ridgelineit.com/downloads/ridgeline-capabilities.pdf",
+       "title": "Ridgeline IT Capabilities",
+       "pages": 1,
+       "words": 21,
+       "credentials": [
+        "Microsoft Partner",
+        "SOC 2",
+        "HIPAA",
+        "CMMC"
+       ],
+       "industries": [
+        "law firms",
+        "accounting"
+       ],
+       "excerpt": "Ridgeline IT Capability Statement Microsoft Solutions Partner SOC 2 aligned, HIPAA and CMMC Level 1 ready Serving law firms and accounting firms since 2012"
+      }
+     ],
+     "emailSetup": {
+      "mailHost": "Microsoft 365",
+      "mailHosts": [
+       "Microsoft 365"
+      ],
+      "spf": true,
+      "senders": [
+       "Microsoft 365",
+       "HubSpot"
+      ],
+      "dmarc": "quarantine",
+      "verifiedTools": [
+       "Microsoft 365",
+       "DocuSign",
+       "KnowBe4 (security training)"
+      ]
+     },
+     "history": {
+      "firstSeen": "2013-02-15",
+      "lastSeen": "2026-06-15",
+      "monthsCaptured": 41,
+      "years": 13
+     },
+     "lookalikes": [],
+     "timeline": [
+      {
+       "year": 2013,
+       "date": "2013-06-15",
+       "title": "Ridgeline Computer Services — Charlotte PC repair",
+       "headline": "PC and network repair for small offices",
+       "description": "",
+       "url": "https://web.archive.org/web/20130615000000/http://ridgelineit.com/"
+      },
+      {
+       "year": 2016,
+       "date": "2016-06-15",
+       "title": "Ridgeline Computer Services",
+       "headline": "Computer support for Charlotte businesses",
+       "description": "",
+       "url": "https://web.archive.org/web/20160615000000/http://ridgelineit.com/",
+       "changed": [
+        "title",
+        "headline"
+       ]
+      },
+      {
+       "year": 2018,
+       "date": "2018-06-15",
+       "title": "Ridgeline IT | Managed IT for Law & Accounting Firms in Charlotte",
+       "headline": "Managed IT that law firms and accounting firms trust",
+       "description": "",
+       "url": "https://web.archive.org/web/20180615000000/http://ridgelineit.com/",
+       "changed": [
+        "title",
+        "headline"
+       ]
+      },
+      {
+       "year": 2021,
+       "date": "2021-06-15",
+       "title": "Ridgeline IT | Managed IT for Law & Accounting Firms in Charlotte",
+       "headline": "Managed IT that law firms and accounting firms trust",
+       "description": "",
+       "url": "https://web.archive.org/web/20210615000000/http://ridgelineit.com/",
+       "changed": []
+      },
+      {
+       "year": 2022,
+       "date": "2022-06-15",
+       "title": "",
+       "headline": "IT that law firms trust",
+       "description": "",
+       "url": "https://web.archive.org/web/20220615000000/http://ridgelineit.com/",
+       "changed": [
+        "headline"
+       ]
+      },
+      {
+       "year": 2025,
+       "date": "2025-06-15",
+       "title": "Ridgeline IT | Managed IT for Law & Accounting Firms in Charlotte",
+       "headline": "Managed IT that law firms and accounting firms trust",
+       "description": "",
+       "url": "https://web.archive.org/web/20250615000000/http://ridgelineit.com/",
+       "changed": [
+        "title",
+        "headline"
+       ]
+      }
+     ],
+     "money": {
+      "federal": {
+       "searched": [
+        "Ridgeline IT",
+        "Ridgelineit"
+       ],
+       "state": "NC",
+       "ppp": [
+        {
+         "amount": 118400,
+         "forgiven": true,
+         "date": "2020-04-28",
+         "recipient": "RIDGELINE IT LLC",
+         "id": "PPP-7721"
+        }
+       ],
+       "payroll": {
+        "annual": 568320,
+        "fromLoan": 118400,
+        "loanDate": "2020-04-28",
+        "basis": "PPP loan ÷ 2.5 × 12 (SBA formula: a first-draw loan was 2.5 months of 2019 payroll; pay above $100k a person was capped, so this is a floor)"
+       },
+       "contracts": [],
+       "grants": [],
+       "federalTotal": 0,
+       "recipients": [
+        "RIDGELINE IT LLC"
+       ],
+       "errors": [],
+       "source": "USAspending.gov"
+      },
+      "sec": {
+       "total": 0,
+       "filings": [],
+       "raisedMoney": false,
+       "source": "SEC EDGAR"
+      },
+      "names": [
+       "Ridgeline IT",
+       "Ridgelineit"
+      ],
+      "states": [
+       "NC"
+      ],
+      "revenue": [
+       {
+        "low": 1920000,
+        "high": 3360000,
+        "basis": "16 people × $120,000–$210,000 revenue per employee for accounting / CPA firms (Census SUSB 2022 NAICS 541211, Rosenberg survey)",
+        "floor": false
+       },
+       {
+        "low": 1160000,
+        "high": 1322000,
+        "basis": "2019 payroll about $568,320 (their PPP loan) ÷ payroll being 43–49% of revenue for accounting / CPA firms (Census SUSB 2022 NAICS 541211)",
+        "floor": true,
+        "year": 2019
+       }
+      ],
+      "benchmark": "accounting / CPA firms"
+     },
+     "offers": {
+      "ctas": [
+       "Book a free network assessment"
+      ],
+      "promos": [
+       {
+        "offer": "free network assessment",
+        "quote": "a file. — Renee Hollis, Hollis & Grant Law Book a free network assessment Download our capabilities statement 2100 South Blvd, Suite",
+        "page": "/"
+       },
+       {
+        "offer": "No long-term contracts",
+        "quote": "9 per user / month Complete $149 per user / month No long-term contracts. Onboarding included. 2100 South Blvd, Suite 300, Charlotte",
+        "page": "/pricing"
+       },
+       {
+        "offer": "Unlimited help desk",
+        "quote": "Pricing Careers Blog Contact Managed IT services Unlimited help desk, 15-minute response time guaranteed, patching and monitorin",
+        "page": "/services/managed-it"
+       },
+       {
+        "offer": "15-minute response",
+        "quote": "Contact Managed IT services Unlimited help desk, 15-minute response time guaranteed, patching and monitoring for every device.",
+        "page": "/services/managed-it"
+       },
+       {
+        "offer": "24/7 monitoring",
+        "quote": "t protection, phishing training with KnowBe4, and 24/7 monitoring. HIPAA and FINRA ready. 2100 South Blvd, Suite 300, Charlot",
+        "page": "/services/cybersecurity"
+       }
+      ],
+      "magnets": [],
+      "plans": [
+       {
+        "name": "Essentials",
+        "price": "$99 per user / month",
+        "page": "/pricing"
+       },
+       {
+        "name": "Complete",
+        "price": "$149 per user / month",
+        "page": "/pricing"
+       }
+      ]
+     },
+     "ads": [],
+     "facts": 110
+    }
+   }
+  },
+  "onboardCall": {
+   "status": "held",
+   "label": "Call done",
+   "sentAt": "2026-10-02T03:30:00.000Z",
+   "openedAt": "2026-10-02T11:50:00.000Z",
+   "lastReplyAt": "2026-10-02T13:05:00.000Z",
+   "bookedFor": "2026-10-06T15:00:00.000Z",
+   "bookedAt": "2026-10-02T14:30:00.000Z",
+   "bookedBy": "calendar",
+   "heldAt": "2026-10-06T15:40:00.000Z",
+   "dueBy": "2026-10-07T03:30:00.000Z",
+   "overdue": false,
+   "remindersSent": 0,
+   "nextReminderAt": null,
+   "stopped": false,
+   "bookingUrl": null,
+   "fromInbox": "hello@aviance.test",
+   "noShowAt": null,
+   "stoppedAt": null,
+   "lastOwnerReplyAt": null,
+   "lastBotReplyAt": "2026-10-02T13:10:00.000Z",
+   "needsReply": false,
+   "callMinutes": 30,
+   "requestedFor": null,
+   "requestedAt": null,
+   "proposedFor": null,
+   "meetingId": "mmur1805c91eb6a69da",
+   "steps": [
+    {
+     "key": "sent",
+     "label": "Acceptance email sent",
+     "done": true,
+     "at": "2026-10-02T03:30:00.000Z"
+    },
+    {
+     "key": "opened",
+     "label": "They opened it",
+     "done": true,
+     "at": "2026-10-02T11:50:00.000Z"
+    },
+    {
+     "key": "replied",
+     "label": "They replied",
+     "done": true,
+     "at": "2026-10-02T13:05:00.000Z"
+    },
+    {
+     "key": "booked",
+     "label": "Call booked",
+     "done": true,
+     "at": "2026-10-02T14:30:00.000Z"
+    },
+    {
+     "key": "held",
+     "label": "Call done",
+     "done": true,
+     "at": "2026-10-06T15:40:00.000Z"
+    }
+   ],
+   "thread": [
+    {
+     "id": "out-36880654bed94f22",
+     "dir": "out",
+     "at": "2026-10-02T03:30:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "You're in — let's book your onboarding call",
+     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_1/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_2/onboard — one page, your details and the agreement.\n\nLimeth Sith",
+     "kind": "acceptance",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "in-6afd9ae97d23270e",
+     "dir": "in",
+     "at": "2026-10-02T13:05:00.000Z",
+     "from": "dana@ridgelineit.com",
+     "to": "hello@aviance.test",
+     "subject": "Re: You're in — let's book your onboarding call",
+     "text": "Hi Limeth,\n\nThanks — great news! What times work for you next week?\n\nDana",
+     "kind": "reply",
+     "auto": false,
+     "rule": "wants_time",
+     "template": null
+    },
+    {
+     "id": "out-4700484a1918c1f0",
+     "dir": "out",
+     "at": "2026-10-02T13:10:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: You're in — let's book your onboarding call",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_3/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
+     "kind": "auto_reply",
+     "auto": true,
+     "rule": "wants_time",
+     "template": null
+    },
+    {
+     "id": "out-d05d56c661ceeb53",
+     "dir": "out",
+     "at": "2026-10-02T14:02:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: You're in — let's book your onboarding call",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_4/book\n\nLimeth Sith",
+     "kind": "booking",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-a94a45c31a85cd37",
+     "dir": "out",
+     "at": "2026-10-02T14:30:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Confirmed: our call on Tue 6 Oct at 11:00 am ET",
+     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_5/book\n\nLimeth Sith",
+     "kind": "booking",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-a6604454448db36e",
+     "dir": "out",
+     "at": "2026-10-05T13:30:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Our onboarding call tomorrow",
+     "text": "Hi Dana,\n\nA quick reminder: our 30-minute onboarding call is Tuesday, October 6 at 11:00 AM EDT.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
+     "kind": "reminder",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-76ff2f098c2fcaa9",
+     "dir": "out",
+     "at": "2026-10-06T18:20:00.250Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your trial agreement — signed copy",
+     "text": "Hi Dana,\n\nHere is a plain-text copy of the agreement you accepted. Keep it for your records; nothing else is needed from you.\n\nThe Aviance 30-Day Trial — Agreement\nBetween Aviance (“we”) and Ridgeline IT (“you”). Effective 6 October 2026.\n\n1. What this is. A 30-day cold email trial. We build and run a small outbound campaign in your name, book sales calls onto your calendar, and hand you a written report of what your market said. It costs you nothing. It is not a paid plan; it is how you decide whether to buy one.\n\n2. What we do. Register one sending domain and two inboxes. Research and verify a list of 300–500 contacts matching the customer profile you approve. Write a three-email sequence you approve. Send for 30 days. Handle every reply. Book, confirm and remind every meeting, and chase no-shows for 14 days. Send you a written update every Friday, and on day 29 a report covering the numbers, every reply we received and what it means.\n\n3. What you do. Approve the customer profile and the copy on the kickoff call. Keep at least five open slots a week on the calendar you give us, and be able to take a booked meeting within five business days. Reply to any hot lead we hand you within one business day. Give us the postal address for the email footer. Authorise us to send email in your company’s name, from the trial domain, using only copy you approved.\n\n4. The two promises. First: we will contact the approved list and give you the written report — that is guaranteed. Second: if no qualified booked call has been held by the end of the 30 days, we keep sending at our cost until one is, for up to 30 further days, after which the trial ends. Both promises hold while you hold up clause 3. If you stop responding for five business days, the trial ends and the promises end with it.\n\n5. What counts as a qualified booked call. All four must be true: the company matches the approved profile; the attendee holds an approved title; they attended; they booked in response to outreach describing your offer. Budget, timeline, level of interest and whether they buy do not affect whether a call counts. No-shows do not count; we re-book them for 14 days. You may flag a call as not qualifying within 24 business hours, in writing, stating which criterion it failed.\n\n6. The exchange. The trial is free, so its price is proof. You agree to: (a) leave a review of the trial on Clutch, or a platform we both agree, within seven days of the day-30 call. That review may be positive or negative, must be your honest opinion, and must begin with the words “I received this service for free for my review.” We will never ask you to change or remove it; (b) if at least one qualified call was held, allow us to quote you by name, title and company, using words you approve in writing before publication; (c) allow us to publish the trial’s numbers — companies contacted, replies, calls booked — as a case study, anonymised if you prefer; (d) give us ten minutes at the end for an honest debrief, whatever the outcome. We will never publish anything you have not approved in writing, and we will never ask you to say anything you do not mean.\n\n7. Day 31. On the day-30 call you decide whether to continue on one of our plans: Starter $2,497 for 10 guaranteed booked calls a month, Growth $3,997 for 20, or Scale $8,497 for 50 — month to month, 14 days’ notice to cancel, no setup fee, on the terms published at aviance.online. We will recommend one of them based on what the trial measured and how many calls a week you told us you can handle. If you continue, the trial domain, inboxes and list carry into your plan and campaigns stay live. If you don’t, we retire the trial domain and inboxes within seven days and never use them for anyone else. There is no obligation to continue and nothing to cancel.\n\n8. Ownership and data. Your leads, replies and booked meetings are yours, exported on request, whether or not you continue. The sending domain and inboxes are registered by us and stay o",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "agreement_copy"
+    },
+    {
+     "id": "out-186c27e7d8778e62",
+     "dir": "out",
+     "at": "2026-10-06T18:20:12.400Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your trial — setup has started",
+     "text": "Hi Dana,\n\nYour market check passed, so we're going ahead. I'm buying the sending domain and two inboxes now.\n\nOnce they pass their checks you'll get an email with your two dates: the first send and Day 30. Nothing is needed from you in the meantime.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "setup_in_progress"
+    }
+   ]
+  },
+  "autobuy": {
+   "status": "provisioning",
+   "buy": null,
+   "label": "Setting up getridgelineit.com — about 48 hours",
+   "domain": "getridgelineit.com",
+   "steps": [
+    {
+     "key": "bought",
+     "label": "You bought it",
+     "done": true,
+     "at": "2026-10-07T02:42:00.000Z"
+    },
+    {
+     "key": "domain",
+     "label": "Domain live + spam protection set",
+     "done": false,
+     "at": null
+    },
+    {
+     "key": "inboxes",
+     "label": "2 inboxes created",
+     "done": false,
+     "at": null
+    },
+    {
+     "key": "connected",
+     "label": "Connected to our system",
+     "done": false,
+     "at": null
+    },
+    {
+     "key": "warmup",
+     "label": "Warm-up started",
+     "done": false,
+     "at": null
+    }
+   ],
+   "mailboxes": [
+    {
+     "email": "dana@getridgelineit.com",
+     "status": "provisioning"
+    },
+    {
+     "email": "dana.whitfield@getridgelineit.com",
+     "status": "provisioning"
+    }
+   ],
+   "problem": null,
+   "linkedBy": "match",
+   "canUnlink": true
+  },
+  "warmup": null,
+  "conversation": {
+   "thread": [
+    {
+     "id": "out-36880654bed94f22",
+     "dir": "out",
+     "at": "2026-10-02T03:30:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "You're in — let's book your onboarding call",
+     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_1/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_2/onboard — one page, your details and the agreement.\n\nLimeth Sith",
+     "kind": "acceptance",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "in-6afd9ae97d23270e",
+     "dir": "in",
+     "at": "2026-10-02T13:05:00.000Z",
+     "from": "dana@ridgelineit.com",
+     "to": "hello@aviance.test",
+     "subject": "Re: You're in — let's book your onboarding call",
+     "text": "Hi Limeth,\n\nThanks — great news! What times work for you next week?\n\nDana",
+     "kind": "reply",
+     "auto": false,
+     "rule": "wants_time",
+     "template": null
+    },
+    {
+     "id": "out-4700484a1918c1f0",
+     "dir": "out",
+     "at": "2026-10-02T13:10:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: You're in — let's book your onboarding call",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_3/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
+     "kind": "auto_reply",
+     "auto": true,
+     "rule": "wants_time",
+     "template": null
+    },
+    {
+     "id": "out-d05d56c661ceeb53",
+     "dir": "out",
+     "at": "2026-10-02T14:02:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: You're in — let's book your onboarding call",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_4/book\n\nLimeth Sith",
+     "kind": "booking",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-a94a45c31a85cd37",
+     "dir": "out",
+     "at": "2026-10-02T14:30:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Confirmed: our call on Tue 6 Oct at 11:00 am ET",
+     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_5/book\n\nLimeth Sith",
+     "kind": "booking",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-a6604454448db36e",
+     "dir": "out",
+     "at": "2026-10-05T13:30:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Our onboarding call tomorrow",
+     "text": "Hi Dana,\n\nA quick reminder: our 30-minute onboarding call is Tuesday, October 6 at 11:00 AM EDT.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
+     "kind": "reminder",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-76ff2f098c2fcaa9",
+     "dir": "out",
+     "at": "2026-10-06T18:20:00.250Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your trial agreement — signed copy",
+     "text": "Hi Dana,\n\nHere is a plain-text copy of the agreement you accepted. Keep it for your records; nothing else is needed from you.\n\nThe Aviance 30-Day Trial — Agreement\nBetween Aviance (“we”) and Ridgeline IT (“you”). Effective 6 October 2026.\n\n1. What this is. A 30-day cold email trial. We build and run a small outbound campaign in your name, book sales calls onto your calendar, and hand you a written report of what your market said. It costs you nothing. It is not a paid plan; it is how you decide whether to buy one.\n\n2. What we do. Register one sending domain and two inboxes. Research and verify a list of 300–500 contacts matching the customer profile you approve. Write a three-email sequence you approve. Send for 30 days. Handle every reply. Book, confirm and remind every meeting, and chase no-shows for 14 days. Send you a written update every Friday, and on day 29 a report covering the numbers, every reply we received and what it means.\n\n3. What you do. Approve the customer profile and the copy on the kickoff call. Keep at least five open slots a week on the calendar you give us, and be able to take a booked meeting within five business days. Reply to any hot lead we hand you within one business day. Give us the postal address for the email footer. Authorise us to send email in your company’s name, from the trial domain, using only copy you approved.\n\n4. The two promises. First: we will contact the approved list and give you the written report — that is guaranteed. Second: if no qualified booked call has been held by the end of the 30 days, we keep sending at our cost until one is, for up to 30 further days, after which the trial ends. Both promises hold while you hold up clause 3. If you stop responding for five business days, the trial ends and the promises end with it.\n\n5. What counts as a qualified booked call. All four must be true: the company matches the approved profile; the attendee holds an approved title; they attended; they booked in response to outreach describing your offer. Budget, timeline, level of interest and whether they buy do not affect whether a call counts. No-shows do not count; we re-book them for 14 days. You may flag a call as not qualifying within 24 business hours, in writing, stating which criterion it failed.\n\n6. The exchange. The trial is free, so its price is proof. You agree to: (a) leave a review of the trial on Clutch, or a platform we both agree, within seven days of the day-30 call. That review may be positive or negative, must be your honest opinion, and must begin with the words “I received this service for free for my review.” We will never ask you to change or remove it; (b) if at least one qualified call was held, allow us to quote you by name, title and company, using words you approve in writing before publication; (c) allow us to publish the trial’s numbers — companies contacted, replies, calls booked — as a case study, anonymised if you prefer; (d) give us ten minutes at the end for an honest debrief, whatever the outcome. We will never publish anything you have not approved in writing, and we will never ask you to say anything you do not mean.\n\n7. Day 31. On the day-30 call you decide whether to continue on one of our plans: Starter $2,497 for 10 guaranteed booked calls a month, Growth $3,997 for 20, or Scale $8,497 for 50 — month to month, 14 days’ notice to cancel, no setup fee, on the terms published at aviance.online. We will recommend one of them based on what the trial measured and how many calls a week you told us you can handle. If you continue, the trial domain, inboxes and list carry into your plan and campaigns stay live. If you don’t, we retire the trial domain and inboxes within seven days and never use them for anyone else. There is no obligation to continue and nothing to cancel.\n\n8. Ownership and data. Your leads, replies and booked meetings are yours, exported on request, whether or not you continue. The sending domain and inboxes are registered by us and stay o",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "agreement_copy"
+    },
+    {
+     "id": "out-186c27e7d8778e62",
+     "dir": "out",
+     "at": "2026-10-06T18:20:12.400Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your trial — setup has started",
+     "text": "Hi Dana,\n\nYour market check passed, so we're going ahead. I'm buying the sending domain and two inboxes now.\n\nOnce they pass their checks you'll get an email with your two dates: the first send and Day 30. Nothing is needed from you in the meantime.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "setup_in_progress"
+    }
+   ],
+   "needsReply": false,
+   "lastInAt": "2026-10-02T13:05:00.000Z",
+   "lastOutAt": "2026-10-06T18:20:12.400Z",
+   "bot": {
+    "enabled": true,
+    "sentToday": 0,
+    "maxPerDay": 3,
+    "everyone": true,
+    "forClient": true,
+    "answersNow": false,
+    "why": "The reply bot only answers while they are onboarding (after the acceptance email).",
+    "pending": null
+   },
+   "canReply": true,
+   "fromInbox": "hello@aviance.test"
+  },
+  "deliverability": {
+   "warmup": {
+    "pool": null,
+    "helpers": null,
+    "trialInboxes": null,
+    "avianceInboxes": null,
+    "families": null,
+    "providers": null,
+    "todayPairs": null,
+    "at": null,
+    "external": null
+   },
+   "placement": [],
+   "blacklists": null,
+   "bounce": {
+    "rate7d": null,
+    "sent7d": null,
+    "at": null,
+    "pauseAt": 0.015,
+    "stopAt": 0.02,
+    "halved": false
+   },
+   "gates": {
+    "seedPlacement": 0.85,
+    "mailTesterMin": 8,
+    "spamAssassinMax": 2,
+    "spamTestRequired": true
+   }
+  },
+  "leadQuality": null,
+  "links": {},
+  "virtualNow": null
+ },
+ "extra": {
+  "cheapinboxes": {
+   "status": "connected",
+   "account": "Aviance Outreach",
+   "hasPaymentMethod": true,
+   "webhook": "registered",
+   "unmatched": [],
+   "keyFrom": "saved",
+   "checkedAt": "2026-10-01T04:30:00.400Z",
+   "lastSyncAt": "2026-10-07T02:42:00.000Z",
+   "problem": null,
+   "encKey": true
+  }
+ }
+}

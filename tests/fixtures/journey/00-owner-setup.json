@@ -1,0 +1,189 @@
+{
+ "step": "00-owner-setup",
+ "what": "The owner connects Google Meet and CheapInboxes and fills his settings. No trial yet, and no heartbeat (cron-job.org is not set up).",
+ "at": "2026-10-01T04:30:02.200Z",
+ "check": {
+  "ok": true,
+  "checked": 0,
+  "newReplies": 0,
+  "booked": 0,
+  "remindersSent": 0,
+  "autobuy": {
+   "ok": true,
+   "found": [],
+   "connected": [],
+   "ready": [],
+   "unmatched": 0,
+   "problems": 0
+  }
+ },
+ "board": {
+  "machine": {
+   "ok": true,
+   "baseUrl": "https://machine.test",
+   "heartbeat": {
+    "lastTickAt": null,
+    "ageSec": null,
+    "source": null,
+    "lastSendAt": null
+   },
+   "activeTrials": 0,
+   "maxActiveTrials": 3,
+   "extensions": 0,
+   "openAlerts": 0,
+   "usage": {
+    "redis": {
+     "used": null,
+     "limit": 500000,
+     "pct": null
+    },
+    "places": {
+     "used": null,
+     "limit": 1000,
+     "pct": null
+    },
+    "reoon": {
+     "used": null,
+     "limit": 600,
+     "pct": null,
+     "remaining": null
+    }
+   },
+   "setup": {
+    "migrated": false,
+    "encKey": true,
+    "cronSecret": true,
+    "telegram": false,
+    "healthchecks": false,
+    "ownerInbox": true
+   },
+   "queue": [],
+   "others": []
+  },
+  "stages": [
+   {
+    "key": "intake",
+    "label": "Applied & queued",
+    "states": [
+     "applied",
+     "queued"
+    ],
+    "clients": []
+   },
+   {
+    "key": "onboard",
+    "label": "Onboarding",
+    "states": [
+     "onboarding"
+    ],
+    "clients": []
+   },
+   {
+    "key": "setup",
+    "label": "Buying & setup",
+    "states": [
+     "awaiting_purchase",
+     "setup_check"
+    ],
+    "clients": []
+   },
+   {
+    "key": "build",
+    "label": "Warm-up & build",
+    "states": [
+     "warming",
+     "ready"
+    ],
+    "clients": []
+   },
+   {
+    "key": "live",
+    "label": "Sending",
+    "states": [
+     "sending",
+     "paused",
+     "extension"
+    ],
+    "clients": []
+   },
+   {
+    "key": "decide",
+    "label": "Deciding",
+    "states": [
+     "deciding"
+    ],
+    "clients": []
+   },
+   {
+    "key": "won",
+    "label": "Converted",
+    "states": [
+     "converted"
+    ],
+    "clients": []
+   },
+   {
+    "key": "closing",
+    "label": "Not now & closing",
+    "states": [
+     "not_now",
+     "retired"
+    ],
+    "clients": []
+   },
+   {
+    "key": "ended",
+    "label": "Ended",
+    "states": [
+     "declined",
+     "closed_silent",
+     "deleted"
+    ],
+    "clients": []
+   }
+  ],
+  "todos": [
+   {
+    "id": "machine-setup",
+    "clientId": null,
+    "clientName": "Machine",
+    "text": "Finish the machine setup: Telegram, Healthchecks",
+    "detail": "Settings in Vercel — see docs/PROGRESS.md",
+    "urgent": false,
+    "since": null,
+    "action": {
+     "type": "none"
+    }
+   },
+   {
+    "id": "machine-migrate",
+    "clientId": null,
+    "clientName": "Machine",
+    "text": "Run first-time setup (moves the Aviance inboxes into the database)",
+    "detail": "",
+    "urgent": false,
+    "since": null,
+    "action": {
+     "type": "api",
+     "method": "POST",
+     "path": "/api/mc/setup",
+     "body": {
+      "action": "migrate"
+     }
+    }
+   }
+  ],
+  "inquiries": {
+   "counts": {
+    "new": 0,
+    "contacted": 0,
+    "won": 0,
+    "lost": 0
+   },
+   "open": 0,
+   "latest": []
+  },
+  "alerts": []
+ },
+ "detail": null
+}

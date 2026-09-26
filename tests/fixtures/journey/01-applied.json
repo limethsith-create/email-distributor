@@ -1,0 +1,1648 @@
+{
+ "step": "01-applied",
+ "what": "Dana Whitfield of Ridgeline IT fills the trial form on aviance.online. The owner hears at once; the machine reads the whole website, the public records and Google, then scores the fit.",
+ "at": "2026-10-01T19:40:28.160Z",
+ "check": null,
+ "board": {
+  "machine": {
+   "ok": true,
+   "baseUrl": "https://machine.test",
+   "heartbeat": {
+    "lastTickAt": null,
+    "ageSec": null,
+    "source": null,
+    "lastSendAt": null
+   },
+   "activeTrials": 0,
+   "maxActiveTrials": 3,
+   "extensions": 0,
+   "openAlerts": 2,
+   "usage": {
+    "redis": {
+     "used": null,
+     "limit": 500000,
+     "pct": null
+    },
+    "places": {
+     "used": 1,
+     "limit": 1000,
+     "pct": 0
+    },
+    "reoon": {
+     "used": null,
+     "limit": 600,
+     "pct": null,
+     "remaining": null
+    }
+   },
+   "setup": {
+    "migrated": false,
+    "encKey": true,
+    "cronSecret": true,
+    "telegram": false,
+    "healthchecks": false,
+    "ownerInbox": true
+   },
+   "queue": [],
+   "others": []
+  },
+  "stages": [
+   {
+    "key": "intake",
+    "label": "Applied & queued",
+    "states": [
+     "applied",
+     "queued"
+    ],
+    "clients": [
+     {
+      "id": "ridgelineit",
+      "name": "Ridgeline IT",
+      "state": "applied",
+      "plan": "trial",
+      "trialDay": null,
+      "day1Date": null,
+      "day30Date": null,
+      "health": "red",
+      "healthReasons": [
+       "1 urgent alert open"
+      ],
+      "five": {
+       "sent": null,
+       "replies": null,
+       "positive": null,
+       "booked": null,
+       "qualified": null
+      },
+      "inboxRate": null,
+      "lastJobAt": null,
+      "openAlerts": 2,
+      "urgentAlerts": 1,
+      "extension": false,
+      "stateLabel": "Applied — waiting for your review",
+      "simple": {
+       "step": "new",
+       "label": "New application — read it and say yes or no",
+       "next": "Open it and press “Say yes” or “Say no”",
+       "needsYou": true,
+       "since": "2026-10-01T19:40:00.000Z",
+       "person": "Dana Whitfield",
+       "company": "Ridgeline IT",
+       "dayOf30": null,
+       "needsReply": false
+      },
+      "fitScore": {
+       "score": 94,
+       "grade": "A",
+       "label": "Strong fit",
+       "confidence": 97
+      },
+      "contactName": "Dana Whitfield",
+      "contactEmail": "dana@ridgelineit.com",
+      "website": "https://www.ridgelineit.com/",
+      "todo": [
+       {
+        "id": "review:ridgelineit",
+        "clientId": "ridgelineit",
+        "clientName": "Ridgeline IT",
+        "text": "Review Ridgeline IT's trial application",
+        "detail": "From the website just now · fit score 94/100 (Strong fit) · looks like a fit — 3 checks unknown",
+        "urgent": false,
+        "since": "2026-10-01T19:40:00.000Z",
+        "action": {
+         "type": "view",
+         "view": "detail",
+         "clientId": "ridgelineit",
+         "section": "application"
+        }
+       }
+      ],
+      "systems": [
+       {
+        "key": "intake",
+        "label": "Intake",
+        "status": "waiting",
+        "line": "Website application — waiting for your review · Looks like a fit — 3 checks unknown",
+        "detail": [
+         "5–50 people: unknown — The website form does not ask for headcount",
+         "Three dream customers: unknown — Collected on the onboarding page",
+         "Nobody else cold-emailing for them: unknown — The website form does not ask"
+        ]
+       },
+       {
+        "key": "market",
+        "label": "Market count",
+        "status": "off",
+        "line": "Runs when the agreement is accepted",
+        "detail": []
+       },
+       {
+        "key": "purchase",
+        "label": "Domain & inboxes",
+        "status": "off",
+        "line": "Shopping list goes out once the market count passes",
+        "detail": []
+       },
+       {
+        "key": "setup",
+        "label": "Setup checks",
+        "status": "off",
+        "line": "Runs when you paste the logins",
+        "detail": []
+       },
+       {
+        "key": "warmup",
+        "label": "Warm-up",
+        "status": "off",
+        "line": "Starts when the inboxes are in",
+        "detail": []
+       },
+       {
+        "key": "list",
+        "label": "Lead list",
+        "status": "off",
+        "line": "Starts with warm-up",
+        "detail": []
+       },
+       {
+        "key": "copy",
+        "label": "Copy & approval",
+        "status": "off",
+        "line": "Built during warm-up",
+        "detail": []
+       },
+       {
+        "key": "canary",
+        "label": "Placement & ramp",
+        "status": "off",
+        "line": "Runs during warm-up",
+        "detail": []
+       },
+       {
+        "key": "sending",
+        "label": "Sending",
+        "status": "off",
+        "line": "Starts on Day 1",
+        "detail": []
+       },
+       {
+        "key": "replies",
+        "label": "Replies",
+        "status": "off",
+        "line": "Read every few minutes once sending starts",
+        "detail": []
+       },
+       {
+        "key": "calls",
+        "label": "Calls",
+        "status": "off",
+        "line": "Watches the calendar once sending starts",
+        "detail": []
+       },
+       {
+        "key": "reports",
+        "label": "Reports & decision",
+        "status": "off",
+        "line": "Friday updates start at Day −14",
+        "detail": []
+       },
+       {
+        "key": "closing",
+        "label": "Close-out",
+        "status": "off",
+        "line": "Runs after Day 30",
+        "detail": []
+       }
+      ],
+      "nextUp": null
+     }
+    ]
+   },
+   {
+    "key": "onboard",
+    "label": "Onboarding",
+    "states": [
+     "onboarding"
+    ],
+    "clients": []
+   },
+   {
+    "key": "setup",
+    "label": "Buying & setup",
+    "states": [
+     "awaiting_purchase",
+     "setup_check"
+    ],
+    "clients": []
+   },
+   {
+    "key": "build",
+    "label": "Warm-up & build",
+    "states": [
+     "warming",
+     "ready"
+    ],
+    "clients": []
+   },
+   {
+    "key": "live",
+    "label": "Sending",
+    "states": [
+     "sending",
+     "paused",
+     "extension"
+    ],
+    "clients": []
+   },
+   {
+    "key": "decide",
+    "label": "Deciding",
+    "states": [
+     "deciding"
+    ],
+    "clients": []
+   },
+   {
+    "key": "won",
+    "label": "Converted",
+    "states": [
+     "converted"
+    ],
+    "clients": []
+   },
+   {
+    "key": "closing",
+    "label": "Not now & closing",
+    "states": [
+     "not_now",
+     "retired"
+    ],
+    "clients": []
+   },
+   {
+    "key": "ended",
+    "label": "Ended",
+    "states": [
+     "declined",
+     "closed_silent",
+     "deleted"
+    ],
+    "clients": []
+   }
+  ],
+  "todos": [
+   {
+    "id": "machine-setup",
+    "clientId": null,
+    "clientName": "Machine",
+    "text": "Finish the machine setup: Telegram, Healthchecks",
+    "detail": "Settings in Vercel — see docs/PROGRESS.md",
+    "urgent": false,
+    "since": null,
+    "action": {
+     "type": "none"
+    }
+   },
+   {
+    "id": "machine-migrate",
+    "clientId": null,
+    "clientName": "Machine",
+    "text": "Run first-time setup (moves the Aviance inboxes into the database)",
+    "detail": "",
+    "urgent": false,
+    "since": null,
+    "action": {
+     "type": "api",
+     "method": "POST",
+     "path": "/api/mc/setup",
+     "body": {
+      "action": "migrate"
+     }
+    }
+   },
+   {
+    "id": "review:ridgelineit",
+    "clientId": "ridgelineit",
+    "clientName": "Ridgeline IT",
+    "text": "Review Ridgeline IT's trial application",
+    "detail": "From the website just now · fit score 94/100 (Strong fit) · looks like a fit — 3 checks unknown",
+    "urgent": false,
+    "since": "2026-10-01T19:40:00.000Z",
+    "action": {
+     "type": "view",
+     "view": "detail",
+     "clientId": "ridgelineit",
+     "section": "application"
+    }
+   }
+  ],
+  "inquiries": {
+   "counts": {
+    "new": 0,
+    "contacted": 0,
+    "won": 0,
+    "lost": 0
+   },
+   "open": 0,
+   "latest": []
+  },
+  "alerts": [
+   {
+    "id": "1790883627910-5oy551",
+    "at": "2026-10-01T19:40:27.910Z",
+    "key": "application_scored",
+    "clientId": "ridgelineit",
+    "title": "Fit score for Ridgeline IT: 94/100 (Strong fit)",
+    "urgent": false,
+    "delivered": true
+   },
+   {
+    "id": "1790883602690-bigoni",
+    "at": "2026-10-01T19:40:02.690Z",
+    "key": "new_application",
+    "clientId": "ridgelineit",
+    "title": "New trial application: Ridgelineit",
+    "urgent": true,
+    "delivered": true
+   }
+  ]
+ },
+ "detail": {
+  "row": {
+   "id": "ridgelineit",
+   "name": "Ridgeline IT",
+   "state": "applied",
+   "plan": "trial",
+   "trialDay": null,
+   "day1Date": null,
+   "day30Date": null,
+   "health": "green",
+   "healthReasons": [],
+   "five": {
+    "sent": null,
+    "replies": null,
+    "positive": null,
+    "booked": null,
+    "qualified": null
+   },
+   "inboxRate": null,
+   "lastJobAt": null,
+   "openAlerts": 0,
+   "urgentAlerts": 0,
+   "extension": false,
+   "stateLabel": "Applied — waiting for your review",
+   "simple": {
+    "step": "new",
+    "label": "New application — read it and say yes or no",
+    "next": "Open it and press “Say yes” or “Say no”",
+    "needsYou": true,
+    "since": "2026-10-01T19:40:00.000Z",
+    "person": "Dana Whitfield",
+    "company": "Ridgeline IT",
+    "dayOf30": null,
+    "needsReply": false
+   },
+   "fitScore": {
+    "score": 94,
+    "grade": "A",
+    "label": "Strong fit",
+    "confidence": 97
+   },
+   "contactName": "Dana Whitfield",
+   "contactEmail": "dana@ridgelineit.com",
+   "website": "https://www.ridgelineit.com/",
+   "todo": [
+    {
+     "id": "review:ridgelineit",
+     "clientId": "ridgelineit",
+     "clientName": "Ridgeline IT",
+     "text": "Review Ridgeline IT's trial application",
+     "detail": "From the website just now · fit score 94/100 (Strong fit) · looks like a fit — 3 checks unknown",
+     "urgent": false,
+     "since": "2026-10-01T19:40:00.000Z",
+     "action": {
+      "type": "view",
+      "view": "detail",
+      "clientId": "ridgelineit",
+      "section": "application"
+     }
+    }
+   ],
+   "systems": [
+    {
+     "key": "intake",
+     "label": "Intake",
+     "status": "waiting",
+     "line": "Website application — waiting for your review · Looks like a fit — 3 checks unknown",
+     "detail": [
+      "5–50 people: unknown — The website form does not ask for headcount",
+      "Three dream customers: unknown — Collected on the onboarding page",
+      "Nobody else cold-emailing for them: unknown — The website form does not ask"
+     ]
+    },
+    {
+     "key": "market",
+     "label": "Market count",
+     "status": "off",
+     "line": "Runs when the agreement is accepted",
+     "detail": []
+    },
+    {
+     "key": "purchase",
+     "label": "Domain & inboxes",
+     "status": "off",
+     "line": "Shopping list goes out once the market count passes",
+     "detail": []
+    },
+    {
+     "key": "setup",
+     "label": "Setup checks",
+     "status": "off",
+     "line": "Runs when you paste the logins",
+     "detail": []
+    },
+    {
+     "key": "warmup",
+     "label": "Warm-up",
+     "status": "off",
+     "line": "Starts when the inboxes are in",
+     "detail": []
+    },
+    {
+     "key": "list",
+     "label": "Lead list",
+     "status": "off",
+     "line": "Starts with warm-up",
+     "detail": []
+    },
+    {
+     "key": "copy",
+     "label": "Copy & approval",
+     "status": "off",
+     "line": "Built during warm-up",
+     "detail": []
+    },
+    {
+     "key": "canary",
+     "label": "Placement & ramp",
+     "status": "off",
+     "line": "Runs during warm-up",
+     "detail": []
+    },
+    {
+     "key": "sending",
+     "label": "Sending",
+     "status": "off",
+     "line": "Starts on Day 1",
+     "detail": []
+    },
+    {
+     "key": "replies",
+     "label": "Replies",
+     "status": "off",
+     "line": "Read every few minutes once sending starts",
+     "detail": []
+    },
+    {
+     "key": "calls",
+     "label": "Calls",
+     "status": "off",
+     "line": "Watches the calendar once sending starts",
+     "detail": []
+    },
+    {
+     "key": "reports",
+     "label": "Reports & decision",
+     "status": "off",
+     "line": "Friday updates start at Day −14",
+     "detail": []
+    },
+    {
+     "key": "closing",
+     "label": "Close-out",
+     "status": "off",
+     "line": "Runs after Day 30",
+     "detail": []
+    }
+   ],
+   "nextUp": null
+  },
+  "profile": {
+   "companyName": "Ridgeline IT",
+   "postalAddress": "2100 South Blvd Suite 300, Charlotte, NC 28203",
+   "cities": [
+    "Charlotte, NC",
+    "Raleigh, NC"
+   ],
+   "defaultIcp": "law firms and accounting firms"
+  },
+  "trial": {},
+  "domain": {
+   "name": null,
+   "setupPhase": null,
+   "setupPassedAt": null,
+   "setupFailedAt": null,
+   "checks": {
+    "spf": null,
+    "dkim": null,
+    "dmarc": null,
+    "mx": null,
+    "autorenew": null,
+    "blacklist": null,
+    "redirect": null,
+    "smtp": null,
+    "imap": null,
+    "twostep": null,
+    "loopback": null
+   },
+   "dmarcPassRate7d": null,
+   "blacklist": null,
+   "retiredAt": null
+  },
+  "shopping": {
+   "domainCandidates": [],
+   "backups": [],
+   "registrarQuotes": [],
+   "inboxQuotes": [],
+   "senderAddresses": [],
+   "unconfirmed": [],
+   "autoBought": null,
+   "offers": [],
+   "registrars": [],
+   "inboxes": null,
+   "totals": null,
+   "domain": {}
+  },
+  "inboxes": [],
+  "leadsByStatus": {
+   "unsent": 0,
+   "in_sequence": 0,
+   "replied": 0,
+   "bounced": 0,
+   "suppressed": 0,
+   "notnow": 0,
+   "done": 0
+  },
+  "leadfinder": {},
+  "sequence": {
+   "active": null,
+   "version": null,
+   "approvedAt": null,
+   "approvalMode": null,
+   "round": 0,
+   "changes": [],
+   "sentAt": null
+  },
+  "counters": {},
+  "repliesByKind": {},
+  "replies": [],
+  "bookings": [],
+  "pacelog": [],
+  "reports": [],
+  "invoice": null,
+  "promises": [],
+  "upcoming": [],
+  "events": [
+   {
+    "at": "2026-10-01T19:40:28.160Z",
+    "system": "notify",
+    "event": "alert_sent",
+    "detail": {
+     "key": "application_scored",
+     "title": "Fit score for Ridgeline IT: 94/100 (Strong fit)",
+     "channels": {
+      "email": "ok",
+      "push": "push not configured"
+     }
+    }
+   },
+   {
+    "at": "2026-10-01T19:40:27.910Z",
+    "system": "research",
+    "event": "done",
+    "detail": {
+     "pagesRead": 8,
+     "deepPages": 14,
+     "facts": 110,
+     "business": true,
+     "market": 360,
+     "flags": 0,
+     "prefilled": [
+      "companyName",
+      "postalAddress",
+      "cities",
+      "defaultIcp"
+     ],
+     "score": 94,
+     "grade": "A"
+    }
+   },
+   {
+    "at": "2026-10-01T19:40:27.910Z",
+    "system": "research",
+    "event": "prefilled",
+    "detail": {
+     "fields": [
+      "companyName",
+      "postalAddress",
+      "cities",
+      "defaultIcp"
+     ]
+    }
+   },
+   {
+    "at": "2026-10-01T19:40:27.910Z",
+    "system": "research",
+    "event": "name_from_site",
+    "detail": {
+     "from": "Ridgelineit",
+     "to": "Ridgeline IT"
+    }
+   },
+   {
+    "at": "2026-10-01T19:40:02.940Z",
+    "system": "notify",
+    "event": "alert_sent",
+    "detail": {
+     "key": "new_application",
+     "title": "New trial application: Ridgelineit",
+     "channels": {
+      "email": "ok",
+      "push": "push not configured",
+      "telegram": "telegram not configured"
+     }
+    }
+   },
+   {
+    "at": "2026-10-01T19:40:00.470Z",
+    "system": "gatekeeper",
+    "event": "held_for_review",
+    "detail": {
+     "verdict": "fit",
+     "summary": "Looks like a fit — 3 checks unknown"
+    }
+   },
+   {
+    "at": "2026-10-01T19:40:00.470Z",
+    "system": "research",
+    "event": "started",
+    "detail": {}
+   },
+   {
+    "at": "2026-10-01T19:40:00.470Z",
+    "system": "gatekeeper",
+    "event": "applied",
+    "detail": {
+     "source": "website",
+     "preApproved": false,
+     "mainDomain": "ridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-01T19:40:00.470Z",
+    "system": "client",
+    "event": "created",
+    "detail": {
+     "state": "applied",
+     "name": "Ridgelineit"
+    }
+   }
+  ],
+  "jobs": {
+   "aviance-send": null,
+   "aviance-replies": null,
+   "aviance-eod-report": null,
+   "onboarding-nudge": null,
+   "research": null,
+   "market": null,
+   "pricescout": null,
+   "purchase-nudge": null,
+   "setup-check": null,
+   "welcome": null,
+   "auth": null,
+   "blacklist": null,
+   "booking-test": null,
+   "booking-reminder": null,
+   "warmup-daily-scaled": null,
+   "canary": null,
+   "placement": null,
+   "ramp": null,
+   "leadfinder-start": null,
+   "leadfinder-refill": null,
+   "approval": null,
+   "readiness": null,
+   "emergency": null,
+   "send": null,
+   "reminders": null,
+   "client-watch": null,
+   "noshow": null,
+   "notnow": null,
+   "pace": null,
+   "replies": null,
+   "hot-chaser": null,
+   "bounces": null,
+   "bookings": null,
+   "lead-verify": null,
+   "lead-verify-daily": null,
+   "day1-notice": null,
+   "cancel-inboxes": null,
+   "invoice": null,
+   "wrapup": null,
+   "friday": null,
+   "day-jobs": null
+  },
+  "holds": {
+   "legalHoldAt": null,
+   "sendHold": null,
+   "emergencyActive": false,
+   "emergencyHalved": false,
+   "pausedReason": null
+  },
+  "application": {
+   "receivedAt": "2026-10-01T19:40:00.000Z",
+   "source": "website",
+   "review": "pending",
+   "decidedAt": null,
+   "decision": null,
+   "declineReason": null,
+   "answers": [
+    {
+     "q": "Name",
+     "a": "Dana Whitfield"
+    },
+    {
+     "q": "Work email",
+     "a": "Dana@RidgelineIT.com"
+    },
+    {
+     "q": "Company website",
+     "a": "https://www.ridgelineit.com/"
+    },
+    {
+     "q": "City / state",
+     "a": "Charlotte, NC"
+    },
+    {
+     "q": "What do you sell, and who to?",
+     "a": "Managed IT and cybersecurity for law firms and accounting firms with 10–75 staff in the Carolinas"
+    },
+    {
+     "q": "What is a new customer worth in the first year?",
+     "a": "$5,000–$20,000"
+    },
+    {
+     "q": "How many sales calls a week could you actually take?",
+     "a": "5–10 a week"
+    },
+    {
+     "q": "Has anyone outside your network ever bought from you?",
+     "a": "Yes — cold buyers already"
+    },
+    {
+     "q": "Could you take a booked meeting within five business days?",
+     "a": "Yes"
+    },
+    {
+     "q": "If the trial books you a call, what then?",
+     "a": "Move to Growth — 20 calls a month"
+    },
+    {
+     "q": "Anything we should know?",
+     "a": "We tried LinkedIn ads in 2024; not much came of it."
+    },
+    {
+     "q": "Agreed to the quote + honest review",
+     "a": "Yes"
+    },
+    {
+     "q": "Open to (optional)",
+     "a": "Intro to one peer"
+    }
+   ],
+   "fit": {
+    "verdict": "fit",
+    "summary": "Looks like a fit — 3 checks unknown",
+    "lines": [
+     {
+      "rule": "one_trial_ever",
+      "label": "First trial for this company",
+      "status": "pass",
+      "note": "ridgelineit.com has not had one"
+     },
+     {
+      "rule": "us_based",
+      "label": "US-based",
+      "status": "pass",
+      "note": "They sell from Charlotte, NC"
+     },
+     {
+      "rule": "employees",
+      "label": "5–50 people",
+      "status": "unknown",
+      "note": "The website form does not ask for headcount"
+     },
+     {
+      "rule": "deal_value",
+      "label": "Customer worth ≥ $2,000 in year one",
+      "status": "pass",
+      "note": "They said $5,000–$20,000"
+     },
+     {
+      "rule": "sold_to_strangers",
+      "label": "Has sold to strangers before",
+      "status": "pass",
+      "note": "They said \"Yes — cold buyers already\""
+     },
+     {
+      "rule": "dream_customers",
+      "label": "Three dream customers",
+      "status": "unknown",
+      "note": "Collected on the onboarding page"
+     },
+     {
+      "rule": "meet_within_5_days",
+      "label": "Can meet within five business days",
+      "status": "pass",
+      "note": "They said \"Yes\""
+     },
+     {
+      "rule": "slots_per_week",
+      "label": "At least 5 open slots a week",
+      "status": "pass",
+      "note": "They said 5–10 a week"
+     },
+     {
+      "rule": "nobody_else_emailing",
+      "label": "Nobody else cold-emailing for them",
+      "status": "unknown",
+      "note": "The website form does not ask"
+     },
+     {
+      "rule": "review_agreed",
+      "label": "Agreed to the quote + honest review",
+      "status": "pass",
+      "note": "Ticked the box"
+     },
+     {
+      "rule": "not_agency",
+      "label": "Not a lead-gen / outbound agency",
+      "status": "pass",
+      "note": "Website title and their answers checked"
+     }
+    ]
+   },
+   "research": {
+    "status": "done",
+    "at": "2026-10-01T19:40:12.760Z",
+    "error": null,
+    "summary": "Ridgeline IT is a computer support and services in Charlotte, NC (4.8★, 61 Google reviews). The website lists services such as Managed IT services, Cybersecurity and Cloud backup and recovery, names Charlotte, NC and Raleigh, NC, says “Founded in 2012” and shows 4 people on the team page. A quick Google Maps count suggests at least 360 law firms and accounting firms in Charlotte, NC. Read 22 pages and 1 document (1,111 words): 110 facts — 4 named people, 3 named clients, 1 testimonial, 2 case studies, 8 certifications / partners, online since 2013.",
+    "website": {
+     "url": "https://www.ridgelineit.com/",
+     "title": "Ridgeline IT | Managed IT for Law & Accounting Firms in Charlotte",
+     "description": "Managed IT, cybersecurity and cloud for law firms and accounting firms in Charlotte and Raleigh.",
+     "headline": "Managed IT that law firms and accounting firms trust",
+     "services": [
+      "Managed IT services",
+      "Cybersecurity",
+      "Cloud backup and recovery",
+      "Compliance for law and CPA firms"
+     ],
+     "locations": [
+      "Charlotte, NC",
+      "Raleigh, NC"
+     ],
+     "phones": [
+      "(704) 555-0142"
+     ],
+     "emails": [
+      "info@ridgelineit.com"
+     ],
+     "socials": {
+      "linkedin": "https://www.linkedin.com/company/ridgeline-it",
+      "facebook": "https://www.facebook.com/ridgelineit"
+     },
+     "teamHint": "4 people on the team page",
+     "yearsHint": "Founded in 2012",
+     "pagesRead": 8
+    },
+    "business": {
+     "name": "Ridgeline IT",
+     "address": "2100 South Blvd Suite 300, Charlotte, NC 28203, USA",
+     "category": "Computer support and services",
+     "rating": 4.8,
+     "reviews": 61,
+     "mapsUrl": "https://maps.google.com/?cid=4411",
+     "phone": "(704) 555-0142"
+    },
+    "market": {
+     "query": "law firms and accounting firms in Charlotte, NC",
+     "estimate": 360,
+     "source": "places",
+     "capped": true
+    },
+    "flags": [],
+    "score": {
+     "score": 94,
+     "grade": "A",
+     "label": "Strong fit",
+     "confidence": 97,
+     "summary": "94/100 — strong fit (97 of 100 points checked). Strongest: sells to businesses; weakest: market.",
+     "parts": [
+      {
+       "key": "b2b",
+       "label": "Sells to businesses",
+       "points": 20,
+       "checked": 20,
+       "max": 20,
+       "pct": 100,
+       "items": [
+        {
+         "text": "They sell to “law firms and accounting firms with 10–75 staff in the caro…” — businesses",
+         "status": "good",
+         "max": 8,
+         "evidence": null,
+         "known": true,
+         "points": 8
+        },
+        {
+         "text": "Website talks to businesses (37 mentions)",
+         "status": "good",
+         "max": 12,
+         "evidence": {
+          "quote": "Ridgeline IT | Managed IT for Law & Accounting Firms in Charlotte",
+          "page": "/"
+         },
+         "known": true,
+         "points": 12
+        }
+       ]
+      },
+      {
+       "key": "deal",
+       "label": "Deal size",
+       "points": 20,
+       "checked": 20,
+       "max": 20,
+       "pct": 100,
+       "items": [
+        {
+         "text": "A new customer is worth $5,000–$20,000 in year one",
+         "status": "good",
+         "max": 12,
+         "evidence": null,
+         "known": true,
+         "points": 12
+        },
+        {
+         "text": "Website sells ongoing or quoted work (plans, contracts, consultations)",
+         "status": "good",
+         "max": 8,
+         "evidence": {
+          "quote": "Ridgeline IT | Managed IT for Law & Accounting Firms in Charlotte",
+          "page": "/"
+         },
+         "known": true,
+         "points": 8
+        }
+       ]
+      },
+      {
+       "key": "size",
+       "label": "Size and age",
+       "points": 15,
+       "checked": 15,
+       "max": 15,
+       "pct": 100,
+       "items": [
+        {
+         "text": "About 16 people (Website lists 16 employees (schema.org)) — inside 5–50",
+         "status": "good",
+         "max": 7,
+         "evidence": null,
+         "known": true,
+         "points": 7
+        },
+        {
+         "text": "In business about 14 years (website: Founded in 2012)",
+         "status": "good",
+         "max": 5,
+         "evidence": null,
+         "known": true,
+         "points": 5
+        },
+        {
+         "text": "Hiring (2 open roles, including sales) · 2 locations",
+         "status": "good",
+         "max": 3,
+         "evidence": {
+          "quote": "Account Executive (B2B sales) · Help Desk Technician",
+          "page": "/careers"
+         },
+         "known": true,
+         "points": 3
+        }
+       ]
+      },
+      {
+       "key": "proof",
+       "label": "Already wins strangers",
+       "points": 15.1,
+       "checked": 15.1,
+       "max": 15,
+       "pct": 100,
+       "items": [
+        {
+         "text": "They already sell to strangers (“Yes — cold buyers already”)",
+         "status": "good",
+         "max": 5.3,
+         "evidence": null,
+         "known": true,
+         "points": 5.3
+        },
+        {
+         "text": "Website shows 1 testimonial, 2 case studies, 3 named clients",
+         "status": "good",
+         "max": 3,
+         "evidence": {
+          "quote": "They moved our whole office over a weekend and nobody lost a file.",
+          "page": "/"
+         },
+         "known": true,
+         "points": 3
+        },
+        {
+         "text": "Certifications, partners or awards: Microsoft Partner, Microsoft Solutions Partner, SOC 2, Veteran-owned, HIPAA, FINRA / SEC (+2)",
+         "status": "good",
+         "max": 1.5,
+         "evidence": {
+          "quote": "in Charlotte, Ridgeline IT is a team of 16 people. We are a Microsoft Solutions Partner for Modern Work, SOC 2 aligned and veteran-owned. We serve law",
+          "page": "/about"
+         },
+         "known": true,
+         "points": 1.5
+        },
+        {
+         "text": "A real website (1,111 words across 8 pages)",
+         "status": "good",
+         "max": 2.3,
+         "evidence": null,
+         "known": true,
+         "points": 2.3
+        },
+        {
+         "text": "Google: 4.8★ from 61 reviews",
+         "status": "good",
+         "max": 3,
+         "evidence": null,
+         "known": true,
+         "points": 3
+        }
+       ]
+      },
+      {
+       "key": "market",
+       "label": "Market",
+       "points": 8,
+       "checked": 12,
+       "max": 15,
+       "pct": 67,
+       "items": [
+        {
+         "text": "At least 360 companies to reach — Google lists at most 60 per search, so there are more; the full count runs after they sign",
+         "status": "ok",
+         "max": 8,
+         "evidence": null,
+         "known": true,
+         "points": 4
+        },
+        {
+         "text": "Clear buyer: “law firms and accounting firms with 10–75 staff in the caro…”",
+         "status": "good",
+         "max": 4,
+         "evidence": null,
+         "known": true,
+         "points": 4
+        },
+        {
+         "text": "Three dream customers: not asked yet",
+         "status": "unknown",
+         "max": 3,
+         "evidence": null,
+         "known": false,
+         "points": null
+        }
+       ]
+      },
+      {
+       "key": "ready",
+       "label": "Ready for calls",
+       "points": 13.2,
+       "checked": 14.9,
+       "max": 15,
+       "pct": 89,
+       "items": [
+        {
+         "text": "Can take a meeting within five business days",
+         "status": "good",
+         "max": 3.5,
+         "evidence": null,
+         "known": true,
+         "points": 3.5
+        },
+        {
+         "text": "Can take 5–10 calls a week",
+         "status": "good",
+         "max": 3.5,
+         "evidence": null,
+         "known": true,
+         "points": 3.5
+        },
+        {
+         "text": "If it works: “Move to Growth — 20 calls a month”",
+         "status": "good",
+         "max": 2.6,
+         "evidence": null,
+         "known": true,
+         "points": 2.6
+        },
+        {
+         "text": "Runs sales tools: HubSpot",
+         "status": "good",
+         "max": 1.8,
+         "evidence": null,
+         "known": true,
+         "points": 1.8
+        },
+        {
+         "text": "Website has a phone number, no booking link",
+         "status": "ok",
+         "max": 3.5,
+         "evidence": null,
+         "known": true,
+         "points": 1.8
+        }
+       ]
+      }
+     ],
+     "dealbreakers": [],
+     "warnings": [],
+     "questions": [
+      "Name three companies that would be perfect customers.",
+      "Is anyone else cold-emailing this same list for you right now?"
+     ]
+    },
+    "deep": {
+     "pagesRead": 22,
+     "sitemapPages": 22,
+     "words": 1111,
+     "people": [
+      {
+       "name": "Marcus Hale",
+       "title": "Founder & CEO",
+       "page": "/team"
+      },
+      {
+       "name": "Dana Whitfield",
+       "title": "Director of Client Success",
+       "page": "/team"
+      },
+      {
+       "name": "Priya Raman",
+       "title": "Service Desk Lead",
+       "page": "/team"
+      },
+      {
+       "name": "Tom Becker",
+       "title": "Network Engineer",
+       "page": "/team"
+      }
+     ],
+     "clients": [
+      {
+       "name": "Hollis & Grant Law",
+       "page": "/"
+      },
+      {
+       "name": "Carolina Tax Partners",
+       "page": "/"
+      },
+      {
+       "name": "Queen City Family Law",
+       "page": "/"
+      }
+     ],
+     "testimonials": [
+      {
+       "quote": "They moved our whole office over a weekend and nobody lost a file.",
+       "by": "Renee Hollis, Hollis & Grant Law",
+       "page": "/"
+      }
+     ],
+     "caseStudies": [
+      {
+       "title": "How Hollis & Grant Law moved 40 people over one weekend",
+       "page": "/case-studies/law-firm-office-move"
+      },
+      {
+       "title": "Carolina Tax Partners recovered from ransomware in six hours",
+       "page": "/case-studies/cpa-ransomware-recovery"
+      }
+     ],
+     "credentials": [
+      {
+       "name": "Microsoft Partner",
+       "quote": "in Charlotte, Ridgeline IT is a team of 16 people. We are a Microsoft Solutions Partner for Modern Work, SOC 2 aligned and veteran-owned. We serve law",
+       "page": "/about"
+      },
+      {
+       "name": "Microsoft Solutions Partner",
+       "quote": "te, Ridgeline IT is a team of 16 people. We are a Microsoft Solutions Partner for Modern Work, SOC 2 aligned and veteran-owned. We serve law firms and",
+       "page": "/about"
+      },
+      {
+       "name": "SOC 2",
+       "quote": "ople. We are a Microsoft Solutions Partner for Modern Work, SOC 2 aligned and veteran-owned. We serve law firms and accounting firms in North Carolina",
+       "page": "/about"
+      },
+      {
+       "name": "Veteran-owned",
+       "quote": "rosoft Solutions Partner for Modern Work, SOC 2 aligned and veteran-owned. We serve law firms and accounting firms in North Carolina and South Carolin",
+       "page": "/about"
+      },
+      {
+       "name": "HIPAA",
+       "quote": "ction, phishing training with KnowBe4, and 24/7 monitoring. HIPAA and FINRA ready. 2100 South Blvd, Suite 300, Charlotte, NC 28203 Call (704) 555-0142",
+       "page": "/services/cybersecurity"
+      },
+      {
+       "name": "FINRA / SEC",
+       "quote": "shing training with KnowBe4, and 24/7 monitoring. HIPAA and FINRA ready. 2100 South Blvd, Suite 300, Charlotte, NC 28203 Call (704) 555-0142 · info@ri",
+       "page": "/services/cybersecurity"
+      },
+      {
+       "name": "Microsoft 365 / Azure",
+       "quote": "dies Pricing Careers Blog Contact Cloud backup and recovery Microsoft 365 backup and disaster recovery for law firms. Restores in under an hour. 2100",
+       "page": "/services/cloud-backup"
+      },
+      {
+       "name": "CMMC",
+       "quote": "In their document “Ridgeline IT Capabilities”",
+       "page": "/downloads/ridgeline-capabilities.pdf"
+      }
+     ],
+     "industries": [
+      "law firms",
+      "accounting",
+      "cpa firms"
+     ],
+     "prices": [
+      {
+       "text": "$99 per user / month",
+       "page": "/pricing"
+      },
+      {
+       "text": "$149 per user / month",
+       "page": "/pricing"
+      }
+     ],
+     "addresses": [
+      "2100 South Blvd, Suite 300, Charlotte, NC 28203"
+     ],
+     "jobs": [
+      {
+       "title": "Account Executive (B2B sales)",
+       "page": "/careers",
+       "sales": true
+      },
+      {
+       "title": "Help Desk Technician",
+       "page": "/careers",
+       "sales": false
+      }
+     ],
+     "blog": {
+      "posts": 5,
+      "dated": 5,
+      "first": "2025-11-18",
+      "latest": "2026-08-04",
+      "recent": [
+       {
+        "page": "/blog/wisp-template",
+        "date": "2026-08-04",
+        "title": "A WISP your CPA firm can use"
+       },
+       {
+        "page": "/blog/clio-security",
+        "date": "2026-06-03",
+        "title": "Locking down Clio for small firms"
+       },
+       {
+        "page": "/blog/m365-backup",
+        "date": "2026-04-22",
+        "title": "Why Microsoft 365 is not a backup"
+       },
+       {
+        "page": "/blog/phishing-season",
+        "date": "2026-02-10",
+        "title": "Tax season is phishing season"
+       },
+       {
+        "page": "/blog/office-move-checklist",
+        "date": "2025-11-18",
+        "title": "The office move checklist"
+       }
+      ]
+     },
+     "tech": [
+      {
+       "name": "Google Analytics",
+       "kind": "analytics"
+      },
+      {
+       "name": "HubSpot",
+       "kind": "crm / marketing"
+      }
+     ],
+     "forms": 1,
+     "company": {
+      "name": "Ridgeline IT",
+      "founded": "2012",
+      "employees": 16,
+      "rating": null,
+      "reviews": null
+     },
+     "documents": [
+      {
+       "url": "https://www.ridgelineit.com/downloads/ridgeline-capabilities.pdf",
+       "title": "Ridgeline IT Capabilities",
+       "pages": 1,
+       "words": 21,
+       "credentials": [
+        "Microsoft Partner",
+        "SOC 2",
+        "HIPAA",
+        "CMMC"
+       ],
+       "industries": [
+        "law firms",
+        "accounting"
+       ],
+       "excerpt": "Ridgeline IT Capability Statement Microsoft Solutions Partner SOC 2 aligned, HIPAA and CMMC Level 1 ready Serving law firms and accounting firms since 2012"
+      }
+     ],
+     "emailSetup": {
+      "mailHost": "Microsoft 365",
+      "mailHosts": [
+       "Microsoft 365"
+      ],
+      "spf": true,
+      "senders": [
+       "Microsoft 365",
+       "HubSpot"
+      ],
+      "dmarc": "quarantine",
+      "verifiedTools": [
+       "Microsoft 365",
+       "DocuSign",
+       "KnowBe4 (security training)"
+      ]
+     },
+     "history": {
+      "firstSeen": "2013-02-15",
+      "lastSeen": "2026-06-15",
+      "monthsCaptured": 41,
+      "years": 13
+     },
+     "lookalikes": [],
+     "timeline": [
+      {
+       "year": 2013,
+       "date": "2013-06-15",
+       "title": "Ridgeline Computer Services — Charlotte PC repair",
+       "headline": "PC and network repair for small offices",
+       "description": "",
+       "url": "https://web.archive.org/web/20130615000000/http://ridgelineit.com/"
+      },
+      {
+       "year": 2016,
+       "date": "2016-06-15",
+       "title": "Ridgeline Computer Services",
+       "headline": "Computer support for Charlotte businesses",
+       "description": "",
+       "url": "https://web.archive.org/web/20160615000000/http://ridgelineit.com/",
+       "changed": [
+        "title",
+        "headline"
+       ]
+      },
+      {
+       "year": 2018,
+       "date": "2018-06-15",
+       "title": "Ridgeline IT | Managed IT for Law & Accounting Firms in Charlotte",
+       "headline": "Managed IT that law firms and accounting firms trust",
+       "description": "",
+       "url": "https://web.archive.org/web/20180615000000/http://ridgelineit.com/",
+       "changed": [
+        "title",
+        "headline"
+       ]
+      },
+      {
+       "year": 2021,
+       "date": "2021-06-15",
+       "title": "Ridgeline IT | Managed IT for Law & Accounting Firms in Charlotte",
+       "headline": "Managed IT that law firms and accounting firms trust",
+       "description": "",
+       "url": "https://web.archive.org/web/20210615000000/http://ridgelineit.com/",
+       "changed": []
+      },
+      {
+       "year": 2022,
+       "date": "2022-06-15",
+       "title": "",
+       "headline": "IT that law firms trust",
+       "description": "",
+       "url": "https://web.archive.org/web/20220615000000/http://ridgelineit.com/",
+       "changed": [
+        "headline"
+       ]
+      },
+      {
+       "year": 2025,
+       "date": "2025-06-15",
+       "title": "Ridgeline IT | Managed IT for Law & Accounting Firms in Charlotte",
+       "headline": "Managed IT that law firms and accounting firms trust",
+       "description": "",
+       "url": "https://web.archive.org/web/20250615000000/http://ridgelineit.com/",
+       "changed": [
+        "title",
+        "headline"
+       ]
+      }
+     ],
+     "money": {
+      "federal": {
+       "searched": [
+        "Ridgeline IT",
+        "Ridgelineit"
+       ],
+       "state": "NC",
+       "ppp": [
+        {
+         "amount": 118400,
+         "forgiven": true,
+         "date": "2020-04-28",
+         "recipient": "RIDGELINE IT LLC",
+         "id": "PPP-7721"
+        }
+       ],
+       "payroll": {
+        "annual": 568320,
+        "fromLoan": 118400,
+        "loanDate": "2020-04-28",
+        "basis": "PPP loan ÷ 2.5 × 12 (SBA formula: a first-draw loan was 2.5 months of 2019 payroll; pay above $100k a person was capped, so this is a floor)"
+       },
+       "contracts": [],
+       "grants": [],
+       "federalTotal": 0,
+       "recipients": [
+        "RIDGELINE IT LLC"
+       ],
+       "errors": [],
+       "source": "USAspending.gov"
+      },
+      "sec": {
+       "total": 0,
+       "filings": [],
+       "raisedMoney": false,
+       "source": "SEC EDGAR"
+      },
+      "names": [
+       "Ridgeline IT",
+       "Ridgelineit"
+      ],
+      "states": [
+       "NC"
+      ],
+      "revenue": [
+       {
+        "low": 1920000,
+        "high": 3360000,
+        "basis": "16 people × $120,000–$210,000 revenue per employee for accounting / CPA firms (Census SUSB 2022 NAICS 541211, Rosenberg survey)",
+        "floor": false
+       },
+       {
+        "low": 1160000,
+        "high": 1322000,
+        "basis": "2019 payroll about $568,320 (their PPP loan) ÷ payroll being 43–49% of revenue for accounting / CPA firms (Census SUSB 2022 NAICS 541211)",
+        "floor": true,
+        "year": 2019
+       }
+      ],
+      "benchmark": "accounting / CPA firms"
+     },
+     "offers": {
+      "ctas": [
+       "Book a free network assessment"
+      ],
+      "promos": [
+       {
+        "offer": "free network assessment",
+        "quote": "a file. — Renee Hollis, Hollis & Grant Law Book a free network assessment Download our capabilities statement 2100 South Blvd, Suite",
+        "page": "/"
+       },
+       {
+        "offer": "No long-term contracts",
+        "quote": "9 per user / month Complete $149 per user / month No long-term contracts. Onboarding included. 2100 South Blvd, Suite 300, Charlotte",
+        "page": "/pricing"
+       },
+       {
+        "offer": "Unlimited help desk",
+        "quote": "Pricing Careers Blog Contact Managed IT services Unlimited help desk, 15-minute response time guaranteed, patching and monitorin",
+        "page": "/services/managed-it"
+       },
+       {
+        "offer": "15-minute response",
+        "quote": "Contact Managed IT services Unlimited help desk, 15-minute response time guaranteed, patching and monitoring for every device.",
+        "page": "/services/managed-it"
+       },
+       {
+        "offer": "24/7 monitoring",
+        "quote": "t protection, phishing training with KnowBe4, and 24/7 monitoring. HIPAA and FINRA ready. 2100 South Blvd, Suite 300, Charlot",
+        "page": "/services/cybersecurity"
+       }
+      ],
+      "magnets": [],
+      "plans": [
+       {
+        "name": "Essentials",
+        "price": "$99 per user / month",
+        "page": "/pricing"
+       },
+       {
+        "name": "Complete",
+        "price": "$149 per user / month",
+        "page": "/pricing"
+       }
+      ]
+     },
+     "ads": [],
+     "facts": 110
+    }
+   }
+  },
+  "onboardCall": null,
+  "autobuy": null,
+  "warmup": null,
+  "conversation": {
+   "thread": [],
+   "needsReply": false,
+   "lastInAt": null,
+   "lastOutAt": null,
+   "bot": {
+    "enabled": true,
+    "sentToday": 0,
+    "maxPerDay": 3,
+    "everyone": true,
+    "forClient": true,
+    "answersNow": false,
+    "why": "The reply bot only answers while they are onboarding (after the acceptance email).",
+    "pending": null
+   },
+   "canReply": true,
+   "fromInbox": "hello@aviance.test"
+  },
+  "deliverability": {
+   "warmup": {
+    "pool": null,
+    "helpers": null,
+    "trialInboxes": null,
+    "avianceInboxes": null,
+    "families": null,
+    "providers": null,
+    "todayPairs": null,
+    "at": null,
+    "external": null
+   },
+   "placement": [],
+   "blacklists": null,
+   "bounce": {
+    "rate7d": null,
+    "sent7d": null,
+    "at": null,
+    "pauseAt": 0.015,
+    "stopAt": 0.02,
+    "halved": false
+   },
+   "gates": {
+    "seedPlacement": 0.85,
+    "mailTesterMin": 8,
+    "spamAssassinMax": 2,
+    "spamTestRequired": true
+   }
+  },
+  "leadQuality": null,
+  "links": {},
+  "virtualNow": null
+ }
+}
