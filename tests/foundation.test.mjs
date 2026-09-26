@@ -61,7 +61,10 @@ test('inbox passwords round-trip through AES-256-GCM', async () => {
   const blob = encrypt('abcd efgh ijkl mnop');
   assert.ok(blob.startsWith('v1.') && !blob.includes('abcd'));
   assert.equal(decrypt(blob), 'abcd efgh ijkl mnop');
-  const tampered = blob.slice(0, -2) + (blob.endsWith('A') ? 'BB' : 'AA');
+  // Flip the first character of the auth tag: always a different tag (the blob's last
+  // characters can be padding bits, which made this check flaky).
+  const [v, iv, tag, ct] = blob.split('.');
+  const tampered = [v, iv, (tag[0] === 'A' ? 'B' : 'A') + tag.slice(1), ct].join('.');
   assert.throws(() => decrypt(tampered));
 });
 

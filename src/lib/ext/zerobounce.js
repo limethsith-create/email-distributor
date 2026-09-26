@@ -3,13 +3,15 @@
  * monthly); unknowns are not charged. GET
  * https://api.zerobounce.net/v2/validate?api_key=&email=&ip_address= →
  * status valid|invalid|catch-all|unknown|spamtrap|abuse|do_not_mail,
- * sub_status (docs/research/v2-leads-copy.md, checked 2026-09-25).
+ * sub_status (docs/research/v2-leads-copy.md, checked 2026-09-25). The key:
+ * env wins, else the one pasted in the hub (lib/secrets.js).
  */
 
 import { fetchExt } from '@/lib/ext/http';
+import { secretOf } from '@/lib/secrets';
 
 export const SERVICE = 'zerobounce';
-export const configured = () => Boolean(process.env.ZEROBOUNCE_API_KEY);
+export const configured = async (snap = null) => Boolean(await secretOf('ZEROBOUNCE_API_KEY', snap));
 
 export function mapZeroBounce(j = {}) {
   if (j.error) {
@@ -25,7 +27,8 @@ export function mapZeroBounce(j = {}) {
   return { status: 'unknown', raw: sub || s || 'no status' };
 }
 
-export async function verify(email, { apiKey = process.env.ZEROBOUNCE_API_KEY, timeoutMs = 15_000 } = {}) {
+export async function verify(email, { apiKey = undefined, timeoutMs = 15_000 } = {}) {
+  apiKey = apiKey ?? await secretOf('ZEROBOUNCE_API_KEY');
   if (!apiKey) return { status: 'unknown', raw: 'ZEROBOUNCE_API_KEY is not set', error: 'nokey' };
   try {
     const res = await fetchExt(`https://api.zerobounce.net/v2/validate?api_key=${encodeURIComponent(apiKey)}&email=${encodeURIComponent(email)}&ip_address=`, { timeoutMs, retry: false });

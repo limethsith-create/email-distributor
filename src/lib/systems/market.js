@@ -93,12 +93,12 @@ async function saveState(clientId, s) {
   });
 }
 
-function freshState(profile, limits, round, now) {
+async function freshState(profile, limits, round, now) {
   const keywords = keywordsOf(profile);
   const states = round === 'widened' ? neighboursOf(statesOf(profile)) : statesOf(profile);
   const locations = round === 'widened' ? states.map((c) => STATES[c]) : baseLocations(profile);
   return {
-    status: 'running', round, source: placesConfigured() ? 'places' : 'overpass',
+    status: 'running', round, source: (await placesConfigured()) ? 'places' : 'overpass',
     queries: buildQueries(keywords, locations, { min: limits.queriesMin, max: limits.queriesMax }),
     states, idx: 0, page: 0, pageToken: null, ids: [], count: 0, perQuery: {}, startedAt: now.toISOString(), error: null,
   };
@@ -120,7 +120,7 @@ export async function runMarketCount(clientId, { deadline = Date.now() + 15000, 
   let s = await loadState(clientId);
   if (!s.status || s.status === 'unavailable' || s.status === 'passed' || s.status === 'declined') {
     if (s.status === 'passed' || s.status === 'declined') return { status: s.status };
-    s = freshState(profile, limits, 'base', now);
+    s = await freshState(profile, limits, 'base', now);
     if (!s.queries.length) {
       await updateClient(clientId, { intakeStep: '' });
       await io.alertOwner('market_unavailable', { clientId, vars: { clientId }, body: `The market count for ${clientId} has no industry keyword or location to search for.`, did: 'Nothing was bought. Fill industry and cities/states on the client profile, then re-run the count from Mission Control.' });
@@ -193,7 +193,7 @@ export async function runMarketCount(clientId, { deadline = Date.now() + 15000, 
   }
 
   if (s.round === 'base') {
-    const widened = freshState(profile, limits, 'widened', now);
+    const widened = await freshState(profile, limits, 'widened', now);
     if (widened.states.length) {
       // Keep what was found; the widened round adds to it.
       widened.source = s.source === 'overpass' ? 'overpass' : widened.source;

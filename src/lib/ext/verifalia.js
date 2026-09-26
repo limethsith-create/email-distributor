@@ -6,14 +6,16 @@
  * browser-app key). 200 = done; 202 = still running → poll
  * /email-validations/{id} once. Entry: classification Deliverable |
  * Undeliverable | Risky | Unknown, status (ServerIsCatchAll, …)
- * (docs/research/v2-leads-copy.md, checked 2026-09-25).
+ * (docs/research/v2-leads-copy.md, checked 2026-09-25). The login: env wins,
+ * else the one pasted in the hub (lib/secrets.js).
  */
 
 import { fetchExt } from '@/lib/ext/http';
+import { secretOf } from '@/lib/secrets';
 
 export const SERVICE = 'verifalia';
 const BASE = 'https://api.verifalia.com/v2.7';
-export const configured = () => Boolean(process.env.VERIFALIA_USERNAME && process.env.VERIFALIA_PASSWORD);
+export const configured = async (snap = null) => Boolean((await secretOf('VERIFALIA_USERNAME', snap)) && (await secretOf('VERIFALIA_PASSWORD', snap)));
 
 export function mapVerifalia(entry = {}) {
   const c = String(entry.classification || '').toLowerCase();
@@ -27,7 +29,9 @@ export function mapVerifalia(entry = {}) {
 
 const entryOf = (j) => (j?.entries?.data || j?.entries || [])[0] || null;
 
-export async function verify(email, { user = process.env.VERIFALIA_USERNAME, pass = process.env.VERIFALIA_PASSWORD, timeoutMs = 15_000, waitMs = 8000 } = {}) {
+export async function verify(email, { user = undefined, pass = undefined, timeoutMs = 15_000, waitMs = 8000 } = {}) {
+  user = user ?? await secretOf('VERIFALIA_USERNAME');
+  pass = pass ?? await secretOf('VERIFALIA_PASSWORD');
   if (!user || !pass) return { status: 'unknown', raw: 'VERIFALIA_USERNAME / VERIFALIA_PASSWORD are not set', error: 'nokey' };
   const headers = { authorization: `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}`, 'content-type': 'application/json', accept: 'application/json' };
   try {

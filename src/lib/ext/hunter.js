@@ -4,13 +4,15 @@
  * GET https://api.hunter.io/v2/email-verifier?email= with X-API-KEY →
  * data.status valid|invalid|accept_all|webmail|disposable|unknown; HTTP 202 =
  * still checking, 222 = SMTP error (docs/research/v2-leads-copy.md, checked
- * 2026-09-25).
+ * 2026-09-25). The key: env wins, else the one pasted in the hub
+ * (lib/secrets.js).
  */
 
 import { fetchExt } from '@/lib/ext/http';
+import { secretOf } from '@/lib/secrets';
 
 export const SERVICE = 'hunter';
-export const configured = () => Boolean(process.env.HUNTER_API_KEY);
+export const configured = async (snap = null) => Boolean(await secretOf('HUNTER_API_KEY', snap));
 
 export function mapHunter(data = {}) {
   const s = String(data.status || '').toLowerCase();
@@ -21,7 +23,8 @@ export function mapHunter(data = {}) {
   return { status: 'unknown', raw: s || 'no status' };
 }
 
-export async function verify(email, { apiKey = process.env.HUNTER_API_KEY, timeoutMs = 15_000 } = {}) {
+export async function verify(email, { apiKey = undefined, timeoutMs = 15_000 } = {}) {
+  apiKey = apiKey ?? await secretOf('HUNTER_API_KEY');
   if (!apiKey) return { status: 'unknown', raw: 'HUNTER_API_KEY is not set', error: 'nokey' };
   try {
     const res = await fetchExt(`https://api.hunter.io/v2/email-verifier?email=${encodeURIComponent(email)}`, { headers: { 'X-API-KEY': apiKey }, timeoutMs, retry: false });

@@ -1045,3 +1045,71 @@ heartbeat**: warm-up itself, the Lead Finder, copy/approval, the canary and spam
 tests, sending, replies, bookings, reports, the decision and everything after —
 and, until it runs, the reply bot's answers and the onboarding call's reminders
 go only when the owner opens the hub.
+
+# Keys — Settings › Keys (2026-09-26)
+
+The owner's steps to show in the hub: docs/KEYS.md (every card carries them
+too, see `steps`). One card per service key the machine needs; he pastes it
+in the hub, the machine checks it with the service before storing it
+encrypted, and never shows it again. A key set on the server (Vercel env)
+still wins: its card says `from: 'env'` and can only be tested. CheapInboxes
+and Google Meet keep their own cards (above). Every field is additive.
+
+`GET /api/mc/keys` →
+```jsonc
+{
+  "keys": [ {
+    "name": "PLACES_API_KEY",            // the card id — save/test/forget with it
+    "label": "Google Places key — finds businesses, reads reviews and market size",
+    "short": "Google Places key",
+    "optional": false,                   // ZeroBounce and Hunter are optional
+    "secret": true,                      // false only for GITHUB_REPO (a plain setting, shown as `value`)
+    "fields": ["PLACES_API_KEY"],        // env names behind the card (Verifalia: two)
+    "parts": ["username", "password"],   // Verifalia only: the body fields of a save
+    "set": true, "from": "hub|env|null",
+    "savedAt": "ISO|null", "testedAt": "ISO|null",
+    "ok": true|false|null,               // the last check: null = not tested yet
+    "problem": "Google said the key is invalid|Out of credits — …|not tested yet|null",  // plain words, null when fine
+    "detail": "Google answered a test search with 2 places|18 free checks left today|null",
+    "url": "https://console.cloud.google.com/",   // where to get it
+    "free": "…what the free plan gives…",
+    "steps": ["Go to console.cloud.google.com …", "…"],
+    "note": "Steps checked against their own help pages on 2026-09-26.|Their menus may have moved — check on their site."
+  } ],
+  "encKey": true                         // false: keys cannot be saved (ENC_KEY missing)
+}
+```
+Cards, in order: `PLACES_API_KEY`, `QUICKEMAILVERIFICATION_API_KEY`,
+`VERIFALIA` (username + password), `REOON_API_KEY`, `ZEROBOUNCE_API_KEY`,
+`HUNTER_API_KEY`, `GITHUB_TOKEN`, `GITHUB_REPO` (`value`, `default`
+`limethsith-create/email-distributor`). A secret's value is never in any
+answer.
+
+`POST /api/mc/keys`, one of:
+- `{ action: 'save', name, value }` — Verifalia: `{ action: 'save', name:
+  'VERIFALIA', username, password }` → `{ saved: true, …card }`. The machine
+  first makes ONE cheap call to the service (Places: an IDs-only text search,
+  free; QuickEmailVerification: their free sandbox; Verifalia: the credit
+  balance; Reoon: the account balance; ZeroBounce: `getcredits`; Hunter:
+  `/account`; GitHub: reads the repository and checks the token may push —
+  it never starts a job). A key the service refuses is NOT saved → 400
+  `{ error }` with the reason ("Google said the key is invalid", "Places API
+  (New) is not enabled for this key — turn it on in Google Cloud", "This
+  token cannot start jobs on limethsith-create/email-distributor — it needs
+  Contents: Read and write on that repository" …). A working key whose
+  credits are used up is saved with `problem: "Out of credits — …"`. When the
+  service could not be reached the key is saved with `ok: null, problem:
+  'not tested yet'`. 400 for a value with blanks / an unknown name · 409 when
+  set on the server · 503 no ENC_KEY.
+- `{ action: 'test', name }` → `{ tested: true, …card }` (`ok` / `problem` /
+  `detail` = the outcome; works for env keys too) · 409 not set.
+- `{ action: 'forget', name }` → `{ forgotten: true, …card }` (the hub's
+  value and its test outcome go; an env value stays and the card still says
+  `env`).
+
+Elsewhere: the Lead Finder job gets the keys it needs with
+`GET /api/clients/{id}/profile` (`keys: { places, quickEmailVerification,
+verifalia: { username, password }, reoon, zeroBounce, hunter }`) — with the
+LEADFINDER_TOKEN only, never for a browser session and never in any
+`/api/mc/hub` answer; the keys store is left out of backups whole. Alert
+`verify_no_keys` now points at Settings › Keys.

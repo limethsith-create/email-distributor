@@ -264,6 +264,16 @@ export const K = {
    */
   autobuy: (id) => `${c(id)}:autobuy`,
   // ── end CheapInboxes ──
+
+  // ── Keys store (docs/KEYS.md) ──
+  /**
+   * The owner's service keys (hash): `{ENV_NAME}` → the value, ENC_KEY-encrypted (GITHUB_REPO,
+   * a plain setting, as it is), plus per card `{card}:savedAt`, `{card}:testedAt`, `{card}:ok`
+   * ('1'|'0'|''), `{card}:problem`, `{card}:detail`. Never returned by any API; the whole hash
+   * stays out of backups (systems/backup.js) — after a restore the owner pastes the keys again.
+   */
+  secrets: () => 'secrets',
+  // ── end keys store ──
 };
 
 /**

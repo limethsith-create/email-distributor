@@ -34,6 +34,7 @@ import { deps, alert } from '@/lib/systems/stagec-common';
 import { gradeContext, gradePatch, worthVerifying, maybeRollup } from '@/lib/systems/grader';
 import { ET, dayKeyIn, partsIn } from '@/lib/time';
 import { syntaxOk, isDisposable } from '@/lib/leadquality/rules.mjs';
+import { secretsSnapshot } from '@/lib/secrets';
 import * as quickemail from '@/lib/ext/quickemail';
 import * as verifalia from '@/lib/ext/verifalia';
 import * as reoon from '@/lib/ext/reoon';
@@ -59,11 +60,16 @@ async function serviceCfg(name) {
   return services[name] || {};
 }
 
-/** Services in waterfall order that have a key set (and a config entry). */
+/** Services in waterfall order that have a key set (env or the hub's — one read of the keys store) and a config entry. */
 export async function configuredServices() {
   const order = (await cfg(null, 'VERIFY.order')) || [];
   const services = (await cfg(null, 'VERIFY.services')) || {};
-  return order.filter((n) => ADAPTERS[n] && services[n] && services[n].enabled !== false && ADAPTERS[n].configured());
+  const snap = await secretsSnapshot();
+  const out = [];
+  for (const n of order) {
+    if (ADAPTERS[n] && services[n] && services[n].enabled !== false && (await ADAPTERS[n].configured(snap))) out.push(n);
+  }
+  return out;
 }
 
 /**
@@ -196,7 +202,7 @@ export async function verifyAddress(email, { now = new Date(), services = null }
   // A catch-all verdict: ask the resolver for a real answer when it has credits.
   if (verdict?.status === 'catchall') {
     const resolver = await cfg(null, 'VERIFY.catchallResolver');
-    if (resolver && ADAPTERS[resolver]?.configured() && (await reserve(resolver, now))) {
+    if (resolver && ADAPTERS[resolver] && (await ADAPTERS[resolver].configured()) && (await reserve(resolver, now))) {
       const r = await ADAPTERS[resolver].verify(e, { timeoutMs });
       spent.push(resolver);
       if (r.error === 'quota') { await giveBack(resolver, now); await markExhausted(resolver, now); }
@@ -316,7 +322,7 @@ export async function runVerify(clientId, { now = new Date(), deadline = Date.no
     await maybeRollup(clientId, { now, ctx });
   }
   if (!names.length && out.checked) {
-    await alert('verify_no_keys', { clientId, scope: `${clientId}:verify-keys`, vars: { clientId }, body: `No email verifier API key is set, so ${clientId}'s leads can only be MX-checked and none of them is sendable. Add at least one free key in the Vercel environment: QUICKEMAILVERIFICATION_API_KEY (100/day), VERIFALIA_USERNAME + VERIFALIA_PASSWORD (25/day), REOON_API_KEY (20/day), MAILBOXVALIDATOR_API_KEY (300/month), ZEROBOUNCE_API_KEY (100/month), HUNTER_API_KEY (100 checks/month).`, did: 'The leads are marked risky (MX only) and will be re-checked automatically the day a key appears.' });
+    await alert('verify_no_keys', { clientId, scope: `${clientId}:verify-keys`, vars: { clientId }, body: `No email verifier key is set, so ${clientId}'s leads can only be MX-checked and none of them is sendable. Paste at least one free key in the hub, Settings › Keys: QuickEmailVerification (100 a day), Verifalia (25 a day), Reoon (20 a day), ZeroBounce (100 a month) or Hunter (about 100 checks a month) — each card there says how to get it.`, did: 'The leads are marked risky (MX only) and will be re-checked automatically the day a key appears.' });
   }
   if (budgetOut) {
     const pending = (await kv.zrange(K.verifyQueue(clientId), 0, -1)).length;

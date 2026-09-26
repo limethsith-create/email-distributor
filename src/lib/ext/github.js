@@ -2,19 +2,25 @@
  * GitHub API wrapper (SPEC §13): repository_dispatch for the Lead Finder
  * workflow, and verification of the workflow_run failure report.
  * GITHUB_TOKEN needs `repo` (classic) or Contents: read & write (fine-grained).
+ * The token and the repository: env wins, else what the owner pasted in the
+ * hub (lib/secrets.js, Settings › Keys), else BUILD.repo / the default.
  */
 
 import crypto from 'crypto';
 import { fetchExt } from '@/lib/ext/http';
 import { safeEqual } from '@/lib/crypto';
+import { secretOf, DEFAULT_REPO } from '@/lib/secrets';
 
-export function repoName(fallback) {
-  return (process.env.GITHUB_REPO || fallback || 'limethsith-create/email-distributor').trim();
+/** owner/repository: env GITHUB_REPO, else the hub's, else `fallback` (BUILD.repo), else the default. */
+export async function repoName(fallback = null) {
+  return String((await secretOf('GITHUB_REPO')) || fallback || DEFAULT_REPO).trim();
 }
 
 /** POST /repos/{repo}/dispatches. Resolves { ok, status, error }. Never retried (a retry could start two runs). */
-export async function repositoryDispatch(eventType, clientPayload, { token = process.env.GITHUB_TOKEN, repo = repoName() } = {}) {
-  if (!token) return { ok: false, status: 0, error: 'GITHUB_TOKEN is not set' };
+export async function repositoryDispatch(eventType, clientPayload, { token = undefined, repo = undefined } = {}) {
+  token = token ?? await secretOf('GITHUB_TOKEN');
+  repo = repo ?? await repoName();
+  if (!token) return { ok: false, status: 0, error: 'GITHUB_TOKEN is not set — paste a GitHub token in the hub (Settings › Keys)' };
   try {
     const res = await fetchExt(`https://api.github.com/repos/${repo}/dispatches`, {
       service: 'github',

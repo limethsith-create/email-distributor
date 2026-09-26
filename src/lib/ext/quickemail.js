@@ -3,13 +3,15 @@
  * signup). GET https://api.quickemailverification.com/v1/verify?email=&apikey=
  * → result valid|invalid|unknown, accept_all, disposable, role, safe_to_send;
  * remaining credits in the X-QEV-Remaining-Credits header
- * (docs/research/v2-leads-copy.md, checked 2026-09-25).
+ * (docs/research/v2-leads-copy.md, checked 2026-09-25). The key: env wins,
+ * else the one pasted in the hub (lib/secrets.js).
  */
 
 import { fetchExt } from '@/lib/ext/http';
+import { secretOf } from '@/lib/secrets';
 
 export const SERVICE = 'quickemail';
-export const configured = () => Boolean(process.env.QUICKEMAILVERIFICATION_API_KEY);
+export const configured = async (snap = null) => Boolean(await secretOf('QUICKEMAILVERIFICATION_API_KEY', snap));
 const yes = (v) => v === true || String(v).toLowerCase() === 'true';
 
 export function mapQuickEmail(j = {}) {
@@ -25,7 +27,8 @@ export function mapQuickEmail(j = {}) {
   return { status: 'unknown', raw: String(j.reason || result || 'no result') };
 }
 
-export async function verify(email, { apiKey = process.env.QUICKEMAILVERIFICATION_API_KEY, timeoutMs = 15_000 } = {}) {
+export async function verify(email, { apiKey = undefined, timeoutMs = 15_000 } = {}) {
+  apiKey = apiKey ?? await secretOf('QUICKEMAILVERIFICATION_API_KEY');
   if (!apiKey) return { status: 'unknown', raw: 'QUICKEMAILVERIFICATION_API_KEY is not set', error: 'nokey' };
   try {
     const res = await fetchExt(`https://api.quickemailverification.com/v1/verify?email=${encodeURIComponent(email)}&apikey=${encodeURIComponent(apiKey)}`, { timeoutMs, retry: false });

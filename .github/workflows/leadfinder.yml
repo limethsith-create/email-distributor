@@ -7,6 +7,12 @@ name: leadfinder
 # Email verification with the free-tier APIs (Reoon, Hunter, …) runs in the
 # app's waterfall (src/lib/systems/verify.js), which holds those keys — the
 # job needs no verifier key.
+# Keys: the owner pastes them in the hub (Settings › Keys, docs/KEYS.md) and
+# the app hands the job what it needs with the profile (`keys` in
+# GET /api/clients/{id}/profile, LEADFINDER_TOKEN only). This repository
+# therefore needs only LEADFINDER_TOKEN (and CRON_SECRET for the other
+# workflows) plus the APP_URL variable; the PLACES_API_KEY secret below is a
+# fallback for a store with no Places key and may stay empty.
 # A failure posts {type:'failed'} from the script; if the runner itself dies,
 # the repo's workflow_run webhook → /api/webhooks/github raises leadfinder_failed.
 run-name: leadfinder ${{ github.event.client_payload.clientId }} ${{ github.event.client_payload.mode }}
@@ -35,7 +41,7 @@ jobs:
         env:
           APP_URL: ${{ vars.APP_URL || 'https://email-distributor.vercel.app' }}
           LEADFINDER_TOKEN: ${{ secrets.LEADFINDER_TOKEN }}
-          PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
+          PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }} # fallback only — the app sends the hub's key with the profile
           CLIENT_PAYLOAD: ${{ toJSON(github.event.client_payload) }}
           GITHUB_RUN_ID: ${{ github.run_id }}
         run: node scripts/leadfinder/index.mjs

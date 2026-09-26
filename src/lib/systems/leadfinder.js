@@ -31,7 +31,8 @@ import { countByStatus, hostOf, saveLead, getLeadsByStatus } from '@/lib/db/lead
 import { logEvent } from '@/lib/db/events';
 import { alertOwner } from '@/lib/notify';
 import { countUsage, isThrottled } from '@/lib/systems/usage';
-import { repositoryDispatch } from '@/lib/ext/github';
+import { repositoryDispatch, repoName } from '@/lib/ext/github';
+import { leadFinderKeys } from '@/lib/secrets';
 import { checkLead, blockedHosts } from '@/lib/systems/blocklist';
 import { sanityCheck, storeSanityRows } from '@/lib/systems/sanity';
 import { nicheOf } from '@/lib/systems/copy';
@@ -58,8 +59,9 @@ async function setState(clientId, fields) {
 export async function dispatchLeadFinder(clientId, { mode = 'initial', need = null, exclude = null, widen = false } = {}, deps = {}) {
   const n = need || (mode === 'refill' ? await cfg(clientId, 'BUILD.refillNeed') : await cfg(clientId, 'LIST.need'));
   const payload = { clientId, need: n, mode, ...(exclude ? { exclude } : {}), ...(widen ? { widen: true } : {}) };
-  const repo = await cfg(clientId, 'BUILD.repo');
-  const res = await (deps.dispatch || ((p) => repositoryDispatch('leadfinder', p, { repo: process.env.GITHUB_REPO || repo })))(payload);
+  // The repository: env GITHUB_REPO, else the hub's (Settings › Keys), else BUILD.repo.
+  const repo = await repoName(await cfg(clientId, 'BUILD.repo'));
+  const res = await (deps.dispatch || ((p) => repositoryDispatch('leadfinder', p, { repo })))(payload);
   const now = new Date().toISOString();
   if (!res.ok) {
     await setState(clientId, { lastDispatchError: String(res.error || '').slice(0, 200), lastDispatchErrorAt: now });
@@ -81,8 +83,13 @@ export async function dispatchLeadFinder(clientId, { mode = 'initial', need = nu
   return { ok: true };
 }
 
-/** What GET /api/clients/{id}/profile returns to the workflow. */
-export async function profilePayload(clientId, now = new Date()) {
+/**
+ * What GET /api/clients/{id}/profile returns to the workflow. `keys: true`
+ * (only for the LEADFINDER_TOKEN-authenticated job, never for a browser
+ * session or any hub answer) adds the service keys from the store
+ * (lib/secrets.js), so GitHub needs no key secrets of its own.
+ */
+export async function profilePayload(clientId, now = new Date(), { keys = false } = {}) {
   const [client, profile, st] = await Promise.all([getClient(clientId), getProfile(clientId), getState(clientId)]);
   if (!client) return null;
   const month = monthOf(now);
@@ -115,6 +122,7 @@ export async function profilePayload(clientId, now = new Date()) {
       placesLimit,
       placesStopRatio: await cfg(clientId, 'BUILD.placesStopRatio'),
     },
+    ...(keys ? { keys: await leadFinderKeys() } : {}),
   };
 }
 

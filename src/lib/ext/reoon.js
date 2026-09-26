@@ -8,13 +8,15 @@
  *
  * `reoonVerify` keeps the v1 shape { valid: true|false|null, status, raw }
  * (null = unknown, never a guess); `verify` is the waterfall adapter
- * ({ status: valid|invalid|catchall|risky|unknown, raw, error? }).
+ * ({ status: valid|invalid|catchall|risky|unknown, raw, error? }). The key:
+ * env wins, else the one pasted in the hub (lib/secrets.js).
  */
 
 import { fetchJson } from '@/lib/ext/http';
+import { secretOf } from '@/lib/secrets';
 
 export const SERVICE = 'reoon';
-export const configured = () => Boolean(process.env.REOON_API_KEY);
+export const configured = async (snap = null) => Boolean(await secretOf('REOON_API_KEY', snap));
 
 export function mapReoon(j = {}) {
   const s = String(j.status || '').toLowerCase();
@@ -30,7 +32,8 @@ export function mapReoon(j = {}) {
   return { status: 'unknown', raw: s || 'no status' };
 }
 
-export async function verify(email, { apiKey = process.env.REOON_API_KEY, timeoutMs = 30_000 } = {}) {
+export async function verify(email, { apiKey = undefined, timeoutMs = 30_000 } = {}) {
+  apiKey = apiKey ?? await secretOf('REOON_API_KEY');
   if (!apiKey) return { status: 'unknown', raw: 'REOON_API_KEY is not set', error: 'nokey' };
   try {
     const url = `https://emailverifier.reoon.com/api/v1/verify?email=${encodeURIComponent(email)}&key=${encodeURIComponent(apiKey)}&mode=power`;

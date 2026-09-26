@@ -1,7 +1,9 @@
 // Lead Finder (SPEC §7.2, Leads v2). Runs in GitHub Actions (Node 20, no npm deps):
 //   node scripts/leadfinder/index.mjs
-// env: APP_URL, LEADFINDER_TOKEN, PLACES_API_KEY,
-//      CLIENT_PAYLOAD (the repository_dispatch client_payload JSON), GITHUB_RUN_ID
+// env: APP_URL, LEADFINDER_TOKEN, CLIENT_PAYLOAD (the repository_dispatch
+//      client_payload JSON), GITHUB_RUN_ID. The service keys come from the app
+//      with the profile (`info.keys`, the owner's keys store — docs/KEYS.md);
+//      env PLACES_API_KEY is only a fallback for when the store has none.
 //
 // 1 search (Places Enterprise mask incl. rating / reviews / business status;
 //   Overpass fallback)
@@ -230,6 +232,9 @@ export async function run({ env = process.env, fetchImpl = fetch, resolveMx = un
     const approvedTitles = list(profile.titles);
     const excludedTitles = [...list(profile.excludedTitles), ...list(exclude.titles)];
     const contactsPerCompany = Math.max(1, Math.min(3, Number(profile.contactsPerCompany) || 1));
+    // The keys the owner pasted in the hub travel with the profile; GitHub's own secret is only a fallback. Never logged.
+    const keys = info.keys && typeof info.keys === 'object' ? info.keys : {};
+    const placesKey = String(keys.places || env.PLACES_API_KEY || '');
 
     // Collect more contacts than needed: some fail verification or are catch-all.
     const findTarget = Math.ceil(need * Math.max(1, Math.min(3, Number(payload.overshoot || info.overshoot) || 1)));
@@ -246,10 +251,10 @@ export async function run({ env = process.env, fetchImpl = fetch, resolveMx = un
     const plan = queryPlan(profile, { widen });
     const viewports = new Map();
     let proUnreported = 0;
-    if (env.PLACES_API_KEY) {
+    if (placesKey) {
       search: for (const { q, kw, city, state } of plan) {
         if (cands.length >= target || placesBudget <= 0) break;
-        const r = await placesTextSearch(q, { apiKey: env.PLACES_API_KEY, fetchImpl, budgetLeft: placesBudget });
+        const r = await placesTextSearch(q, { apiKey: placesKey, fetchImpl, budgetLeft: placesBudget });
         placesBudget -= r.requests;
         placesUnreported += r.requests;
         placesTotal += r.requests;
@@ -259,7 +264,7 @@ export async function run({ env = process.env, fetchImpl = fetch, resolveMx = un
         if (r.places.length >= 60 && city && state && cands.length < target && placesBudget >= 3) {
           const key = `${city}|${state}`;
           if (!viewports.has(key)) {
-            const v = await placesCityViewport(city, state, { apiKey: env.PLACES_API_KEY, fetchImpl });
+            const v = await placesCityViewport(city, state, { apiKey: placesKey, fetchImpl });
             proUnreported += v.requests;
             viewports.set(key, v.viewport);
           }
@@ -267,7 +272,7 @@ export async function run({ env = process.env, fetchImpl = fetch, resolveMx = un
           if (!vp) continue;
           for (const rect of gridCells(vp, 3)) {
             if (cands.length >= target || placesBudget <= 0) break search;
-            const g = await placesTextSearch(kw, { apiKey: env.PLACES_API_KEY, fetchImpl, budgetLeft: placesBudget, rectangle: rect });
+            const g = await placesTextSearch(kw, { apiKey: placesKey, fetchImpl, budgetLeft: placesBudget, rectangle: rect });
             placesBudget -= g.requests;
             placesUnreported += g.requests;
             placesTotal += g.requests;

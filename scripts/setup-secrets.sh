@@ -48,6 +48,7 @@ OWNER_INBOX=you@yourdomain.com:APP_PASSWORD:Your Name
 TELEGRAM_BOT_TOKEN=   TELEGRAM_CHAT_ID=
 HC_PING_URL=          (Healthchecks.io check "tick")
 PLACES_API_KEY=       REOON_API_KEY=       GITHUB_TOKEN=
+  (or skip these three: paste them in the hub, Settings › Keys — docs/KEYS.md)
 
 cron-job.org job: every minute, GET https://email-distributor.vercel.app/api/cron/tick?source=cronjob
 with the header  Authorization: Bearer $CRON_SECRET

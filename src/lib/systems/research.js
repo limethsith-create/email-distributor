@@ -1030,7 +1030,7 @@ export async function runResearch(clientId, { now = io.now(), deadline = Date.no
     if (s.step === 'places') {
       const application = (await kv.hgetall(K.application(clientId)).catch(() => null)) || {};
       const city = application.web_city || (s.acc?.locations || [])[0] || '';
-      if (!placesConfigured()) { s.business = null; s.placesNote = 'no_key'; }
+      if (!(await placesConfigured())) { s.business = null; s.placesNote = 'no_key'; }
       else if (await isThrottled('places')) { s.business = null; s.placesNote = 'throttled'; }
       else if (left() < 3000) { await saveState(clientId, s); return { status: 'pending' }; }
       else {
@@ -1093,7 +1093,7 @@ async function marketStep(clientId, client, s, { deadline }) {
   const R = await cfg(clientId, 'RESEARCH');
   const M = await cfg(clientId, 'MARKET');
 
-  if (placesConfigured() && !(s.mkt && s.mkt.source === 'overpass')) {
+  if ((await placesConfigured()) && !(s.mkt && s.mkt.source === 'overpass')) {
     // The Market Counter's own query builder and estimate (IDs-only, free).
     const m = s.mkt || { source: 'places', queries: buildQueries([phrase], [...new Set(locs)].map((l) => `in ${l}`), { min: 1, max: R.marketQueries }), idx: 0, pageToken: null, ids: [], perQuery: {} };
     s.mkt = m;

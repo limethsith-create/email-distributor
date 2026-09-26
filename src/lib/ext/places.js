@@ -4,13 +4,24 @@
  * so the Market Counter never spends the Enterprise quota the Lead Finder
  * needs (SPEC §6.3, §13). Every call is counted under usage:places:{month}
  * field `idsOnly`.
+ *
+ * The key: env PLACES_API_KEY wins, else the one the owner pasted in the hub
+ * (lib/secrets.js, Settings › Keys).
  */
 
 import { fetchJson } from '@/lib/ext/http';
+import { secretOf } from '@/lib/secrets';
 
 const URL = 'https://places.googleapis.com/v1/places:searchText';
 
-export const placesConfigured = () => Boolean(process.env.PLACES_API_KEY);
+/** Is a Places key there at all (env or the hub's)? */
+export const placesConfigured = async () => Boolean(await secretOf('PLACES_API_KEY'));
+
+async function keyOrThrow() {
+  const key = await secretOf('PLACES_API_KEY');
+  if (!key) throw new Error('PLACES_API_KEY not set');
+  return key;
+}
 
 /**
  * One page of place ids for a text query.
@@ -18,8 +29,7 @@ export const placesConfigured = () => Boolean(process.env.PLACES_API_KEY);
  * Throws on any non-2xx so the caller can fall back to Overpass.
  */
 export async function textSearchIds(textQuery, { pageToken = null, pageSize = 20, timeoutMs = 8000 } = {}) {
-  const key = process.env.PLACES_API_KEY;
-  if (!key) throw new Error('PLACES_API_KEY not set');
+  const key = await keyOrThrow();
   const body = { textQuery, pageSize };
   if (pageToken) body.pageToken = pageToken;
   const res = await fetchJson(URL, {
@@ -55,8 +65,7 @@ export const BUSINESS_FIELDS = [
  * Missing values stay null (never 0). Throws on any non-2xx.
  */
 export async function textSearchBusiness(textQuery, { pageSize = 3, timeoutMs = 8000 } = {}) {
-  const key = process.env.PLACES_API_KEY;
-  if (!key) throw new Error('PLACES_API_KEY not set');
+  const key = await keyOrThrow();
   const res = await fetchJson(URL, {
     service: 'places',
     usageField: 'enterprise',

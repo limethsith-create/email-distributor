@@ -6,11 +6,12 @@
 
 import { kv } from '@vercel/kv';
 
-const EXCLUDE = [/^session:/, /^jobs:claim:/, /:token:/, /^throttle:/, /^claim:/, /^lead:.*:claim$/, /_lock$/, /^google:(access$|state:)/, /^cheapinboxes:(syncedat$|wake:)/];
+const EXCLUDE = [/^session:/, /^jobs:claim:/, /:token:/, /^throttle:/, /^claim:/, /^lead:.*:claim$/, /_lock$/, /^google:(access$|state:)/, /^cheapinboxes:(syncedat$|wake:)/, /^secrets$/];
 // The Google keys and token (google:oauth) stay in Redis too: after a restore the owner reconnects.
 // Same for CheapInboxes (cheapinboxes:account): the API key and the webhook secret never leave
 // Redis; after a restore he pastes the key again. An inbox's login password (loginPasswordEnc,
-// CheapInboxes inboxes) is stripped like its app password.
+// CheapInboxes inboxes) is stripped like its app password. The keys store (`secrets`, lib/secrets.js)
+// is left out whole: the owner pastes his service keys again in Settings › Keys.
 const SECRET_FIELDS = new Set(['passwordEnc', 'loginPasswordEnc', 'password', 'appPassword', 'clientIdEnc', 'clientSecretEnc', 'refreshTokenEnc', 'apiKeyEnc', 'webhookSecretEnc']);
 
 function stripSecrets(obj) {

@@ -16,6 +16,7 @@ import { K } from '@/lib/db/keys';
 import { addToBlocklist, isBlocked, hostOf } from '@/lib/db/leads';
 import { logEvent } from '@/lib/db/events';
 import { countUsage, isThrottled } from '@/lib/systems/usage';
+import { secretOf } from '@/lib/secrets';
 
 const HEADER_WORDS = new Set(['name', 'names', 'email', 'emails', 'company', 'companies', 'website', 'domain', 'domains', 'customer', 'customers', 'competitor', 'competitors', 'partner', 'partners', 'url']);
 const EMAIL_RE = /^[^\s@<>"]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
@@ -57,8 +58,9 @@ export function parseBlocklistInput(text) {
  * { name → canonicalDisplayName|null }. Skipped (null) without an API key or
  * when Places is throttled.
  */
-export async function resolveNames(names, { apiKey = process.env.PLACES_API_KEY, fetchImpl = globalThis.fetch, max = 25 } = {}) {
+export async function resolveNames(names, { apiKey = undefined, fetchImpl = globalThis.fetch, max = 25 } = {}) {
   const out = {};
+  apiKey = apiKey ?? await secretOf('PLACES_API_KEY');
   if (!apiKey || (await isThrottled('places'))) {
     for (const n of names) out[n] = null;
     return out;
