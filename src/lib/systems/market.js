@@ -180,10 +180,16 @@ export async function runMarketCount(clientId, { deadline = Date.now() + 15000, 
   const estimate = estimateFrom({ source: s.source, unique, count: s.count }, limits);
   await logEvent(clientId, SYSTEM, 'counted', { round: s.round, source: s.source, unique, count: s.count, estimate });
 
-  if (estimate >= minMarket) {
+  // Google shows at most `maxPerQuery` results for one search, so the count can
+  // never exceed queries × maxPerQuery × coverageFactor (5 × 60 × 3 = 900 —
+  // under MIN_MARKET). When EVERY search came back full, the market is at least
+  // that big and probably far bigger: that is a pass, not "too small".
+  const saturated = s.source === 'places' && s.queries.length >= limits.queriesMin
+    && s.queries.every((q) => (s.perQuery[q] || 0) >= limits.maxPerQuery);
+  if (estimate >= minMarket || saturated) {
     s.status = 'passed';
     await saveState(clientId, s);
-    return finishPass(clientId, { estimate, source: s.source, round: s.round }, now);
+    return finishPass(clientId, { estimate, source: s.source, round: s.round, capped: saturated && estimate < minMarket }, now);
   }
 
   if (s.round === 'base') {
@@ -204,11 +210,12 @@ export async function runMarketCount(clientId, { deadline = Date.now() + 15000, 
   return finishDecline(clientId, { estimate, widened: s.round === 'widened', minMarket }, now);
 }
 
-async function finishPass(clientId, { estimate, source = null, round = null, override = false }, now) {
-  await kv.hset(K.profile(clientId), { marketEstimate: estimate ?? '', marketCheckedAt: now.toISOString(), marketSource: override ? 'override' : source, marketRound: round || '' });
+async function finishPass(clientId, { estimate, source = null, round = null, override = false, capped = false }, now) {
+  // capped: every Google search was full — the estimate is a floor ("at least").
+  await kv.hset(K.profile(clientId), { marketEstimate: estimate ?? '', marketCapped: capped ? '1' : '', marketCheckedAt: now.toISOString(), marketSource: override ? 'override' : source, marketRound: round || '' });
   await setState(clientId, 'awaiting_purchase', override ? 'market override' : `market ${estimate}`);
   await updateClient(clientId, { intakeStep: 'pricescout' });
-  await logEvent(clientId, SYSTEM, 'passed', { estimate, override });
+  await logEvent(clientId, SYSTEM, 'passed', { estimate, override, capped: capped || undefined });
   return { status: override ? 'override' : 'passed', estimate };
 }
 

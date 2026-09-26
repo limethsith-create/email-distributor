@@ -292,8 +292,10 @@ test('onboarding: signer missing blocks the agreement; accept → market passes 
   assert.ok(emails.some((e) => e.key === 'agreement_copy'));
   // Blocklist Keeper ran on submit: the bare company name is in the client blocklist.
   assert.equal(await kv.sismember('client:acme:blocklist', 'name:joe s diner'), 1);
-  // 5 queries × 3 pages of 20 = 300 unique ids × 3 = 900 < 1000 → widened once and passed.
-  assert.equal(Number((await getProfile('acme')).marketEstimate) >= 1000, true);
+  // 5 queries × 3 pages of 20 = 300 unique ids × 3 = 900: every search came back full, so the
+  // market is at least that big — passed on the first round as a floor (no widening needed).
+  assert.equal(Number((await getProfile('acme')).marketEstimate), 900);
+  assert.equal((await getProfile('acme')).marketCapped, '1');
   assert.ok(fetchLog.every((u) => u.includes('places.googleapis.com')));
   // Accepting again is a no-op.
   assert.equal((await acceptAgreement('acme', { name: 'Ann Lee', title: 'CEO', agree: true })).ok, false); // page closed
@@ -327,6 +329,26 @@ test('market falls back to Overpass when Places fails, widens, then passes', asy
   assert.equal(r.status, 'passed');
   assert.equal(r.estimate, 700 * 5); // TX + AR, LA, NM, OK
   assert.equal(fetchLog.filter((u) => u.includes('overpass')).length, 5);
+});
+
+test('every Google search full → the market is at least that big: passed (a floor), not widened or declined', async () => {
+  await marketClient();
+  await kv.hset('client:mk:profile', { cities: JSON.stringify(['Dallas, TX', 'Houston, TX']) });
+  const hadKey = process.env.PLACES_API_KEY;
+  process.env.PLACES_API_KEY = 'k';
+  let n = 0;
+  globalThis.fetch = async (url) => {
+    fetchLog.push(String(url));
+    if (!String(url).includes('places.googleapis.com')) throw new Error('only Places here');
+    const places = Array.from({ length: 20 }, () => ({ id: `p${++n}` }));
+    return new Response(JSON.stringify({ places, nextPageToken: 'more' }), { status: 200 });
+  };
+  const r = await runMarketCount('mk', { deadline: Date.now() + 60000, now: new Date('2026-10-05T14:00:00Z') });
+  assert.equal(r.status, 'passed');
+  assert.ok(r.estimate < 1000, `the count itself is capped (${r.estimate})`);
+  assert.equal((await getClient('mk')).state, 'awaiting_purchase');
+  assert.equal((await kv.hgetall('client:mk:profile')).marketCapped, '1');
+  if (hadKey === undefined) delete process.env.PLACES_API_KEY; else process.env.PLACES_API_KEY = hadKey;
 });
 
 test('market still small after widening → declined, decline_market, market_small; owner override', async () => {
