@@ -11,6 +11,7 @@ import { addOwnerNote, completePromise } from '@/lib/systems/promiseregister';
 import { markInboxesCancelled } from '@/lib/systems/wrapup';
 import { markPaid } from '@/lib/systems/invoice';
 import { patchTrial, recordLedger } from '@/lib/systems/dshared';
+import { ackAlerts } from '@/lib/notify';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -84,11 +85,14 @@ export async function POST(request, { params }) {
         // state is not changed by the hold, so clearing it does not change state either.
         await kv.hset(K.client(id), { legalHoldAt: '', legalHoldReply: '', legalHoldClearedAt: new Date().toISOString() });
         await logEvent(id, 'mc', 'legal_hold_cleared', { by: 'owner' });
+        // He read it and cleared the hold: the legal_reply alert is handled too (no lingering to-do).
+        await ackAlerts(id, ['legal_reply'], { reason: 'legal hold cleared' });
         return Response.json({ ok: true });
       }
       case 'clearSendHold': {
         await kv.hset(K.client(id), { sendHold: '', sendHoldClearedAt: new Date().toISOString() });
         await logEvent(id, 'mc', 'send_hold_cleared', { by: 'owner' });
+        await ackAlerts(id, ['blacklisted'], { reason: 'send hold cleared' });
         return Response.json({ ok: true });
       }
       case 'reviewCaptured': {

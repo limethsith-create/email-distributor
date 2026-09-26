@@ -37,6 +37,7 @@ import { logEvent } from '@/lib/db/events';
 import { dayKeyIn, ET, addDays } from '@/lib/time';
 import { recordEmergencyCause } from '@/lib/systems/learning';
 import { notifyClientSafe } from '@/lib/systems/outbound';
+import { ackAlerts } from '@/lib/notify';
 import * as leadfinder from '@/lib/systems/leadfinder';
 import {
   deps, alert, isTrialClient, lower, getRunState, patchRunState, businessDaysBetween, isBusinessDayKey, ccfg } from '@/lib/systems/stagec-common';
@@ -110,7 +111,15 @@ export async function detectTrigger(clientId, client, now = new Date(), info = n
     const noReplyDays = await ccfg(clientId, 'EMERGENCY.noReplyDays');
     if (quietDays >= noReplyDays) {
       const sentSince = await recentWindow(clientId, now, Infinity, quietDays + 1, dayKeyIn(ET, new Date(since)));
-      if (sentSince.sent > 0) return { code: 'no_replies', detail: `no replies for ${quietDays} business days (${sentSince.sent} sends since)` };
+      // Silence only means trouble when this campaign's own reply rate says replies were due:
+      // at a 3 % reply rate, 28 sends with no reply happen on a healthy domain almost half the
+      // time. Fire when at least EMERGENCY.noReplyMinExpected replies were expected (5 → a
+      // healthy campaign stays silent that long under 1 % of the time; the check runs every
+      // tick for 30 days, so a looser line would still stop healthy trials).
+      const rate = (totals.replies || 0) / Math.max(1, totals.sent || 0);
+      const expected = sentSince.sent * rate;
+      const minExpected = Number(await ccfg(clientId, 'EMERGENCY.noReplyMinExpected')) || 0;
+      if (sentSince.sent > 0 && expected >= minExpected) return { code: 'no_replies', detail: `no replies for ${quietDays} business days (${sentSince.sent} sends since, about ${Math.round(expected * 10) / 10} expected)` };
     }
   }
   return null;
@@ -259,6 +268,8 @@ async function greenDays(clientId, client, em, now) {
     await kv.hset(K.client(clientId), { emergencyHalved: '0' });
     await patchEmergency(clientId, { recoveredAt: now.toISOString() });
     await alert('emergency_resolved', { clientId, vars: { clientId }, body: `${clientId}: ${streak} green days in a row (bounce under 2%, replies coming in${canary.min === null ? '' : ', canary ≥ 85%'}).`, did: 'Half-volume lifted; the Ramp Planner restores full caps from its next run.' });
+    // Resolved: the urgent `emergency` alert (and its to-do) is handled.
+    await ackAlerts(clientId, ['emergency'], { reason: 'deliverability back to normal', now });
     return 'recovered';
   }
   return green ? 'green' : 'not green';

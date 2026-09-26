@@ -303,13 +303,19 @@ test('research run: crawl (robots honoured), Places, domain age, market preview,
   assert.deepEqual(Object.keys(v), ['status', 'at', 'error', 'summary', 'website', 'business', 'market', 'flags', 'score', 'deep']);
   assert.deepEqual(Object.keys(v.website), ['url', 'title', 'description', 'headline', 'services', 'locations', 'phones', 'emails', 'socials', 'teamHint', 'yearsHint', 'pagesRead']);
   assert.deepEqual(Object.keys(v.business), ['name', 'address', 'category', 'rating', 'reviews', 'mapsUrl', 'phone']);
-  assert.deepEqual(Object.keys(v.market), ['query', 'estimate', 'source']);
+  // `capped`: a search filled Google's 60-per-search limit, so the estimate is a floor (journey fix).
+  assert.deepEqual(Object.keys(v.market), ['query', 'estimate', 'source', 'capped']);
+  assert.equal(v.market.capped, true);
   assert.equal(v.website.url, 'https://www.acme-plumbing.com/');
   assert.equal(v.website.pagesRead, 5);
   assert.equal(v.website.teamHint, '4 people on the team page');
   assert.ok(v.website.locations.includes('McKinney, TX'));
   assert.equal(v.business.rating, 4.7);
-  assert.deepEqual(v.market, { query: 'property managers in Charlotte, NC', estimate: 360, source: 'places' }); // 2 queries × 60 unique ids × coverage 3
+  // 2 queries × 60 unique ids × coverage 3 — both searches filled Google's 60-a-search limit, so this is a floor.
+  assert.deepEqual(v.market, { query: 'property managers in Charlotte, NC', estimate: 360, source: 'places', capped: true });
+  // A cut-off count never makes "Market too small" (it was every applicant's dealbreaker before: 360 < 500).
+  assert.ok(!v.score.dealbreakers.some((d) => /Market too small/.test(d.text)), JSON.stringify(v.score.dealbreakers));
+  assert.ok(v.score.parts.find((p) => p.key === 'market').items.some((i) => /^At least 360 companies to reach/.test(i.text) && i.status === 'ok'));
   assert.match(v.summary, /^Acme Plumbing is a plumber in Charlotte, NC \(4\.7★, 128 Google reviews\)\./);
   assert.deepEqual(v.flags, [], 'nothing to warn about');
 

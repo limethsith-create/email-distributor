@@ -69,7 +69,10 @@ export const DEFAULTS = {
   NOTNOW: { defaultDays: 60, quarterDays: 90, maxMoves: 1 },
   CLIENT: { quietWarnDays: 2, pauseDays: 5, endDays: 14 },
   PACE: { days: [3, 7, 12, 15, 20, 25], replyMin: 0.01, positiveMin: 0.01, bookedMin: 0.0025 },
-  EMERGENCY: { noReplyDays: 2, placementMin: 0.70, dmarcMin: 0.80, greenDays: 3 },
+  // noReplyMinExpected: the no-reply trigger needs this many replies to have been expected over the
+  // silent days (sends since the last reply × the campaign's reply rate); fewer is normal silence.
+  // 5 → a healthy campaign stays that silent under 1 % of the time (the check runs all trial long).
+  EMERGENCY: { noReplyDays: 2, noReplyMinExpected: 5, placementMin: 0.70, dmarcMin: 0.80, greenDays: 3 },
   TRIAL: { buildDays: 14, reportDay: 29, decisionDay: 30, ladderDays: [33, 37, 44], retireDay: 45, bonusHours: 24 },
   EXTENSION_CAP: 60,
   DELETE: { afterEndDays: 30 },

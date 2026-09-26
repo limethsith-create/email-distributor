@@ -305,6 +305,9 @@ export function dayBeforeDue(raw, s, now) {
 
 const callPassed = (raw, s, now) => flag(raw.bookedFor) && now.getTime() > ms(raw.bookedFor) + s.callMinutes * 60e3;
 
+/** The last answer to them was the reply bot's email (not the owner's own reply). */
+export const botAnsweredLast = (raw) => flag(raw.lastBotAt) && ms(raw.lastBotAt) >= (ms(raw.lastOwnerReplyAt) || 0);
+
 function labelFor(status, raw, s, now) {
   // A time from the booking page waiting on the owner comes first (docs/CALENDAR.md).
   if (status !== 'held' && status !== 'booked' && requestPending(raw)) {
@@ -320,7 +323,9 @@ function labelFor(status, raw, s, now) {
       return callPassed(raw, s, now) ? `Call was ${ownerWhen(raw.bookedFor)} (your time) — mark it done or no-show` : `Call booked for ${ownerWhen(raw.bookedFor)} (your time)`;
     case 'stopped': return 'Reminders stopped — nothing more is sent to them';
     case 'overdue': return `Not booked yet — it should have been booked by ${ownerWhen(raw.dueBy)} (your time)`;
-    case 'replied': return needsReply(raw) ? 'They replied — answer them below' : 'You answered — waiting for them to book';
+    case 'replied':
+      if (needsReply(raw)) return 'They replied — answer them below';
+      return botAnsweredLast(raw) ? 'The reply bot answered — waiting for them to book' : 'You answered — waiting for them to book';
     case 'opened': return 'They opened the email — waiting for them to book';
     default: return 'Email sent — waiting for them to book';
   }
@@ -360,6 +365,7 @@ export function onboardCallView(raw, thread = [], { now = new Date(), settings, 
     noShowAt: isoOrNull(raw.noShowAt),
     stoppedAt: isoOrNull(raw.stoppedAt),
     lastOwnerReplyAt: isoOrNull(raw.lastOwnerReplyAt),
+    lastBotReplyAt: isoOrNull(raw.lastBotAt),
     needsReply: needsReply(raw),
     callMinutes: s.callMinutes,
     // The Calendar (docs/CALENDAR.md): a time they asked for on the booking page, the owner's suggestion, the meeting.
@@ -981,10 +987,15 @@ export async function ownerReply(clientId, text, { now = io.now() } = {}) {
   // A double click sends once.
   const claim = await kv.set(K.onceClaim('onboard_reply', clientId, shortHash(body)), now.toISOString(), { nx: true, ex: 120 });
   if (claim !== 'OK') return { duplicate: true };
-  const vars = { threadSubject: conv.stripRe(raw.lastInSubject) || raw.subject || FIRST_SUBJECT, text: withSignOff(body, await ownerName(clientId)) };
+  // Their newest message may have come after the onboarding call ended (a question mid-trial): the call's
+  // own hash stops following them then, the conversation does not — answer THAT message, in its thread.
+  const convo = await conv.readConvo(clientId);
+  const later = convo.lastInMessageId && (ms(convo.lastInAt) || 0) > (ms(raw.lastReplyAt) || 0);
+  const threadRaw = later ? { ...raw, lastInMessageId: convo.lastInMessageId, lastInSubject: convo.lastInSubject || raw.lastInSubject, messageIds: JSON.stringify(withId(raw, convo.lastInMessageId)) } : raw;
+  const vars = { threadSubject: conv.stripRe(threadRaw.lastInSubject) || raw.subject || FIRST_SUBJECT, text: withSignOff(body, await ownerName(clientId)) };
   let res;
   try {
-    res = await sendClient(clientId, 'onboard_owner_reply', vars, { dedupe: null, thread: false, ...threadHeaders(raw) });
+    res = await sendClient(clientId, 'onboard_owner_reply', vars, { dedupe: null, thread: false, ...threadHeaders(threadRaw) });
   } catch (err) {
     await kv.del(K.onceClaim('onboard_reply', clientId, shortHash(body)));
     throw err;
@@ -992,7 +1003,7 @@ export async function ownerReply(clientId, text, { now = io.now() } = {}) {
   const at = now.toISOString();
   const copy = sentCopy(res, 'onboard_owner_reply', vars, client);
   const from = await fromInboxOf(res);
-  await patch(clientId, { lastOwnerReplyAt: at, ...(res.messageId ? { messageIds: JSON.stringify(withId(raw, res.messageId)) } : {}) });
+  await patch(clientId, { lastOwnerReplyAt: at, ...(res.messageId ? { messageIds: JSON.stringify(withId(threadRaw, res.messageId)) } : {}) });
   await pushThread(clientId, { id: `out-${shortHash(res.messageId || `${at}|owner`)}`, dir: 'out', at, from, to: lower(client.contactEmail), subject: copy.subject, text: copy.text, kind: 'owner_reply' });
   await conv.noteAnswered(clientId, at, { messageId: res.messageId || null });
   const { dropPending } = await import('@/lib/systems/replybot');
@@ -1006,10 +1017,11 @@ export async function ownerReply(clientId, text, { now = io.now() } = {}) {
  * messages so far are answered, and its email joins the thread's Message-IDs.
  * Only for a client with an onboarding conversation.
  */
-export async function markAnswered(clientId, at, messageId = null) {
+export async function markAnswered(clientId, at, messageId = null, { bot = false } = {}) {
   const raw = await readCall(clientId);
   if (!flag(raw.sentAt)) return;
-  await patch(clientId, { lastAnsweredAt: at, ...(messageId ? { messageIds: JSON.stringify(withId(raw, messageId)) } : {}) });
+  // lastBotAt: the reply bot's own email (the labels say who answered: the bot, not "you").
+  await patch(clientId, { lastAnsweredAt: at, ...(bot && messageId ? { lastBotAt: at } : {}), ...(messageId ? { messageIds: JSON.stringify(withId(raw, messageId)) } : {}) });
 }
 
 /** "Mark call booked" with the date and time the owner agreed with them. */

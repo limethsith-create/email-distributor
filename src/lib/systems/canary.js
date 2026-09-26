@@ -23,7 +23,7 @@ import { cfg, HARD_WARMUP_CAP } from '@/lib/config';
 import { getTrial, updateClient, SENDING_STATES } from '@/lib/db/client';
 import { getInboxRecords, patchInbox } from '@/lib/db/inboxes';
 import { logEvent } from '@/lib/db/events';
-import { alertOwner } from '@/lib/notify';
+import { ackAlerts, alertOwner } from '@/lib/notify';
 import { ET, dayKeyIn, trialDay, partsIn, addDays } from '@/lib/time';
 import { getHelpers, HELPER, sendMarked, processMailbox, statsFor, statBump } from '@/lib/systems/warmup';
 import { recordPlacement } from '@/lib/systems/placement';
@@ -227,6 +227,8 @@ async function finalize({ client, run, key, now }) {
     reportUrl: null,
   }).catch(() => {});
   const pct = `${Math.round(res.overall * 100)}%`;
+  // A good day again: yesterday's placement_low (urgent) is handled.
+  if (!(res.overall < warn || (res.min != null && res.min < warn))) await ackAlerts(id, ['placement_low'], { reason: 'canary placement back above the line', now });
   if (res.overall < warn || (res.min != null && res.min < warn)) {
     await alertOwner('placement_low', { clientId: id, vars: { clientId: id, rate: pct }, body: `Canary placement today: ${pct} overall, lowest inbox ${Math.round((res.min ?? 0) * 100)}%.\n${Object.entries(res.perInbox).map(([e, r]) => `${e}: ${r.inbox}/${r.sent}`).join('\n')}`, did: SENDING_STATES.has(client.state) ? 'Logged; the Emergency Runner is asked to act if any inbox is under the emergency line.' : 'Day 1 cannot start until every inbox is at the gate line.' });
   }

@@ -625,17 +625,27 @@ export async function scanAllInboxes(clientId, { now = new Date(), deadline = Da
 
 // ─── Hot-lead chaser ─────────────────────────────────────────────────────────
 
+/** The client's working day (Mon–Fri 08:00–20:00 in their zone): a "still waiting" nudge never lands at night or on a weekend. */
+export const NUDGE_HOURS = [8, 20];
+export function inClientDay(now, zone = ET) {
+  const p = partsIn(zone, now);
+  return !['Sat', 'Sun'].includes(p.weekday) && p.hour >= NUDGE_HOURS[0] && p.hour < NUDGE_HOURS[1];
+}
+
 export async function runHotChaser(clientId, now = new Date()) {
   const hot = (await kv.hgetall(K.hot(clientId))) || {};
   const nudgeH = await ccfg(clientId, 'HOT.nudgeHours');
   const holdH = await ccfg(clientId, 'HOT.holdingHours');
   const out = { nudged: 0, holding: 0 };
+  let zone = null;
   for (const [id, h] of Object.entries(hot)) {
     if (!h || h.answeredAt || !h.sentAt) continue;
     const age = (now.getTime() - Date.parse(h.sentAt)) / 3600e3;
     const lead = await getLead(clientId, h.leadEmail);
     if (!lead) continue;
-    if (age >= nudgeH && !h.nudgedAt) {
+    // The 4-hour nudge to the CLIENT waits for their working day when it falls at night or on a weekend (their zone).
+    if (age >= nudgeH && !h.nudgedAt && !zone) zone = await (await import('@/lib/systems/calendar')).zoneOfClient(clientId).catch(() => ET);
+    if (age >= nudgeH && !h.nudgedAt && inClientDay(now, zone || ET)) {
       const verbatim = String((await kv.hget(K.replies(clientId), id))?.text || '').slice(0, 600) || '(see the earlier email)';
       const r = await notifyClientSafe(clientId, 'hot_lead_nudge', { Company: lead.company || hostOf(lead.email), Name: lead.name || lead.first_name || lead.email, hours: Math.floor(age), verbatim, quote: quoteOf(verbatim) }, { from: 'trial', dedupe: `hot_nudge:${id}` });
       await kv.hset(K.hot(clientId), { [id]: { ...h, nudgedAt: now.toISOString(), nudgeSent: Boolean(r.sent) } });

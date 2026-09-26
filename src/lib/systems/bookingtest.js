@@ -22,7 +22,7 @@ import { logEvent } from '@/lib/db/events';
 import { mintToken, readToken, pageUrl, TTL } from '@/lib/pagetokens';
 import { sha256 } from '@/lib/crypto';
 import { dayKeyIn, addDays, ET } from '@/lib/time';
-import { io, asArray, truthy, firstNameOf, ownerName, sendClient, businessDaysBetween, isPublicUrl } from '@/lib/systems/intake-io';
+import { io, asArray, truthy, firstNameOf, ownerName, sendClient, businessDaysBetween, isPublicUrl, isUsBusinessDay } from '@/lib/systems/intake-io';
 
 const SYSTEM = 'bookingtest';
 
@@ -104,10 +104,21 @@ export function evaluateBooking({ status, host, slots, lengthMin }, rules, now) 
   return { problems, firstSlotDays, slots7d, lengthMin: Number.isFinite(lengthMin) ? lengthMin : null };
 }
 
-/** Is a test due now? From Day −4 (day1Date − 4) on, when the URL changed or the last test found problems ≥ 20 h ago. */
+/**
+ * The first day of the test: Day −4, or the US business day before it when Day −4 falls on a
+ * weekend or a US holiday (Day 1 on a Wednesday → the Friday before, not the Saturday), so the
+ * client gets the "60-second test" email on a working day with time to do it.
+ */
+export function testStartDay(day1Date) {
+  let d = addDays(day1Date, -4);
+  for (let i = 0; i < 10 && !isUsBusinessDay(d); i++) d = addDays(d, -1);
+  return d;
+}
+
+/** Is a test due now? From its start day (testStartDay) on, when the URL changed or the last test found problems ≥ 20 h ago. */
 export function testDue(profile, trial, now) {
   if (!profile.calendarUrl || !trial.day1Date) return false;
-  if (dayKeyIn(ET, now) < addDays(trial.day1Date, -4)) return false;
+  if (dayKeyIn(ET, now) < testStartDay(trial.day1Date)) return false;
   if (profile.bookingTestedUrl !== profile.calendarUrl) return true;
   if (profile.bookingCheckStatus === 'problems' && profile.bookingTestAt) return now.getTime() - Date.parse(profile.bookingTestAt) >= 20 * 3600e3;
   return false;

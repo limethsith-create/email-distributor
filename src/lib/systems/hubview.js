@@ -394,9 +394,27 @@ export function todosFor(ctx) {
   if (['warming', 'ready'].includes(st) && profile.bookingRequestSentAt && !truthy(profile.bookingTested)) {
     push('booking-test', 'Client has not done the 60-second booking test yet (Day 1 waits for it)', `Asked ${ago(profile.bookingRequestSentAt, now)} · reminded daily`, false, profile.bookingRequestSentAt, view('detail', id, 'setup'));
   }
+  // Open urgent alerts: one to-do per kind (a daily repeat of the same problem is one thing to do,
+  // not one more line a day), and none where a to-do above already says the same thing.
+  const covered = {
+    new_application: underReview(ctx), application_scored: underReview(ctx),
+    legal_reply: Boolean(client.legalHoldAt),
+    shopping_list: st === 'awaiting_purchase', purchase_reminder: st === 'awaiting_purchase',
+  };
+  const groups = new Map();
   for (const a of alerts) {
-    if (!a.urgent) continue;
-    push(`alert-${a.id}`, a.title, `Alert ${ago(a.at, now)} · acknowledge it once handled`, true, a.at, api('/api/mc/alerts', { action: 'ack', id: a.id }));
+    if (!a.urgent || covered[a.key]) continue;
+    if (!groups.has(a.key)) groups.set(a.key, []);
+    groups.get(a.key).push(a);
+  }
+  for (const g of groups.values()) {
+    const sorted = g.slice().sort((x, y) => String(y.at || '').localeCompare(String(x.at || '')));
+    const newest = sorted[0];
+    const oldest = sorted[sorted.length - 1];
+    const many = sorted.length > 1;
+    push(`alert-${newest.id}`, many ? `${newest.title} (${sorted.length} alerts)` : newest.title,
+      many ? `Latest ${ago(newest.at, now)}, first ${ago(oldest.at, now)} · acknowledge them once handled` : `Alert ${ago(newest.at, now)} · acknowledge it once handled`,
+      true, oldest.at, api('/api/mc/alerts', many ? { action: 'ack', ids: sorted.map((a) => a.id) } : { action: 'ack', id: newest.id }));
   }
   return t.sort((a, b) => Number(b.urgent) - Number(a.urgent) || String(a.since || '').localeCompare(String(b.since || '')));
 }
@@ -462,9 +480,9 @@ function simpleBase(ctx, todos) {
     case 'ready':
       return r('warming_up', `Ready — first emails${on(trial.day1Date)}`, 'Nothing for you');
     case 'sending':
-      return r('sending', `Sending — day ${ctx.day ?? '—'} of 30${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, ctx.day ?? null);
+      return heldSimple(ctx, r) || r('sending', `Sending — day ${ctx.day ?? '—'} of 30${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, ctx.day ?? null);
     case 'extension':
-      return r('sending', `Free extension — day ${ctx.day ?? '—'}${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, ctx.day ?? null);
+      return heldSimple(ctx, r) || r('sending', `Free extension — day ${ctx.day ?? '—'}${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, ctx.day ?? null);
     case 'paused':
       return r('sending', `Paused — ${client.pausedReason || 'by you'}`, 'No emails go out until it is cleared', false, since0, ctx.day ?? null);
     case 'deciding':
@@ -480,6 +498,19 @@ function simpleBase(ctx, todos) {
     default:
       return r('new', STATE_LABELS[st] || st, 'Nothing for you yet');
   }
+}
+
+/**
+ * Sending is held although the state still says sending: a legal reply (only he may clear it), a
+ * DNS / blacklist send hold, or a deliverability emergency. The row must not read "Sending — day 12".
+ */
+function heldSimple(ctx, r) {
+  const { client } = ctx;
+  const day = ctx.day ?? null;
+  if (client.legalHoldAt) return r('sending', 'Sending stopped — a prospect replied with a legal threat', 'Read the legal reply, then clear the hold', true, client.legalHoldAt, day);
+  if (client.sendHold) return r('sending', `Sending on hold — ${client.sendHold}`, 'Clear the send hold once the DNS or blacklist problem is fixed', true, client.sendHoldAt || null, day);
+  if (truthy(client.emergencyActive)) return r('sending', 'Sending paused — a deliverability problem the machine is fixing', 'Nothing for you: it re-checks the list and resumes at half volume by itself', false, client.pausedAt || null, day);
+  return null;
 }
 
 /** `simple` while a CheapInboxes purchase sets itself up (docs/AUTO-BUY.md): nothing for him unless a problem says so. */
@@ -511,7 +542,12 @@ function onboardingSimple(ctx, r) {
   if (oc.status === 'no_show') return r('accepted', 'They missed the call — waiting for a new time', 'Write to them in the conversation, or mark the new time once it is booked', false, oc.noShowAt);
   if (oc.status === 'overdue') return r('accepted', 'Accepted — the call is still not booked (overdue)', 'Write to them in the conversation, or send the email again', true, oc.dueBy);
   if (oc.status === 'stopped') return r('accepted', 'Accepted — reminders stopped', 'Mark the call booked if you arrange it', false, oc.stoppedAt);
-  if (oc.status === 'replied') return r('accepted', 'Accepted — you answered, waiting for them to book the call', 'Mark the call booked once you agree a time', false, oc.lastOwnerReplyAt || oc.lastReplyAt);
+  if (oc.status === 'replied') {
+    // Who answered last (the reply bot or him), and where a booking lands: his own link, or our booking page → the Calendar.
+    const bot = Boolean(oc.lastBotReplyAt) && Date.parse(oc.lastBotReplyAt) >= (Date.parse(oc.lastOwnerReplyAt || '') || 0);
+    const next = oc.bookingUrl ? 'Mark the call booked once they book with your link' : 'Nothing for you: the time they pick on your booking page comes to your Calendar';
+    return r('accepted', bot ? 'Accepted — the reply bot answered, waiting for them to pick a time' : 'Accepted — you answered, waiting for them to book the call', next, false, (bot ? oc.lastBotReplyAt : oc.lastOwnerReplyAt) || oc.lastReplyAt);
+  }
   const next = oc.nextReminderAt
     ? `Nothing for you: we remind them ${ownerDayWord(oc.nextReminderAt, now)}`
     : `Nothing for you: if it is not booked by ${ownerWhen(oc.dueBy)} (your time), you get an alert`;

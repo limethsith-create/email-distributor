@@ -2,7 +2,7 @@
  * Health colour (SPEC §10.1, from the KPIs SOP):
  *   red    = behind pace AND unanswered hot leads, or any urgent alert open
  *   yellow = behind pace OR client quiet CLIENT.quietWarnDays business days
- *            OR any warning alert open OR an overdue promise
+ *            OR any warning alert open (not news: ALERTS[key].info) OR an overdue promise
  *   green  = otherwise
  *
  * "Behind pace" for a trial = Day ≥ 15 (the off-pace check) in a running
@@ -11,6 +11,7 @@
  */
 
 import { isWeekday, partsIn, ET, dayKeyIn } from '@/lib/time';
+import { ALERTS } from '@/lib/templates/owner';
 
 const RUNNING = new Set(['sending', 'paused', 'extension']);
 
@@ -46,15 +47,17 @@ export function computeHealth({ client, trial = {}, totals = {}, day = null, ale
     const bd = businessDaysSince(lastSeen, now);
     if (bd != null && bd >= quietWarnDays) { quiet = true; reasons.push(`client quiet ${bd} business days`); }
   }
-  const urgent = alerts.filter((a) => a.urgent);
+  // News and to-do-carried heads-ups (ALERTS[key].info) are not warnings: they never colour the trial.
+  const warnings = alerts.filter((a) => a.urgent || !ALERTS[a.key]?.info);
+  const urgent = warnings.filter((a) => a.urgent);
   if (urgent.length) reasons.push(`${urgent.length} urgent alert${urgent.length === 1 ? '' : 's'} open`);
-  else if (alerts.length) reasons.push(`${alerts.length} alert${alerts.length === 1 ? '' : 's'} open`);
+  else if (warnings.length) reasons.push(`${warnings.length} alert${warnings.length === 1 ? '' : 's'} open`);
   const overdue = overduePromises(promises, now);
   if (overdue.length) reasons.push(`${overdue.length} overdue promise${overdue.length === 1 ? '' : 's'}`);
 
   let colour = 'green';
   if ((behind && hot > 0) || urgent.length) colour = 'red';
-  else if (behind || quiet || alerts.length || overdue.length) colour = 'yellow';
+  else if (behind || quiet || warnings.length || overdue.length) colour = 'yellow';
   return { colour, reasons };
 }
 

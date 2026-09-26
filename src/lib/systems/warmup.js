@@ -728,7 +728,11 @@ export async function processMailbox(member, { mode = 'warm', tag = '', now = ne
           const roll = mode === 'warm' ? rng() : 1;
           if (mode === 'warm' && depth < maxDepth && roll < (depth === 0 ? replyRate : replyRate * deeperShare) && poolByEmail[sender] && Date.now() < deadline - 5000) {
             const sentToday = (await statsFor(member.email, day)).sent || 0;
-            if (sentToday < HARD_WARMUP_CAP) {
+            // A trial inbox's replies count against its own ramp quota (3 a day in days 1–3, SPEC §7.1),
+            // not only the hard ceiling — a new inbox must not send 7 warm-up emails on its third day.
+            // Helpers and the aviance inboxes are old accounts: the ceiling alone.
+            const cap = countsForClient(member) && Number.isFinite(Number(member.quota)) ? Math.min(Number(member.quota), HARD_WARMUP_CAP) : HARD_WARMUP_CAP;
+            if (sentToday < cap) {
               const other = poolByEmail[sender];
               const quote = quoteReplies ? quotedTextFor(meta, { reader: member, sender: other }) : null;
               const reply = composeReply(rng, { fromName: member.record?.displayName, depth: depth + 1, quote, quoteMeta: { date: msg.envelope?.date || null, name: other.record?.displayName || '', email: sender, tz: member.tz || ET } });

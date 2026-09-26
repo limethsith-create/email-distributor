@@ -3,6 +3,12 @@
  * Telegram. Each alert fires at most once per day per (key, scope) unless
  * `repeatDaily` is false and `everyHour` is set.
  *
+ * `info: true` = news, not a problem (a purchase found, a bot answer, a
+ * conversion) or a heads-up whose own hub to-do carries the red dot and clears
+ * itself (a reply to answer, a time to confirm). It is still sent and logged,
+ * but an open one does not turn a trial yellow or fill the morning digest —
+ * otherwise every trial stayed yellow for good, since nobody acknowledges news.
+ *
  * Every alert body has the same shape: what happened, what the system already
  * did, and a Mission Control link — so the owner never has to investigate
  * before deciding.
@@ -53,13 +59,13 @@ export const ALERTS = {
   paused_quiet: { urgent: true, title: 'Paused — client quiet: {clientId}' },
   trial_stopped_by_client: { urgent: false, title: 'Client stopped the trial: {clientId}' },
   // Stage D
-  extension_started: { urgent: false, title: 'Extension started: {clientId}' },
+  extension_started: { urgent: false, info: true, title: 'Extension started: {clientId}' },
   talk_request: { urgent: true, title: '{clientId} wants to talk' },
-  converted: { urgent: false, title: 'Converted: {clientId} on {plan}' },
+  converted: { urgent: false, info: true, title: 'Converted: {clientId} on {plan}' },
   cancel_inboxes: { urgent: true, title: 'Cancel the inboxes for {clientId}' },
   // Scheduled
-  morning_digest: { urgent: false, title: 'Morning digest — {date}' },
-  monday_digest: { urgent: false, title: 'Monday KPIs — {date}' },
+  morning_digest: { urgent: false, info: true, title: 'Morning digest — {date}' },
+  monday_digest: { urgent: false, info: true, title: 'Monday KPIs — {date}' },
   test: { urgent: true, title: 'Test alert from Mission Control' },
   // ── Stage A additions ──
   market_unavailable: { urgent: true, title: 'Market count could not run: {clientId}' },
@@ -67,31 +73,31 @@ export const ALERTS = {
   promo_expired: { urgent: false, title: 'Promo expired: {registrar} {code}' },
   booking_link_broken: { urgent: false, title: 'Booking link problem: {clientId}' },
   new_application: { urgent: true, title: 'New trial application: {company}' },
-  application_scored: { urgent: false, title: 'Fit score for {company}: {score}' },
+  application_scored: { urgent: false, info: true, title: 'Fit score for {company}: {score}' },
   research_failed: { urgent: false, title: 'Applicant research could not finish: {clientId}' },
   // ── end Stage A ──
   // ── Stage B additions ──
   warmup_pool_small: { urgent: false, title: 'Warm-up pool has {count} members (needs {min})' },
   // docs/WARMUP-HUB.md: a trial is warming while the circle is under WARMUP.minPool — once a day at most.
   // {helpers} = "2 warm-up helpers".
-  warmup_needs_helpers: { urgent: false, title: 'Add {helpers} — the warm-up circle has {members} of {min}' },
+  warmup_needs_helpers: { urgent: false, info: true, title: 'Add {helpers} — the warm-up circle has {members} of {min}' },
   helper_unhealthy: { urgent: false, title: 'Warm-up helper not working: {email}' },
   warmup_errors: { urgent: false, title: 'Warm-up sends failing: {email}' },
   canary_incomplete: { urgent: false, title: 'Canary test incomplete: {clientId}' },
   day1_slid: { urgent: false, title: 'Day 1 moved for {clientId} to {date}' },
-  approved_by_silence: { urgent: false, title: 'Copy approved by silence: {clientId}' },
+  approved_by_silence: { urgent: false, info: true, title: 'Copy approved by silence: {clientId}' },
   // Deliverability v2
   spam_score_low: { urgent: true, title: 'Spam test {score}/10 for {email} ({clientId})' },
   placement_test_failed: { urgent: false, title: 'Spam test could not run: {clientId}' },
   bounce_pause: { urgent: true, title: 'Bounces at {rate} — caps halved: {clientId}' },
-  bounce_pause_lifted: { urgent: false, title: 'Bounces back under the pause line: {clientId}' },
+  bounce_pause_lifted: { urgent: false, info: true, title: 'Bounces back under the pause line: {clientId}' },
   blacklist_warning: { urgent: false, title: 'An address near {domain} is on a blacklist (not blocking)' },
   // ── end Stage B ──
   // ── Stage C additions ──
   hot_lead_failed: { urgent: true, title: 'Hot lead NOT delivered to {clientId}' },
   prospect_send_failed: { urgent: false, title: 'Reply to a prospect failed: {clientId} ({template})' },
   competitor_booked: { urgent: false, title: 'A competitor booked a call: {clientId}' },
-  emergency_resolved: { urgent: false, title: 'Deliverability back to normal: {clientId}' },
+  emergency_resolved: { urgent: false, info: true, title: 'Deliverability back to normal: {clientId}' },
   booking_unmatched: { urgent: false, title: 'Booking could not be matched to a prospect: {clientId}' },
   trial_ended_quiet: { urgent: true, title: 'Trial ended — client quiet 14 business days: {clientId}' },
   // Leads + Copy v2
@@ -102,7 +108,7 @@ export const ALERTS = {
   // ── Stage D additions ──
   build_behind: { urgent: false, title: 'Build behind at Day −7: {clientId} — {what}' },
   invoice_unpaid: { urgent: false, title: 'Invoice still unpaid: {clientId} ({days} days)' },
-  decision_made: { urgent: false, title: '{clientId} chose: {choice}' },
+  decision_made: { urgent: false, info: true, title: '{clientId} chose: {choice}' },
   new_inquiry: { urgent: true, title: 'New plan inquiry: {company} — call {when}' },
   // ── end Stage D ──
   // ── Google Meet (docs/REPLYBOT-MEET.md §3) ── once per broken connection (not urgent: calls
@@ -112,27 +118,27 @@ export const ALERTS = {
   // ── Onboarding call (docs/ONBOARD-CALL.md) ── phone + email (not urgent: the hub's own
   // to-do for the trial clears itself once answered/booked, an urgent alert would linger).
   // Scope is per message / booking, so each one alerts exactly once.
-  onboard_reply: { urgent: false, title: '{person} wrote — needs your answer' },
-  onboard_booked: { urgent: false, title: 'Onboarding call booked: {person}, {when}' },
-  onboard_overdue: { urgent: false, title: 'Onboarding call not booked yet: {person}' },
-  onboard_cancelled: { urgent: false, title: 'Onboarding call cancelled: {person}' },
+  onboard_reply: { urgent: false, info: true, title: '{person} wrote — needs your answer' },
+  onboard_booked: { urgent: false, info: true, title: 'Onboarding call booked: {person}, {when}' },
+  onboard_overdue: { urgent: false, info: true, title: 'Onboarding call not booked yet: {person}' },
+  onboard_cancelled: { urgent: false, info: true, title: 'Onboarding call cancelled: {person}' },
   // ── end onboarding call ──
   // ── Reply bot (docs/REPLYBOT-MEET.md §2) ── quiet: phone push at low urgency + email, one per
   // bot email. {who} = "Sam (eCreek IT)", {did} = "sent the booking link".
-  bot_replied: { urgent: false, quiet: true, title: 'Auto-replied to {who}: {did}' },
+  bot_replied: { urgent: false, info: true, quiet: true, title: 'Auto-replied to {who}: {did}' },
   // ── end reply bot ──
   // ── Calendar (docs/CALENDAR.md) ── phone + email, not urgent for the same reason: the
   // Calendar's "waiting for your yes" list and the trial's to-do carry it until answered.
   // {who} = "Sam (eCreek IT)", {when} = "Tue 30 Sep 2:00 pm ET = 11:30 pm Colombo".
-  meeting_requested: { urgent: false, title: '{who} asked for {when} — say yes in the Calendar' },
-  meeting_accepted: { urgent: false, title: '{who} said yes to {when}' },
+  meeting_requested: { urgent: false, info: true, title: '{who} asked for {when} — say yes in the Calendar' },
+  meeting_accepted: { urgent: false, info: true, title: '{who} said yes to {when}' },
   // ── end calendar ──
   // ── CheapInboxes auto-buy (docs/AUTO-BUY.md) ── phone + email. Each fires once per purchase
   // (the machine's own once-claims, on top of the daily dedupe). A problem is urgent: something
   // stopped that only the owner can fix in CheapInboxes. {what} is one plain sentence.
-  purchase_found: { urgent: false, title: 'We found {domain} — connecting it to {company}' },
-  inboxes_ready: { urgent: false, title: '{domain} and {count} inboxes are ready — warm-up has started' },
+  purchase_found: { urgent: false, info: true, title: 'We found {domain} — connecting it to {company}' },
+  inboxes_ready: { urgent: false, info: true, title: '{domain} and {count} inboxes are ready — {next}' },
   autobuy_problem: { urgent: true, title: 'Inbox setup: {what}' },
-  purchase_unmatched: { urgent: false, title: 'You bought {domain} — which trial is it for? Pick in Settings' },
+  purchase_unmatched: { urgent: false, info: true, title: 'You bought {domain} — which trial is it for? Pick in Settings' },
   // ── end CheapInboxes ──
 };

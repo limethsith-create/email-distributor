@@ -228,6 +228,9 @@ export function scoreFit(x = {}, opts = {}) {
   const est = numOr(x.market?.estimate);
   if (est === null) item('market', { max: 8, status: 'unknown', text: 'Market size: not counted yet', ask: 'Roughly how many companies could buy from you in your area?' });
   else if (est >= marketGood) item('market', { max: 8, share: 1, status: 'good', text: `About ${est.toLocaleString('en-US')} companies to reach (${clip(x.market.query, 50)})` });
+  // Google cut its answer off (a full page of results per search): the count is a floor, not a size —
+  // "at least N", never "too small". The full Market Counter runs after the agreement.
+  else if (x.market?.capped) item('market', { max: 8, share: 0.5, status: 'ok', text: `At least ${est.toLocaleString('en-US')} companies to reach — Google lists at most 60 per search, so there are more; the full count runs after they sign` });
   else if (est >= marketMin) item('market', { max: 8, share: 0.5, status: 'ok', text: `About ${est.toLocaleString('en-US')} companies to reach — under ${marketGood.toLocaleString('en-US')}` });
   // OpenStreetMap only counts businesses whose NAME has the words: too rough to turn anyone down on.
   else if (x.market?.source === 'overpass') item('market', { max: 8, status: 'unknown', text: `OpenStreetMap found ${est.toLocaleString('en-US')} by name — too rough to judge`, ask: 'Roughly how many companies could buy from you in your area?' });

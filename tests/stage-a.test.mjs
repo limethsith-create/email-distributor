@@ -616,9 +616,14 @@ test('booking test sends the one-tap request; the tap sets bookingTested', async
   await kv.hset('client:acme:trial', { signedDay: '2026-10-02', day1Date: '2026-10-16' });
   await kv.hset('client:acme:profile', { calendarUrl: 'https://tidycal.com/acme/30' });
   io.fetchExt = async () => ({ status: 200, ok: true, url: 'https://tidycal.com/acme/30', text: async () => '<html>TidyCal</html>' });
-  const { runBookingTest, confirmBookingOk } = await import('@/lib/systems/bookingtest');
-  assert.equal((await runBookingTest('acme', { now: new Date('2026-10-11T14:00:00Z') })).skipped, 'not due');
-  const r = await runBookingTest('acme', { now: new Date('2026-10-12T14:00:00Z') });
+  const { runBookingTest, confirmBookingOk, testStartDay } = await import('@/lib/systems/bookingtest');
+  // Day −4 is Monday 12 October, a US holiday (Columbus Day): the test starts the business day before
+  // it, Friday 9 October — never on a holiday or a weekend (journey fix).
+  assert.equal(testStartDay('2026-10-16'), '2026-10-09');
+  assert.equal(testStartDay('2026-10-21'), '2026-10-16', 'Day 1 on a Wednesday: Day −4 is Saturday → Friday');
+  assert.equal(testStartDay('2026-10-23'), '2026-10-19', 'a weekday Day −4 stays');
+  assert.equal((await runBookingTest('acme', { now: new Date('2026-10-08T14:00:00Z') })).skipped, 'not due');
+  const r = await runBookingTest('acme', { now: new Date('2026-10-09T14:00:00Z') });
   assert.equal(r.ok, true);
   const mail = emails.find((e) => e.key === 'booking_test_request');
   const token = mail.vars.link.match(/\/c\/([^/]+)\/booking-ok$/)[1];

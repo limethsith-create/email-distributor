@@ -610,7 +610,7 @@ async function answerPending(clientId, s, onboard, now) {
     }
     if (a.stop) await call.stopReminders(clientId, { now }).catch(() => {});
   }
-  await call.markAnswered(clientId, at, messageId);
+  await call.markAnswered(clientId, at, messageId, { bot: true });
   await conv.noteAnswered(clientId, at, { messageId });
   await conv.patchConvo(clientId, { botPending: null, botDay: day, botCount: count + 1 });
   await kv.srem(K.replyBotPending(), clientId);

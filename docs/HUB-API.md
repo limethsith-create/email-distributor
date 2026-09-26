@@ -987,3 +987,61 @@ or an inbox still under the line past the Day 1 slide window).
   of 8" — at most once a day while a trial waits; push `url`
   `/#settings/warmup`. (It replaces the daily `warmup_pool_small` while a
   trial waits.)
+
+# Journey run (2026-09-26) — what changed for the hub
+
+A full simulated journey of one applicant (tests/journey.test.mjs: the website
+form → the owner's yes → the reply bot → the booking page and the Calendar with
+Google Meet → the onboarding page → CheapInboxes → warm-up → Day 1 → Day 30 →
+converted → paid), through the real routes, found the problems below; each is
+fixed. Every change is additive for the hub.
+
+**The hub's answers after every step** are saved in
+`tests/fixtures/journey/NN-step.json` (`{ step, what, at, check, board, detail,
+extra? }` — `extra.calendar` = `GET /api/mc/calendar`, `extra.cheapinboxes`,
+`extra.warmupSettings`). Real shapes; tokens, pixel tokens and Message-IDs are
+replaced by `TOKEN_n` / `PIXEL_n` / `MSGID_n`; `detail.events` is cut to its
+newest 40. Regenerate: `JOURNEY_SNAPSHOTS=1 node --import ./tests/register.mjs --test tests/journey.test.mjs`
+(`JOURNEY_REPORT=dir` also writes a readable journey.md of every step).
+
+## Alerts and to-dos
+- The machine acknowledges a trial's alerts once what they were about is done
+  (`acknowledgedBy: 'machine'`, `ackReason`): `new_application` /
+  `application_scored` on Say yes / Say no, `legal_reply` on clearing the legal
+  hold, `dns_fail` when DNS passes again, `blacklisted` when clean, the setup
+  alerts when the setup passes, `shopping_list` / `purchase_reminder` once
+  bought, `placement_low` on a good canary day, `emergency` when resolved. Before,
+  an urgent alert stayed a to-do (and a red dot) until the owner found it.
+- An open urgent alert is ONE to-do per kind: repeats read "… (3 alerts)" and the
+  button acknowledges them all — `POST /api/mc/alerts` takes `{ action: 'ack',
+  ids: [...] }` as well as `{ action: 'ack', id }` (→ `{ ok, acknowledged: n }`).
+  No alert to-do where a to-do already says it (the application review, the legal
+  hold, the buy to-do).
+- Alert titles name the trial ("Angry reply: Ridgeline IT"), not its id.
+- `ALERTS[key].info` (news: a purchase found, a bot answer, a conversion; or a
+  heads-up whose own to-do clears itself: a reply to answer, a time to confirm)
+  never turns a trial yellow and is left out of the morning digest.
+- `inboxes_ready` says "… are ready — add 6 warm-up helpers to start warm-up"
+  while the circle is short (title `{domain} and {count} inboxes are ready — {next}`).
+
+## Statuses
+- `simple` while sending is held: "Sending stopped — a prospect replied with a
+  legal threat" / "Sending on hold — …" (`needsYou: true`), "Sending paused — a
+  deliverability problem the machine is fixing".
+- After the reply bot answered: "Accepted — the reply bot answered, waiting for
+  them to pick a time" (+ `onboardCall.lastBotReplyAt`; the card's label "The reply
+  bot answered — waiting for them to book").
+- `application.research.market.capped: true` when a Google search was cut off at
+  60 places: the count is a floor ("at least 360") — never "Market too small".
+
+## Without the heartbeat
+`POST /api/mc/onboard-calls/check` (and the agreement's after()) also carry the
+intake on when no tick ran in the last 5 minutes — the research, the market
+count, the Price Scout (the shopping list + the client's "setup in progress"),
+a pasted purchase's setup round, the welcome email and the onboarding page's
+reminders (`carried: [{ job, clientId }]` in the answer). With CheapInboxes the
+webhook and the check carry the purchase to `warming`. **Still needs the
+heartbeat**: warm-up itself, the Lead Finder, copy/approval, the canary and spam
+tests, sending, replies, bookings, reports, the decision and everything after —
+and, until it runs, the reply bot's answers and the onboarding call's reminders
+go only when the owner opens the hub.

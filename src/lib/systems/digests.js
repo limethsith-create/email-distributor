@@ -25,10 +25,12 @@ import { clientNow } from '@/lib/testclock';
 import { getAllClients } from '@/lib/db/client';
 import { getEvents } from '@/lib/db/events';
 import { alertOwner, getAlertLog } from '@/lib/notify';
-import { dayKeyIn, OWNER_TZ, ET } from '@/lib/time';
+import { dayKeyIn, OWNER_TZ } from '@/lib/time';
 import { boardData } from '@/lib/systems/boarddata';
 import { promisesDue } from '@/lib/systems/promiseregister';
 import { getLedger, cfgTree } from '@/lib/systems/dshared';
+import { ALERTS } from '@/lib/templates/owner';
+import { isConnected as cheapInboxesConnected } from '@/lib/ext/cheapinboxes';
 
 function didSummary(events, since) {
   const recent = events.filter((e) => e.at && Date.parse(e.at) >= since && e.event !== 'job_error');
@@ -50,8 +52,10 @@ export async function configDrift() {
 
 export async function morningDigest({ now = new Date(), send = true } = {}) {
   const clients = await getAllClients();
-  const alerts = (await getAlertLog(500)).filter((a) => !a.acknowledged && !['morning_digest', 'monday_digest'].includes(a.key));
+  // Problems only: news (ALERTS[key].info — a purchase found, a bot answer) is not an open alert to list every morning.
+  const alerts = (await getAlertLog(500)).filter((a) => !a.acknowledged && (a.urgent || !ALERTS[a.key]?.info));
   const since = now.getTime() - 24 * 3600_000;
+  const ciOn = await cheapInboxesConnected().catch(() => false);
   const sections = [];
   const dueLines = [];
   const topLines = [];
@@ -61,7 +65,8 @@ export async function morningDigest({ now = new Date(), send = true } = {}) {
       const shop = (await kv.hgetall(K.shopping(c.id))) || {};
       if (shop.escalatedAt && !shop.boughtAt) {
         const hours = shop.sentAt ? Math.floor((now.getTime() - Date.parse(shop.sentAt)) / 3600e3) : null;
-        topLines.push(`NOT BOUGHT: ${c.name || c.id} — shopping list sent ${hours != null ? `${hours} h ago` : 'earlier'} (${shop.chosenDomain || 'see the list'}). Paste the logins on /mc/clients/${c.id}/purchase.`);
+        const how = ciOn ? 'Buy them on CheapInboxes — the hub shows exactly what; the machine connects everything after.' : `Paste the logins on /mc/clients/${c.id}/purchase.`;
+        topLines.push(`NOT BOUGHT: ${c.name || c.id} — shopping list sent ${hours != null ? `${hours} h ago` : 'earlier'} (${shop.chosenDomain || 'see the list'}). ${how}`);
       }
     }
     if (['warming', 'ready'].includes(c.state)) {
@@ -130,7 +135,9 @@ export async function mondayDigest({ now = new Date(), send = true } = {}) {
     'Health:',
     ...(colours.length ? colours : ['  • no clients']),
   ].join('\n');
-  const date = dayKeyIn(ET, now);
+  // The owner's own date, like the morning digest: it goes out Monday 08:00 in Sri Lanka, which is
+  // still Sunday in the US — "Monday KPIs — <Sunday's date>" read wrong.
+  const date = dayKeyIn(OWNER_TZ, now);
   const res = send ? await alertOwner('monday_digest', { vars: { date }, body, did: 'Numbers from stored counters and the trial ledger only.' }) : null;
   return { body, sent: res?.sent ?? false, finished: finished.length };
 }

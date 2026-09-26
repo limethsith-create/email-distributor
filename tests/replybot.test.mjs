@@ -579,7 +579,8 @@ test('a client past onboarding: their reply lands in the conversation (no bot), 
 });
 
 test('alerts: bot_replied is quiet and never urgent; onboard_reply says it needs an answer', () => {
-  assert.deepEqual(ALERTS.bot_replied, { urgent: false, quiet: true, title: 'Auto-replied to {who}: {did}' });
+  // info: news, not a problem — it never turns a trial yellow (journey fix).
+  assert.deepEqual(ALERTS.bot_replied, { urgent: false, info: true, quiet: true, title: 'Auto-replied to {who}: {did}' });
   assert.equal(fill('alert:bot_replied', ALERTS.bot_replied.title, { who: 'Sam (eCreek IT)', did: 'sent the booking link' }), 'Auto-replied to Sam (eCreek IT): sent the booking link');
   assert.equal(ALERTS.onboard_reply.urgent, false);
 });

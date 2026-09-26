@@ -622,7 +622,7 @@ export function buildSummary({ name, host, website, business, businessMatched, m
   if (website?.teamHint) bits.push(/^\d/.test(website.teamHint) ? `shows ${website.teamHint}` : website.teamHint.replace(/^Website /, '').replace(/^says/, 'says'));
   if (bits.length) out.push(`The website ${listText(bits)}.`);
   if (market && Number.isFinite(market.estimate)) {
-    out.push(`A quick ${market.source === 'overpass' ? 'OpenStreetMap' : 'Google Maps'} count suggests about ${market.estimate.toLocaleString('en-US')} ${market.query}.`);
+    out.push(`A quick ${market.source === 'overpass' ? 'OpenStreetMap' : 'Google Maps'} count suggests ${market.capped ? 'at least' : 'about'} ${market.estimate.toLocaleString('en-US')} ${market.query}.`);
   }
   return out.slice(0, 3).join(' ');
 }
@@ -1113,7 +1113,10 @@ async function marketStep(clientId, client, s, { deadline }) {
       }
       await saveState(clientId, s);
     }
-    s.market = { query: m.queries[0], estimate: estimateFrom({ source: 'places', unique: m.ids.length }, M), source: 'places' };
+    // Google lists at most MARKET.maxPerQuery places per search: a search that filled it was cut off, so the
+    // estimate is a floor ("at least"), never proof the market is small (systems/fitscore.js reads `capped`).
+    const capped = Object.values(m.perQuery).some((n) => n >= M.maxPerQuery);
+    s.market = { query: m.queries[0], estimate: estimateFrom({ source: 'places', unique: m.ids.length }, M), source: 'places', ...(capped ? { capped: true } : {}) };
     s.mkt = null;
     return 'done';
   }

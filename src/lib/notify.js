@@ -116,11 +116,17 @@ export async function alertOwner(key, { clientId = null, vars = {}, body = '', d
     }
   }
 
+  // Titles are read by the owner (hub to-dos, phone, email subject): a trial's {clientId}
+  // shows as its name ("Ridgeline IT"), not the id slug ("ridgelineit"). The record keeps the id.
+  let shown = null;
+  if (clientId && (vars.clientId === undefined || vars.clientId === clientId)) {
+    try { shown = (await kv.hget(K.client(clientId), 'name')) || null; } catch { shown = null; }
+  }
   let title;
   try {
-    title = fill(`alert:${key}`, spec.title, { clientId, ...vars });
+    title = fill(`alert:${key}`, spec.title, { clientId, ...vars, ...(shown ? { clientId: String(shown) } : {}) });
   } catch {
-    title = `${key}${clientId ? ` (${clientId})` : ''}`;
+    title = `${key}${clientId ? ` (${shown || clientId})` : ''}`;
   }
   const link = clientId ? `${baseUrl()}/mc/clients/${clientId}` : `${baseUrl()}/mc`;
   const text = [
@@ -161,6 +167,41 @@ export async function alertOwner(key, { clientId = null, vars = {}, body = '', d
 
 export async function getAlertLog(limit = 200) {
   try { return (await kv.lrange(K.alertLog(), 0, limit - 1)) || []; } catch { return []; }
+}
+
+/**
+ * Acknowledge open alerts in the log (the hub's to-do for an urgent alert goes
+ * with it). `match(alert)` picks them; each is re-read at its index right
+ * before the write, so an alert pushed in between (the list shifts) is never
+ * overwritten — it is simply left for the owner. → how many were acknowledged.
+ */
+export async function ackMatching(match, { by = 'owner', reason = null, now = new Date() } = {}) {
+  let list;
+  try { list = await getAlertLog(LOG_CAP); } catch { return 0; }
+  let n = 0;
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i];
+    if (!a || a.acknowledged || !match(a)) continue;
+    try {
+      const [cur] = (await kv.lrange(K.alertLog(), i, i)) || [];
+      if (!cur || cur.id !== a.id) continue;
+      await kv.lset(K.alertLog(), i, { ...cur, acknowledged: true, acknowledgedAt: now.toISOString(), acknowledgedBy: by, ...(reason ? { ackReason: String(reason).slice(0, 120) } : {}) });
+      n++;
+    } catch { /* leave it open: the owner can still acknowledge it */ }
+  }
+  return n;
+}
+
+/**
+ * The machine handled what a trial's alerts were about (the application was
+ * decided, the legal hold cleared, DNS passes again …): acknowledge that
+ * client's open alerts of these keys, so an urgent one does not linger as a
+ * to-do — and a red dot — after the thing is done.
+ */
+export async function ackAlerts(clientId, keys, { reason = 'handled', now = new Date() } = {}) {
+  if (!clientId) return 0;
+  const want = new Set([].concat(keys || []));
+  return ackMatching((a) => a.clientId === clientId && want.has(a.key), { by: 'machine', reason, now });
 }
 
 /**

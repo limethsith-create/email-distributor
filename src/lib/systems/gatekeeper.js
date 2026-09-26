@@ -20,6 +20,7 @@ import { mintToken, pageUrl, TTL } from '@/lib/pagetokens';
 import { dayKeyIn, daysBetween, addDays, ET } from '@/lib/time';
 import { io, truthy, asArray, firstNameOf, ownerName, sendClient, formatDay, nextUsBusinessDay, isPublicUrl } from '@/lib/systems/intake-io';
 import { sendAcceptance, readCall, onboardPageClock } from '@/lib/systems/onboardcall';
+import { ackAlerts } from '@/lib/notify';
 
 const SYSTEM = 'gatekeeper';
 /** Earlier records in these states do not block a new application (no trial was ever run). */
@@ -425,7 +426,10 @@ export async function approveApplication(clientId, { now = io.now() } = {}) {
   await kv.hset(K.application(clientId), { review: 'approved', decision: 'approve', decidedAt: now.toISOString() });
   await logEvent(clientId, SYSTEM, 'review_approved', {});
   try {
-    return await decide(clientId, { mainDomain: application.mainDomain }, { preApproved: true, now });
+    const out = await decide(clientId, { mainDomain: application.mainDomain }, { preApproved: true, now });
+    // Decided: the new_application alert (urgent) is handled — no to-do or red dot lingers after the yes.
+    await ackAlerts(clientId, ['new_application', 'application_scored'], { reason: 'application approved', now });
+    return out;
   } catch (err) {
     // Email first, state second: nothing changed for the applicant, so the application waits again.
     if ((await getClient(clientId))?.state === 'applied') {
@@ -444,7 +448,9 @@ export async function declineApplication(clientId, reason, { now = io.now() } = 
   await pendingApplication(clientId);
   await kv.hset(K.application(clientId), { review: 'declined', decision: 'decline', declineReason: text.slice(0, 500), decidedAt: now.toISOString() });
   await logEvent(clientId, SYSTEM, 'review_declined', {});
-  return decline(clientId, 'owner', 'decline_fit', { reason: text }, now);
+  const out = await decline(clientId, 'owner', 'decline_fit', { reason: text }, now);
+  await ackAlerts(clientId, ['new_application', 'application_scored'], { reason: 'application declined', now });
+  return out;
 }
 
 // ── queue ───────────────────────────────────────────────────────────────────

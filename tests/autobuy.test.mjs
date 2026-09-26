@@ -375,7 +375,7 @@ test('personas and the pure helpers', () => {
   assert.equal(mailboxState({ status: 'pending' }), 'provisioning');
   for (const k of ['purchase_found', 'inboxes_ready', 'autobuy_problem', 'purchase_unmatched']) assert.ok(ALERTS[k], k);
   assert.equal(fill('t', ALERTS.purchase_found.title, { domain: 'acmeoutreach.com', company: 'Acme' }), 'We found acmeoutreach.com — connecting it to Acme');
-  assert.equal(fill('t', ALERTS.inboxes_ready.title, { domain: 'acmeoutreach.com', count: 2 }), 'acmeoutreach.com and 2 inboxes are ready — warm-up has started');
+  assert.equal(fill('t', ALERTS.inboxes_ready.title, { domain: 'acmeoutreach.com', count: 2, next: 'warm-up has started' }), 'acmeoutreach.com and 2 inboxes are ready — warm-up has started');
   assert.equal(fill('t', ALERTS.purchase_unmatched.title, { domain: 'x.com' }), 'You bought x.com — which trial is it for? Pick in Settings');
   assert.equal(autobuyView({ client: { id: 'a', state: 'onboarding' } }), null, 'not at the buying step: no autobuy');
 });
@@ -553,7 +553,9 @@ test('sync: forwarding once, logins → encrypted inbox records in the existing 
   assert.ok((await getInboxRecords('acme')).every((r) => r.enabled === '1' && r.warmupStartedAt));
   const ready = alerts.filter((a) => a.key === 'inboxes_ready');
   assert.equal(ready.length, 1);
-  assert.equal(fill('t', ALERTS.inboxes_ready.title, ready[0].vars), `${buy.domain} and 2 inboxes are ready — warm-up has started`);
+  // No helpers in this test's circle (2 of 8): the alert says what warm-up still needs (journey fix), not "started".
+  assert.equal(fill('t', ALERTS.inboxes_ready.title, ready[0].vars), `${buy.domain} and 2 inboxes are ready — add 6 warm-up helpers to start warm-up`);
+  assert.match(ready[0].body, /the circle has 2 of the 8 members it needs — add 6 in the hub, Settings › Warm-up/);
   assert.equal((await getClient('acme')).autobuyOpen, '0');
   ab = (await hubClient('acme')).autobuy;
   assert.equal(ab.status, 'done');

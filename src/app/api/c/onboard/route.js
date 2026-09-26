@@ -5,11 +5,15 @@
  * click-to-accept agreement, which then starts the Market Counter).
  */
 
+import { after } from 'next/server';
 import { readToken } from '@/lib/pagetokens';
 import { loadOnboarding, saveOnboarding, acceptAgreement } from '@/lib/systems/onboarding';
+import { carryIntake } from '@/lib/systems/carry';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+// The agreement runs the market count for up to 20 s; after the answer the count (if it needs
+// longer) and the Price Scout carry on here when the heartbeat is not running (systems/carry.js).
+export const maxDuration = 60;
 
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
@@ -29,6 +33,7 @@ export async function POST(request) {
         const ip = (request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || request.headers.get('x-real-ip') || 'unknown';
         const r = await acceptAgreement(id, { name: body.name, title: body.title, agree: body.agree === true, ip, deadline: Date.now() + 20000 });
         if (!r.ok) return Response.json(r, { status: 400 });
+        try { after(() => carryIntake({ clientId: id, deadline: Date.now() + 30000 })); } catch { /* not inside a request (tests) */ }
         return Response.json({ ...r, ...(await loadOnboarding(id)) });
       }
       default:

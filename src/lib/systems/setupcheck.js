@@ -27,8 +27,9 @@ import { logEvent } from '@/lib/db/events';
 import { getInboxRecords, toAccount, patchInbox } from '@/lib/db/inboxes';
 import { initCounters } from '@/lib/db/counters';
 import { parseAccount } from '@/lib/smtp-accounts';
-import { dayKeyIn, addDays, ET } from '@/lib/time';
+import { dayKeyIn, addDays, partsIn, ET } from '@/lib/time';
 import { io, asObject, firstNameOf, ownerName, sendClient, formatDay, nextUsBusinessDay } from '@/lib/systems/intake-io';
+import { ackAlerts } from '@/lib/notify';
 
 const SYSTEM = 'setupcheck';
 
@@ -401,10 +402,23 @@ export async function finishSetup(clientId, { now = io.now() } = {}) {
   await setState(clientId, 'warming', 'all setup checks passed');
   await updateClient(clientId, { intakeStep: 'welcome' });
   await logEvent(clientId, SYSTEM, 'passed', dates);
-  await sendWelcome(clientId, { now }).catch(async (err) => {
-    await logEvent(clientId, SYSTEM, 'welcome_failed', { error: String(err.message).slice(0, 200) });
-  });
+  // Every check passes now: the setup alerts of an earlier failed round (and the buy reminders) are handled.
+  await ackAlerts(clientId, ['dns_fail', 'inbox_auth_fail', 'loopback_fail', 'blacklisted', 'shopping_list', 'purchase_reminder'], { reason: 'setup checks passed', now });
+  // The two dates go in the daytime (08:00–20:00 US Eastern): a setup that passes at night (a CheapInboxes
+  // webhook can come any time) leaves welcome_two_dates to the `welcome` job / the hub's check in the morning.
+  if (inDaytime(now)) {
+    await sendWelcome(clientId, { now }).catch(async (err) => {
+      await logEvent(clientId, SYSTEM, 'welcome_failed', { error: String(err.message).slice(0, 200) });
+    });
+  } else await logEvent(clientId, SYSTEM, 'welcome_waits', { until: '08:00 US Eastern' });
   return { phase: 'passed', ...dates };
+}
+
+/** 08:00–20:00 US Eastern, any day: when an automatic email to a client may go (never at night). */
+export const DAYTIME = ['08:00', '20:00'];
+export function inDaytime(now) {
+  const p = partsIn(ET, now);
+  return p.hhmm >= DAYTIME[0] && p.hhmm < DAYTIME[1];
 }
 
 /** welcome_two_dates; retried hourly by the `welcome` job until sent. */

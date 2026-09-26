@@ -229,6 +229,29 @@ export function shoppingText(client, list, { autoBought = null, link }) {
   return lines.join('\n');
 }
 
+/** The shopping list alert while CheapInboxes is connected: buy there, the machine connects everything after. */
+async function cheapInboxesShoppingText(clientId, client, { link }) {
+  const buy = await buyOnCheapInboxes(clientId);
+  const orderUrl = await cfg(null, 'CHEAPINBOXES.orderUrl');
+  return [
+    `Shopping list for ${client.name || client.id} (${client.mainDomain}).`, '',
+    buy ? `Buy on CheapInboxes: ${buy.domain}${buy.price != null ? ` (${money(buy.price)} first year)` : ''} with ${buy.mailboxes.length || 2} inboxes${buy.mailboxes.length ? ` — ${buy.mailboxes.map((m) => m.email).join(', ')}` : ''}.`
+      : 'Buy their domain and 2 inboxes on CheapInboxes — the hub shows exactly which in a minute (open the trial).',
+    `Order page: ${orderUrl}`,
+    'The machine finds the purchase in your CheapInboxes account and does the rest: forwarding, logins, setup checks, warm-up. Nothing to paste.',
+    '', `The trial in Mission Control: ${link}`,
+  ].join('\n');
+}
+
+/** What the hub shows to buy on CheapInboxes (client:{id}:autobuy `buy`), or null while it is being made. */
+async function buyOnCheapInboxes(clientId) {
+  try {
+    const raw = await kv.hget(K.autobuy(clientId), 'buy');
+    const b = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return b && b.domain ? { domain: b.domain, price: b.price ?? null, mailboxes: Array.isArray(b.mailboxes) ? b.mailboxes : [] } : null;
+  } catch { return null; }
+}
+
 /**
  * Domain availability + prices + inboxes for a client → the list (no side
  * effects beyond the RDAP / price caches). `exclude` drops names (e.g. a
@@ -363,7 +386,10 @@ export async function runPriceScout(clientId, { deadline = Date.now() + 15000, n
     scoutRuns: 0,
   });
 
-  const body = shoppingText(client, list, { autoBought, link });
+  // With CheapInboxes connected (docs/AUTO-BUY.md) he buys the domain AND the inboxes there — the
+  // registrar list and the paste form would send him the other way. The hub shows exactly what to buy.
+  const ciOn = !autoBought && await cheapInboxesConnected().catch(() => false);
+  const body = ciOn ? await cheapInboxesShoppingText(clientId, client, { link }) : shoppingText(client, list, { autoBought, link });
   const alert = await io.alertOwner('shopping_list', { clientId, vars: { clientId }, body, did: `Market passed (${profile.marketEstimate || 'override'}). ${autoBought ? 'Domain bought automatically; only the inboxes are left.' : 'Nothing bought yet.'}` });
   if (!alert.sent && !alert.deduped) {
     await kv.del(K.onceClaim('shopping_list', clientId, 'sent'));
@@ -423,9 +449,12 @@ export async function runPurchaseNudge({ clientId, now = io.now() }) {
   const [first, second] = await cfg(clientId, 'PURCHASE.reminderHours');
   const link = `${baseUrl()}/mc/clients/${clientId}/purchase`;
   // With CheapInboxes connected (docs/AUTO-BUY.md) he only buys; the machine finds the purchase and connects it.
-  const how = (await cheapInboxesConnected())
+  const ciOn = await cheapInboxesConnected();
+  const how = ciOn
     ? `Buy them on CheapInboxes — the hub shows exactly which domain and inboxes (${await cfg(null, 'CHEAPINBOXES.orderUrl')}). The machine connects everything after.`
     : `Paste the logins: ${link}`;
+  // The domain to name: the one the hub shows to buy on CheapInboxes (it may differ from the Price Scout's pick).
+  if (ciOn) { const b = await buyOnCheapInboxes(clientId); if (b) shop.chosenDomain = b.domain; }
   if (hours >= second && !shop.escalatedAt) {
     await io.alertOwner('purchase_reminder', { clientId, scope: `${clientId}:${second}`, vars: { clientId, hours: second }, body: `The domain and inboxes for ${client.name || clientId} are still not bought, ${second} hours after the shopping list (${shop.chosenDomain || 'see list'}).\n${how}`, did: 'Escalated: this also heads the morning digest until the purchase is in.' });
     await kv.hset(K.shopping(clientId), { escalatedAt: now.toISOString(), reminded12At: shop.reminded12At || now.toISOString() });

@@ -9,7 +9,7 @@
  *  ramp              client  daily 00:05 ET — dailyCap per inbox
  *  leadfinder-start  client  hourly in `warming` until the first dispatch succeeds
  *  leadfinder-refill client  daily 02:00 ET when unsent < LIST.refillBelow
- *  approval          client  hourly in `warming` — link Day −7, reminders, silence
+ *  approval          client  hourly in `warming`, inside OWNER.usHours (ET) — link Day −7, reminders, silence
  *  readiness         client  hourly from 10:00 ET in `warming` — warming → ready / Day 1 slide
  */
 
@@ -203,7 +203,12 @@ const approval = {
   claimTtl: 3600,
   async due({ client, now }) {
     if (!trialClient(client) || client.state !== 'warming') return null;
-    return hourKey(partsIn(ET, now));
+    // Every run may email the client (the link, a reminder, the silence note): inside the owner's
+    // US hours only (US Eastern), never at midnight their time.
+    const p = partsIn(ET, now);
+    const [from, to] = await cfg(null, 'OWNER.usHours');
+    if (p.hhmm < from || p.hhmm >= to) return null;
+    return hourKey(p);
   },
   async run(ctx) {
     const { runApprovalJob } = await import('@/lib/systems/approval');

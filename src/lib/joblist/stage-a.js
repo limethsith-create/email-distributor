@@ -14,12 +14,12 @@
  *  pricescout        every minute        awaiting_purchase + 'pricescout'
  *  purchase-nudge    hourly              awaiting_purchase     12 h reminder, 48 h escalation
  *  setup-check       every minute while running, else hourly   setup_check
- *  welcome           hourly              warming + 'welcome'   retry welcome_two_dates
+ *  welcome           hourly 08–20 ET     warming + 'welcome'   welcome_two_dates (waits for the morning when setup passed at night)
  *  auth              daily 06:00 ET      warming..extension    SPF/DKIM/DMARC/MX
  *  blacklist         daily 06:10 ET      warming..extension    DNSBL
  *  dmarc             daily 06:20 ET      (global)              DMARC reports; every 10 min while a backlog remains
- *  booking-test      hourly              warming..extension    Day −4 and on calendar URL change
- *  booking-reminder  daily 10:00 ET      warming / ready       until "It worked" is tapped
+ *  booking-test      hourly, US bus. hrs warming..extension    from Day −4 (the business day before it on a weekend) and on calendar URL change
+ *  booking-reminder  daily 10:00 ET      warming / ready       until "It worked" is tapped (US business days only)
  *  promo-check       monthly, 1st 09:00  (global)              expired promos, Cloudflare .com price
  *  research          every minute        researchStep=running  Applicant Research (Intake v2), bounded + resumable
  *  registrar-prices  monthly, 1st 09:10  (global)              live Porkbun prices (keyless) for the shopping list
@@ -29,11 +29,14 @@
 
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
-import { cfg } from '@/lib/config';
+import { cfg, isUsHoliday } from '@/lib/config';
 import { WARMUP_STATES } from '@/lib/db/client';
-import { partsIn, ET } from '@/lib/time';
+import { partsIn, ET, isWeekday } from '@/lib/time';
 import { minuteKey, bucketKey, dailyAt } from '@/lib/joblist/helpers';
 import { onClientClock } from '@/lib/joblist/helpers';
+
+/** A US business day (ET parts): Monday–Friday and not a federal holiday. */
+const businessDay = (p) => isWeekday(p.weekday) && !isUsHoliday(p.dayKey);
 
 const skip = (client) => !client || client.id === 'aviance';
 const hourKey = (p) => `${p.dayKey}T${String(p.hour).padStart(2, '0')}`;
@@ -142,7 +145,10 @@ const welcome = {
   claimTtl: 7200,
   async due({ client, now }) {
     if (skip(client) || client.state !== 'warming' || client.intakeStep !== 'welcome') return null;
-    return hourKey(et(now));
+    // An email to the client: in the daytime (08:00–20:00 ET) — the setup may pass at night.
+    const p = et(now);
+    if (p.hhmm < '08:00' || p.hhmm >= '20:00') return null;
+    return hourKey(p);
   },
   async run({ clientId, now }) {
     const { sendWelcome } = await import('@/lib/systems/setupcheck');
@@ -212,7 +218,11 @@ const bookingTest = {
   claimTtl: 7200,
   async due({ client, now }) {
     if (skip(client) || !['warming', 'ready', 'sending', 'extension'].includes(client.state)) return null;
-    return hourKey(et(now));
+    // The test emails the client (the 60-second test, or what to fix): US business hours only.
+    const p = et(now);
+    const [from, to] = await cfg(null, 'OWNER.usHours');
+    if (!businessDay(p) || p.hhmm < from || p.hhmm >= to) return null;
+    return hourKey(p);
   },
   async run({ clientId, now }) {
     const { runBookingTest } = await import('@/lib/systems/bookingtest');
@@ -226,7 +236,9 @@ const bookingReminder = {
   cost: 3,
   async due({ client, now }) {
     if (skip(client) || !['warming', 'ready'].includes(client.state)) return null;
-    return dailyAt(et(now), '10:00');
+    const p = et(now);
+    if (!businessDay(p)) return null; // no reminder to the client on a weekend or a US holiday
+    return dailyAt(p, '10:00');
   },
   async run({ clientId, now }) {
     const { runBookingReminder } = await import('@/lib/systems/bookingtest');

@@ -11,10 +11,16 @@
  * with the `autobuy` job): new purchases found, matched and connected, the setup
  * checks moved on. `autobuy` = { ok, found, connected, ready, unmatched,
  * problems, skipped?, error? } is in the answer only when a key is set.
+ *
+ * Without the heartbeat it also carries the intake on (systems/carry.js): the
+ * research, the market count, the Price Scout, a manual purchase's setup round,
+ * the welcome email and the onboarding page's reminders — the tick's own jobs
+ * and claims, nothing twice. `carried: [{ job, clientId }]` when any ran.
  */
 
 import { checkOnboardCalls } from '@/lib/systems/onboardcall';
 import { syncQuietly } from '@/lib/systems/autobuy';
+import { carryIntake } from '@/lib/systems/carry';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // the CheapInboxes look may move a setup round on (DNS, SMTP, IMAP)
@@ -24,7 +30,9 @@ export async function POST() {
     checkOnboardCalls().then((r) => ({ r }), (err) => ({ err })),
     syncQuietly({ reason: 'hub', deadline: Date.now() + 22000 }),
   ]);
-  const extra = autobuy && autobuy.skipped !== 'not_set_up' ? { autobuy } : {};
+  // After both (never at the same time as the CheapInboxes sync's own setup round).
+  const carry = await carryIntake({ deadline: Date.now() + 25000 });
+  const extra = { ...(autobuy && autobuy.skipped !== 'not_set_up' ? { autobuy } : {}), ...(carry.ran?.length ? { carried: carry.ran } : {}) };
   if (calls.err) {
     console.error('[onboard-calls] check failed', calls.err);
     return Response.json({ ok: false, checked: 0, newReplies: 0, booked: 0, remindersSent: 0, error: String(calls.err?.message || calls.err), ...extra }, { status: 500 });

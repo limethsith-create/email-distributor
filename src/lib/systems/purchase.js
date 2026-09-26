@@ -20,6 +20,7 @@ import { hasEncKey } from '@/lib/crypto';
 import { io, truthy } from '@/lib/systems/intake-io';
 import { startSetupCheck, runSetupCheck } from '@/lib/systems/setupcheck';
 import { tldOf } from '@/lib/systems/pricescout';
+import { ackAlerts } from '@/lib/notify';
 
 const DOMAIN_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+$/;
@@ -77,6 +78,7 @@ export async function submitPurchase(clientId, body, { now = io.now(), deadline 
   for (const r of await getInboxRecords(clientId)) if (!keep.has(r.email)) await removeInbox(clientId, r.email);
   for (const i of inboxes) await saveInbox(clientId, { email: i.email, password: i.password, displayName: i.displayName, provider: 'google', enabled: false });
   await kv.hset(K.shopping(clientId), { boughtAt: now.toISOString() });
+  await ackAlerts(clientId, ['shopping_list', 'purchase_reminder'], { reason: 'logins pasted', now });
   await logEvent(clientId, 'purchase', 'logins_pasted', { domain, inboxes: inboxes.map((i) => i.email) });
 
   if (client.state === 'awaiting_purchase') await setState(clientId, 'setup_check', 'owner pasted logins');

@@ -48,6 +48,7 @@ import { rankCandidates } from '@/lib/systems/domains';
 import { allowedTlds } from '@/lib/systems/pricescout';
 import { startSetupCheck, runSetupCheck } from '@/lib/systems/setupcheck';
 import * as ci from '@/lib/ext/cheapinboxes';
+import { ackAlerts } from '@/lib/notify';
 
 const SYSTEM = 'autobuy';
 /** A webhook may start a sync this often: signed ones every 10 s, unsigned ones every 2 min (they only ever wake the sync). */
@@ -339,6 +340,8 @@ async function linkDomain(client, rec, entry, name, { by, now, s }) {
   if (marked === 1 || marked === true) { await writeRec(id, { boughtMarked: '1' }); rec.boughtMarked = '1'; }
   await updateClient(id, { autobuyOpen: '1' });
   await logEvent(id, SYSTEM, 'linked', { domain: name, by });
+  // Bought: the Price Scout's urgent "shopping list" / "still to buy" alerts are handled.
+  await ackAlerts(id, ['shopping_list', 'purchase_reminder'], { reason: 'purchase found', now });
   if (await once(id, `found:${name}`)) {
     await io.alertOwner('purchase_found', {
       clientId: id,
@@ -515,11 +518,21 @@ async function finishReady(client, rec, ctx) {
     if (!rec.warmupAt) { await writeRec(id, { warmupAt: iso(now) }); rec.warmupAt = iso(now); }
     if (await once(id, `ready:${rec.domain}`)) {
       const n = (rec.mailboxes || []).filter((m) => m.connectedAt).length || Number(rec.expected) || 2;
+      // Warm-up needs WARMUP.minPool members in the circle: with too few helpers, say so instead of "started".
+      let short = null;
+      try {
+        const { getPool } = await import('@/lib/systems/warmup');
+        const min = Number(await cfg(null, 'WARMUP.minPool')) || 8;
+        const members = (await getPool({ now, sync: false })).length;
+        if (members < min) short = { members, min, missing: min - members };
+      } catch { short = null; }
       await io.alertOwner('inboxes_ready', {
         clientId: id,
         scope: `${id}:${rec.domain}`,
-        vars: { domain: rec.domain, count: n },
-        body: `${rec.domain} and ${n} inboxes for ${company(client)} are bought, connected and checked (SPF, DKIM, DMARC, the logins and a test email). Warm-up has started; the first emails go out on Day 1.`,
+        vars: { domain: rec.domain, count: n, next: short ? `add ${short.missing} warm-up helper${short.missing === 1 ? '' : 's'} to start warm-up` : 'warm-up has started' },
+        body: short
+          ? `${rec.domain} and ${n} inboxes for ${company(client)} are bought, connected and checked (SPF, DKIM, DMARC, the logins and a test email). Warm-up needs helpers first: the circle has ${short.members} of the ${short.min} members it needs — add ${short.missing} in the hub, Settings › Warm-up.`
+          : `${rec.domain} and ${n} inboxes for ${company(client)} are bought, connected and checked (SPF, DKIM, DMARC, the logins and a test email). Warm-up has started; the first emails go out on Day 1.`,
         did: `Pointed ${rec.domain} at ${client.mainDomain || 'their website'}, stored the logins encrypted, ran the setup checks and started the warm-up.`,
       });
       out.ready.push(id);

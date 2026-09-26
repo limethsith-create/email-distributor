@@ -11,11 +11,11 @@
 
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
-import { cfg } from '@/lib/config';
+import { cfg, isUsHoliday } from '@/lib/config';
 import { getClient, updateClient } from '@/lib/db/client';
 import { logEvent } from '@/lib/db/events';
 import { notifyClient, alertOwner } from '@/lib/notify';
-import { daysBetween, dayKeyIn, ET } from '@/lib/time';
+import { daysBetween, dayKeyIn, partsIn, isWeekday, ET } from '@/lib/time';
 import { clientNow } from '@/lib/testclock';
 import { money, PLAN_NAMES, ownerName, fmtDay, cfgTree } from '@/lib/systems/dshared';
 
@@ -93,6 +93,9 @@ export async function runInvoiceJob(clientId, { now: realNow = new Date() } = {}
   try { sent = typeof inv.remindersSent === 'string' ? JSON.parse(inv.remindersSent) : inv.remindersSent || []; } catch { sent = []; }
   const due = reminderDays.filter((d) => days >= d && !sent.includes(d));
   if (!due.length) return { days, reminder: null };
+  // A payment reminder to a new client goes on a US business day (a Day +3 on a Sunday waits for Monday).
+  const p = partsIn(ET, now);
+  if (!isWeekday(p.weekday) || isUsHoliday(p.dayKey)) return { days, reminder: null, waiting: 'business day' };
   const d = Math.max(...due);
   const sig = await ownerName(clientId, 'The invoice reminder');
   if (!sig) return { held: 'OWNER.signerName' };
