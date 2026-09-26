@@ -90,10 +90,11 @@ export default function Warmup() {
           <div key={x.email} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
             <strong style={{ flex: 1, minWidth: 220 }}>{x.email}</strong>
             <span className="mono" style={{ fontSize: 12 }}>{x.provider} · {x.hasPassword ? 'password stored' : 'NO password'} · {x.health || 'new'}{x.providerOk ? '' : ' · provider not supported'}</span>
-            {x.health === 'auth_failed' && <button style={btnGhost} onClick={() => post({ action: 'retryMember', clientId: '_helper', email: x.email }, 'Retrying')}>Retry</button>}
+            <button style={btnGhost} onClick={() => post({ action: 'testHelper', email: x.email }, 'Login works')}>Test</button>
+            {x.state === 'auth_failed' && <button style={btnGhost} onClick={() => post({ action: 'retryMember', clientId: '_helper', email: x.email }, 'Retrying')}>Retry</button>}
             <button style={x.enabled !== '0' ? btn : btnGhost} onClick={() => post({ action: 'helperEnabled', email: x.email, enabled: x.enabled === '0' })}>{x.enabled !== '0' ? 'ON' : 'OFF'}</button>
             <button style={btnGhost} onClick={() => confirm(`Remove ${x.email} from the circle?`) && post({ action: 'removeHelper', email: x.email }, 'Removed')}>Remove</button>
-            {!x.providerOk && x.providerNote && <p style={{ flexBasis: '100%', margin: 0, fontSize: 12, color: 'var(--warning)' }}>{x.providerNote}</p>}
+            {x.problem && <p style={{ flexBasis: '100%', margin: 0, fontSize: 12, color: 'var(--warning)' }}>{x.problem}</p>}
           </div>
         ))}
         {!d.encKey && <p style={{ color: 'var(--warning)' }}>ENC_KEY is not set, so helper passwords can’t be saved yet.</p>}
@@ -105,7 +106,7 @@ export default function Warmup() {
           <input style={input} placeholder="app password" type="password" value={h.password} onChange={(e) => setH({ ...h, password: e.target.value })} />
           <input style={input} placeholder="display name (e.g. Sam Carter)" value={h.displayName} onChange={(e) => setH({ ...h, displayName: e.target.value })} />
           {h.provider === 'icloud' && <input style={input} placeholder="IMAP user (default: part before @)" value={h.imapUser} onChange={(e) => setH({ ...h, imapUser: e.target.value })} />}
-          <button style={btn} disabled={!h.email || !h.password} onClick={async () => { await post({ action: 'addHelper', ...h }, 'Helper added'); setH(EMPTY); }}>Add helper</button>
+          <button style={btn} disabled={!h.email || !h.password} onClick={async () => { await post({ action: 'addHelper', ...h }, 'Login works — helper added'); setH(EMPTY); }}>Test and add</button>
         </div>
         {chosen && (
           <div style={{ marginTop: 10, fontSize: 13 }}>

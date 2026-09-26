@@ -89,7 +89,12 @@ test('/api/mc/warmup refuses a helper whose provider cannot log in with a passwo
   const bad = await call({ action: 'addHelper', email: 'h@outlook.com', password: 'pw', provider: 'outlook' });
   assert.equal(bad.status, 400);
   assert.match((await bad.json()).error, /OAuth2/);
+  // addHelper tests the logins first (docs/WARMUP-HUB.md): stubbed, no network.
+  const { smtpVerify, imapLogin } = io;
+  io.smtpVerify = async () => ({ success: true });
+  io.imapLogin = async () => ({ ok: true, spamFolderExists: true });
   const ok = await call({ action: 'addHelper', email: 'h@aol.com', password: 'pw' });
+  Object.assign(io, { smtpVerify, imapLogin });
   assert.equal((await ok.json()).provider, 'aol');
   await kv.hset(K.warmupHelper('h@aol.com'), { health: 'auth_failed' });
   await call({ action: 'retryMember', clientId: '_helper', email: 'h@aol.com' });

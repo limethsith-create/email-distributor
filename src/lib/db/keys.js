@@ -126,6 +126,8 @@ export const K = {
   // Deliverability v2
   /** Warm-up pool at a glance, written by every warm-up send run (hash): pool, helpers, providers (JSON), todayPairs, at. */
   warmupSummary: () => 'warmup:summary',
+  /** The day's warmup_needs_helpers alert is claimed (string, SET NX EX) — at most one a day (docs/WARMUP-HUB.md). */
+  warmupNeedsHelpers: (day) => `warmup:needshelpers:${day}`,
   /** Placement results (list, newest first, capped 30): {at, day, tool: seed|mail-tester, inbox, score, inboxRate, detail[], reportUrl}. */
   placement: (id) => `${c(id)}:placement`,
   /** One day's spam-test run for a client (hash): phase, pending tests, results. */

@@ -30,7 +30,8 @@ function imapClient(account) {
     host: account.imap.host,
     port: account.imap.port || 993,
     secure: true,
-    auth: { user: account.email, pass: account.appPassword || account.password },
+    // imapUser: a login name other than the address (iCloud: the part before the @).
+    auth: { user: account.imapUser || account.email, pass: account.appPassword || account.password },
     logger: false,
     disableAutoIdle: true,
     connectionTimeout: 10000,

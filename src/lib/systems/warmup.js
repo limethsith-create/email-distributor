@@ -35,6 +35,13 @@
  *
  * Network pieces (SMTP send, IMAP client, randomness) are injectable through
  * `deps` so the tests never touch the network.
+ *
+ * The hub (docs/WARMUP-HUB.md): a helper is saved only after its SMTP and
+ * IMAP logins worked (`addHelper`, through io.smtpVerify / io.imapLogin);
+ * `testHelper` re-tests one; `circleOf` / `helperView` / `helperProviders`
+ * are the plain blocks of GET /api/mc/warmup; `warmupView` is a trial's
+ * warm-up card; `helpersAlert` tells the owner (once a day) while a trial
+ * waits for the circle to reach WARMUP.minPool.
  */
 
 import crypto from 'crypto';
@@ -47,7 +54,8 @@ import { bump } from '@/lib/db/counters';
 import { logEvent } from '@/lib/db/events';
 import { clientNow, hasScaledClock } from '@/lib/testclock';
 import { alertOwner } from '@/lib/notify';
-import { encrypt } from '@/lib/crypto';
+import { encrypt, hasEncKey } from '@/lib/crypto';
+import { io } from '@/lib/systems/intake-io';
 import { PROVIDERS, HELPER_PROVIDERS, providerForAddress, familyOf, providerLabel } from '@/lib/smtp-providers';
 import { ET, dayKeyIn, daysBetween, addDays, inWindow } from '@/lib/time';
 import { composeWarmup, composeReply, renderWarmup, renderReply, encodeWarmMeta, decodeWarmMeta } from '@/lib/templates/warmup';
@@ -163,7 +171,7 @@ const domainOf = (email) => String(email).split('@')[1] || '';
  * else google. `imapUser` overrides the IMAP login name (iCloud uses the part
  * before the @ by default).
  */
-export async function saveHelper({ email, password, displayName, provider = null, imapUser = null }) {
+export async function saveHelper({ email, password, displayName, provider = null, imapUser = null, testedAt = null }) {
   const addr = String(email || '').trim().toLowerCase();
   if (!addr.includes('@')) throw new Error('invalid helper email');
   const prov = provider && PROVIDERS[provider] ? provider : (providerForAddress(addr) || 'google');
@@ -179,8 +187,11 @@ export async function saveHelper({ email, password, displayName, provider = null
     imapHost: p.imap.host,
     imapPort: p.imap.port,
     enabled: '1',
-    health: 'new',
+    // Saved after a login test that worked (addHelper): healthy from the start.
+    health: testedAt ? 'ok' : 'new',
+    problem: '',
     updatedAt: new Date().toISOString(),
+    ...(testedAt ? { healthAt: new Date(testedAt).toISOString(), lastOkAt: new Date(testedAt).toISOString() } : {}),
     ...(user ? { imapUser: user } : {}),
   };
   if (password) rec.passwordEnc = encrypt(String(password).replace(/\s+/g, ''));
@@ -459,7 +470,7 @@ async function onSendFailure(member, res, now) {
   const errs = (await statsFor(member.email, dayKeyIn(ET, now))).errors || 0;
   await logEvent(member.isHelper ? null : member.clientId, 'warmup', 'send_failed', { email: member.email, kind: res.kind, error: res.error });
   if (res.kind === 'auth') {
-    await patchMember(member, member.isHelper ? { health: 'auth_failed', healthAt: now.toISOString() } : { warmupHealth: 'auth_failed', warmupHealthAt: now.toISOString() });
+    await patchMember(member, member.isHelper ? { health: 'auth_failed', healthAt: now.toISOString(), problem: '' } : { warmupHealth: 'auth_failed', warmupHealthAt: now.toISOString() });
     if (member.isHelper) {
       const preset = PROVIDERS[member.provider];
       const why = preset && !preset.helper ? ` ${preset.helperNote}` : '';
@@ -522,6 +533,9 @@ export async function runWarmupSend({ now = new Date(), deadline = Date.now() + 
     return { sent: 0, skipped: 'no_secret' };
   }
   const pool = await getPool({ now, clients });
+  // A trial waits while the circle is under WARMUP.minPool: tell the owner (once a day).
+  const minPool = await cfg(null, 'WARMUP.minPool');
+  if (pool.length < minPool) await helpersAlert(pool, { now, min: minPool });
   if (pool.length < 2) return { sent: 0, pool: pool.length };
   // Helpers exist to warm client inboxes; with no client in the circle they
   // rest (aviance alone keeps it going only with WARMUP_V2.avianceAlone).
@@ -807,7 +821,7 @@ export async function runWarmupRead({ now = new Date(), deadline = Date.now() + 
     const r = await processMailbox(m, { mode: 'warm', now, deadline, deps, poolByEmail });
     await recordLandings(r.bySender, poolByEmail, now);
     Object.keys(r.bySender).forEach((s) => touched.add(s));
-    await patchMember(m, { lastWarmReadAt: now.toISOString(), lastWarmReadError: r.error || '' , ...(m.isHelper ? { health: r.ok ? 'ok' : 'imap_error', healthAt: now.toISOString() } : {}) });
+    await patchMember(m, { lastWarmReadAt: now.toISOString(), lastWarmReadError: r.error || '' , ...(m.isHelper ? { health: r.ok ? 'ok' : 'imap_error', healthAt: now.toISOString(), ...(r.ok ? { lastOkAt: now.toISOString(), problem: '' } : {}) } : {}) });
     if (!r.ok) {
       await logEvent(m.isHelper ? null : m.clientId, 'warmup', 'read_failed', { email: m.email, error: r.error });
       if (m.isHelper) {
@@ -846,7 +860,8 @@ export function readinessUpdate(record, { rate, day, days, readyRate = 0.9, need
  * the two day keys never mix.
  */
 export async function runWarmupDaily({ now = new Date(), clients = null, scaled = false } = {}) {
-  const pool = (await getPool({ now, clients, sync: !scaled })).filter((m) => (m.isHelper ? !scaled : hasScaledClock(m.client) === scaled));
+  const all = await getPool({ now, clients, sync: !scaled });
+  const pool = all.filter((m) => (m.isHelper ? !scaled : hasScaledClock(m.client) === scaled));
   const day = dayKeyIn(ET, now);
   const readyRate = await cfg(null, 'WARMUP.readyRate');
   const needStreak = await cfg(null, 'WARMUP.readyConsecutiveDays');
@@ -864,7 +879,9 @@ export async function runWarmupDaily({ now = new Date(), clients = null, scaled 
     if (u.fields) await patchMember(m, u.fields);
     out.push({ email: m.email, clientId: m.clientId, rate, inbox, spam, streak: u.streak, ready: u.ready });
   }
-  if (!scaled && pool.length < minPool) {
+  // A trial waiting for the circle gets the plainer warmup_needs_helpers (once a day) instead.
+  if (!scaled && waitingClients(all, minPool).length) await helpersAlert(all, { now, min: minPool });
+  else if (!scaled && pool.length < minPool) {
     await alertOwner('warmup_pool_small', { scope: 'pool', vars: { count: pool.length, min: minPool }, body: `The warm-up circle has ${pool.length} working members; the spec needs at least ${minPool} (helpers + trial inboxes).`, did: 'Warm-up keeps running with what exists; add helper accounts on /mc/warmup.' });
   }
   return { pool: pool.length, inboxes: out };
@@ -889,15 +906,23 @@ export async function poolStatus({ now = new Date() } = {}) {
     const { rate } = await inboxRate7d(m.email, now);
     members.push({ email: m.email, clientId: m.clientId, provider: m.provider, family: m.family, label: m.label, isHelper: m.isHelper, isAviance: Boolean(m.isAviance), days: m.days, quota: m.quota, sentToday: s.sent || 0, receivedToday: s.received || 0, errorsToday: s.errors || 0, inboxRate7d: rate, ready: m.record.warmupReady === '1', health: m.isHelper ? m.record.health || 'new' : m.record.warmupHealth || 'ok', lastReadAt: readAt[m.key] || null, lastReadError: m.record.lastWarmReadError || '' });
   }
-  const helpers = (await getHelpers()).map(({ passwordEnc, ...h }) => ({ ...h, hasPassword: Boolean(passwordEnc), providerOk: Boolean(PROVIDERS[h.provider]?.helper), providerNote: PROVIDERS[h.provider]?.helper ? '' : (PROVIDERS[h.provider]?.helperNote || '') }));
+  // Every helper (switched off and failing ones too), plain for the hub; the old page's fields stay on each.
+  const roll = (await kv.hgetall(K.warmupDayStats(day))) || {};
+  const helpers = (await getHelpers()).map((h) => helperView(h, { sentToday: roll[`${String(h.email).toLowerCase()}|sent`] }));
   const pairs = Object.entries((await kv.hgetall(K.warmupPair(day))) || {}).map(([k, at]) => ({ pair: k, at }));
   const includeAviance = Boolean(await cfg(null, 'WARMUP.includeAviance'));
   const avianceOut = includeAviance
     ? (await getInboxRecords(AVIANCE).catch(() => [])).filter((r) => r.warmupHealth === 'auth_failed').map((r) => ({ email: r.email, since: r.warmupHealthAt || null }))
     : [];
+  const minPool = await cfg(null, 'WARMUP.minPool');
   return {
-    day, members, helpers, pairs,
-    minPool: await cfg(null, 'WARMUP.minPool'),
+    // The hub's Settings › Warm-up (docs/WARMUP-HUB.md).
+    circle: circleOf(pool, minPool),
+    helpers,
+    providers: helperProviders(),
+    // What /mc/warmup already used.
+    day, members, pairs,
+    minPool,
     // Pairing across providers needs other filters to pair with (the trial
     // inboxes are Google): the page warns below this many families.
     minFamilies: Number(await cfg(null, 'WARMUP_V2.minFamilies')) || 0,
@@ -936,9 +961,394 @@ export async function externalStatus() {
 export async function retryMember(clientId, email) {
   if (clientId === HELPER) {
     clearHelperMemo();
-    await kv.hset(K.warmupHelper(email), { health: 'new', healthAt: new Date().toISOString() });
+    await kv.hset(K.warmupHelper(email), { health: 'new', healthAt: new Date().toISOString(), problem: '' });
   } else {
     await patchInbox(clientId, email, { warmupHealth: '', warmupHealthAt: new Date().toISOString() });
   }
   await logEvent(clientId === HELPER ? null : clientId, 'warmup', 'member_retry', { email: String(email).toLowerCase() });
+}
+
+// ── the hub (docs/WARMUP-HUB.md) ─────────────────────────────────────────────
+
+/** How long "Test and add" / "Test" may take: the SMTP login, then the IMAP login. */
+export const HELPER_TEST_MS = 20_000;
+/** The IMAP login keeps at least this much of the budget. */
+const IMAP_MIN_MS = 8_000;
+const NET_CODES = new Set(['ETIMEDOUT', 'ETIMEOUT', 'ECONNECTION', 'ECONNREFUSED', 'ECONNRESET', 'ESOCKET', 'ENOTFOUND', 'EDNS', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH']);
+const NET_RE = /\b(ETIMEDOUT|ECONNREFUSED|ECONNRESET|ENOTFOUND|EHOSTUNREACH|ENETUNREACH|EAI_AGAIN)\b|timed? ?out/i;
+const AUTH_RE = /auth|password|credential|username|login/i;
+const IMAP_OFF_RE = /imap[^.]*\b(disabled|not enabled|is off|turned off|not allowed|not permitted)\b|enable imap|web ?login required|not (enabled|allowed) for (this|your) account/i;
+
+const short = (v) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+const helperName = (p, key) => p?.helperLabel || p?.label || String(key || 'the provider');
+const helpersText = (n) => `${n} warm-up helper${n === 1 ? '' : 's'}`;
+const pctText = (x) => `${Math.round(x * 100)}%`;
+
+/** A promise that answers {timedOut: true} after `ms` instead of waiting on (and {thrown} instead of throwing). */
+function within(run, ms) {
+  let t;
+  return Promise.race([
+    Promise.resolve().then(run).catch((err) => ({ thrown: err })).finally(() => clearTimeout(t)),
+    new Promise((resolve) => { t = setTimeout(() => resolve({ timedOut: true }), Math.max(0, ms)); }),
+  ]);
+}
+
+/**
+ * Why a helper's login test failed, in the owner's words, per provider (pure).
+ * `smtp` = io.smtpVerify's answer ({success, error, code, responseCode}),
+ * `imap` = io.imapLogin's ({ok, error, auth}) or null when not tried; either
+ * may be {timedOut} / {thrown}. → { kind, reason } — kind wrong_password |
+ * imap_off | imap_user | unreachable | other — or null when both logins worked.
+ * SMTP took the password when only IMAP refuses it, so the password is right
+ * and the mailbox login (IMAP) is what is switched off.
+ */
+export function helperFailure(provider, { smtp, imap = null }) {
+  const p = PROVIDERS[provider] || null;
+  const name = helperName(p, provider);
+  const pw = p?.passwordLabel || 'app password';
+  const secs = HELPER_TEST_MS / 1000;
+  if (!smtp || !smtp.success) {
+    const x = smtp || {};
+    if (x.timedOut) return { kind: 'unreachable', reason: `${name} did not answer within ${secs} seconds — try again in a minute` };
+    const code = x.code || x.thrown?.code || null;
+    const err = short(x.error || x.thrown?.message);
+    if (NET_CODES.has(code) || (!x.responseCode && NET_RE.test(err))) return { kind: 'unreachable', reason: `Could not reach ${name}'s mail server${code ? ` (${code})` : ''} — try again in a minute` };
+    if (code === 'EAUTH' || [530, 534, 535].includes(Number(x.responseCode)) || AUTH_RE.test(err)) return { kind: 'wrong_password', reason: p?.wrongPassword || `${name} said the password is wrong — use the ${pw}` };
+    return { kind: 'other', reason: `${name} did not accept the sending login${err ? ` (${err})` : ''} — check the address and the ${pw}` };
+  }
+  if (!imap || imap.ok) return null;
+  if (imap.timedOut) return { kind: 'unreachable', reason: `${name} did not open the mailbox within ${secs} seconds — try again in a minute` };
+  const err = short(imap.error || imap.thrown?.message);
+  if (IMAP_OFF_RE.test(err)) return { kind: 'imap_off', reason: p?.imapOff || `IMAP is off — ${name}: turn on IMAP access in its mail settings, then press Test and add again` };
+  if (NET_RE.test(err) && !imap.auth) return { kind: 'unreachable', reason: `Could not reach ${name}'s mailbox server — try again in a minute` };
+  if (imap.auth || AUTH_RE.test(err)) {
+    if (p?.imapOff) return { kind: 'imap_off', reason: p.imapOff };
+    if (p?.imapUser === 'local') return { kind: 'imap_user', reason: `${name} took the password for sending but not for reading mail — if your Apple Account uses another address, enter it as the IMAP user` };
+    return { kind: 'other', reason: `${name} took the password for sending but refused the mailbox login (IMAP) — create a new ${pw} and try again` };
+  }
+  return { kind: 'other', reason: `${name} did not open the mailbox (IMAP)${err ? `: ${err}` : ''} — try again in a minute` };
+}
+
+/** Connection object for an address + password on a provider preset (what saveHelper would store). */
+function presetAccount(email, password, provider, imapUser = null) {
+  const p = PROVIDERS[provider];
+  return {
+    email, appPassword: password, password, provider,
+    smtp: { host: p.smtp.host, port: p.smtp.port, secure: p.smtp.port === 465 },
+    imap: { host: p.imap.host, port: p.imap.port },
+    spamFolder: p.spamFolder,
+    ...(imapUser ? { imapUser } : {}),
+  };
+}
+
+/**
+ * Log in to a helper the way the circle will, sending nothing: SMTP through
+ * io.smtpVerify, then IMAP through io.imapLogin, both inside one
+ * HELPER_TEST_MS budget. An IMAP user other than the address (iCloud: the
+ * part before the @) is tried first, then the full address.
+ * → { ok: true, imapUser } | { ok: false, kind, reason }
+ */
+export async function testHelperLogin(account, { provider = account?.provider, deadline = Date.now() + HELPER_TEST_MS } = {}) {
+  const left = () => deadline - Date.now();
+  const smtp = await within(() => io.smtpVerify(account), Math.max(1000, left() - IMAP_MIN_MS));
+  if (!smtp?.success) return { ok: false, ...helperFailure(provider, { smtp }) };
+  const users = [...new Set([account.imapUser || account.email, account.email])];
+  let imap = null;
+  let user = users[0];
+  for (const u of users) {
+    if (left() < 1000) { imap = imap || { timedOut: true }; break; }
+    user = u;
+    imap = await within(() => io.imapLogin({ ...account, imapUser: u }), left());
+    // Another login name only helps when this one was refused.
+    if (imap?.ok || imap?.timedOut || !(imap?.auth || AUTH_RE.test(String(imap?.error || '')))) break;
+  }
+  const fail = helperFailure(provider, { smtp, imap });
+  if (fail) return { ok: false, ...fail };
+  return { ok: true, imapUser: user };
+}
+
+/**
+ * "Test and add" (POST /api/mc/warmup addHelper): the address and preset
+ * checked, then both logins tested; saved (password encrypted, health ok)
+ * only when both worked. The machine never creates the account — the owner
+ * makes it once at the provider. Never returns the password.
+ * → { ok: true, helper } | { ok: false, status, error, kind? }
+ */
+export async function addHelper({ email, password, provider = null, displayName = null, imapUser = null, force = false } = {}, { now = new Date(), deadline = Date.now() + HELPER_TEST_MS } = {}) {
+  if (!hasEncKey()) return { ok: false, status: 503, error: 'ENC_KEY is not set on the server, so passwords cannot be stored safely yet.' };
+  const addr = String(email || '').trim().toLowerCase();
+  const pass = String(password || '').replace(/\s+/g, '');
+  if (!addr || !pass) return { ok: false, status: 400, error: 'email and app password are required' };
+  if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(addr)) return { ok: false, status: 400, error: `"${addr}" does not look like an email address` };
+  const key = provider || providerForAddress(addr) || 'google';
+  const preset = PROVIDERS[key];
+  if (!preset) return { ok: false, status: 400, error: `Unknown provider "${key}" — pick one of: ${HELPER_PROVIDERS.map((k) => helperName(PROVIDERS[k], k)).join(', ')}` };
+  // Free accounts that cannot log in with a password (Outlook.com: OAuth2
+  // only since Sep 2024; Zoho / mail.com free: no IMAP) would only fail.
+  if (!preset.helper && !force) return { ok: false, status: 400, error: preset.helperNote || `${preset.label || key} cannot be a free helper.` };
+  const user = imapUser ? String(imapUser).trim() : preset.imapUser === 'local' ? addr.split('@')[0] : null;
+  const res = await testHelperLogin(presetAccount(addr, pass, key, user), { provider: key, deadline });
+  if (!res.ok) {
+    await logEvent(null, 'warmup', 'helper_test_failed', { email: addr, provider: key, kind: res.kind });
+    return { ok: false, status: 400, error: res.reason, kind: res.kind };
+  }
+  // The login name that worked is kept when it is not the address itself (or iCloud found the full address).
+  const keepUser = res.imapUser && (res.imapUser !== addr || preset.imapUser === 'local') ? res.imapUser : null;
+  const rec = await saveHelper({ email: addr, password: pass, displayName, provider: key, imapUser: keepUser, testedAt: now });
+  return { ok: true, helper: helperView(rec) };
+}
+
+/**
+ * "Test" on a saved helper (POST /api/mc/warmup testHelper): the same two
+ * logins; health, problem and lastOkAt follow. A refused login (wrong
+ * password, IMAP off) takes it out of the circle until it passes again; a
+ * server that did not answer only notes the problem.
+ * → { ok, found, error?, kind?, helper? }
+ */
+export async function testHelper(email, { now = new Date(), deadline = Date.now() + HELPER_TEST_MS } = {}) {
+  const addr = String(email || '').trim().toLowerCase();
+  const rec = addr ? await kv.hgetall(K.warmupHelper(addr)) : null;
+  if (!rec || !rec.email) return { ok: false, found: false, error: `No warm-up helper ${addr || 'without an address'}` };
+  const account = accountFor({ record: rec });
+  const res = account
+    ? await testHelperLogin(account, { provider: rec.provider, deadline })
+    : { ok: false, kind: 'other', reason: 'The stored password cannot be read (ENC_KEY changed?) — remove the helper and add it again' };
+  const at = now.toISOString();
+  const fields = res.ok
+    ? { health: 'ok', healthAt: at, lastOkAt: at, problem: '', ...(res.imapUser && res.imapUser !== (rec.imapUser || rec.email) ? { imapUser: res.imapUser } : {}) }
+    : { health: res.kind === 'unreachable' ? 'unreachable' : 'auth_failed', healthAt: at, problem: res.reason };
+  clearHelperMemo();
+  await kv.hset(K.warmupHelper(addr), { ...fields, updatedAt: at });
+  await logEvent(null, 'warmup', res.ok ? 'helper_test_ok' : 'helper_test_failed', { email: addr, provider: rec.provider, kind: res.kind || null });
+  const roll = (await kv.hgetall(K.warmupDayStats(dayKeyIn(ET, now)))) || {};
+  const helper = helperView({ ...rec, ...fields }, { sentToday: roll[`${addr}|sent`] });
+  return res.ok ? { ok: true, found: true, helper } : { ok: false, found: true, error: res.reason, kind: res.kind, helper };
+}
+
+/** The plain problem of a helper whose stored health is not ok / new. */
+function failingProblem(raw, p, rec) {
+  const name = helperName(p, rec.provider);
+  if (raw === 'auth_failed') return `${name} refused the login — ${p?.wrongPassword ? p.wrongPassword.replace(/^[^—]*— /, '') : 'make a new app password'}. Add the helper again with it`;
+  if (raw === 'imap_error') return `Could not read the mailbox${rec.lastWarmReadError ? ` (${short(rec.lastWarmReadError)})` : ''} — it keeps sending; press Test to see why`;
+  if (raw === 'unreachable') return `${name} did not answer the last test — press Test again later`;
+  return 'Not working — press Test to see why';
+}
+
+/**
+ * A helper as the hub shows it: health ok | new | failing | disabled, the
+ * problem in plain words, when it last worked, today's sends. The fields
+ * /mc/warmup already used stay on it (displayName, enabled, hasPassword,
+ * providerOk, providerNote; `state` = the stored health). Never the password.
+ */
+export function helperView(rec, { sentToday = 0 } = {}) {
+  const p = PROVIDERS[rec.provider] || null;
+  const raw = rec.health || 'new';
+  const off = rec.enabled === '0' || rec.enabled === 0 || rec.enabled === false;
+  const health = off ? 'disabled' : raw === 'ok' ? 'ok' : raw === 'new' ? 'new' : 'failing';
+  const providerOk = Boolean(p?.helper);
+  let problem = null;
+  if (health === 'failing') problem = rec.problem || failingProblem(raw, p, rec);
+  else if (health === 'disabled') problem = 'Switched off — it trades no emails until you switch it on';
+  if (!problem && !providerOk) problem = p?.helperNote || `${rec.provider || 'This provider'} cannot be a free helper`;
+  return {
+    email: rec.email,
+    provider: rec.provider || null,
+    providerLabel: helperName(p, rec.provider),
+    health,
+    lastOkAt: rec.lastOkAt || (raw === 'ok' ? rec.healthAt || null : null),
+    problem,
+    sentToday: Number(sentToday) || 0,
+    displayName: rec.displayName || null,
+    enabled: off ? '0' : '1',
+    hasPassword: Boolean(rec.passwordEnc),
+    providerOk,
+    providerNote: providerOk ? '' : (p?.helperNote || ''),
+    state: raw,
+  };
+}
+
+/** The providers a free helper can be made at, with the owner's one-time steps (Settings › Warm-up › Add a helper). */
+export function helperProviders() {
+  return HELPER_PROVIDERS.map((key) => {
+    const p = PROVIDERS[key];
+    return { key, label: helperName(p, key), steps: p.setup || [], note: p.helperNote || '', passwordLabel: p.passwordLabel || 'app password' };
+  });
+}
+
+/**
+ * Trials that wait for the circle (pure): in `warming` with an inbox not ready
+ * yet, while the circle (`pool`, getPool) is under `min` members.
+ */
+export function waitingClients(pool, min) {
+  if (pool.length >= min) return [];
+  const out = new Map();
+  for (const m of pool) {
+    if (!countsForClient(m) || m.client?.state !== 'warming' || m.record?.warmupReady === '1' || out.has(m.clientId)) continue;
+    out.set(m.clientId, { clientId: m.clientId, name: m.client.name || m.clientId });
+  }
+  return [...out.values()];
+}
+
+/** The circle meter (pure): who is in it, how many are missing, and who waits. */
+export function circleOf(pool, min) {
+  const members = pool.length;
+  const missing = Math.max(0, (Number(min) || 0) - members);
+  return {
+    members,
+    helpers: pool.filter((m) => m.isHelper).length,
+    clientInboxes: pool.filter((m) => countsForClient(m)).length,
+    avianceInboxes: pool.filter((m) => m.isAviance).length,
+    min: Number(min) || 0,
+    ready: missing === 0,
+    missing,
+    label: missing ? `${members} of ${min} in the warm-up circle — add ${missing} more helper${missing === 1 ? '' : 's'}` : `${members} in the warm-up circle — enough (at least ${min} needed)`,
+    waiting: waitingClients(pool, min),
+  };
+}
+
+/**
+ * warmup_needs_helpers: once a day at most (a day claim on top of the alert
+ * dedupe), only while a trial waits for the circle. true when it went out.
+ */
+export async function helpersAlert(pool, { now = new Date(), min }) {
+  const waiting = waitingClients(pool, min);
+  if (!waiting.length) return false;
+  const day = dayKeyIn(ET, now);
+  let claimed = 'OK';
+  try { claimed = await kv.set(K.warmupNeedsHelpers(day), now.toISOString(), { nx: true, ex: 2 * 86400 }); } catch {}
+  if (claimed !== 'OK') return false;
+  const missing = Math.max(1, min - pool.length);
+  const names = waiting.map((w) => w.name);
+  const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  await alertOwner('warmup_needs_helpers', {
+    scope: `helpers:${day}`,
+    vars: { helpers: helpersText(missing), members: pool.length, min },
+    body: `${who} ${names.length === 1 ? 'is' : 'are'} warming up, but the warm-up circle has only ${pool.length} of the ${min} members it needs.\n\nIn the hub: Settings › Warm-up › Add a helper — make ${helpersText(missing)} (free Gmail, Yahoo, AOL, iCloud, GMX, WEB.DE or Yandex accounts; each provider's steps are shown), then press "Test and add". Helpers are made once and help every client.`,
+    did: 'Warm-up keeps going with the members it has; this reminder comes at most once a day while a trial waits.',
+    url: '/#settings/warmup',
+  });
+  await logEvent(null, 'warmup', 'needs_helpers', { members: pool.length, min, waiting: waiting.map((w) => w.clientId) });
+  return true;
+}
+
+// ── a trial's warm-up card ───────────────────────────────────────────────────
+
+/** States in which a trial's warm-up card shows (null before the inboxes are connected). */
+export const WARMUP_VIEW_STATES = new Set(['setup_check', ...WARMUP_STATES]);
+
+/** The rules the card reads (global, like the daily readiness run): readiness, ramp, slide window, circle size. */
+export async function warmupHubSettings() {
+  const [q, readyRate, need, minDays, maxSlideDays, minPool] = await Promise.all([
+    quotaSettings(), cfg(null, 'WARMUP.readyRate'), cfg(null, 'WARMUP.readyConsecutiveDays'), cfg(null, 'BUILD.warmupReadyMinDays'), cfg(null, 'WARMUP.maxSlideDays'), cfg(null, 'WARMUP.minPool'),
+  ]);
+  return { table: q.table, share: q.share, external: q.external, readyRate: Number(readyRate), need: Math.max(1, Number(need) || 1), minDays: Number(minDays) || 14, maxSlideDays: Math.max(0, Number(maxSlideDays) || 0), minPool: Number(minPool) || 0 };
+}
+
+/** What every trial's card shares, read once per board: the rules, today's send roll-up, the circle (when asked). */
+export async function hubWarmupData({ now = new Date(), clients = null, circle = true } = {}) {
+  const settings = await warmupHubSettings();
+  const dayStats = (await kv.hgetall(K.warmupDayStats(dayKeyIn(ET, now))).catch(() => null)) || {};
+  const pool = circle ? await getPool({ now, clients, sync: false }) : null;
+  return { settings, dayStats, circle: pool ? circleOf(pool, settings.minPool) : null };
+}
+
+/**
+ * When the slowest inbox should pass the readiness rule (pure). Its day
+ * `minDays` from its first warm-up day; later only when the rule's `need`
+ * passing daily checks (inbox rate ≥ readyRate) cannot finish by then — the
+ * next check is tonight (tomorrow night when today's already ran). null when
+ * unknown: no start day, or an inbox under the line (or never measured)
+ * whose earliest date is past the Day 1 slide window (`maxSlideDays` after
+ * its day `minDays`). rows: [{ start, rate, streak, checkedDay, ready }].
+ */
+export function estimateReadyBy(rows, { today, readyRate = 0.9, need = 2, minDays = 14, maxSlideDays = 7 }) {
+  let latest = null;
+  for (const x of rows) {
+    if (x.ready) continue;
+    if (!x.start) return null;
+    const dayN = addDays(x.start, minDays - 1);
+    const passing = x.rate != null && x.rate >= readyRate;
+    const alive = passing && x.checkedDay && daysBetween(x.checkedDay, today) <= 1;
+    const remaining = Math.max(0, need - (alive ? Number(x.streak) || 0 : 0));
+    const earliest = addDays(today, x.checkedDay === today ? remaining : Math.max(0, remaining - 1));
+    const est = earliest > dayN ? earliest : dayN;
+    if (!passing && est > addDays(dayN, maxSlideDays)) return null;
+    if (!latest || est > latest) latest = est;
+  }
+  return latest;
+}
+
+const rateOf = (v) => (v === '' || v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+
+/**
+ * A trial's warm-up card (pure; docs/WARMUP-HUB.md "Trial detail"): null
+ * before the inboxes are connected. `inboxes` = the client's inbox records,
+ * `now` = the client's clock, `circle` = circleOf (needed in `warming`),
+ * `dayStats` = today's send roll-up, `s` = warmupHubSettings.
+ *   status  paused (not started / switched off) · ready (every inbox passed
+ *           the readiness rule, or the trial is past warm-up) ·
+ *           waiting_for_helpers (warming while the circle is under min) · warming
+ *   day     the slowest inbox's warm-up day; inboxRate the lowest 7-day rate
+ *   readyBy estimateReadyBy while warming, else null
+ */
+export function warmupView({ client, inboxes = [], now = new Date(), circle = null, dayStats = {}, s }) {
+  const st = client?.state;
+  if (!WARMUP_VIEW_STATES.has(st)) return null;
+  const connected = (inboxes || []).filter((r) => r && r.email && (r.passwordEnc || r.hasPassword));
+  if (!connected.length) return null;
+  const today = dayKeyIn(ET, now);
+  const warmingState = WARMUP_STATES.has(st);
+  const sending = SENDING_STATES.has(st) || st === 'paused';
+  const rows = connected.map((r) => {
+    const on = warmingState && Boolean(r.warmupStartedAt) && r.warmupEnabled !== '0';
+    const day = on ? warmupDays(r, now) : 0;
+    return {
+      email: r.email,
+      day,
+      sentToday: Number(dayStats[`${String(r.email).toLowerCase()}|sent`]) || 0,
+      quota: on ? inboxQuota({ days: day, table: s.table, sending, dailyCap: r.dailyCap, share: s.share, external: s.external }) : 0,
+      inboxRate7d: rateOf(r.inboxRate7d),
+      ready: r.warmupReady === '1',
+      _rec: r,
+      _on: on,
+    };
+  });
+  const on = rows.filter((x) => x._on);
+  const minDay = on.length ? Math.min(...on.map((x) => x.day)) : 0;
+  const rates = on.map((x) => x.inboxRate7d).filter((x) => x != null);
+  const inboxRate = rates.length ? Math.min(...rates) : null;
+  let status = 'warming';
+  if (!on.length) status = 'paused';
+  else if (st !== 'warming' || on.every((x) => x.ready)) status = 'ready';
+  else if (circle && circle.members < circle.min) status = 'waiting_for_helpers';
+
+  const readyBy = status === 'warming'
+    ? estimateReadyBy(on.map((x) => ({ start: dayKeyIn(ET, new Date(x._rec.warmupStartedAt)), rate: x.inboxRate7d, streak: x._rec.readyStreak, checkedDay: x._rec.readyCheckedDay || null, ready: x.ready })), { today, readyRate: s.readyRate, need: s.need, minDays: s.minDays, maxSlideDays: s.maxSlideDays })
+    : null;
+  const reach = inboxRate != null ? ` · ${pctText(inboxRate)} reach the inbox` : '';
+  let label;
+  if (status === 'paused') label = !warmingState ? 'Warm-up starts when the setup checks pass' : connected.some((r) => r.warmupStartedAt) ? 'Warm-up is switched off for these inboxes' : 'Warm-up has not started yet';
+  else if (status === 'ready') label = `Warm-up done${reach}`;
+  else if (status === 'waiting_for_helpers') label = `Waiting for warm-up helpers — ${circle.members} of ${circle.min} in the circle, add ${circle.missing} more`;
+  else label = `Warming up — day ${minDay} of about ${s.minDays}${reach}`;
+
+  let problem = null;
+  const authFail = on.find((x) => x._rec.warmupHealth === 'auth_failed');
+  const lagging = on.find((x) => !x.ready && x.inboxRate7d != null && x.inboxRate7d < s.readyRate);
+  if (status === 'waiting_for_helpers') problem = `The warm-up circle has ${circle.members} of the ${circle.min} members it needs — add ${helpersText(circle.missing)} in Settings › Warm-up`;
+  else if (authFail) problem = `Warm-up could not log in to ${authFail.email} — check its app password`;
+  else if (status === 'warming' && lagging) problem = `${lagging.email}: ${pctText(lagging.inboxRate7d)} reach the inbox — it needs ${pctText(s.readyRate)} on ${s.need} day${s.need === 1 ? '' : 's'} in a row${readyBy ? '' : ', so Day 1 waits for it'}`;
+  else if (status === 'warming' && !readyBy) problem = 'The inbox rate has not been measured for too long — check the warm-up circle in Settings › Warm-up';
+
+  return {
+    status,
+    label,
+    day: minDay,
+    of: s.minDays,
+    readyBy,
+    inboxRate,
+    inboxes: rows.map(({ _rec, _on, ...x }) => x),
+    problem,
+    helpersNeeded: status === 'waiting_for_helpers' ? circle.missing : 0,
+  };
 }

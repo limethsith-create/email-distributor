@@ -72,6 +72,9 @@ export const ALERTS = {
   // ── end Stage A ──
   // ── Stage B additions ──
   warmup_pool_small: { urgent: false, title: 'Warm-up pool has {count} members (needs {min})' },
+  // docs/WARMUP-HUB.md: a trial is warming while the circle is under WARMUP.minPool — once a day at most.
+  // {helpers} = "2 warm-up helpers".
+  warmup_needs_helpers: { urgent: false, title: 'Add {helpers} — the warm-up circle has {members} of {min}' },
   helper_unhealthy: { urgent: false, title: 'Warm-up helper not working: {email}' },
   warmup_errors: { urgent: false, title: 'Warm-up sends failing: {email}' },
   canary_incomplete: { urgent: false, title: 'Canary test incomplete: {clientId}' },

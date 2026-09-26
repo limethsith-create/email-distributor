@@ -38,6 +38,7 @@ import { conversationFor, needsReplyFor } from '@/lib/systems/conversation';
 import { formatDay } from '@/lib/systems/intake-io';
 import { autobuyView, readRec as readAutobuy, autobuySettings, AUTOBUY_STATES } from '@/lib/systems/autobuy';
 import { isConnected as cheapInboxesConnected, readDomainIndex, unmatchedOf } from '@/lib/ext/cheapinboxes';
+import { warmupView, hubWarmupData, WARMUP_VIEW_STATES } from '@/lib/systems/warmup';
 
 export const STATE_LABELS = {
   applied: 'Applied', queued: 'In the queue', onboarding: 'Onboarding', awaiting_purchase: 'Waiting for you to buy',
@@ -205,7 +206,7 @@ export function systemsFor(ctx) {
     const minRate = rates.length ? Math.min(...rates) : null;
     const disabled = inboxes.filter((i) => i.disabledReason);
     const ready = minDay != null && minDay >= 14 && minRate != null && minRate >= 0.9;
-    const status = disabled.length ? 'blocked' : ready ? 'ok' : 'working';
+    const status = disabled.length ? 'blocked' : ctx.warmup?.status === 'waiting_for_helpers' ? 'waiting' : ready ? 'ok' : 'working';
     out.push(sys('warmup', status, `Day ${minDay ?? '—'} of 14 · inbox rate ${minRate != null ? pct(minRate) : 'not measured yet'} · ${warm.length} inbox${warm.length === 1 ? '' : 'es'}`,
       inboxes.map((i) => `${i.email}: ${rate(i.inboxRate7d) != null ? pct(rate(i.inboxRate7d)) : '—'}${i.disabledReason ? ` — DISABLED: ${i.disabledReason}` : ''}`)));
   } else out.push(sys('warmup', past(st, 'setup_check') || st === 'setup_check' ? 'waiting' : 'off', inboxes.length ? 'Inboxes stored, warm-up starts when the setup checks pass' : 'Starts when the inboxes are in'));
@@ -385,6 +386,11 @@ export function todosFor(ctx) {
   for (const p of overduePromises(promises, now)) {
     push(`promise-${p.id}`, `Promise overdue: ${p.text}`, `Due ${String(p.dueAt).slice(0, 10)}`, false, p.dueAt, api(`/api/mc/clients/${id}`, { action: 'completePromise', promiseId: p.id }, 'Mark this promise done?'));
   }
+  // The warm-up circle is under WARMUP.minPool while this trial warms (docs/WARMUP-HUB.md).
+  if (ctx.warmup?.status === 'waiting_for_helpers') {
+    const n = ctx.warmup.helpersNeeded || 1;
+    push('warmup-helpers', `Add ${n} warm-up helper${n === 1 ? '' : 's'} — Settings › Warm-up`, ctx.warmup.problem || '', true, client.stateChangedAt || null, { type: 'view', view: 'settings', section: 'warmup' });
+  }
   if (['warming', 'ready'].includes(st) && profile.bookingRequestSentAt && !truthy(profile.bookingTested)) {
     push('booking-test', 'Client has not done the 60-second booking test yet (Day 1 waits for it)', `Asked ${ago(profile.bookingRequestSentAt, now)} · reminded daily`, false, profile.bookingRequestSentAt, view('detail', id, 'setup'));
   }
@@ -446,8 +452,13 @@ function simpleBase(ctx, todos) {
       if (ctx.autobuy && ctx.autobuy.domain && domain.setupPhase !== 'failed') return autobuySimple(ctx, r);
       if (domain.setupPhase === 'failed') return r('setting_up', 'Setting up their emails — a domain check failed', 'Fix the record named in the to-do; the checks run again every hour', true, domain.setupFailedAt);
       return r('setting_up', 'Setting up their emails — checking the new domain', 'Nothing for you: warm-up starts when the checks pass');
-    case 'warming':
+    case 'warming': {
+      // The warm-up card's own sentence (docs/WARMUP-HUB.md) once the inboxes are in.
+      const w = ctx.warmup;
+      if (w && w.status === 'waiting_for_helpers') return r('warming_up', w.label, `Add ${w.helpersNeeded} warm-up helper${w.helpersNeeded === 1 ? '' : 's'} — Settings › Warm-up`, true);
+      if (w && w.status !== 'paused') return r('warming_up', w.label, trial.day1Date ? `Nothing for you: first emails${on(trial.day1Date)}` : 'Nothing for you: the inboxes warm up for about 2 weeks');
       return r('warming_up', `Warming up their inboxes — first emails${on(trial.day1Date)}`, 'Nothing for you: the inboxes warm up for about 2 weeks');
+    }
     case 'ready':
       return r('warming_up', `Ready — first emails${on(trial.day1Date)}`, 'Nothing for you');
     case 'sending':
@@ -511,7 +522,7 @@ function onboardingSimple(ctx, r) {
 
 const parseJson = (v, fallback) => { if (v == null || v === '') return fallback; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return fallback; } };
 
-export async function loadContext(client, { alerts = null, now = new Date(), onboard = null, autobuy = null } = {}) {
+export async function loadContext(client, { alerts = null, now = new Date(), onboard = null, autobuy = null, warm = null } = {}) {
   const id = client.id;
   const vnow = clientNow(client, now);
   // The onboarding call is read only for clients that were sent one (flag on the client hash).
@@ -543,6 +554,13 @@ export async function loadContext(client, { alerts = null, now = new Date(), onb
     autobuyCtx = autobuyView({ client, rec, connected, domain, s });
   }
   const inboxes = inboxesRaw.map(publicInbox);
+  // The warm-up card (docs/WARMUP-HUB.md): from the inbox records just read + what the board shares (rules, today's
+  // sends, the circle — read once per board; the circle only matters while a trial warms).
+  let warmup = null;
+  if (id !== 'aviance' && WARMUP_VIEW_STATES.has(client.state) && inboxesRaw.some((r) => r.passwordEnc)) {
+    const w = warm || await hubWarmupData({ now, circle: client.state === 'warming' }).catch(() => null);
+    if (w) warmup = warmupView({ client, inboxes: inboxesRaw, now: vnow, circle: w.circle, dayStats: w.dayStats, s: w.settings });
+  }
   const hot = Object.values((await kv.hgetall(K.hot(id)).catch(() => null)) || {});
   const application = applicationView(await kv.hgetall(K.application(id)).catch(() => null));
   const fitScore = application ? scoreBadge(await kv.hget(K.research(id), 'score').catch(() => null)) : null;
@@ -553,13 +571,13 @@ export async function loadContext(client, { alerts = null, now = new Date(), onb
     bookings: extras.bookings || [], replies: extras.replies || [], repliesByKind: extras.repliesByKind || {}, hot,
     invoice: extras.invoice, promises: extras.promises || [], pacelog, reports: extras.reports || [], upcoming: extras.upcoming || [],
     runState, application, fitScore, alerts: openAlerts, day: extras.trialDay, health: extras.health, now: vnow, minMarket: await cfg(id, 'MIN_MARKET'),
-    onboardCall, callRaw, autobuy: autobuyCtx,
+    onboardCall, callRaw, autobuy: autobuyCtx, warmup,
   };
 }
 
 /** One board row (docs/HUB-API.md "Client row"). */
-export async function hubRow(client, { alerts, now = new Date(), onboard = null, autobuy = null } = {}) {
-  const [base, ctx] = await Promise.all([clientRow(client, { alerts, now }), loadContext(client, { alerts, now, onboard, autobuy })]);
+export async function hubRow(client, { alerts, now = new Date(), onboard = null, autobuy = null, warm = null } = {}) {
+  const [base, ctx] = await Promise.all([clientRow(client, { alerts, now }), loadContext(client, { alerts, now, onboard, autobuy, warm })]);
   const next = ctx.upcoming[0] || null;
   const todo = todosFor(ctx);
   return {
@@ -583,12 +601,16 @@ export async function hubBoard({ now = new Date() } = {}) {
   // Whether CheapInboxes is connected + its settings, once per board.
   const ciOn = await cheapInboxesConnected();
   const autobuy = clients.some((c) => AUTOBUY_STATES.has(c.state) || String(c.autobuyOpen) === '1') ? { connected: ciOn, settings: await autobuySettings() } : null;
-  const rows = await Promise.all(clients.map((c) => hubRow(c, { alerts, now, onboard, autobuy })));
+  // The warm-up cards' shared reads, once per board; the circle only while a trial warms.
+  const warm = clients.some((c) => c.id !== 'aviance' && WARMUP_VIEW_STATES.has(c.state))
+    ? await hubWarmupData({ now, clients, circle: clients.some((c) => c.state === 'warming') }).catch(() => null)
+    : null;
+  const rows = await Promise.all(clients.map((c) => hubRow(c, { alerts, now, onboard, autobuy, warm })));
   const byId = new Map(rows.map((r) => [r.id, r]));
   const strip = (r) => { const { _ctx, ...rest } = r; return rest; };
   const stages = STAGES.map((s) => ({ ...s, clients: board.clients.filter((c) => s.states.includes(c.state) && c.id !== 'aviance' && c.id !== '_test').map((c) => strip(byId.get(c.id))).filter(Boolean) }));
   const others = ['aviance', '_test'].map((id) => byId.get(id)).filter(Boolean).map(strip);
-  const todos = rows.filter((r) => r.id !== '_test').flatMap((r) => r.todo);
+  const todos = oneHelpersTodo(rows.filter((r) => r.id !== '_test').flatMap((r) => r.todo));
   const inquiries = await inquirySummary().catch(() => null);
   for (const q of (inquiries?.latest || []).filter((x) => x.status === 'new')) {
     todos.push({ id: `inquiry:${q.id}`, clientId: null, clientName: q.company, text: `New plan inquiry from ${q.company} — call them back`,
@@ -622,6 +644,15 @@ export async function hubBoard({ now = new Date() } = {}) {
     inquiries,
     alerts: alerts.filter((a) => !a.acknowledged).slice(0, 50).map((a) => ({ id: a.id, at: a.at, key: a.key, clientId: a.clientId, title: a.title, urgent: a.urgent, delivered: a.delivered })),
   };
+}
+
+/** However many trials wait for the warm-up circle, the board shows one "Add N warm-up helpers" to-do. */
+function oneHelpersTodo(todos) {
+  const helpers = todos.filter((t) => t.id.startsWith('warmup-helpers:'));
+  if (helpers.length < 2) return todos;
+  const names = helpers.map((t) => t.clientName);
+  const one = { ...helpers[0], id: 'warmup-helpers', clientId: null, clientName: 'Warm-up', detail: `${helpers[0].detail}${helpers[0].detail ? ' · ' : ''}waiting: ${names.join(', ')}`, since: helpers.map((t) => t.since).filter(Boolean).sort()[0] || null };
+  return [...todos.filter((t) => !t.id.startsWith('warmup-helpers:')), one];
 }
 
 /** Machine-level to-dos (no client): setup still missing, first-time setup, queue with a free slot. */
@@ -694,6 +725,8 @@ export async function hubClient(id, { now = new Date() } = {}) {
     onboardCall: client.onboardCallSentAt ? await onboardCallFor(id, { now, client }).catch(() => null) : null,
     // The CheapInboxes purchase (docs/AUTO-BUY.md "Status for the hub"); null outside the buying / setup / warm-up steps.
     autobuy: ctx.autobuy || null,
+    // The warm-up card (docs/WARMUP-HUB.md); null before the inboxes are connected.
+    warmup: ctx.warmup || null,
     // The client's one conversation, any state, with the reply bot's switch (docs/REPLYBOT-MEET.md §1).
     conversation: await conversationFor(id, { now, client }).catch(() => null),
     deliverability: await deliverabilityView(id).catch(() => null),

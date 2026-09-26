@@ -14,6 +14,11 @@
  *                 2026 (IMAP + SMTP with a password or app password)?
  *   helperNote    why not / what to switch on — shown on /mc/warmup
  *   setup         the one-time steps the owner does when creating a helper
+ *   helperLabel   short name in the hub (Gmail, not "Gmail / Google Workspace")
+ *   passwordLabel what the password field asks for ("16-letter app password")
+ *   wrongPassword / imapOff  the plain reason shown when a helper's login
+ *                 test fails that way (docs/WARMUP-HUB.md); imapOff null =
+ *                 IMAP cannot be switched off at this provider
  *
  * Sources and dates: docs/research/v2-deliverability.md §2.
  */
@@ -34,6 +39,10 @@ export const PROVIDERS = {
     helper: true,
     domains: ['gmail.com', 'googlemail.com'],
     helperNote: 'Free Gmail works with an app password (needs 2-Step Verification). IMAP is always on since Jan 2025. 500 emails/day limit.',
+    helperLabel: 'Gmail',
+    passwordLabel: '16-letter app password',
+    wrongPassword: 'Gmail said the password is wrong — use the 16-letter app password (myaccount.google.com/apppasswords, needs 2-Step Verification), not your normal password',
+    imapOff: null,
     setup: ['Create a Gmail account', 'Turn on 2-Step Verification (myaccount.google.com/security)', 'Create an app password at myaccount.google.com/apppasswords', 'Paste the address + the 16-letter app password below'],
   },
   yahoo: {
@@ -47,6 +56,9 @@ export const PROVIDERS = {
     helper: true,
     domains: ['yahoo.com', 'ymail.com', 'rocketmail.com'],
     helperNote: 'Free Yahoo works with an app password (Account security → Create app password). Yahoo allows only a few IMAP connections at once.',
+    passwordLabel: 'app password',
+    wrongPassword: 'Yahoo said the password is wrong — Yahoo does not take your normal password here: create an app password under Account security › Generate app password',
+    imapOff: null,
     setup: ['Create a Yahoo account', 'Account security → Generate app password', 'Paste the address + the app password below'],
   },
   aol: {
@@ -60,6 +72,9 @@ export const PROVIDERS = {
     helper: true,
     domains: ['aol.com'],
     helperNote: 'Free AOL works with an app password. AOL runs on Yahoo’s mail system, so it counts as the same filter family as Yahoo when pairing.',
+    passwordLabel: 'app password',
+    wrongPassword: 'AOL said the password is wrong — AOL does not take your normal password here: create an app password under Account security › Generate app password',
+    imapOff: null,
     setup: ['Create an AOL account', 'Account security → Generate app password', 'Paste the address + the app password below'],
   },
   icloud: {
@@ -75,6 +90,9 @@ export const PROVIDERS = {
     imapUser: 'local',
     domains: ['icloud.com', 'me.com', 'mac.com'],
     helperNote: 'Free iCloud Mail works with an app-specific password (needs two-factor authentication). 1,000 emails/day.',
+    passwordLabel: 'app-specific password',
+    wrongPassword: 'iCloud said the password is wrong — use an app-specific password (account.apple.com › Sign-In and Security › App-Specific Passwords; needs two-factor authentication), not your Apple Account password',
+    imapOff: null,
     setup: ['Create an Apple Account with an @icloud.com address', 'Turn on two-factor authentication', 'account.apple.com → Sign-In and Security → App-Specific Passwords → generate one', 'Paste the address + the app-specific password below'],
   },
   gmx: {
@@ -88,6 +106,9 @@ export const PROVIDERS = {
     helper: true,
     domains: ['gmx.com', 'gmx.us'],
     helperNote: 'Free GMX works, but IMAP must be switched on (Settings → POP3 & IMAP) and GMX switches it off again after a long idle spell — the circle reads it every 30 minutes, which keeps it on.',
+    passwordLabel: 'GMX password (an application-specific password if two-factor is on)',
+    wrongPassword: 'GMX said the password is wrong — use the GMX password (or an application-specific password if you turned on two-factor)',
+    imapOff: 'IMAP is off — GMX: Email › Settings › POP3 & IMAP › enable access, then press Test and add again',
     setup: ['Create a gmx.com account', 'Email → Settings → POP3 & IMAP → enable access', 'Paste the address + the account password below (an application-specific password if you turned on two-factor)'],
   },
   gmxnet: {
@@ -101,6 +122,9 @@ export const PROVIDERS = {
     helper: true,
     domains: ['gmx.net', 'gmx.de', 'gmx.at', 'gmx.ch'],
     helperNote: 'Free GMX (German) works once POP3 & IMAP is switched on in the settings.',
+    passwordLabel: 'GMX password',
+    wrongPassword: 'GMX said the password is wrong — use the GMX password (or an application-specific password if you turned on two-factor)',
+    imapOff: 'IMAP is off — GMX: E-Mail › Einstellungen › POP3 & IMAP › enable, then press Test and add again',
     setup: ['Create a gmx.net account', 'E-Mail → Einstellungen → POP3 & IMAP → enable', 'Paste the address + the password below'],
   },
   webde: {
@@ -114,6 +138,9 @@ export const PROVIDERS = {
     helper: true,
     domains: ['web.de'],
     helperNote: 'Free WEB.DE works once IMAP is switched on in the settings (same company as GMX, so the same filter family).',
+    passwordLabel: 'WEB.DE password',
+    wrongPassword: 'WEB.DE said the password is wrong — use the WEB.DE password (or an application-specific password if you turned on two-factor)',
+    imapOff: 'IMAP is off — WEB.DE: Settings › POP3/IMAP › enable, then press Test and add again',
     setup: ['Create a web.de account', 'Settings → POP3/IMAP → enable', 'Paste the address + the password below'],
   },
   yandex: {
@@ -127,6 +154,9 @@ export const PROVIDERS = {
     helper: true,
     domains: ['yandex.com', 'yandex.ru', 'ya.ru'],
     helperNote: 'Free Yandex works with an app password; two settings must be on (IMAP, and app passwords). Sign-up needs a phone number.',
+    passwordLabel: 'app password',
+    wrongPassword: 'Yandex said the password is wrong — create an app password for Mail at id.yandex.com › Security › App passwords (Mail › Settings › Email clients › "App passwords and OAuth tokens" must be on)',
+    imapOff: 'IMAP is off — Yandex: Mail › Settings › Email clients › turn on IMAP (and "App passwords and OAuth tokens"), then press Test and add again',
     setup: ['Create a Yandex account', 'Settings → Email clients → turn on IMAP and "App passwords and OAuth tokens"', 'id.yandex.com → Security → App passwords → create one for Mail', 'Paste the address + the app password below'],
   },
   outlook: {

@@ -172,7 +172,7 @@ Everything in the row above plus:
 | Alerts | `GET /api/mc/alerts` → `{alerts}` · `POST` `{action:'ack', id}` |
 | Setup (first-time) | `POST /api/mc/setup` `{action:'migrate'|'test-alert'}` |
 | Config | `GET /api/mc/config` → `{settings:[{key, default, value, overridden, toSet}]}` · `POST` `{action:'set', key, value}` / `{action:'reset', key}` |
-| Warm-up circle | `GET /api/mc/warmup` · `POST` `{action:'addHelper'|'removeHelper'|'helperEnabled', ...}` |
+| Warm-up circle | `GET /api/mc/warmup` · `POST` `{action:'addHelper'|'testHelper'|'removeHelper'|'helperEnabled', ...}` (see "Warm-up in the hub" below) |
 | Test Mode | `GET /api/mc/test` · `POST` `{action:'start', from}` / `reset` / `{action:'jump', day}` / `{action:'simulate', kind}` / `tick` |
 
 Every state name → plain label (for the hub): applied "Applied", queued
@@ -876,3 +876,114 @@ docs/AUTO-BUY.md "As built").
 `provider` ('google'), `mailboxes` (2), `stuckHours` (72), `orderUrl`,
 `alternatives` (3), `maxSearches` (6), `refreshHours` (24),
 `credentialsGraceHours` (2), `checkEveryMinutes` (2), `jobEveryMinutes` (10).
+
+# Warm-up in the hub (2026-09-26)
+
+Contract: docs/WARMUP-HUB.md (its "As built" lists every decision). The
+machine's own warm-up circle is the warm-up; it needs free **helper**
+accounts the owner makes once (the machine never creates accounts). Every
+field is additive.
+
+## Settings › Warm-up — `GET /api/mc/warmup`
+
+Adds three plain blocks; every older field (`day`, `members`, `pairs`,
+`minPool`, `minFamilies`, `summary`, `presets`, `external`, `aviance`,
+`encKey`) stays for /mc/warmup.
+```jsonc
+{
+  "circle": {
+    "members": 6,              // working members: helpers + trial inboxes + aviance inboxes
+    "helpers": 3, "clientInboxes": 2, "avianceInboxes": 1,
+    "min": 8, "ready": false, "missing": 2,
+    "label": "6 of 8 in the warm-up circle — add 2 more helpers",   // or "9 in the warm-up circle — enough (at least 8 needed)"
+    "waiting": [ { "clientId": "acme", "name": "Acme Co" } ]         // trials waiting for the circle
+  },
+  "helpers": [ {                                  // every helper, switched-off and failing ones too
+    "email": "pat@yahoo.com", "provider": "yahoo", "providerLabel": "Yahoo Mail",
+    "health": "ok|new|failing|disabled",
+    "lastOkAt": "ISO|null",                       // last login test / mailbox read that worked
+    "problem": "plain sentence|null",             // e.g. "Yahoo Mail refused the login — … Add the helper again with it"
+    "sentToday": 3,
+    "displayName": "Pat Lee", "enabled": "1|0", "hasPassword": true,   // (kept for /mc/warmup)
+    "providerOk": true, "providerNote": "", "state": "ok|new|auth_failed|imap_error|unreachable"
+  } ],
+  "providers": [ {                                // the free-helper providers, in this order: Gmail, Yahoo, AOL, iCloud, GMX (.com), GMX (.net/.de), WEB.DE, Yandex
+    "key": "google", "label": "Gmail",
+    "steps": [ "Create a Gmail account", "Turn on 2-Step Verification (…)", "…" ],   // numbered one-time steps
+    "note": "Free Gmail works with an app password …",
+    "passwordLabel": "16-letter app password"     // the password field's label
+  } ]
+}
+```
+Health in plain words: `ok` works · `new` not tried yet · `failing` (see
+`problem`; "Test" re-checks) · `disabled` switched off.
+
+## `POST /api/mc/warmup`
+
+- `{ action: 'addHelper', provider, email, password, displayName? }` — "Test
+  and add". Tests the send (SMTP) and mailbox (IMAP) logins first (up to
+  ~20 s — show a spinner) and saves only when both work →
+  `{ ok: true, email, provider, helper }` (`helper` as in the list, health
+  `ok`). Otherwise nothing is saved and the answer is `400 { ok: false,
+  error, kind }` — `error` is one plain sentence to show as-is, e.g. "Gmail
+  said the password is wrong — use the 16-letter app password
+  (myaccount.google.com/apppasswords, needs 2-Step Verification), not your
+  normal password", "IMAP is off — GMX: Email › Settings › POP3 & IMAP ›
+  enable access, then press Test and add again", "Unknown provider …",
+  "Outlook … OAuth2 …", "Yahoo Mail did not answer within 20 seconds — try
+  again in a minute"; `kind` = `wrong_password | imap_off | imap_user |
+  unreachable | other` (absent for form errors). `503` when ENC_KEY is not
+  set. `provider` = a `providers[].key` (default: from the address's domain).
+- `{ action: 'testHelper', email }` — "Test" on a saved helper; the same two
+  logins → `{ ok: true, helper }` or `400 { ok: false, error, kind, helper }`
+  (redraw the row from `helper`) · `404` unknown helper. A refused login
+  takes the helper out of the circle until it passes again.
+- `removeHelper` / `helperEnabled` / `retryMember` unchanged. Passwords are
+  never in any answer.
+
+## `GET /api/mc/hub/{id}` gains `warmup`
+
+`null` before the inboxes are connected (and outside setup_check…converted).
+```jsonc
+"warmup": {
+  "status": "waiting_for_helpers|warming|ready|paused",
+  "label": "Warming up — day 5 of about 14 · 96% reach the inbox",   // one plain sentence for the card
+  "day": 5, "of": 14,                  // the slowest inbox's warm-up day (0 before it starts)
+  "readyBy": "2026-10-15|null",        // estimate while warming; null when unknown (see below)
+  "inboxRate": 0.96,                   // lowest 7-day inbox rate, null until first measured (nightly)
+  "inboxes": [ { "email": "jordan@acmehq.com", "day": 5, "sentToday": 8, "quota": 8, "inboxRate7d": 0.96, "ready": false } ],
+  "problem": "plain sentence|null",
+  "helpersNeeded": 0                   // N for the "Add N warm-up helpers" button (only while waiting_for_helpers)
+}
+```
+Labels: warming "Warming up — day 5 of about 14 · 96% reach the inbox" (the
+rate part only once measured) · waiting_for_helpers "Waiting for warm-up
+helpers — 6 of 8 in the circle, add 2 more" · ready "Warm-up done · 96% reach
+the inbox" · paused "Warm-up starts when the setup checks pass" / "Warm-up is
+switched off for these inboxes". Problems: "The warm-up circle has 6 of the 8
+members it needs — add 2 warm-up helpers in Settings › Warm-up" · "Warm-up
+could not log in to … — check its app password" · "…: 85% reach the inbox —
+it needs 90% on 2 days in a row[, so Day 1 waits for it]".
+`readyBy` = day 14 from the first warm-up day, later when an inbox's rate
+lags; `null` when there is no honest date (not warming, waiting for helpers,
+or an inbox still under the line past the Day 1 slide window).
+
+## Board rows and to-dos
+
+- `simple` in `warming`: `label` = `warmup.label`; `next` "Nothing for you:
+  first emails on Monday 26 October". While `waiting_for_helpers`: `next`
+  "Add 2 warm-up helpers — Settings › Warm-up", `needsYou: true`.
+- To-do `warmup-helpers:{id}` (urgent) "Add 2 warm-up helpers — Settings ›
+  Warm-up", detail = the problem, `action: { type: 'view', view: 'settings',
+  section: 'warmup' }` — a new section: open Settings › Warm-up. On the
+  board, several waiting trials give ONE to-do `warmup-helpers`
+  (`clientId: null`, clientName "Warm-up", detail ending "waiting: Acme Co,
+  Bolt Co").
+- System card `warmup`: status `waiting` while waiting for helpers.
+
+## Alerts (phone + email)
+
+- `warmup_needs_helpers` "Add 2 warm-up helpers — the warm-up circle has 6
+  of 8" — at most once a day while a trial waits; push `url`
+  `/#settings/warmup`. (It replaces the daily `warmup_pool_small` while a
+  trial waits.)
