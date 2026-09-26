@@ -5,10 +5,6 @@
     {
       "path": "/api/cron/check-bounces",
       "schedule": "0 13 * * *"
-    },
-    {
-      "path": "/api/cron/tick?source=vercel",
-      "schedule": "* * * * *"
     }
   ]
 }
