@@ -43,7 +43,7 @@ import { DEFAULTS, globalOverrides, isUsHoliday } from '@/lib/config';
 import { getClient, getProfile } from '@/lib/db/client';
 import { logEvent } from '@/lib/db/events';
 import { mintToken, pageUrl } from '@/lib/pagetokens';
-import { onboardSender } from '@/lib/notify';
+import { onboardSender, ackAlerts } from '@/lib/notify';
 import { zonedToUtc } from '@/lib/systems/stagec-common';
 import { io, firstNameOf, ownerName, asObject, isPublicUrl, weekdayOf } from '@/lib/systems/intake-io';
 import { STATES, stateCode, stateOfCity } from '@/lib/systems/usgeo';
@@ -885,6 +885,10 @@ export async function calendarAction(body = {}, { now = io.now() } = {}) {
     return saved;
   });
   await logEvent(meeting.clientId || null, SYSTEM, `owner_${body.action}`, { meetingId: meeting.id, start: meeting.start, status: meeting.status });
+  // The owner answered their request (Yes, another time, Decline, or cancelled it): its "asked for … — say yes" alert is handled.
+  if (meeting.clientId && ['confirm', 'suggest', 'decline', 'cancel'].includes(body.action)) {
+    await ackAlerts(meeting.clientId, ['meeting_requested'], { reason: `answered in the Calendar (${body.action})`, now });
+  }
   return { ok: true, meeting: hubMeeting(meeting, s) };
 }
 

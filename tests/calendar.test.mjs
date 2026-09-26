@@ -335,7 +335,8 @@ test('Yes: the confirmation has the time in their zone and a valid .ics in UTC; 
   // The day-before reminder follows in their zone.
   await checkOnboardCalls({ now: at(MON, 3), force: true });
   assert.equal(toSam().at(-1).subject, 'Our onboarding call tomorrow');
-  assert.match(toSam().at(-1).text, /is Tuesday, October 6 at 12:00 PM MDT\./);
+  // One time style in every email to them (the Calendar's): their zone, Eastern beside it.
+  assert.match(toSam().at(-1).text, /is Tuesday 6 October at 12:00 pm Mountain Time \(2:00 pm Eastern\)\./);
   // Their calendar accepting our invite (a REPLY for our UID) is no new booking.
   inbox = [{ uid: 5, folder: 'INBOX', inbox: 'onboard@aviance.test', messageId: '<acc-1@google.com>', from: SAM, subject: 'Accepted: Onboarding call — eCreek IT', date: at(MON, 3).toISOString(), threadIds: [], kind: 'auto_ack', hasIcs: true,
     ics: [['BEGIN:VCALENDAR', 'METHOD:REPLY', 'BEGIN:VEVENT', `UID:${meeting.id}`, 'DTSTART:20261006T180000Z', 'ORGANIZER:mailto:onboard@aviance.test', `ATTENDEE;PARTSTAT=ACCEPTED:mailto:${SAM}`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n')] }];

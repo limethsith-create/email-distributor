@@ -162,7 +162,7 @@ export async function alertOwner(key, { clientId = null, vars = {}, body = '', d
     // Allow a retry on the next occurrence rather than swallowing it for the day.
     try { await kv.srem(K.alertsDay(day), dedupeKey); } catch {}
   }
-  return { sent: delivered, channels: record.channels };
+  return { sent: delivered, id: record.id, channels: record.channels };
 }
 
 export async function getAlertLog(limit = 200) {
@@ -235,7 +235,9 @@ export async function notifyClient(clientId, key, vars = {}, { to = null, from =
   }
   let msg;
   try {
-    msg = renderTemplate(key, { clientName: client?.name, contactName: client?.contactName, ...vars });
+    // Every client template may greet them by first name ("Hi Dana,"); the full name stays for where a name is signed.
+    const firstName = String(client?.contactName || '').trim().split(/\s+/)[0] || 'there';
+    msg = renderTemplate(key, { clientName: client?.name, contactName: client?.contactName, firstName, ...vars });
   } catch (err) {
     if (dedupe) await kv.del(`notified:${clientId}:${dedupe}`);
     await alertOwner('report_blocked', { clientId, scope: `${clientId}:${key}`, vars: { report: key, clientId }, body: `Could not render "${key}" for ${clientId}: ${err.message}`, did: 'Nothing was sent to the client.' });

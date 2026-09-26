@@ -23,7 +23,7 @@ import { getClient, getProfile, getTrial } from '@/lib/db/client';
 import { logEvent } from '@/lib/db/events';
 import { addPromise } from '@/lib/db/promises';
 import { alertOwner, notifyClient } from '@/lib/notify';
-import { mintToken, readToken, pageUrl, TTL } from '@/lib/pagetokens';
+import { mintToken, readToken, pageUrl, rememberLink, TTL } from '@/lib/pagetokens';
 import { encrypt, decrypt } from '@/lib/crypto';
 import { ET, dayKeyIn, trialDay, addDays } from '@/lib/time';
 import { buildSequence, getStoredSequence, checkVariant, sampleLead } from '@/lib/systems/copy';
@@ -72,14 +72,21 @@ export async function approvalUrl(clientId, { fresh = false } = {}) {
   if (!fresh && a.tokenEnc) {
     try {
       const raw = decrypt(a.tokenEnc);
-      if (await readToken(raw, { purpose: PURPOSE })) return pageUrl(raw, 'approve');
+      if (await readToken(raw, { purpose: PURPOSE })) {
+        const url = pageUrl(raw, 'approve');
+        await rememberLink(clientId, PURPOSE, url);
+        return url;
+      }
     } catch {}
   }
   const token = await mintToken(clientId, PURPOSE, { ttl: TTL.long * 2 });
   let tokenEnc = '';
   try { tokenEnc = encrypt(token); } catch {}
   await saveApproval(clientId, { tokenEnc, tokenMintedAt: new Date().toISOString() });
-  return pageUrl(token, 'approve');
+  const url = pageUrl(token, 'approve');
+  // The hub shows the last approval link they were sent (docs/HUB-API.md `links`).
+  await rememberLink(clientId, PURPOSE, url);
+  return url;
 }
 
 async function mailVars(clientId) {

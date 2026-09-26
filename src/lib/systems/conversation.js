@@ -28,6 +28,7 @@ import { kv } from '@vercel/kv';
 import { K, assertClientId } from '@/lib/db/keys';
 import { logEvent } from '@/lib/db/events';
 import { normId } from '@/lib/mail-utils';
+import { ackAlerts } from '@/lib/notify';
 import { io, asArray, asObject } from '@/lib/systems/intake-io';
 import { shortHash, lower } from '@/lib/systems/stagec-common';
 
@@ -138,6 +139,8 @@ export async function noteAnswered(clientId, at, { messageId = null } = {}) {
     ...(messageId ? { messageIds: JSON.stringify(withId(c.messageIds, messageId)) } : {}),
   });
   await kv.hdel(K.client(clientId), 'msgWaitingAt');
+  // Their "wrote — needs your answer" alert is handled now; it must not stay open in the hub.
+  await ackAlerts(clientId, ['onboard_reply'], { reason: 'answered', now: new Date(ms(at) || Date.now()) });
 }
 
 /**

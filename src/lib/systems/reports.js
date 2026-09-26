@@ -22,7 +22,7 @@ import { alertOwner } from '@/lib/notify';
 import { fill } from '@/lib/templates/render';
 import { REPORT_LINES, REPORT_ZERO_LINES } from '@/lib/templates/client/stage-d';
 import { addDays, dayKeyIn, ET } from '@/lib/time';
-import { mintToken, pageUrl } from '@/lib/pagetokens';
+import { mintToken, pageUrl, rememberLink } from '@/lib/pagetokens';
 import { clientNow } from '@/lib/testclock';
 import { getReplies, getBookings, getPaceLog, pct, money, csv, esc, fmtDay, PLAN_NAMES, markReportRendered, parseRec, cfgTree } from '@/lib/systems/dshared';
 
@@ -279,7 +279,9 @@ async function block(clientId, name, missing) {
 /** Decision page URL for reports/emails (purpose decision:{tag}; see decision.js). */
 export async function decisionLink(clientId, tag, ttlDays = 30) {
   const token = await mintToken(clientId, `decision:${tag}`, { ttl: ttlDays * 86400 });
-  return pageUrl(token, 'decide');
+  const url = pageUrl(token, 'decide');
+  await rememberLink(clientId, 'decision', url);
+  return url;
 }
 
 /**

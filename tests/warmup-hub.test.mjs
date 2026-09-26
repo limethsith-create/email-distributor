@@ -358,7 +358,10 @@ test('warmupView: null before the inboxes are connected; paused until warm-up st
   assert.deepEqual([off.status, off.label], ['paused', 'Warm-up is switched off for these inboxes']);
   const sending = warmupView({ client: { id: 'acme', state: 'sending' }, inboxes: [{ ...inbox, warmupStartedAt: daysAgo(20), inboxRate7d: '0.97' }], now: NOW, s });
   assert.deepEqual([sending.status, sending.label, sending.readyBy], ['ready', 'Warm-up done · 97% reach the inbox', null]);
-  assert.equal(warmupView({ client: { id: 'acme', state: 'deciding' }, inboxes: [inbox], now: NOW, s }), null);
+  // Hub screens fix: the card stays through the decision weeks (how warm-up ended), and goes once the trial is over.
+  const deciding = warmupView({ client: { id: 'acme', state: 'deciding' }, inboxes: [{ ...inbox, warmupStartedAt: daysAgo(40), inboxRate7d: '0.97', warmupReady: '1' }], now: NOW, s });
+  assert.deepEqual([deciding.status, deciding.label], ['ready', 'Warm-up done · 97% reach the inbox']);
+  assert.equal(warmupView({ client: { id: 'acme', state: 'not_now' }, inboxes: [inbox], now: NOW, s }), null);
 });
 
 // ── 5. waiting for helpers ───────────────────────────────────────────────────

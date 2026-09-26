@@ -403,7 +403,7 @@
    },
    "inboxRate": null,
    "lastJobAt": "2026-10-02T14:02:00.800Z",
-   "openAlerts": 0,
+   "openAlerts": 2,
    "urgentAlerts": 0,
    "extension": false,
    "stateLabel": "Onboarding — link sent 11 h ago",
@@ -552,6 +552,8 @@
    "sellsTo": "Managed IT and cybersecurity for law firms and accounting firms with 10–75 staff in the Carolinas"
   },
   "trial": {
+   "onboardingLink": "https://machine.test/c/TOKEN_1/onboard",
+   "onboardingLinkAt": "2026-10-02T03:30:00.000Z",
    "onboardingSentAt": "2026-10-02T03:30:00.000Z",
    "onboardingClosesOn": "held"
   },
@@ -1797,6 +1799,7 @@
    "requestedAt": "2026-10-02T14:02:00.000Z",
    "proposedFor": null,
    "meetingId": "mmur1805c91eb6a69da",
+   "meetLink": null,
    "steps": [
     {
      "key": "sent",
@@ -1837,7 +1840,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_1/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_2/onboard — one page, your details and the agreement.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_2/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_1/onboard — one page, your details and the agreement.\n\nLimeth Sith",
      "kind": "acceptance",
      "auto": false,
      "rule": null,
@@ -1895,7 +1898,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_1/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_2/onboard — one page, your details and the agreement.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_2/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_1/onboard — one page, your details and the agreement.\n\nLimeth Sith",
      "kind": "acceptance",
      "auto": false,
      "rule": null,
@@ -1987,7 +1990,9 @@
    }
   },
   "leadQuality": null,
-  "links": {},
+  "links": {
+   "onboarding": "https://machine.test/c/TOKEN_1/onboard"
+  },
   "virtualNow": null
  },
  "extra": {

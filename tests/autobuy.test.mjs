@@ -559,8 +559,10 @@ test('sync: forwarding once, logins → encrypted inbox records in the existing 
   assert.equal((await getClient('acme')).autobuyOpen, '0');
   ab = (await hubClient('acme')).autobuy;
   assert.equal(ab.status, 'done');
-  assert.ok(ab.steps.every((s) => s.done));
-  assert.equal(ab.label, `${buy.domain} and 2 inboxes are ready — warm-up has started`);
+  // Hub screens fix: with 2 of 8 in the circle the card says what to add, and "Warm-up started" is not done yet.
+  assert.ok(ab.steps.filter((s) => s.key !== 'warmup').every((s) => s.done));
+  assert.equal(ab.steps.find((s) => s.key === 'warmup').done, false);
+  assert.equal(ab.label, `${buy.domain} and 2 inboxes are ready — add 6 warm-up helpers to start warm-up`);
 
   // Idempotent: more looks change nothing, call nothing that writes, alert nothing.
   const inboxesBefore = JSON.stringify(await getInboxRecords('acme'));

@@ -108,6 +108,11 @@ Status for the hub (trial detail `autobuy`):
 `simple` (board rows): "Setting up their inboxes (about 2 days)" /
 "Buy their domain and 2 inboxes on CheapInboxes" (`needsYou: true`).
 
+Once connected the label is "{domain} and 2 inboxes are ready — warm-up has
+started" — or, while the warm-up circle is short (the trial's `warmup.status`
+is `waiting_for_helpers`), "… are ready — add N warm-up helpers to start
+warm-up", with the `warmup` step not done until warm-up really runs.
+
 Settings status: `GET /api/mc/cheapinboxes` →
 `{ status: 'not_set_up|connected|broken', account, hasPaymentMethod, webhook: 'registered|missing', unmatched: [ { domain, mailboxes: n, boughtAt } ] }`;
 `POST /api/mc/cheapinboxes` `{ action: 'saveKey', apiKey }` · `{ action: 'test' }` · `{ action: 'forget' }`.

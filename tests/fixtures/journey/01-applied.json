@@ -376,8 +376,10 @@
    "trialDay": null,
    "day1Date": null,
    "day30Date": null,
-   "health": "green",
-   "healthReasons": [],
+   "health": "red",
+   "healthReasons": [
+    "1 urgent alert open"
+   ],
    "five": {
     "sent": null,
     "replies": null,
@@ -387,8 +389,8 @@
    },
    "inboxRate": null,
    "lastJobAt": null,
-   "openAlerts": 0,
-   "urgentAlerts": 0,
+   "openAlerts": 2,
+   "urgentAlerts": 1,
    "extension": false,
    "stateLabel": "Applied — waiting for your review",
    "simple": {

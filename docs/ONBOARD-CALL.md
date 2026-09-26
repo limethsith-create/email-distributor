@@ -112,6 +112,7 @@ thread as `out`. Plain text only, 2 000 characters max.
   "heldAt": "ISO|null", "dueBy": "ISO", "overdue": false,
   "remindersSent": 1, "nextReminderAt": "ISO|null", "stopped": false,
   "bookingUrl": "https://…|null", "fromInbox": "hello@…",
+  "meetingId": "m…|null", "meetLink": "https://meet.google.com/…|null",   // the confirmed call's Google Meet link (docs/CALENDAR.md)
   "steps": [ { "key": "sent", "label": "Acceptance email sent", "done": true, "at": "ISO" },
              { "key": "opened", "label": "They opened it", "done": true, "at": "ISO" },
              { "key": "replied", "label": "They replied", "done": false, "at": null },
@@ -125,7 +126,7 @@ thread as `out`. Plain text only, 2 000 characters max.
 ### `simple` (on every board row) — the ONLY status the simple Trials list shows
 ```jsonc
 {
-  "step": "new|accepted|call_booked|setting_up|warming_up|sending|finished|declined|queued",
+  "step": "new|accepted|call_booked|setting_up|warming_up|sending|deciding|finished|declined|queued",   // deciding = Day 30 passed, their click pending (drawn where finished is)
   "label": "Accepted — waiting for them to book the call",   // one plain sentence, no jargon
   "next": "Nothing for you: we remind them tomorrow",        // what happens next / what the owner must do
   "needsYou": true,                                            // red dot + top of the list

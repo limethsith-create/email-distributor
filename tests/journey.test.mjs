@@ -238,6 +238,9 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.ok(!research.score.dealbreakers.some((d) => /Market too small/.test(d.text)), JSON.stringify(research.score.dealbreakers));
   assert.notEqual(research.score.label, 'Not a fit', `${research.score.score}/100 ${research.score.label}`);
   assert.equal(s1.row.todo[0].text, "Review Ridgeline IT's trial application", 'one to-do for the application, not also its alert');
+  // Hub screens fix: the trial's own `row` is the board row — the same alerts, the same health.
+  assert.equal(s1.row.health, 'red');
+  assert.deepEqual([s1.detail.row.health, s1.detail.row.openAlerts, s1.detail.row.urgentAlerts], [s1.row.health, s1.row.openAlerts, s1.row.urgentAlerts]);
 
   // ── 2. The owner reads it in the morning (Sri Lanka) and says yes ────────
   clock.set(colombo('2026-10-02', '08:55'));
@@ -259,6 +262,8 @@ test('the journey: website form → Day 30 → converted, through the real route
   // Journey fix: the urgent new_application alert is handled by the yes — no to-do or red dot is left behind.
   assert.equal(s3.row.simple.needsYou, false, JSON.stringify(s3.row.todo));
   assert.ok((await allAlerts()).find((a) => a.key === 'new_application').acknowledged);
+  // Hub screens fix: the onboarding link she was sent is in `links`.
+  assert.ok(String(s3.detail.links.onboarding || '').endsWith(`/c/${onboardToken}/onboard`), JSON.stringify(s3.detail.links));
 
   // Dana opens it on her phone the next morning (Gmail loads the pixel through its proxy).
   clock.set(et('2026-10-02', '07:50'));
@@ -321,6 +326,9 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(s6.detail.onboardCall.bookedFor, tue11);
   assert.equal(s6.row.simple.label, 'Call booked for Tue 6 Oct, 8:30 pm your time');
   assert.equal(s6.row.simple.needsYou, false);
+  // Hub screens fix: the Meet link is on the trial's onboarding call, and the "asked for a time" alert is handled by the Yes.
+  assert.equal(s6.detail.onboardCall.meetLink, meetLink);
+  assert.ok((await allAlerts()).find((a) => a.key === 'meeting_requested').acknowledged, 'meeting_requested closed by the Yes');
 
   // The weekend: the owner opens the hub now and then; nothing goes to Dana.
   for (const [d, t] of [['2026-10-03', '11:00'], ['2026-10-04', '19:30']]) { clock.set(colombo(d, t)); await hubLooks(); }
@@ -334,6 +342,8 @@ test('the journey: website form → Day 30 → converted, through the real route
   const tomorrow = steps.at(-1).mail.filter((m) => m.to === APPLICANT.email);
   assert.equal(tomorrow.length, 1, 'one day-before reminder');
   assert.ok(sim.sent.filter((m) => m.to === APPLICANT.email).at(-1).text.includes(meetLink), 'with the Meet link');
+  // Hub screens fix: one time style in every email to her (the Calendar's), the reminder included.
+  assert.match(sim.sent.filter((m) => m.to === APPLICANT.email).at(-1).text, /is Tuesday 6 October at 11:00 am Eastern Time\./);
 
   // Tuesday: the call happens; the owner marks it done in the Calendar.
   clock.set(et('2026-10-06', '11:40'));
@@ -416,6 +426,11 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(s11.detail.domain.blacklist, 'clean');
   assert.equal(s11.detail.warmup.status, 'waiting_for_helpers');
   assert.equal(s11.row.simple.needsYou, true, 'add helpers');
+  // Hub screens fix: before warm-up really runs the purchase card says what to add, its warm-up step is not done, and the day is 0.
+  assert.equal(s11.detail.autobuy.label, `${toBuy.domain} and 2 inboxes are ready — add 6 warm-up helpers to start warm-up`);
+  assert.equal(s11.detail.autobuy.steps.find((x) => x.key === 'warmup').done, false);
+  assert.equal(s11.detail.warmup.day, 0);
+  assert.ok(s11.detail.warmup.inboxes.every((i) => i.day === 0), JSON.stringify(s11.detail.warmup.inboxes));
   assert.equal(world.ci.forbidden.length, 0, 'the machine never ordered, paid or cancelled anything');
   assert.ok(world.ci.calls.filter((c) => /credentials$/.test(c.path)).length >= 2, 'the logins were fetched');
   assert.equal((await kv.hgetall(K.heartbeat()))?.lastTickAt || null, null, 'everything so far ran with no heartbeat');
@@ -437,6 +452,9 @@ test('the journey: website form → Day 30 → converted, through the real route
   const s12 = await snap('12', 'helpers-added', 'The owner makes 8 free helper accounts (Gmail, Yahoo, AOL, iCloud, GMX, Yandex) and adds each in Settings › Warm-up; each login is tested first. The circle is complete. From now on the heartbeat runs (cron-job.org).', { extra: { warmupSettings: warmSettings } });
   assert.equal(s12.detail.warmup.status, 'warming', JSON.stringify(s12.detail.warmup));
   assert.equal(s12.row.simple.needsYou, false, JSON.stringify(s12.row.todo));
+  assert.equal(s12.detail.autobuy.label, `${toBuy.domain} and 2 inboxes are ready — warm-up has started`);
+  assert.equal(s12.detail.autobuy.steps.find((x) => x.key === 'warmup').done, true);
+  assert.equal(s12.detail.warmup.day, 1);
 
   // ── From here the heartbeat runs (cron-job.org, every 15 minutes) ──────────
   const tick = async () => {
@@ -536,6 +554,10 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.ok(hourOf(approvalMail.at) >= 9 && hourOf(approvalMail.at) < 17, `approval link at ${approvalMail.at}`);
   assert.ok(approvedAt, 'Dana approved it');
   assert.equal(s15.detail.sequence.approvalMode, 'click');
+  // Hub screens fix: first name in the greeting, the full name where a name is signed; the approval link is in `links`.
+  assert.match(approvalMail.text, /^Hi Dana,\n/);
+  assert.match(approvalMail.text, /in Dana Whitfield's name/);
+  assert.ok(String(s15.detail.links.approval || '').endsWith(`/c/${linkIn(approvalMail.text, 'approve')}/approve`), JSON.stringify(s15.detail.links));
   await goTo(et('2026-10-21', '12:00'));
   const s16 = await snap('16', 'day-1', 'Day 1: warm-up done, list and copy approved, the booking link tested — the first emails went out at 9 am their time.');
   assert.equal(s16.row.state, 'sending');
@@ -610,6 +632,8 @@ test('the journey: website form → Day 30 → converted, through the real route
   // Journey fix: alert titles name the trial ("Ridgeline IT"), not its id.
   const angry = steps.at(-1).alerts.find((a) => a.key === 'angry_reply');
   assert.equal(angry.title, 'Angry reply: Ridgeline IT');
+  // Hub screens fix: the red dot comes with what to do, not "Nothing for you".
+  assert.deepEqual([s17.row.simple.needsYou, s17.row.simple.next], [true, 'Read the angry reply and mark it as seen']);
   // The owner reads the angry reply and presses the to-do's button (acknowledge).
   const angryTodo = s17.board.todos.find((t) => t.clientId === clientId && t.action?.path === '/api/mc/alerts' && /Angry/.test(t.text));
   assert.ok(angryTodo, 'the urgent alert is a to-do');
@@ -637,6 +661,8 @@ test('the journey: website form → Day 30 → converted, through the real route
   await goTo(et('2026-10-26', '10:45'));
   const s20 = await snap('20', 'owner-answered', 'The owner answers from the hub (it goes from the onboarding inbox, in her thread); the red dot goes.');
   assert.equal(s20.row.simple.needsReply, false);
+  // Hub screens fix: her "wrote — needs your answer" alert is handled by the answer.
+  assert.ok((await allAlerts()).filter((a) => a.key === 'onboard_reply').every((a) => a.acknowledged), 'onboard_reply closed by the answer');
 
   // The call happens; Dana taps "Showed".
   await goTo(new Date(slot.getTime() + 90 * 60_000));
@@ -662,6 +688,8 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(s22.row.simple.label, 'Sending stopped — a prospect replied with a legal threat');
   assert.equal(s22.row.simple.needsYou, true);
   assert.equal(s22.row.todo.filter((t) => /legal/i.test(t.text)).length, 1, 'one to-do for it, not also its alert');
+  // Hub screens fix: the to-do says who wrote, when and what — not the reply's id.
+  assert.match(s22.row.todo.find((t) => t.id === `legal:${clientId}`).detail, /^[^\s@]+@[^\s@]+ wrote on \w{3} \d{1,2} \w{3}, [\d:]+ [ap]m \(your time\): “Forwarding this to our attorney/);
   // The owner reads it that evening (Colombo) and presses the to-do's button.
   await goTo(colombo('2026-10-28', '21:30'));
   const legalTodo = (await hubLooks()).board.todos.find((t) => t.id === `legal:${clientId}`);
@@ -681,6 +709,11 @@ test('the journey: website form → Day 30 → converted, through the real route
   await goTo(et('2026-11-19', '12:00'));
   const s26 = await snap('26', 'day-30', 'Day 30: the handover (everything from the trial) and the decision page go to Dana.');
   assert.equal(s26.row.state, 'deciding');
+  // Hub screens fix: its own step in plain words, the bonus deadline with its zones, the warm-up card kept, the decision link shown.
+  assert.deepEqual([s26.row.simple.step, s26.row.simple.label, s26.row.simple.next, s26.row.simple.needsYou], ['deciding', 'Trial finished — waiting for their decision', 'Nothing. Dana chooses on the decision page.', false]);
+  assert.match(s26.row.stateLabel, /^Deciding — bonus until \w{3} \d{1,2} \w{3}, [\d:]+ [ap]m Sri Lanka time \(.* Eastern\)$/);
+  assert.equal(s26.detail.warmup?.status, 'ready', 'the warm-up card stays through the decision');
+  assert.ok(s26.detail.links.decision, JSON.stringify(s26.detail.links));
   // Dana presses Start on the decision page.
   const decision = sim.sent.filter((m) => m.to === APPLICANT.email && linkIn(m.text, 'decide')).at(-1);
   assert.ok(decision, 'the decision page link reached Dana');
@@ -694,6 +727,10 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(s27.row.state, 'converted');
   assert.equal(s27.row.simple.label, 'Finished — became a client');
   assert.equal(steps.at(-1).alerts.find((a) => a.key === 'converted').title, 'Converted: Ridgeline IT on Starter');
+  // Hub screens fix: the invoice in the contract's shape, and a to-do that names it.
+  assert.match(s27.detail.invoice.number, /^AV-\d{6}-ridgelineit$/);
+  assert.deepEqual([s27.detail.invoice.remindersSent, s27.detail.invoice.dueDate, s27.detail.invoice.amount], [0, '2026-11-19', 2497]);
+  assert.equal(s27.row.todo.find((t) => t.id === `invoice:${clientId}`).text, `Mark the month-one invoice paid when the money lands (${s27.detail.invoice.number})`);
   // The money lands a few days later; the owner presses the to-do.
   await goTo(colombo('2026-11-24', '09:00'));
   const paidTodo = (await hubLooks()).board.todos.find((t) => t.id === `invoice:${clientId}`);
@@ -702,6 +739,11 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(paid.status, 200, JSON.stringify(paid.json));
   const s28 = await snap('28', 'paid', 'The money lands; the owner marks the invoice paid. The trial pair keeps sending for the new client until the plan’s inboxes are added.');
   assert.equal(s28.row.simple.next, 'Nothing for you');
+  // Hub screens fix: alerts do not pile up — one digest of each kind open at most, handled alerts closed.
+  const open28 = (await allAlerts()).filter((a) => !a.acknowledged);
+  assert.ok(open28.filter((a) => a.key === 'morning_digest').length <= 1 && open28.filter((a) => a.key === 'monday_digest').length <= 1, open28.map((a) => a.title).join('; '));
+  assert.deepEqual(open28.filter((a) => ['onboard_reply', 'meeting_requested'].includes(a.key)).map((a) => a.title), []);
+  assert.ok(open28.length < 12, `${open28.length} open alerts at the end: ${open28.map((a) => a.key).join(', ')}`);
 
   // ── The whole run ─────────────────────────────────────────────────────────
   if (process.env.JOURNEY_REPORT) writeReport(process.env.JOURNEY_REPORT);

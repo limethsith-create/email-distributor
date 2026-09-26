@@ -23,6 +23,33 @@ export async function getInvoice(clientId) {
   try { return (await kv.hgetall(K.invoice(clientId))) || null; } catch { return null; }
 }
 
+/**
+ * The stored invoice → the hub's shape (docs/HUB-API.md `invoice`): `number`,
+ * `amount`, `issuedAt`, `paidAt`, `dueDate` (the invoice says "due today"),
+ * `remindersSent` as a count, plus plan, calls, bonus, status, sentAt and
+ * blockedReason. null when there is no invoice.
+ */
+export function invoiceView(raw) {
+  if (!raw || !Object.keys(raw).length) return null;
+  const num = (v) => (v === '' || v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+  let reminders = [];
+  try { reminders = typeof raw.remindersSent === 'string' ? JSON.parse(raw.remindersSent || '[]') : raw.remindersSent || []; } catch { reminders = []; }
+  return {
+    number: raw.invoiceNo || null,
+    plan: raw.plan || null,
+    amount: num(raw.amount),
+    calls: num(raw.calls),
+    bonus: raw.bonus === '1' || raw.bonus === true,
+    status: raw.status || null,
+    issuedAt: raw.issuedAt || null,
+    sentAt: raw.sentAt || null,
+    paidAt: raw.paidAt || null,
+    dueDate: raw.issuedAt ? dayKeyIn(ET, new Date(raw.issuedAt)) : null,
+    remindersSent: Array.isArray(reminders) ? reminders.length : 0,
+    blockedReason: raw.blockedReason || null,
+  };
+}
+
 /** Payment lines from config, or null when neither PayPal.me nor Wise is set. */
 export async function paymentLines(clientId, amount) {
   const pay = (await cfgTree(clientId, 'PAYMENT')) || {};

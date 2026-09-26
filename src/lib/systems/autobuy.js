@@ -848,11 +848,13 @@ async function pick(client, domain, { now }) {
  * client, the domain hash and whether a key is set. null while the trial is
  * not at the buying step and never used this path.
  */
-export function autobuyView({ client, rec = {}, connected = false, domain = {}, s = DEFAULTS.CHEAPINBOXES } = {}) {
+export function autobuyView({ client, rec = {}, connected = false, domain = {}, s = DEFAULTS.CHEAPINBOXES, warmup = null } = {}) {
   const st = client?.state;
   const linked = Boolean(rec.domain);
   if (!client || (!linked && st !== 'awaiting_purchase')) return null;
   const n = Number(rec.expected) || rec.buy?.mailboxes?.length || Number(s.mailboxes) || 2;
+  // The warm-up card (docs/WARMUP-HUB.md) knows whether warm-up really runs: while the circle is short it waits for helpers.
+  const helpersShort = warmup && warmup.status === 'waiting_for_helpers' ? Math.max(1, Number(warmup.helpersNeeded) || 1) : 0;
   const stepsOf = (at = {}) => [
     { key: 'bought', label: 'You bought it', done: Boolean(at.bought), at: at.bought || null },
     { key: 'domain', label: 'Domain live + spam protection set', done: Boolean(at.domain), at: at.domain || null },
@@ -872,7 +874,9 @@ export function autobuyView({ client, rec = {}, connected = false, domain = {}, 
     ready_to_buy: name ? `Buy ${name} and ${n} inboxes on CheapInboxes` : rec.buyProblem || `Buy their domain and ${n} inboxes on CheapInboxes — the list is being made`,
     provisioning: `Setting up ${name} — about 48 hours`,
     connecting: rec.connectedAt && domain.setupPhase === 'failed' ? `Connecting ${name} — a setup check failed` : `Connecting ${name} to our system`,
-    done: `${name} and ${n} inboxes are ready — warm-up has started`,
+    done: helpersShort
+      ? `${name} and ${n} inboxes are ready — add ${helpersShort} warm-up helper${helpersShort === 1 ? '' : 's'} to start warm-up`
+      : `${name} and ${n} inboxes are ready — warm-up has started`,
     failed: rec.problem || `The order for ${name} failed`,
   }[status];
   return {
@@ -880,7 +884,8 @@ export function autobuyView({ client, rec = {}, connected = false, domain = {}, 
     buy: status === 'ready_to_buy' ? rec.buy || null : null,
     label,
     domain: name,
-    steps: linked ? stepsOf({ bought: rec.boughtAt || rec.linkedAt, domain: rec.domainLiveAt, inboxes: rec.inboxesActiveAt, connected: rec.connectedAt, warmup: warmupAt }) : stepsOf(),
+    // "Warm-up started" is done only when warm-up really runs (not while the circle waits for helpers).
+    steps: linked ? stepsOf({ bought: rec.boughtAt || rec.linkedAt, domain: rec.domainLiveAt, inboxes: rec.inboxesActiveAt, connected: rec.connectedAt, warmup: helpersShort ? null : warmupAt }) : stepsOf(),
     mailboxes,
     problem: status === 'ready_to_buy' ? (rec.buy ? null : rec.buyProblem || null) : rec.problem || null,
     linkedBy: rec.linkedBy || null,
@@ -892,9 +897,18 @@ export function autobuyView({ client, rec = {}, connected = false, domain = {}, 
 export const AUTOBUY_STATES = new Set(['awaiting_purchase', 'setup_check', 'warming']);
 
 /** The trial's `autobuy` from Redis (two or three reads). */
-export async function autobuyFor(clientId, { client = null, connected = null } = {}) {
+export async function autobuyFor(clientId, { client = null, connected = null, now = new Date() } = {}) {
   const c = client || await getClient(clientId);
   if (!c) return null;
   const [rec, isOn, domain, s] = await Promise.all([readRec(clientId), connected ?? ci.isConnected(), getDomain(clientId), autobuySettings()]);
-  return autobuyView({ client: c, rec, connected: isOn, domain, s });
+  // While the trial warms, the warm-up card says whether warm-up has really started (the circle may be short).
+  let warmup = null;
+  if (c.state === 'warming') {
+    try {
+      const [w, { getInboxRecords }] = await Promise.all([import('@/lib/systems/warmup'), import('@/lib/db/inboxes')]);
+      const data = await w.hubWarmupData({ now, circle: true });
+      warmup = w.warmupView({ client: c, inboxes: await getInboxRecords(clientId), now, circle: data.circle, dayStats: data.dayStats, s: data.settings });
+    } catch { warmup = null; }
+  }
+  return autobuyView({ client: c, rec, connected: isOn, domain, s, warmup });
 }

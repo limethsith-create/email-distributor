@@ -140,7 +140,8 @@ Everything in the row above plus:
   "bookings": [ { "id", "leadEmail", "scheduledAt", "status", "qualified", "tapped", "disputeReason" } ],
   "pacelog": [ { "at", "day", "test", "fix" } ],
   "reports": [ { "name": "friday:2026-10-10", "renderedAt": "...", "blockedReason": null } ],
-  "invoice": { "number", "amount", "issuedAt", "paidAt", "dueDate" } | null,
+  "invoice": { "number": "AV-202611-acme", "amount": 2497, "issuedAt": "ISO", "paidAt": "ISO|null", "dueDate": "YYYY-MM-DD",   // due the day it is issued
+               "remindersSent": 0, "plan": "starter", "calls": 10, "bonus": true, "status": "sent|paid|blocked", "sentAt": "ISO|null", "blockedReason": null } | null,
   "promises": [ { "id", "text", "dueAt", "doneAt" } ],
   "upcoming": [ { "date", "time", "what" } ],
   "events": [ { "at", "system", "event", "detail" } ],   // newest 150
@@ -149,6 +150,14 @@ Everything in the row above plus:
   "links": { "onboarding": "https://.../c/<token>/onboard", "approval": "...", "decision": "..." }   // current client links where they exist
 }
 ```
+
+`links`: tokens are stored hashed, so the machine keeps the LAST link of
+each purpose it emailed the client (the acceptance email and its resends, the
+onboarding reminders, the reply bot's answer; the approval emails; the Day 29
+report and the Day 30 email) on the trial hash (`onboardingLink`,
+`approvalLink`, `decisionLink` + `…LinkAt`) and returns it here while its
+token still works. A link whose token expired, was replaced or used up drops
+out; a purpose with no link sent yet is absent.
 
 ## Actions the hub calls (all existing; JSON bodies)
 
@@ -377,10 +386,10 @@ machine then tracks the call and collects the conversation.
 The ONLY status the simple Trials list shows:
 ```jsonc
 "simple": {
-  "step": "new|accepted|call_booked|setting_up|warming_up|sending|finished|declined|queued",
+  "step": "new|accepted|call_booked|setting_up|warming_up|sending|deciding|finished|declined|queued",
   "label": "Accepted — waiting for them to book the call",   // one plain sentence
   "next": "Nothing for you: we remind them tomorrow",        // what happens next / what the owner must do
-  "needsYou": true,                                          // red dot + top of the list
+  "needsYou": true,                                          // red dot + top of the list; then `next` is what to do, never "Nothing for you"
   "since": "ISO|null",                                       // when this step started
   "person": "Sam Test|null", "company": "eCreek IT",
   "dayOf30": 12 | null                                       // only while sending / extension (can pass 30 in an extension)
@@ -389,7 +398,12 @@ The ONLY status the simple Trials list shows:
 `needsYou` is true for a new application to review, a reply to answer, an
 overdue booking, a call to mark done/no-show, domain buying, a failed domain
 check, a "talk to someone" request, and anything in the row's `todo` marked
-urgent. Times in labels are the owner's (Sri Lanka) time.
+urgent. Whenever it is true, `next` is the thing to do (for an urgent alert:
+"Read the angry reply and mark it as seen"). Times in labels are the owner's
+(Sri Lanka) time. `step` `deciding` = Day 30 has passed and their decision
+is pending ("Trial finished — waiting for their decision", next "Nothing.
+Dana chooses on the decision page."); the hub draws it at the same place as
+`finished`, which stays for after the decision.
 
 Rows of trials with an onboarding call may also carry these to-dos
 (`action: {type:'view', view:'detail', clientId, section:'onboardCall'}`, all
@@ -532,8 +546,11 @@ press again), `503` (the calendar was busy for a moment — press again).
 ## What changes elsewhere
 
 - `onboardCall` (in `GET /api/mc/hub/{id}`) gains `requestedFor`,
-  `requestedAt`, `proposedFor` (set only while a request waits for the owner)
-  and `meetingId`. Its `label` reads "They asked for Tue 6 Oct, 11:30 pm (your
+  `requestedAt`, `proposedFor` (set only while a request waits for the owner),
+  `meetingId` and `meetLink` (the confirmed call's Google Meet link, from its
+  meeting — so "Join Google Meet" works on the trial page without the
+  Calendar week loaded; null before the call is confirmed or without Google).
+  Its `label` reads "They asked for Tue 6 Oct, 11:30 pm (your
   time) — say yes in the Calendar" or "You suggested … — waiting for them".
 - `simple` on board rows: "They asked for Tue 6 Oct, 11:30 pm your time — say
   yes in the Calendar" with `needsYou: true`.
@@ -799,9 +816,11 @@ used this path once past buying).
 Labels: ready_to_buy "Buy {domain} and 2 inboxes on CheapInboxes" ·
 provisioning "Setting up {domain} — about 48 hours" · connecting "Connecting
 {domain} to our system" (or "… — a setup check failed") · done "{domain} and 2
-inboxes are ready — warm-up has started" · failed = the problem · not_set_up
-"CheapInboxes is not connected — buy by hand and paste the logins, or connect
-it in Settings › Inboxes & domains".
+inboxes are ready — warm-up has started", or, while the warm-up circle is
+short (`warmup.status` `waiting_for_helpers`), "{domain} and 2 inboxes are
+ready — add N warm-up helpers to start warm-up" with the `warmup` step not
+done · failed = the problem · not_set_up "CheapInboxes is not connected — buy
+by hand and paste the logins, or connect it in Settings › Inboxes & domains".
 
 ## `POST /api/mc/clients/{id}/autobuy`
 
@@ -832,8 +851,8 @@ connected). Redraw from `autobuy`. `GET` on the same path → `{ ok, autobuy }`.
   (about 2 days) — needs you", next "Fix: {problem}", `needsYou: true`. A
   failed setup check keeps today's text.
 - To-do `buy:{id}` while ready to buy: "Buy {domain} and 2 inboxes on
-  CheapInboxes", detail "$9.99 for the domain · the machine connects
-  everything after you buy", `action: { type: 'view', view: 'detail',
+  CheapInboxes", detail "$9.99 for the domain · we connect everything by
+  ourselves after you buy", `action: { type: 'view', view: 'detail',
   clientId, section: 'autobuy' }` (urgent after 12 h).
 - Machine to-do `unmatched:{domain}` (urgent, `clientId: null`, clientName
   "CheapInboxes"): "You bought {domain} — which trial is it for? Pick in
@@ -943,12 +962,14 @@ Health in plain words: `ok` works · `new` not tried yet · `failing` (see
 
 ## `GET /api/mc/hub/{id}` gains `warmup`
 
-`null` before the inboxes are connected (and outside setup_check…converted).
+`null` before the inboxes are connected (and outside setup_check…converted;
+`deciding` keeps it, status `ready`, so the card does not vanish between Day
+30 and their decision).
 ```jsonc
 "warmup": {
   "status": "waiting_for_helpers|warming|ready|paused",
   "label": "Warming up — day 5 of about 14 · 96% reach the inbox",   // one plain sentence for the card
-  "day": 5, "of": 14,                  // the slowest inbox's warm-up day (0 before it starts)
+  "day": 5, "of": 14,                  // the slowest inbox's warm-up day (0 before it starts — also while waiting_for_helpers)
   "readyBy": "2026-10-15|null",        // estimate while warming; null when unknown (see below)
   "inboxRate": 0.96,                   // lowest 7-day inbox rate, null until first measured (nightly)
   "inboxes": [ { "email": "jordan@acmehq.com", "day": 5, "sentToday": 8, "quota": 8, "inboxRate7d": 0.96, "ready": false } ],
@@ -1113,3 +1134,42 @@ verifalia: { username, password }, reoon, zeroBounce, hunter }`) — with the
 LEADFINDER_TOKEN only, never for a browser session and never in any
 `/api/mc/hub` answer; the keys store is left out of backups whole. Alert
 `verify_no_keys` now points at Settings › Keys.
+
+# Hub screens check (2026-09-26) — what changed for the hub
+
+A check of every hub screen against the journey snapshots
+(tests/fixtures/journey) found these; each is fixed and the snapshots are
+regenerated. Every change is additive except where a field is named.
+
+- `GET /api/mc/hub/{id}` `row` is built with the same alert log as the board,
+  so `health`, `openAlerts` and `urgentAlerts` match the board row.
+- `links` is filled (see "GET /api/mc/hub/[id]" above): the last onboarding /
+  approval / decision link emailed, while its token works.
+- `simple.next` is never "Nothing for you" while `needsYou` is true: an
+  urgent alert gives the thing to do ("Read the angry reply and mark it as
+  seen"; other alerts "Read the alert “…” and mark it as seen").
+- `simple.step` `deciding` (Day 30 passed, decision pending) with `next`
+  "Nothing. {firstName} chooses on the decision page."; `finished` stays for
+  after the decision. `stateLabel` while deciding: "Deciding — bonus until Fri
+  20 Nov, 7:30 pm Sri Lanka time (9:00 am Eastern)".
+- `invoice` follows the contract: `number` (was `invoiceNo`), `dueDate`,
+  `remindersSent` a count; the to-do reads "Mark the month-one invoice paid
+  when the money lands (AV-…)" — no "(invoice)".
+- To-do `legal:{id}` detail is plain words: "{email} wrote on Wed 28 Oct, 8:10
+  pm (your time): “first line”", never the reply's id.
+- To-do `buy:{id}` detail: "we connect everything by ourselves after you buy".
+- `autobuy` while the circle is short: label "… are ready — add N warm-up
+  helpers to start warm-up" and the `warmup` step not done; `warmup.day` and
+  `warmup.inboxes[].day` are 0 (nothing due) until warm-up really runs.
+- `warmup` stays on the trial in `deciding` (status `ready`).
+- `onboardCall.meetLink`: the confirmed call's Google Meet link.
+- Alerts that pile up: the morning and Monday digests acknowledge the earlier
+  ones of their kind when they go out (one of each open at most; they are
+  `info`); `meeting_requested` is acknowledged when the owner answers in the
+  Calendar (Yes, Suggest, Decline, Cancel); `onboard_reply` ("{person} wrote —
+  needs your answer") when the owner or the reply bot answers.
+- Client emails: every time is written the Calendar's way ("Tuesday 6 October
+  at 11:00 am Eastern Time"), the day-before reminder included; the approval
+  emails greet by first name ("Hi Dana,") — the full name stays only where a
+  name is signed ("in Dana Whitfield's name"). Every client template may use
+  `{firstName}`.

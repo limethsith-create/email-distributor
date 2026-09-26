@@ -41,7 +41,7 @@ import { K } from '@/lib/db/keys';
 import { DEFAULTS, globalOverrides, cfg } from '@/lib/config';
 import { getClient } from '@/lib/db/client';
 import { logEvent } from '@/lib/db/events';
-import { mintToken, pageUrl, TTL } from '@/lib/pagetokens';
+import { mintToken, pageUrl, rememberLink, TTL } from '@/lib/pagetokens';
 import { isJunkReply } from '@/lib/junk-filter';
 import { zonedToUtc, shortHash, lower } from '@/lib/systems/stagec-common';
 import { io, sendClient, firstNameOf, ownerName, asObject } from '@/lib/systems/intake-io';
@@ -562,7 +562,9 @@ async function answerFor(client, raw, p, s, onboard, now) {
       return { text: fillAnswer(s.answers.price, base), did: 'answered the price question: the trial is free, no card, an honest review' };
     case 'what_needed': {
       const token = await mintToken(client.id, `onboarding:bot${shortHash(p.id, 8)}`, { ttl: TTL.long });
-      return { text: fillAnswer(s.answers.what_needed, { ...base, onboardingLink: pageUrl(token, 'onboard') }), did: 'sent what the call covers and the onboarding page link' };
+      const onboardingLink = pageUrl(token, 'onboard');
+      await rememberLink(client.id, 'onboarding', onboardingLink, { now });
+      return { text: fillAnswer(s.answers.what_needed, { ...base, onboardingLink }), did: 'sent what the call covers and the onboarding page link' };
     }
     default:
       return { handOver: 'none of its rules fits this message' };

@@ -250,7 +250,7 @@ test('a calendar invite naming the applicant → booked at the right time + onbo
   // The day the reminder would have gone: none to book (booked), but the day-before reminder does.
   await checkOnboardCalls({ now: at(MON, 24), force: true });
   assert.deepEqual(toSam().map((m) => m.subject), [SUBJECT, 'Our onboarding call tomorrow']);
-  assert.match(toSam()[1].text, /our 30-minute onboarding call is Wednesday, October 7 at 3:00 PM EDT\./);
+  assert.match(toSam()[1].text, /our 30-minute onboarding call is Wednesday 7 October at 3:00 pm Eastern Time\./);
   await checkOnboardCalls({ now: at(MON, 25), force: true });
   assert.equal(toSam().length, 2, 'the day-before reminder goes once');
   // The same invite again is a duplicate; a cancel from the calendar undoes the booking.

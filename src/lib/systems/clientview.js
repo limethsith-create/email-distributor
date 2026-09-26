@@ -17,7 +17,7 @@ import { addDays, dayKeyIn, ET } from '@/lib/time';
 import { clientNow, clientTrialDay } from '@/lib/testclock';
 import { getReplies, getBookings, cfgTree } from '@/lib/systems/dshared';
 import { getRenderedReports } from '@/lib/systems/reports';
-import { getInvoice } from '@/lib/systems/invoice';
+import { getInvoice, invoiceView } from '@/lib/systems/invoice';
 import { computeHealth } from '@/lib/systems/health';
 
 /** Dated milestones from the trial record (Stage D's day-jobs schedule). */
@@ -86,7 +86,7 @@ export async function clientExtras(client, now = new Date()) {
     sequence: { active: seq.active || null, version: seq.version || null, approvedAt: seq.approvedAt || null, approvalMode: seq.approvalMode || null, hasA: Boolean(seq.variantA), hasB: Boolean(seq.variantB), checks: seq.checks || null },
     reports,
     promises,
-    invoice,
+    invoice: invoiceView(invoice),
     upcoming: await upcomingFor(client, trial, now),
   };
 }

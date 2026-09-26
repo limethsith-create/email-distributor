@@ -50,10 +50,10 @@ import { logEvent } from '@/lib/db/events';
 import { onboardPixelUrl } from '@/lib/tokens';
 import { onboardSender } from '@/lib/notify';
 import { renderTemplate } from '@/lib/templates/client';
-import { mintToken, pageUrl, TTL } from '@/lib/pagetokens';
+import { mintToken, pageUrl, rememberLink, TTL } from '@/lib/pagetokens';
 import { normId, stripQuotedReply, snippet } from '@/lib/mail-utils';
 import { parseIcs, parseBodyDate } from '@/lib/systems/bookings';
-import { configList, lower, shortHash, zonedToUtc, formatWhen, isBusinessDayKey } from '@/lib/systems/stagec-common';
+import { configList, lower, shortHash, zonedToUtc, isBusinessDayKey } from '@/lib/systems/stagec-common';
 import { io, sendClient, firstNameOf, ownerName, isPublicUrl, asArray, asObject } from '@/lib/systems/intake-io';
 import { partsIn, addDays, hhmmToMin, ET, OWNER_TZ } from '@/lib/time';
 import * as conv from '@/lib/systems/conversation';
@@ -205,6 +205,17 @@ export function ownerDayWord(v, now) {
   return `on ${ownerWhen(t).split(',')[0]}`;
 }
 
+/**
+ * 'Tuesday 6 October at 11:00 am Eastern Time' — the one way every email to
+ * them writes a time (the Calendar's `theirWhen`: their zone, Eastern beside
+ * it when that differs). The Calendar is imported here at call time (it
+ * imports this module).
+ */
+async function whenForThem(iso, tz = ET) {
+  const cal = await import('@/lib/systems/calendar');
+  return cal.theirWhen(iso, tz, await cal.calendarSettings());
+}
+
 /** 'tomorrow' / 'today' / 'on Monday' — the call's day for the applicant (their zone, else US Eastern). */
 export function callDayWord(bookedFor, now, tz = ET) {
   const day = partsIn(tz, new Date(bookedFor)).dayKey;
@@ -338,7 +349,7 @@ const threadEntry = conv.entryView;
  * The hub's `onboardCall` (docs/ONBOARD-CALL.md §5), or null when no
  * acceptance email was sent. Pure: stored times + settings + now.
  */
-export function onboardCallView(raw, thread = [], { now = new Date(), settings, clientState = 'onboarding' } = {}) {
+export function onboardCallView(raw, thread = [], { now = new Date(), settings, clientState = 'onboarding', meeting = null } = {}) {
   if (!raw || !flag(raw.sentAt)) return null;
   const s = settings || normaliseSettings();
   const status = statusOf(raw, { now, clientState });
@@ -373,6 +384,8 @@ export function onboardCallView(raw, thread = [], { now = new Date(), settings, 
     requestedAt: requestPending(raw) ? isoOrNull(raw.requestedAt) : null,
     proposedFor: requestPending(raw) ? isoOrNull(raw.proposedFor) : null,
     meetingId: raw.meetingId || null,
+    // The confirmed call's Google Meet link (from its meeting), so "Join Google Meet" works without the Calendar loaded.
+    meetLink: (meeting && meeting.id === raw.meetingId && meeting.meetLink) || null,
     steps: [
       { key: 'sent', label: 'Acceptance email sent', done: true, at: isoOrNull(raw.sentAt) },
       // A reply or a booking means they read it, even when the pixel was blocked.
@@ -467,6 +480,8 @@ export async function sendAcceptance(clientId, { onboardingLink, now = io.now(),
     ...(flag(raw.sentAt) ? threadHeaders(raw) : {}),
   });
   const at = now.toISOString();
+  // The hub shows the last onboarding link they were sent (docs/HUB-API.md `links`).
+  await rememberLink(clientId, 'onboarding', onboardingLink, { now });
   const copy = sentCopy(res, 'accepted_call', vars, client);
   const fromInbox = await fromInboxOf(res);
   await patch(clientId, {
@@ -518,7 +533,7 @@ async function sendDayBefore(client, raw, s, now) {
     if (raw.meetingId) { const { getMeeting } = await import('@/lib/systems/calendar'); link = (await getMeeting(raw.meetingId))?.meetLink || null; }
     link = link || (await cfg(id, 'CALENDAR.meetingLink')) || null;
   } catch { link = null; }
-  const vars = { firstName: firstNameOf(client.contactName), ownerName: await ownerName(id), callMinutes: s.callMinutes, when: formatWhen(raw.bookedFor, tz), callDay: callDayWord(raw.bookedFor, now, tz), joinLine: link ? `Join here: ${link}` : "I'll send the video link before the call." };
+  const vars = { firstName: firstNameOf(client.contactName), ownerName: await ownerName(id), callMinutes: s.callMinutes, when: await whenForThem(raw.bookedFor, tz), callDay: callDayWord(raw.bookedFor, now, tz), joinLine: link ? `Join here: ${link}` : "I'll send the video link before the call." };
   const res = await sendClient(id, 'onboard_call_tomorrow', vars, { dedupe: `onboard_call_tomorrow:${raw.bookedFor}`, thread: false, ...threadHeaders(raw) });
   const at = now.toISOString();
   await patch(id, { tomorrowSentFor: raw.bookedFor, lastReminderAt: at, ...(res.messageId ? { messageIds: JSON.stringify(withId(raw, res.messageId)) } : {}) });
@@ -622,7 +637,7 @@ async function recordBooking(w, { start, uid, meta, now }) {
   const moved = flag(raw.bookedAt) && flag(raw.bookedFor) && Boolean(startIso);
   const at = isoOrNull(meta.date) || now.toISOString();
   await patch(id, { bookedFor: startIso, bookedAt: at, bookedBy: 'calendar', bookingUid: uid || null, noShowAt: null, cancelledAt: null, tomorrowSentFor: null });
-  const whenLine = startIso ? formatWhen(startIso, ET) : 'a time that was not in the email';
+  const whenLine = startIso ? await whenForThem(startIso, ET) : 'a time that was not in the email';
   await pushThread(id, { id: `in-${shortHash(`${normId(meta.messageId) || meta.uid}|${startIso}`)}`, dir: 'in', at, from: lower(meta.from), to: meta.inbox || null, subject: meta.subject || '', text: `Calendar: ${moved ? 'the call moved to' : 'call booked for'} ${whenLine}.`, kind: 'booking' });
   await logEvent(id, SYSTEM, moved ? 'call_rescheduled' : 'call_booked', { bookedFor: startIso, by: 'calendar', from: lower(meta.from) });
   await toCalendar(id, 'booked', { start: startIso, source: 'inbox', by: 'them', now });
@@ -644,7 +659,7 @@ async function recordCancel(w, { uid, meta, now }) {
   if (uid && raw.bookingUid && uid !== raw.bookingUid) return { skipped: 'another booking' };
   const at = isoOrNull(meta.date) || now.toISOString();
   await patch(id, { bookedFor: null, bookedAt: null, bookedBy: null, bookingUid: null, tomorrowSentFor: null, cancelledAt: at });
-  const was = raw.bookedFor ? formatWhen(raw.bookedFor, ET) : 'the booked time';
+  const was = raw.bookedFor ? await whenForThem(raw.bookedFor, ET) : 'the booked time';
   await pushThread(id, { id: `in-${shortHash(`${normId(meta.messageId) || meta.uid}|cancel`)}`, dir: 'in', at, from: lower(meta.from), to: meta.inbox || null, subject: meta.subject || '', text: `Calendar: the call on ${was} was cancelled.`, kind: 'booking' });
   await logEvent(id, SYSTEM, 'call_cancelled', { was: raw.bookedFor || null });
   await toCalendar(id, 'cancelled', { source: 'inbox', by: 'them', now });
@@ -1083,7 +1098,11 @@ export async function onboardCallFor(clientId, { now = io.now(), settings = null
   if (!c) return null;
   const raw = await readCall(clientId);
   if (!flag(raw.sentAt)) return null;
-  return onboardCallView(raw, await readThread(clientId), { now, settings: settings || await onboardSettings(), clientState: c.state });
+  let meeting = null;
+  if (raw.meetingId) {
+    try { meeting = await (await import('@/lib/systems/calendar')).getMeeting(raw.meetingId); } catch { meeting = null; }
+  }
+  return onboardCallView(raw, await readThread(clientId), { now, settings: settings || await onboardSettings(), clientState: c.state, meeting });
 }
 
 /** POST /api/mc/clients/{id}/onboard-call → { ok, onboardCall }. */

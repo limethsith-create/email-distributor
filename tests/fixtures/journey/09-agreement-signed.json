@@ -1,7 +1,7 @@
 {
  "step": "09-agreement-signed",
  "what": "Dana fills the one-page onboarding form and signs the agreement. The market count passes; the shopping list is made and Dana hears that setup has started.",
- "at": "2026-10-06T18:20:13.900Z",
+ "at": "2026-10-06T18:20:09.400Z",
  "check": {
   "ok": true,
   "checked": 0,
@@ -30,7 +30,7 @@
    "activeTrials": 1,
    "maxActiveTrials": 3,
    "extensions": 0,
-   "openAlerts": 3,
+   "openAlerts": 2,
    "usage": {
     "redis": {
      "used": null,
@@ -106,8 +106,8 @@
        "qualified": null
       },
       "inboxRate": null,
-      "lastJobAt": "2026-10-06T18:20:12.400Z",
-      "openAlerts": 3,
+      "lastJobAt": "2026-10-06T18:20:07.900Z",
+      "openAlerts": 2,
       "urgentAlerts": 1,
       "extension": false,
       "stateLabel": "Waiting for you to buy — just now",
@@ -116,7 +116,7 @@
        "label": "Buy their domain and 2 inboxes on CheapInboxes",
        "next": "Open CheapInboxes and buy getridgelineit.com with 2 inboxes — the rest sets itself up",
        "needsYou": true,
-       "since": "2026-10-06T18:20:12.400Z",
+       "since": "2026-10-06T18:20:07.900Z",
        "person": "Dana Whitfield",
        "company": "Ridgeline IT",
        "dayOf30": null,
@@ -137,9 +137,9 @@
         "clientId": "ridgelineit",
         "clientName": "Ridgeline IT",
         "text": "Buy getridgelineit.com and 2 inboxes on CheapInboxes",
-        "detail": "$11.25 for the domain · the machine connects everything after you buy",
+        "detail": "$11.25 for the domain · we connect everything by ourselves after you buy",
         "urgent": false,
-        "since": "2026-10-06T18:20:12.400Z",
+        "since": "2026-10-06T18:20:07.900Z",
         "action": {
          "type": "view",
          "view": "detail",
@@ -160,7 +160,7 @@
         "key": "market",
         "label": "Market count",
         "status": "ok",
-        "line": "1,800 matching companies (minimum 1,000)",
+        "line": "900 matching companies (minimum 1,000)",
         "detail": [
          "checked 2026-10-06"
         ]
@@ -342,9 +342,9 @@
     "clientId": "ridgelineit",
     "clientName": "Ridgeline IT",
     "text": "Buy getridgelineit.com and 2 inboxes on CheapInboxes",
-    "detail": "$11.25 for the domain · the machine connects everything after you buy",
+    "detail": "$11.25 for the domain · we connect everything by ourselves after you buy",
     "urgent": false,
-    "since": "2026-10-06T18:20:12.400Z",
+    "since": "2026-10-06T18:20:07.900Z",
     "action": {
      "type": "view",
      "view": "detail",
@@ -365,21 +365,12 @@
   },
   "alerts": [
    {
-    "id": "1791310811900-24rijb",
-    "at": "2026-10-06T18:20:11.900Z",
+    "id": "1791310807400-24rijb",
+    "at": "2026-10-06T18:20:07.400Z",
     "key": "shopping_list",
     "clientId": "ridgelineit",
     "title": "Shopping list ready: Ridgeline IT",
     "urgent": true,
-    "delivered": true
-   },
-   {
-    "id": "1790949720250-egq7ex",
-    "at": "2026-10-02T14:02:00.250Z",
-    "key": "meeting_requested",
-    "clientId": "ridgelineit",
-    "title": "Dana (Ridgeline IT) asked for Tue 6 Oct 11:00 am ET = 8:30 pm Colombo — say yes in the Calendar",
-    "urgent": false,
     "delivered": true
    },
    {
@@ -402,8 +393,10 @@
    "trialDay": null,
    "day1Date": null,
    "day30Date": null,
-   "health": "green",
-   "healthReasons": [],
+   "health": "red",
+   "healthReasons": [
+    "1 urgent alert open"
+   ],
    "five": {
     "sent": null,
     "replies": null,
@@ -412,9 +405,9 @@
     "qualified": null
    },
    "inboxRate": null,
-   "lastJobAt": "2026-10-06T18:20:12.400Z",
-   "openAlerts": 0,
-   "urgentAlerts": 0,
+   "lastJobAt": "2026-10-06T18:20:07.900Z",
+   "openAlerts": 2,
+   "urgentAlerts": 1,
    "extension": false,
    "stateLabel": "Waiting for you to buy — just now",
    "simple": {
@@ -422,7 +415,7 @@
     "label": "Buy their domain and 2 inboxes on CheapInboxes",
     "next": "Open CheapInboxes and buy getridgelineit.com with 2 inboxes — the rest sets itself up",
     "needsYou": true,
-    "since": "2026-10-06T18:20:12.400Z",
+    "since": "2026-10-06T18:20:07.900Z",
     "person": "Dana Whitfield",
     "company": "Ridgeline IT",
     "dayOf30": null,
@@ -443,9 +436,9 @@
      "clientId": "ridgelineit",
      "clientName": "Ridgeline IT",
      "text": "Buy getridgelineit.com and 2 inboxes on CheapInboxes",
-     "detail": "$11.25 for the domain · the machine connects everything after you buy",
+     "detail": "$11.25 for the domain · we connect everything by ourselves after you buy",
      "urgent": false,
-     "since": "2026-10-06T18:20:12.400Z",
+     "since": "2026-10-06T18:20:07.900Z",
      "action": {
       "type": "view",
       "view": "detail",
@@ -466,7 +459,7 @@
      "key": "market",
      "label": "Market count",
      "status": "ok",
-     "line": "1,800 matching companies (minimum 1,000)",
+     "line": "900 matching companies (minimum 1,000)",
      "detail": [
       "checked 2026-10-06"
      ]
@@ -624,12 +617,15 @@
     "Queen City IT"
    ],
    "onboardingSavedAt": "2026-10-06T18:05:00.400Z",
-   "marketEstimate": 1800,
+   "marketEstimate": 900,
+   "marketCapped": "1",
    "marketCheckedAt": "2026-10-06T18:20:00.000Z",
    "marketSource": "places",
-   "marketRound": "widened"
+   "marketRound": "base"
   },
   "trial": {
+   "onboardingLink": "https://machine.test/c/TOKEN_1/onboard",
+   "onboardingLinkAt": "2026-10-02T03:30:00.000Z",
    "onboardingSentAt": "2026-10-02T03:30:00.000Z",
    "onboardingClosesOn": "2026-10-13",
    "agreementAcceptedAt": "2026-10-06T18:20:00.000Z",
@@ -758,7 +754,7 @@
      "name": "Porkbun",
      "price": 10.37,
      "renewal": 11.08,
-     "seenAt": "2026-10-06T18:20:10.100Z",
+     "seenAt": "2026-10-06T18:20:05.600Z",
      "source": "live",
      "unconfirmed": false,
      "url": "https://porkbun.com/checkout/search?q=getridgelineit.com"
@@ -837,7 +833,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=getridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -914,7 +910,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=ridgelineithq.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -991,7 +987,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=tryridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1068,7 +1064,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=ridgelineitco.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1145,7 +1141,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=useridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1222,7 +1218,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=ridgelineitusa.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1299,7 +1295,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=joinridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1376,7 +1372,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=heyridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1479,8 +1475,8 @@
     "inboxesMonthly": 7,
     "firstMonth": 16.08
    },
-   "builtAt": "2026-10-06T18:20:10.100Z",
-   "sentAt": "2026-10-06T18:20:10.100Z",
+   "builtAt": "2026-10-06T18:20:05.600Z",
+   "sentAt": "2026-10-06T18:20:05.600Z",
    "domain": {}
   },
   "inboxes": [],
@@ -1522,7 +1518,7 @@
   "upcoming": [],
   "events": [
    {
-    "at": "2026-10-06T18:20:13.600Z",
+    "at": "2026-10-06T18:20:09.100Z",
     "system": "autobuy",
     "event": "shopping_list",
     "detail": {
@@ -1532,7 +1528,7 @@
     }
    },
    {
-    "at": "2026-10-06T18:20:12.400Z",
+    "at": "2026-10-06T18:20:07.900Z",
     "system": "notify",
     "event": "client_email_sent",
     "detail": {
@@ -1541,7 +1537,7 @@
     }
    },
    {
-    "at": "2026-10-06T18:20:12.150Z",
+    "at": "2026-10-06T18:20:07.650Z",
     "system": "pricescout",
     "event": "shopping_list_sent",
     "detail": {
@@ -1551,7 +1547,7 @@
     }
    },
    {
-    "at": "2026-10-06T18:20:12.150Z",
+    "at": "2026-10-06T18:20:07.650Z",
     "system": "notify",
     "event": "alert_sent",
     "detail": {
@@ -1565,47 +1561,23 @@
     }
    },
    {
-    "at": "2026-10-06T18:20:10.100Z",
+    "at": "2026-10-06T18:20:05.600Z",
     "system": "market",
     "event": "passed",
     "detail": {
-     "estimate": 1800,
-     "override": false
+     "estimate": 900,
+     "override": false,
+     "capped": true
     }
    },
    {
-    "at": "2026-10-06T18:20:10.100Z",
+    "at": "2026-10-06T18:20:05.600Z",
     "system": "state",
     "event": "changed",
     "detail": {
      "from": "onboarding",
      "to": "awaiting_purchase",
-     "reason": "market 1800"
-    }
-   },
-   {
-    "at": "2026-10-06T18:20:10.100Z",
-    "system": "market",
-    "event": "counted",
-    "detail": {
-     "round": "widened",
-     "source": "places",
-     "unique": 600,
-     "count": 0,
-     "estimate": 1800
-    }
-   },
-   {
-    "at": "2026-10-06T18:20:05.600Z",
-    "system": "market",
-    "event": "widened",
-    "detail": {
-     "states": [
-      "GA",
-      "TN",
-      "VA"
-     ],
-     "estimateSoFar": 900
+     "reason": "market 900"
     }
    },
    {
@@ -1943,6 +1915,40 @@
       "push": "push not configured"
      }
     }
+   },
+   {
+    "at": "2026-10-01T19:40:27.910Z",
+    "system": "research",
+    "event": "done",
+    "detail": {
+     "pagesRead": 8,
+     "deepPages": 14,
+     "facts": 110,
+     "business": true,
+     "market": 360,
+     "flags": 0,
+     "prefilled": [
+      "companyName",
+      "postalAddress",
+      "cities",
+      "defaultIcp"
+     ],
+     "score": 94,
+     "grade": "A"
+    }
+   },
+   {
+    "at": "2026-10-01T19:40:27.910Z",
+    "system": "research",
+    "event": "prefilled",
+    "detail": {
+     "fields": [
+      "companyName",
+      "postalAddress",
+      "cities",
+      "defaultIcp"
+     ]
+    }
    }
   ],
   "jobs": {
@@ -1958,7 +1964,7 @@
    "research": null,
    "market": null,
    "pricescout": {
-    "at": "2026-10-06T18:20:12.400Z",
+    "at": "2026-10-06T18:20:07.900Z",
     "ms": 2300,
     "ok": true,
     "by": "check"
@@ -2865,6 +2871,7 @@
    "requestedAt": null,
    "proposedFor": null,
    "meetingId": "mmur1805c91eb6a69da",
+   "meetLink": "https://meet.google.com/rdg-001-avc",
    "steps": [
     {
      "key": "sent",
@@ -2905,7 +2912,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_1/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_2/onboard — one page, your details and the agreement.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_2/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_1/onboard — one page, your details and the agreement.\n\nLimeth Sith",
      "kind": "acceptance",
      "auto": false,
      "rule": null,
@@ -2970,7 +2977,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Our onboarding call tomorrow",
-     "text": "Hi Dana,\n\nA quick reminder: our 30-minute onboarding call is Tuesday, October 6 at 11:00 AM EDT.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nA quick reminder: our 30-minute onboarding call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
      "kind": "reminder",
      "auto": false,
      "rule": null,
@@ -2992,7 +2999,7 @@
     {
      "id": "out-186c27e7d8778e62",
      "dir": "out",
-     "at": "2026-10-06T18:20:12.400Z",
+     "at": "2026-10-06T18:20:07.900Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Your trial — setup has started",
@@ -3040,7 +3047,7 @@
      }
     ],
     "orderUrl": "https://app.cheapinboxes.com/add",
-    "builtAt": "2026-10-06T18:20:12.400Z"
+    "builtAt": "2026-10-06T18:20:07.900Z"
    },
    "label": "Buy getridgelineit.com and 2 inboxes on CheapInboxes",
    "domain": "getridgelineit.com",
@@ -3091,7 +3098,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_1/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_2/onboard — one page, your details and the agreement.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_2/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_1/onboard — one page, your details and the agreement.\n\nLimeth Sith",
      "kind": "acceptance",
      "auto": false,
      "rule": null,
@@ -3156,7 +3163,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Our onboarding call tomorrow",
-     "text": "Hi Dana,\n\nA quick reminder: our 30-minute onboarding call is Tuesday, October 6 at 11:00 AM EDT.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nA quick reminder: our 30-minute onboarding call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
      "kind": "reminder",
      "auto": false,
      "rule": null,
@@ -3178,7 +3185,7 @@
     {
      "id": "out-186c27e7d8778e62",
      "dir": "out",
-     "at": "2026-10-06T18:20:12.400Z",
+     "at": "2026-10-06T18:20:07.900Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Your trial — setup has started",
@@ -3191,7 +3198,7 @@
    ],
    "needsReply": false,
    "lastInAt": "2026-10-02T13:05:00.000Z",
-   "lastOutAt": "2026-10-06T18:20:12.400Z",
+   "lastOutAt": "2026-10-06T18:20:07.900Z",
    "bot": {
     "enabled": true,
     "sentToday": 0,
@@ -3235,7 +3242,9 @@
    }
   },
   "leadQuality": null,
-  "links": {},
+  "links": {
+   "onboarding": "https://machine.test/c/TOKEN_1/onboard"
+  },
   "virtualNow": null
  }
 }

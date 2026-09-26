@@ -30,7 +30,7 @@
    "activeTrials": 0,
    "maxActiveTrials": 3,
    "extensions": 0,
-   "openAlerts": 55,
+   "openAlerts": 5,
    "usage": {
     "redis": {
      "used": null,
@@ -132,14 +132,14 @@
       },
       "inboxRate": 0.96,
       "lastJobAt": "2026-11-19T17:00:00.000Z",
-      "openAlerts": 5,
+      "openAlerts": 3,
       "urgentAlerts": 0,
       "extension": false,
-      "stateLabel": "Deciding — bonus until 2026-11-20 14:00",
+      "stateLabel": "Deciding — bonus until Fri 20 Nov, 7:30 pm Sri Lanka time (9:00 am Eastern)",
       "simple": {
-       "step": "finished",
+       "step": "deciding",
        "label": "Trial finished — waiting for their decision",
-       "next": "Nothing for you: they choose on their decision page",
+       "next": "Nothing. Dana chooses on the decision page.",
        "needsYou": false,
        "since": "2026-11-19T14:00:00.750Z",
        "person": "Dana Whitfield",
@@ -169,7 +169,7 @@
         "key": "market",
         "label": "Market count",
         "status": "ok",
-        "line": "1,800 matching companies (minimum 1,000)",
+        "line": "900 matching companies (minimum 1,000)",
         "detail": [
          "checked 2026-10-06"
         ]
@@ -364,24 +364,6 @@
     "delivered": true
    },
    {
-    "id": "1794969000000-d358aq",
-    "at": "2026-11-18T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-18",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1794882600000-p5x16z",
-    "at": "2026-11-17T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-17",
-    "urgent": false,
-    "delivered": true
-   },
-   {
     "id": "1794796200250-g46pcj",
     "at": "2026-11-16T02:30:00.250Z",
     "key": "monday_digest",
@@ -391,416 +373,29 @@
     "delivered": true
    },
    {
-    "id": "1794796200000-mz0qb9",
-    "at": "2026-11-16T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-16",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1794709800000-gc1md2",
-    "at": "2026-11-15T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-15",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1794623400000-cglesl",
-    "at": "2026-11-14T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-14",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1794537000000-xjh5ca",
-    "at": "2026-11-13T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-13",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1794450600000-l4yfk9",
-    "at": "2026-11-12T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-12",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1794364200000-xadf9p",
-    "at": "2026-11-11T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-11",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1794277800000-pa4vm6",
-    "at": "2026-11-10T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-10",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1794191400250-1oqcoq",
-    "at": "2026-11-09T02:30:00.250Z",
-    "key": "monday_digest",
-    "clientId": null,
-    "title": "Monday KPIs — 2026-11-09",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1794191400000-yosjz9",
-    "at": "2026-11-09T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-09",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1794105000000-v2pzql",
-    "at": "2026-11-08T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-08",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1794018600000-z8n6yb",
-    "at": "2026-11-07T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-07",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1793932200000-ftwfre",
-    "at": "2026-11-06T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-06",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1793845800000-4ayars",
-    "at": "2026-11-05T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-05",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1793759400000-7q74pd",
-    "at": "2026-11-04T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-04",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1793673000000-bw84ja",
-    "at": "2026-11-03T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-03",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1793586600250-wwmfv3",
-    "at": "2026-11-02T02:30:00.250Z",
-    "key": "monday_digest",
-    "clientId": null,
-    "title": "Monday KPIs — 2026-11-02",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1793586600000-f05a00",
-    "at": "2026-11-02T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-02",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1793500200000-1vxlre",
-    "at": "2026-11-01T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-11-01",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1793413800000-d29yzc",
-    "at": "2026-10-31T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-31",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1793327400000-que1ue",
-    "at": "2026-10-30T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-30",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1793241000000-r0ztnd",
-    "at": "2026-10-29T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-29",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1793154600000-pjno2t",
-    "at": "2026-10-28T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-28",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1793068200000-keh081",
-    "at": "2026-10-27T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-27",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1793025000300-uiyylh",
-    "at": "2026-10-26T14:30:00.300Z",
-    "key": "onboard_reply",
+    "id": "1791366011590-9b6kqf",
+    "at": "2026-10-07T09:40:11.590Z",
+    "key": "inboxes_ready",
     "clientId": "ridgelineit",
-    "title": "Dana Whitfield wrote — needs your answer",
+    "title": "getridgelineit.com and 2 inboxes are ready — add 6 warm-up helpers to start warm-up",
     "urgent": false,
     "delivered": true
    },
    {
-    "id": "1792981800250-wrmfra",
-    "at": "2026-10-26T02:30:00.250Z",
-    "key": "monday_digest",
-    "clientId": null,
-    "title": "Monday KPIs — 2026-10-26",
+    "id": "1791340920300-z50lzt",
+    "at": "2026-10-07T02:42:00.300Z",
+    "key": "purchase_found",
+    "clientId": "ridgelineit",
+    "title": "We found getridgelineit.com — connecting it to Ridgeline IT",
     "urgent": false,
     "delivered": true
    },
    {
-    "id": "1792981800000-ucu52w",
-    "at": "2026-10-26T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-26",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1792895400000-guvox7",
-    "at": "2026-10-25T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-25",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1792809000000-qbc2qk",
-    "at": "2026-10-24T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-24",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1792722600000-tlflkl",
-    "at": "2026-10-23T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-23",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1792636200000-fzj6we",
-    "at": "2026-10-22T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-22",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1792549800000-2yc72f",
-    "at": "2026-10-21T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-21",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1792463400000-g4olm1",
-    "at": "2026-10-20T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-20",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1792377000250-0nxc51",
-    "at": "2026-10-19T02:30:00.250Z",
-    "key": "monday_digest",
-    "clientId": null,
-    "title": "Monday KPIs — 2026-10-19",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1792377000000-iblkld",
-    "at": "2026-10-19T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-19",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1792290600000-o0dhq2",
-    "at": "2026-10-18T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-18",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1792204200000-wk4es7",
-    "at": "2026-10-17T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-17",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1792117800000-5q4usv",
-    "at": "2026-10-16T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-16",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1792031400000-0cnacw",
-    "at": "2026-10-15T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-15",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1791945000000-ka3omg",
-    "at": "2026-10-14T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-14",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1791858600000-tvlnuj",
-    "at": "2026-10-13T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-13",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1791772200250-rxeomy",
-    "at": "2026-10-12T02:30:00.250Z",
-    "key": "monday_digest",
-    "clientId": null,
-    "title": "Monday KPIs — 2026-10-12",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1791772200000-kuhjrn",
-    "at": "2026-10-12T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-12",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1791685800000-zu9w68",
-    "at": "2026-10-11T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-11",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1791599400000-tcnwv9",
-    "at": "2026-10-10T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-10",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1791513000000-bu4ctv",
-    "at": "2026-10-09T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-09",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1791426600000-7p9z5w",
-    "at": "2026-10-08T02:30:00.000Z",
-    "key": "morning_digest",
-    "clientId": null,
-    "title": "Morning digest — 2026-10-08",
+    "id": "1790946600550-zsmdx0",
+    "at": "2026-10-02T13:10:00.550Z",
+    "key": "bot_replied",
+    "clientId": "ridgelineit",
+    "title": "Auto-replied to Dana (Ridgeline IT): sent the booking link and the next open times",
     "urgent": false,
     "delivered": true
    }
@@ -826,14 +421,14 @@
    },
    "inboxRate": 0.96,
    "lastJobAt": "2026-11-19T17:00:00.000Z",
-   "openAlerts": 0,
+   "openAlerts": 3,
    "urgentAlerts": 0,
    "extension": false,
-   "stateLabel": "Deciding — bonus until 2026-11-20 14:00",
+   "stateLabel": "Deciding — bonus until Fri 20 Nov, 7:30 pm Sri Lanka time (9:00 am Eastern)",
    "simple": {
-    "step": "finished",
+    "step": "deciding",
     "label": "Trial finished — waiting for their decision",
-    "next": "Nothing for you: they choose on their decision page",
+    "next": "Nothing. Dana chooses on the decision page.",
     "needsYou": false,
     "since": "2026-11-19T14:00:00.750Z",
     "person": "Dana Whitfield",
@@ -863,7 +458,7 @@
      "key": "market",
      "label": "Market count",
      "status": "ok",
-     "line": "1,800 matching companies (minimum 1,000)",
+     "line": "900 matching companies (minimum 1,000)",
      "detail": [
       "checked 2026-10-06"
      ]
@@ -1044,10 +639,11 @@
     "Queen City IT"
    ],
    "onboardingSavedAt": "2026-10-06T18:05:00.400Z",
-   "marketEstimate": 1800,
+   "marketEstimate": 900,
+   "marketCapped": "1",
    "marketCheckedAt": "2026-10-06T18:20:00.000Z",
    "marketSource": "places",
-   "marketRound": "widened",
+   "marketRound": "base",
    "bookingTestAt": "2026-10-16T13:00:00.000Z",
    "bookingTestedUrl": "https://cal.com/ridgeline-it/intro",
    "bookingHost": "calcom",
@@ -1062,6 +658,8 @@
    "bookingTestedConfirmedUrl": "https://cal.com/ridgeline-it/intro"
   },
   "trial": {
+   "onboardingLink": "https://machine.test/c/TOKEN_1/onboard",
+   "onboardingLinkAt": "2026-10-02T03:30:00.000Z",
    "onboardingSentAt": "2026-10-02T03:30:00.000Z",
    "onboardingClosesOn": "2026-10-13",
    "agreementAcceptedAt": "2026-10-06T18:20:00.000Z",
@@ -1077,6 +675,8 @@
    "welcomeSentAt": "2026-10-07T13:30:10.700Z",
    "fridayCount": 6,
    "lastFridayAt": "2026-11-13T14:00:00.000Z",
+   "approvalLink": "https://machine.test/c/TOKEN_2/approve",
+   "approvalLinkAt": "2026-10-14T13:00:00.000Z",
    "buildCheckAt": "2026-10-14T13:00:00.000Z",
    "day1Held": "",
    "readyAt": "2026-10-21T04:30:00.000Z",
@@ -1086,6 +686,8 @@
    "lastClientEmailAt": "2026-11-19T14:00:01.000Z",
    "unansweredHot": 0,
    "dispositionSentAt": "2026-11-09T14:00:00.000Z",
+   "decisionLink": "https://machine.test/c/TOKEN_3/decide",
+   "decisionLinkAt": "2026-11-19T14:00:00.750Z",
    "reportSentAt": "2026-11-18T14:00:00.000Z",
    "handoverSentAt": "2026-11-19T14:00:00.000Z",
    "handoverReason": "day30",
@@ -1261,7 +863,7 @@
      "name": "Porkbun",
      "price": 10.37,
      "renewal": 11.08,
-     "seenAt": "2026-10-06T18:20:10.100Z",
+     "seenAt": "2026-10-06T18:20:05.600Z",
      "source": "live",
      "unconfirmed": false,
      "url": "https://porkbun.com/checkout/search?q=getridgelineit.com"
@@ -1340,7 +942,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=getridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1417,7 +1019,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=ridgelineithq.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1494,7 +1096,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=tryridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1571,7 +1173,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=ridgelineitco.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1648,7 +1250,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=useridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1725,7 +1327,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=ridgelineitusa.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1802,7 +1404,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=joinridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1879,7 +1481,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=heyridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:10.100Z",
+       "confirmedAt": "2026-10-06T18:20:05.600Z",
        "source": "live"
       },
       {
@@ -1982,8 +1584,8 @@
     "inboxesMonthly": 7,
     "firstMonth": 16.08
    },
-   "builtAt": "2026-10-06T18:20:10.100Z",
-   "sentAt": "2026-10-06T18:20:10.100Z",
+   "builtAt": "2026-10-06T18:20:05.600Z",
+   "sentAt": "2026-10-06T18:20:05.600Z",
    "boughtAt": "2026-10-07T02:42:00.000Z",
    "domain": {
     "name": "getridgelineit.com",
@@ -2986,7 +2588,7 @@
    "research": null,
    "market": null,
    "pricescout": {
-    "at": "2026-10-06T18:20:12.400Z",
+    "at": "2026-10-06T18:20:07.900Z",
     "ms": 2300,
     "ok": true,
     "by": "check"
@@ -4006,6 +3608,7 @@
    "requestedAt": null,
    "proposedFor": null,
    "meetingId": "mmur1805c91eb6a69da",
+   "meetLink": "https://meet.google.com/rdg-001-avc",
    "steps": [
     {
      "key": "sent",
@@ -4046,7 +3649,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_1/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_2/onboard — one page, your details and the agreement.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_4/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_1/onboard — one page, your details and the agreement.\n\nLimeth Sith",
      "kind": "acceptance",
      "auto": false,
      "rule": null,
@@ -4072,7 +3675,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_3/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_5/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
      "kind": "auto_reply",
      "auto": true,
      "rule": "wants_time",
@@ -4085,7 +3688,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_4/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_6/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -4098,7 +3701,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Confirmed: our call on Tue 6 Oct at 11:00 am ET",
-     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_5/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_7/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -4111,7 +3714,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Our onboarding call tomorrow",
-     "text": "Hi Dana,\n\nA quick reminder: our 30-minute onboarding call is Tuesday, October 6 at 11:00 AM EDT.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nA quick reminder: our 30-minute onboarding call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
      "kind": "reminder",
      "auto": false,
      "rule": null,
@@ -4133,7 +3736,7 @@
     {
      "id": "out-186c27e7d8778e62",
      "dir": "out",
-     "at": "2026-10-06T18:20:12.400Z",
+     "at": "2026-10-06T18:20:07.900Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Your trial — setup has started",
@@ -4176,7 +3779,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Your trial — the list and the emails, for your OK",
-     "text": "Hi Dana Whitfield,\n\nEverything for your trial is ready for one look from you: the customer profile, 20 of the companies we found, and the four emails that will go out in Dana Whitfield's name.\n\nIt takes about five minutes: https://machine.test/c/TOKEN_6/approve\n\nApprove each part, or tell me what to change and I will fix it. First send is Wednesday, October 21.\n\nIf there is no reply by Monday, October 19, I will take it as approved and keep to that date.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nEverything for your trial is ready for one look from you: the customer profile, 20 of the companies we found, and the four emails that will go out in Dana Whitfield's name.\n\nIt takes about five minutes: https://machine.test/c/TOKEN_2/approve\n\nApprove each part, or tell me what to change and I will fix it. First send is Wednesday, October 21.\n\nIf there is no reply by Monday, October 19, I will take it as approved and keep to that date.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4189,7 +3792,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "60-second test of your booking link",
-     "text": "Hi Dana,\n\nBefore the first send I want to be sure a prospect who says yes can actually book. Please do this once:\n\n1. Open https://cal.com/ridgeline-it/intro from a personal email address, not your work one.\n2. Book the first slot it offers.\n3. Tap \"It worked\" below.\n4. Cancel the test booking.\n\nIt worked: https://machine.test/c/TOKEN_7/booking-ok\n\nIf anything went wrong, reply and tell me what you saw.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nBefore the first send I want to be sure a prospect who says yes can actually book. Please do this once:\n\n1. Open https://cal.com/ridgeline-it/intro from a personal email address, not your work one.\n2. Book the first slot it offers.\n3. Tap \"It worked\" below.\n4. Cancel the test booking.\n\nIt worked: https://machine.test/c/TOKEN_8/booking-ok\n\nIf anything went wrong, reply and tell me what you saw.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4215,7 +3818,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Day 1",
-     "text": "Dana Whitfield — the first emails went out this morning from dana@getridgelineit.com. Day 30 is Thu 19 Nov.\n\nI handle every reply. Anything hot lands in your inbox the same day with a note on what to do. Friday update as usual.\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_8/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_8/away\n• Stop the trial: https://machine.test/c/TOKEN_8/stop\n\nLimeth Sith",
+     "text": "Dana Whitfield — the first emails went out this morning from dana@getridgelineit.com. Day 30 is Thu 19 Nov.\n\nI handle every reply. Anything hot lands in your inbox the same day with a note on what to do. Friday update as usual.\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_9/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_9/away\n• Stop the trial: https://machine.test/c/TOKEN_9/stop\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4254,7 +3857,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Ridgeline IT — trial week 1 of 4",
-     "text": "A reply came in from Quinn CPA 91 on Thu.\n\nRidgeline IT — trial week 1 of 4\nSent this week: 34 · to date: 34, to 34 companies\nReplies: 1 (2.9%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 0 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_9/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_9/away\n• Stop the trial: https://machine.test/c/TOKEN_9/stop\n\nLimeth Sith",
+     "text": "A reply came in from Quinn CPA 91 on Thu.\n\nRidgeline IT — trial week 1 of 4\nSent this week: 34 · to date: 34, to 34 companies\nReplies: 1 (2.9%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 0 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_10/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_10/away\n• Stop the trial: https://machine.test/c/TOKEN_10/stop\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4371,7 +3974,7 @@
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
      "subject": "How did the call with Alan Reyes go?",
-     "text": "Your call with Alan Reyes at Reyes Law Group 400 was booked for Tuesday, October 27 at 11:00 AM EDT. One tap tells me what happened:\n\nShowed: https://machine.test/c/TOKEN_10/tap?a=showed\nNo-show: https://machine.test/c/TOKEN_10/tap?a=noshow\nWrong fit: https://machine.test/c/TOKEN_10/tap?a=wrongfit\nDoesn’t count (reason required): https://machine.test/c/TOKEN_10/tap?a=dispute\n\nIf you could not make it yourself: https://machine.test/c/TOKEN_10/tap?a=client_noshow",
+     "text": "Your call with Alan Reyes at Reyes Law Group 400 was booked for Tuesday, October 27 at 11:00 AM EDT. One tap tells me what happened:\n\nShowed: https://machine.test/c/TOKEN_11/tap?a=showed\nNo-show: https://machine.test/c/TOKEN_11/tap?a=noshow\nWrong fit: https://machine.test/c/TOKEN_11/tap?a=wrongfit\nDoesn’t count (reason required): https://machine.test/c/TOKEN_11/tap?a=dispute\n\nIf you could not make it yourself: https://machine.test/c/TOKEN_11/tap?a=client_noshow",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4423,7 +4026,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Ridgeline IT — trial week 2 of 4",
-     "text": "A reply came in from Keller Law Group 8 on Wed.\n\nRidgeline IT — trial week 2 of 4\nSent this week: 94 · to date: 143, to 102 companies\nReplies: 5 (5.3%) · positive: 2\nMeetings booked: 0 · held: 1 · running total: 1 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_11/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_11/away\n• Stop the trial: https://machine.test/c/TOKEN_11/stop\n\nLimeth Sith",
+     "text": "A reply came in from Keller Law Group 8 on Wed.\n\nRidgeline IT — trial week 2 of 4\nSent this week: 94 · to date: 143, to 102 companies\nReplies: 5 (5.3%) · positive: 2\nMeetings booked: 0 · held: 1 · running total: 1 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_12/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_12/away\n• Stop the trial: https://machine.test/c/TOKEN_12/stop\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4462,7 +4065,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Ridgeline IT — trial week 3 of 4",
-     "text": "Ridgeline IT — trial week 3 of 4\nSent this week: 131 · to date: 304, to 125 companies\nReplies: 4 (3.1%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 1 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_12/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_12/away\n• Stop the trial: https://machine.test/c/TOKEN_12/stop\n\nLimeth Sith",
+     "text": "Ridgeline IT — trial week 3 of 4\nSent this week: 131 · to date: 304, to 125 companies\nReplies: 4 (3.1%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 1 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_13/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_13/away\n• Stop the trial: https://machine.test/c/TOKEN_13/stop\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4475,7 +4078,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Your meetings so far — Ridgeline IT",
-     "text": "Dana Whitfield — every meeting from the trial so far, pre-filled: company, date, showed, right fit, outcome. Fill this in and I’ll fix the targeting for you.\n\n• Reyes Law Group 400 — Tue 27 Oct — showed: yes — right fit: yes — outcome: held\n  Tap: https://machine.test/c/TOKEN_13/tap\n\nThe buttons under each meeting stay open until Day 25. Anything to add? Just reply to this email.\n\nLimeth Sith",
+     "text": "Dana Whitfield — every meeting from the trial so far, pre-filled: company, date, showed, right fit, outcome. Fill this in and I’ll fix the targeting for you.\n\n• Reyes Law Group 400 — Tue 27 Oct — showed: yes — right fit: yes — outcome: held\n  Tap: https://machine.test/c/TOKEN_14/tap\n\nThe buttons under each meeting stay open until Day 25. Anything to add? Just reply to this email.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4514,7 +4117,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Ridgeline IT — trial week 4 of 4",
-     "text": "Ridgeline IT — trial week 4 of 4\nSent this week: 99 · to date: 433, to 141 companies\nReplies: 2 (2.0%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 1 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_14/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_14/away\n• Stop the trial: https://machine.test/c/TOKEN_14/stop\n\nLimeth Sith",
+     "text": "Ridgeline IT — trial week 4 of 4\nSent this week: 99 · to date: 433, to 141 companies\nReplies: 2 (2.0%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 1 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_15/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_15/away\n• Stop the trial: https://machine.test/c/TOKEN_15/stop\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4579,7 +4182,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Ridgeline IT — 30-Day Trial Report",
-     "text": "Ridgeline IT — 30-Day Trial Report\n\nCompanies contacted: 173 · Emails sent: 530 · Bounce: 0.0% · Inbox placement: 100%\nReplies: 22 (4.2%) · Positive: 10 (1.9%)\nCalls booked: 1 · Held: 1 · Qualified: 1 · No-shows re-booked: 0\nPromise (one call): met · Target (three): not met\n\nWhat produced it: email version A (16.3% reply rate vs 9.1% for B), and Raleigh (4 of 10 positive replies). What didn’t: no pace check had to step in.\n\nYour measured rate: 1 qualified call from 173 companies is 0.58%.\n\nWhat that means at volume: Starter contacts at least 2,000 companies a month — about 11 calls at your rate, and we guarantee 10. Growth contacts 4,000 — about 23, and we guarantee 20.\n\nWhat carries over if you continue: the warm domain and inboxes, the profile, the proven copy. Full volume inside two weeks, not three.\n\nThe market report: attached — every reply, tagged, plus the 10 conversations still open.\n\nOne recommendation: 1 qualified call from 173 companies is 0.58%. That’s your rate, in your market, with your offer — not a benchmark. Starter contacts at least 2,000 companies a month. At your rate that’s about 11 calls; we guarantee 10. Growth contacts 4,000 — about 23 at your rate, and we guarantee 20. With 1 qualified call so far, the recommendation is Starter, and only Starter — $2,497 for 10 calls — to prove the rate holds at volume before going bigger.\n\nYour Day 30 page: https://machine.test/c/TOKEN_15/decide\n\nLimeth Sith",
+     "text": "Ridgeline IT — 30-Day Trial Report\n\nCompanies contacted: 173 · Emails sent: 530 · Bounce: 0.0% · Inbox placement: 100%\nReplies: 22 (4.2%) · Positive: 10 (1.9%)\nCalls booked: 1 · Held: 1 · Qualified: 1 · No-shows re-booked: 0\nPromise (one call): met · Target (three): not met\n\nWhat produced it: email version A (16.3% reply rate vs 9.1% for B), and Raleigh (4 of 10 positive replies). What didn’t: no pace check had to step in.\n\nYour measured rate: 1 qualified call from 173 companies is 0.58%.\n\nWhat that means at volume: Starter contacts at least 2,000 companies a month — about 11 calls at your rate, and we guarantee 10. Growth contacts 4,000 — about 23, and we guarantee 20.\n\nWhat carries over if you continue: the warm domain and inboxes, the profile, the proven copy. Full volume inside two weeks, not three.\n\nThe market report: attached — every reply, tagged, plus the 10 conversations still open.\n\nOne recommendation: 1 qualified call from 173 companies is 0.58%. That’s your rate, in your market, with your offer — not a benchmark. Starter contacts at least 2,000 companies a month. At your rate that’s about 11 calls; we guarantee 10. Growth contacts 4,000 — about 23 at your rate, and we guarantee 20. With 1 qualified call so far, the recommendation is Starter, and only Starter — $2,497 for 10 calls — to prove the rate holds at volume before going bigger.\n\nYour Day 30 page: https://machine.test/c/TOKEN_16/decide\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4618,7 +4221,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Day 30 — your numbers and one recommendation",
-     "text": "Dana Whitfield — Day 30. Your five numbers, one recommendation and three buttons are on one page: https://machine.test/c/TOKEN_16/decide\n\nMy one recommendation: Starter — $2,497 a month for 10 guaranteed calls, $250 a call.\n\nMonth-one bonus: 12 calls for the price of 10 if you start before Fri, 20 Nov 2026 14:00 UTC. The domain’s already warm and the copy’s proven, so you skip the build. If you don’t continue, the trial domain retires on Day 45.\n\nLimeth Sith",
+     "text": "Dana Whitfield — Day 30. Your five numbers, one recommendation and three buttons are on one page: https://machine.test/c/TOKEN_3/decide\n\nMy one recommendation: Starter — $2,497 a month for 10 guaranteed calls, $250 a call.\n\nMonth-one bonus: 12 calls for the price of 10 if you start before Fri, 20 Nov 2026 14:00 UTC. The domain’s already warm and the copy’s proven, so you skip the build. If you don’t continue, the trial domain retires on Day 45.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4627,7 +4230,34 @@
    ]
   },
   "autobuy": null,
-  "warmup": null,
+  "warmup": {
+   "status": "ready",
+   "label": "Warm-up done · 96% reach the inbox",
+   "day": 44,
+   "of": 14,
+   "readyBy": null,
+   "inboxRate": 0.96,
+   "inboxes": [
+    {
+     "email": "dana@getridgelineit.com",
+     "day": 44,
+     "sentToday": 13,
+     "quota": 8,
+     "inboxRate7d": 0.96,
+     "ready": true
+    },
+    {
+     "email": "dana.whitfield@getridgelineit.com",
+     "day": 44,
+     "sentToday": 13,
+     "quota": 8,
+     "inboxRate7d": 0.972,
+     "ready": true
+    }
+   ],
+   "problem": null,
+   "helpersNeeded": 0
+  },
   "conversation": {
    "thread": [
     {
@@ -4637,7 +4267,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_1/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_2/onboard — one page, your details and the agreement.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_4/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_1/onboard — one page, your details and the agreement.\n\nLimeth Sith",
      "kind": "acceptance",
      "auto": false,
      "rule": null,
@@ -4663,7 +4293,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_3/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_5/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
      "kind": "auto_reply",
      "auto": true,
      "rule": "wants_time",
@@ -4676,7 +4306,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_4/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_6/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -4689,7 +4319,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Confirmed: our call on Tue 6 Oct at 11:00 am ET",
-     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_5/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_7/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -4702,7 +4332,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Our onboarding call tomorrow",
-     "text": "Hi Dana,\n\nA quick reminder: our 30-minute onboarding call is Tuesday, October 6 at 11:00 AM EDT.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nA quick reminder: our 30-minute onboarding call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
      "kind": "reminder",
      "auto": false,
      "rule": null,
@@ -4724,7 +4354,7 @@
     {
      "id": "out-186c27e7d8778e62",
      "dir": "out",
-     "at": "2026-10-06T18:20:12.400Z",
+     "at": "2026-10-06T18:20:07.900Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Your trial — setup has started",
@@ -4767,7 +4397,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Your trial — the list and the emails, for your OK",
-     "text": "Hi Dana Whitfield,\n\nEverything for your trial is ready for one look from you: the customer profile, 20 of the companies we found, and the four emails that will go out in Dana Whitfield's name.\n\nIt takes about five minutes: https://machine.test/c/TOKEN_6/approve\n\nApprove each part, or tell me what to change and I will fix it. First send is Wednesday, October 21.\n\nIf there is no reply by Monday, October 19, I will take it as approved and keep to that date.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nEverything for your trial is ready for one look from you: the customer profile, 20 of the companies we found, and the four emails that will go out in Dana Whitfield's name.\n\nIt takes about five minutes: https://machine.test/c/TOKEN_2/approve\n\nApprove each part, or tell me what to change and I will fix it. First send is Wednesday, October 21.\n\nIf there is no reply by Monday, October 19, I will take it as approved and keep to that date.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4780,7 +4410,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "60-second test of your booking link",
-     "text": "Hi Dana,\n\nBefore the first send I want to be sure a prospect who says yes can actually book. Please do this once:\n\n1. Open https://cal.com/ridgeline-it/intro from a personal email address, not your work one.\n2. Book the first slot it offers.\n3. Tap \"It worked\" below.\n4. Cancel the test booking.\n\nIt worked: https://machine.test/c/TOKEN_7/booking-ok\n\nIf anything went wrong, reply and tell me what you saw.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nBefore the first send I want to be sure a prospect who says yes can actually book. Please do this once:\n\n1. Open https://cal.com/ridgeline-it/intro from a personal email address, not your work one.\n2. Book the first slot it offers.\n3. Tap \"It worked\" below.\n4. Cancel the test booking.\n\nIt worked: https://machine.test/c/TOKEN_8/booking-ok\n\nIf anything went wrong, reply and tell me what you saw.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4806,7 +4436,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Day 1",
-     "text": "Dana Whitfield — the first emails went out this morning from dana@getridgelineit.com. Day 30 is Thu 19 Nov.\n\nI handle every reply. Anything hot lands in your inbox the same day with a note on what to do. Friday update as usual.\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_8/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_8/away\n• Stop the trial: https://machine.test/c/TOKEN_8/stop\n\nLimeth Sith",
+     "text": "Dana Whitfield — the first emails went out this morning from dana@getridgelineit.com. Day 30 is Thu 19 Nov.\n\nI handle every reply. Anything hot lands in your inbox the same day with a note on what to do. Friday update as usual.\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_9/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_9/away\n• Stop the trial: https://machine.test/c/TOKEN_9/stop\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4845,7 +4475,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Ridgeline IT — trial week 1 of 4",
-     "text": "A reply came in from Quinn CPA 91 on Thu.\n\nRidgeline IT — trial week 1 of 4\nSent this week: 34 · to date: 34, to 34 companies\nReplies: 1 (2.9%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 0 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_9/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_9/away\n• Stop the trial: https://machine.test/c/TOKEN_9/stop\n\nLimeth Sith",
+     "text": "A reply came in from Quinn CPA 91 on Thu.\n\nRidgeline IT — trial week 1 of 4\nSent this week: 34 · to date: 34, to 34 companies\nReplies: 1 (2.9%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 0 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_10/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_10/away\n• Stop the trial: https://machine.test/c/TOKEN_10/stop\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4962,7 +4592,7 @@
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
      "subject": "How did the call with Alan Reyes go?",
-     "text": "Your call with Alan Reyes at Reyes Law Group 400 was booked for Tuesday, October 27 at 11:00 AM EDT. One tap tells me what happened:\n\nShowed: https://machine.test/c/TOKEN_10/tap?a=showed\nNo-show: https://machine.test/c/TOKEN_10/tap?a=noshow\nWrong fit: https://machine.test/c/TOKEN_10/tap?a=wrongfit\nDoesn’t count (reason required): https://machine.test/c/TOKEN_10/tap?a=dispute\n\nIf you could not make it yourself: https://machine.test/c/TOKEN_10/tap?a=client_noshow",
+     "text": "Your call with Alan Reyes at Reyes Law Group 400 was booked for Tuesday, October 27 at 11:00 AM EDT. One tap tells me what happened:\n\nShowed: https://machine.test/c/TOKEN_11/tap?a=showed\nNo-show: https://machine.test/c/TOKEN_11/tap?a=noshow\nWrong fit: https://machine.test/c/TOKEN_11/tap?a=wrongfit\nDoesn’t count (reason required): https://machine.test/c/TOKEN_11/tap?a=dispute\n\nIf you could not make it yourself: https://machine.test/c/TOKEN_11/tap?a=client_noshow",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -5014,7 +4644,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Ridgeline IT — trial week 2 of 4",
-     "text": "A reply came in from Keller Law Group 8 on Wed.\n\nRidgeline IT — trial week 2 of 4\nSent this week: 94 · to date: 143, to 102 companies\nReplies: 5 (5.3%) · positive: 2\nMeetings booked: 0 · held: 1 · running total: 1 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_11/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_11/away\n• Stop the trial: https://machine.test/c/TOKEN_11/stop\n\nLimeth Sith",
+     "text": "A reply came in from Keller Law Group 8 on Wed.\n\nRidgeline IT — trial week 2 of 4\nSent this week: 94 · to date: 143, to 102 companies\nReplies: 5 (5.3%) · positive: 2\nMeetings booked: 0 · held: 1 · running total: 1 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_12/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_12/away\n• Stop the trial: https://machine.test/c/TOKEN_12/stop\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -5053,7 +4683,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Ridgeline IT — trial week 3 of 4",
-     "text": "Ridgeline IT — trial week 3 of 4\nSent this week: 131 · to date: 304, to 125 companies\nReplies: 4 (3.1%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 1 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_12/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_12/away\n• Stop the trial: https://machine.test/c/TOKEN_12/stop\n\nLimeth Sith",
+     "text": "Ridgeline IT — trial week 3 of 4\nSent this week: 131 · to date: 304, to 125 companies\nReplies: 4 (3.1%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 1 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_13/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_13/away\n• Stop the trial: https://machine.test/c/TOKEN_13/stop\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -5066,7 +4696,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Your meetings so far — Ridgeline IT",
-     "text": "Dana Whitfield — every meeting from the trial so far, pre-filled: company, date, showed, right fit, outcome. Fill this in and I’ll fix the targeting for you.\n\n• Reyes Law Group 400 — Tue 27 Oct — showed: yes — right fit: yes — outcome: held\n  Tap: https://machine.test/c/TOKEN_13/tap\n\nThe buttons under each meeting stay open until Day 25. Anything to add? Just reply to this email.\n\nLimeth Sith",
+     "text": "Dana Whitfield — every meeting from the trial so far, pre-filled: company, date, showed, right fit, outcome. Fill this in and I’ll fix the targeting for you.\n\n• Reyes Law Group 400 — Tue 27 Oct — showed: yes — right fit: yes — outcome: held\n  Tap: https://machine.test/c/TOKEN_14/tap\n\nThe buttons under each meeting stay open until Day 25. Anything to add? Just reply to this email.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -5105,7 +4735,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Ridgeline IT — trial week 4 of 4",
-     "text": "Ridgeline IT — trial week 4 of 4\nSent this week: 99 · to date: 433, to 141 companies\nReplies: 2 (2.0%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 1 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_14/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_14/away\n• Stop the trial: https://machine.test/c/TOKEN_14/stop\n\nLimeth Sith",
+     "text": "Ridgeline IT — trial week 4 of 4\nSent this week: 99 · to date: 433, to 141 companies\nReplies: 2 (2.0%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 1 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_15/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_15/away\n• Stop the trial: https://machine.test/c/TOKEN_15/stop\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -5170,7 +4800,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Ridgeline IT — 30-Day Trial Report",
-     "text": "Ridgeline IT — 30-Day Trial Report\n\nCompanies contacted: 173 · Emails sent: 530 · Bounce: 0.0% · Inbox placement: 100%\nReplies: 22 (4.2%) · Positive: 10 (1.9%)\nCalls booked: 1 · Held: 1 · Qualified: 1 · No-shows re-booked: 0\nPromise (one call): met · Target (three): not met\n\nWhat produced it: email version A (16.3% reply rate vs 9.1% for B), and Raleigh (4 of 10 positive replies). What didn’t: no pace check had to step in.\n\nYour measured rate: 1 qualified call from 173 companies is 0.58%.\n\nWhat that means at volume: Starter contacts at least 2,000 companies a month — about 11 calls at your rate, and we guarantee 10. Growth contacts 4,000 — about 23, and we guarantee 20.\n\nWhat carries over if you continue: the warm domain and inboxes, the profile, the proven copy. Full volume inside two weeks, not three.\n\nThe market report: attached — every reply, tagged, plus the 10 conversations still open.\n\nOne recommendation: 1 qualified call from 173 companies is 0.58%. That’s your rate, in your market, with your offer — not a benchmark. Starter contacts at least 2,000 companies a month. At your rate that’s about 11 calls; we guarantee 10. Growth contacts 4,000 — about 23 at your rate, and we guarantee 20. With 1 qualified call so far, the recommendation is Starter, and only Starter — $2,497 for 10 calls — to prove the rate holds at volume before going bigger.\n\nYour Day 30 page: https://machine.test/c/TOKEN_15/decide\n\nLimeth Sith",
+     "text": "Ridgeline IT — 30-Day Trial Report\n\nCompanies contacted: 173 · Emails sent: 530 · Bounce: 0.0% · Inbox placement: 100%\nReplies: 22 (4.2%) · Positive: 10 (1.9%)\nCalls booked: 1 · Held: 1 · Qualified: 1 · No-shows re-booked: 0\nPromise (one call): met · Target (three): not met\n\nWhat produced it: email version A (16.3% reply rate vs 9.1% for B), and Raleigh (4 of 10 positive replies). What didn’t: no pace check had to step in.\n\nYour measured rate: 1 qualified call from 173 companies is 0.58%.\n\nWhat that means at volume: Starter contacts at least 2,000 companies a month — about 11 calls at your rate, and we guarantee 10. Growth contacts 4,000 — about 23, and we guarantee 20.\n\nWhat carries over if you continue: the warm domain and inboxes, the profile, the proven copy. Full volume inside two weeks, not three.\n\nThe market report: attached — every reply, tagged, plus the 10 conversations still open.\n\nOne recommendation: 1 qualified call from 173 companies is 0.58%. That’s your rate, in your market, with your offer — not a benchmark. Starter contacts at least 2,000 companies a month. At your rate that’s about 11 calls; we guarantee 10. Growth contacts 4,000 — about 23 at your rate, and we guarantee 20. With 1 qualified call so far, the recommendation is Starter, and only Starter — $2,497 for 10 calls — to prove the rate holds at volume before going bigger.\n\nYour Day 30 page: https://machine.test/c/TOKEN_16/decide\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -5209,7 +4839,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Day 30 — your numbers and one recommendation",
-     "text": "Dana Whitfield — Day 30. Your five numbers, one recommendation and three buttons are on one page: https://machine.test/c/TOKEN_16/decide\n\nMy one recommendation: Starter — $2,497 a month for 10 guaranteed calls, $250 a call.\n\nMonth-one bonus: 12 calls for the price of 10 if you start before Fri, 20 Nov 2026 14:00 UTC. The domain’s already warm and the copy’s proven, so you skip the build. If you don’t continue, the trial domain retires on Day 45.\n\nLimeth Sith",
+     "text": "Dana Whitfield — Day 30. Your five numbers, one recommendation and three buttons are on one page: https://machine.test/c/TOKEN_3/decide\n\nMy one recommendation: Starter — $2,497 a month for 10 guaranteed calls, $250 a call.\n\nMonth-one bonus: 12 calls for the price of 10 if you start before Fri, 20 Nov 2026 14:00 UTC. The domain’s already warm and the copy’s proven, so you skip the build. If you don’t continue, the trial domain retires on Day 45.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -5957,7 +5587,9 @@
    "sendableUnsent": 247,
    "builtAt": "2026-11-19T05:15:00.000Z"
   },
-  "links": {},
+  "links": {
+   "decision": "https://machine.test/c/TOKEN_3/decide"
+  },
   "virtualNow": null
  }
 }

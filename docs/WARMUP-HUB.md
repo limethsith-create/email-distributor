@@ -37,7 +37,7 @@ each with its setup steps). The machine never creates accounts.
   ```jsonc
   { "status": "waiting_for_helpers|warming|ready|paused",
     "label": "Warming up — day 5 of about 14 · 96% reach the inbox",
-    "day": 5, "of": 14, "readyBy": "YYYY-MM-DD|null", "inboxRate": 0.96 | null,
+    "day": 5, "of": 14, "readyBy": "YYYY-MM-DD|null", "inboxRate": 0.96 | null,   // day 0 (and quota 0) until warm-up really runs — also while waiting_for_helpers
     "inboxes": [ { "email": "…", "day": 5, "sentToday": 8, "inboxRate7d": 0.96, "ready": false } ],
     "problem": "plain|null" }
   ```

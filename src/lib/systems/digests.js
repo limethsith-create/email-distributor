@@ -24,7 +24,7 @@ import { trialDay } from '@/lib/time';
 import { clientNow } from '@/lib/testclock';
 import { getAllClients } from '@/lib/db/client';
 import { getEvents } from '@/lib/db/events';
-import { alertOwner, getAlertLog } from '@/lib/notify';
+import { alertOwner, getAlertLog, ackMatching } from '@/lib/notify';
 import { dayKeyIn, OWNER_TZ } from '@/lib/time';
 import { boardData } from '@/lib/systems/boarddata';
 import { promisesDue } from '@/lib/systems/promiseregister';
@@ -65,7 +65,7 @@ export async function morningDigest({ now = new Date(), send = true } = {}) {
       const shop = (await kv.hgetall(K.shopping(c.id))) || {};
       if (shop.escalatedAt && !shop.boughtAt) {
         const hours = shop.sentAt ? Math.floor((now.getTime() - Date.parse(shop.sentAt)) / 3600e3) : null;
-        const how = ciOn ? 'Buy them on CheapInboxes — the hub shows exactly what; the machine connects everything after.' : `Paste the logins on /mc/clients/${c.id}/purchase.`;
+        const how = ciOn ? 'Buy them on CheapInboxes — the hub shows exactly what; we connect everything by ourselves after.' : `Paste the logins on /mc/clients/${c.id}/purchase.`;
         topLines.push(`NOT BOUGHT: ${c.name || c.id} — shopping list sent ${hours != null ? `${hours} h ago` : 'earlier'} (${shop.chosenDomain || 'see the list'}). ${how}`);
       }
     }
@@ -106,7 +106,14 @@ export async function morningDigest({ now = new Date(), send = true } = {}) {
   ].join('\n');
   const date = dayKeyIn(OWNER_TZ, now);
   const res = send ? await alertOwner('morning_digest', { vars: { date }, body, did: allGreen ? 'Nothing needed you.' : 'Every item above is already logged in Mission Control.' }) : null;
+  await supersedeDigests('morning_digest', res, now);
   return { allGreen, body, sent: res?.sent ?? false };
+}
+
+/** A digest is news, not a to-do: the new one acknowledges the earlier ones of its kind, so one at most stays open. */
+async function supersedeDigests(key, res, now) {
+  if (!res?.sent || !res.id) return 0;
+  return ackMatching((a) => a.key === key && a.id !== res.id, { by: 'machine', reason: 'the next digest went out', now });
 }
 
 const share = (n, d) => (d > 0 ? `${Math.round((n / d) * 100)}% (${n} of ${d})` : 'no finished trials yet');
@@ -139,5 +146,6 @@ export async function mondayDigest({ now = new Date(), send = true } = {}) {
   // still Sunday in the US — "Monday KPIs — <Sunday's date>" read wrong.
   const date = dayKeyIn(OWNER_TZ, now);
   const res = send ? await alertOwner('monday_digest', { vars: { date }, body, did: 'Numbers from stored counters and the trial ledger only.' }) : null;
+  await supersedeDigests('monday_digest', res, now);
   return { body, sent: res?.sent ?? false, finished: finished.length };
 }

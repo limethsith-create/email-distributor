@@ -16,6 +16,9 @@ import { getInboxRecords, publicInbox } from '@/lib/db/inboxes';
 import { getEvents } from '@/lib/db/events';
 import { getAlertLog, baseUrl } from '@/lib/notify';
 import { clientNow } from '@/lib/testclock';
+import { dayKeyIn, ET, OWNER_TZ } from '@/lib/time';
+import { currentLinks } from '@/lib/pagetokens';
+import { clockIn, shortDay } from '@/lib/systems/calendar';
 import { boardData, clientRow } from '@/lib/systems/boarddata';
 import { clientExtras } from '@/lib/systems/clientview';
 import { readChecks } from '@/lib/systems/setupcheck';
@@ -120,6 +123,15 @@ const badgeText = (b) => (b ? `fit score ${b.score !== null ? `${b.score}/100` :
 
 const underReview = (ctx) => ctx.client.state === 'applied' && ctx.application?.review === 'pending';
 
+/** 'Fri 20 Nov, 7:30 pm Sri Lanka time (9:00 am Eastern)' — the owner's clock first, US Eastern beside it (with its day when that differs). */
+export function ownerAndEastern(iso) {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return String(iso || '');
+  const d = new Date(t);
+  const sameDay = dayKeyIn(OWNER_TZ, d) === dayKeyIn(ET, d);
+  return `${ownerWhen(t)} Sri Lanka time (${sameDay ? '' : `${shortDay(t, ET)}, `}${clockIn(t, ET)} Eastern)`;
+}
+
 // ─── state label ──────────────────────────────────────────────────────────────
 
 export function stateLabelFor(ctx) {
@@ -135,7 +147,7 @@ export function stateLabelFor(ctx) {
     case 'sending': return day != null ? `${base} — Day ${day} of 30` : base;
     case 'paused': return client.pausedReason ? `${base} — ${client.pausedReason}` : base;
     case 'extension': return day != null ? `${base} — Day ${day}` : base;
-    case 'deciding': return trial.bonusExpiresAt ? `${base} — bonus until ${String(trial.bonusExpiresAt).slice(0, 16).replace('T', ' ')}` : base;
+    case 'deciding': return trial.bonusExpiresAt ? `${base} — bonus until ${ownerAndEastern(trial.bonusExpiresAt)}` : base;
     case 'converted': return client.paidAt ? `${base} — paid` : client.planStartedAt ? `${base} — invoice out` : base;
     case 'not_now': return day != null ? `${base} — Day ${day}` : base;
     case 'retired': return trial.dataDeleteAt ? `${base} — data deleted on ${trial.dataDeleteAt}` : base;
@@ -346,7 +358,7 @@ export function todosFor(ctx) {
     // CheapInboxes is connected: he buys there; the machine finds the purchase and does the rest.
     const since = ab.buy?.builtAt || shopping.sentAt || client.stateChangedAt || null;
     push('buy', `Buy ${ab.buy?.domain || 'their domain'} and ${ab.buy?.mailboxes?.length || 2} inboxes on CheapInboxes`,
-      ab.buy ? `${ab.buy.price != null ? `$${ab.buy.price} for the domain · ` : ''}the machine connects everything after you buy` : (ab.problem || 'The shopping list is being made'),
+      ab.buy ? `${ab.buy.price != null ? `$${ab.buy.price} for the domain · ` : ''}we connect everything by ourselves after you buy` : (ab.problem || 'The shopping list is being made'),
       Boolean(shopping.escalatedAt) || (since && now.getTime() - Date.parse(since) > 12 * 3600e3), since, view('detail', id, 'autobuy'));
   } else if (st === 'awaiting_purchase' && shopping.sentAt && !shopping.boughtAt) {
     push('buy', `Buy ${shopping.chosenDomain || 'the domain'} and 2 inboxes, then paste the logins`,
@@ -372,13 +384,19 @@ export function todosFor(ctx) {
     push('talk', `Call ${client.contactName || client.name} — they pressed "Talk to someone"`, `${ago(trial.talkRequestedAt, now)} · ${client.contactEmail || ''}`, true, trial.talkRequestedAt, view('detail', id));
   }
   if (client.legalHoldAt) {
-    push('legal', 'Read the legal reply, then clear the hold', String(client.legalHoldReply || '').slice(0, 160), true, client.legalHoldAt, api(`/api/mc/clients/${id}`, { action: 'clearLegalHold' }, 'Clear the legal hold and let this client send again?'));
+    // Who wrote, when (the owner's clock) and their first line — never the reply's id.
+    const rep = (ctx.replies || []).find((x) => x && x.id === client.legalHoldReply) || null;
+    const first = rep ? String(rep.snippet || '').split(/\r?\n/).map((l) => l.trim()).find(Boolean) || '' : '';
+    const detail = rep
+      ? `${rep.leadEmail || 'A prospect'} wrote on ${ownerWhen(rep.receivedAt || client.legalHoldAt)} (your time)${first ? `: “${first.slice(0, 140)}”` : ''}`
+      : 'A prospect replied with a legal threat — read it under Replies, then clear the hold';
+    push('legal', 'Read the legal reply, then clear the hold', detail, true, client.legalHoldAt, api(`/api/mc/clients/${id}`, { action: 'clearLegalHold' }, 'Clear the legal hold and let this client send again?'));
   }
   if (client.sendHold) {
     push('sendhold', 'Clear the send hold once the DNS/blacklist problem is fixed', String(client.sendHold).slice(0, 160), true, client.sendHoldAt, api(`/api/mc/clients/${id}`, { action: 'clearSendHold' }, 'Clear the send hold?'));
   }
   if (invoice?.issuedAt && !invoice.paidAt) {
-    push('invoice', `Mark the month-one invoice paid when the money lands (${invoice.number || 'invoice'})`, `Issued ${dateOf(invoice.issuedAt)}${has(invoice.amount) ? ` · $${Number(invoice.amount).toLocaleString('en-US')}` : ''}`, false, invoice.issuedAt, api(`/api/mc/clients/${id}`, { action: 'markPaid' }, 'Mark this invoice as paid?'));
+    push('invoice', `Mark the month-one invoice paid when the money lands${invoice.number ? ` (${invoice.number})` : ''}`, `Issued ${dateOf(invoice.issuedAt)}${has(invoice.amount) ? ` · $${Number(invoice.amount).toLocaleString('en-US')}` : ''}`, false, invoice.issuedAt, api(`/api/mc/clients/${id}`, { action: 'markPaid' }, 'Mark this invoice as paid?'));
   }
   if (domain.retiredAt && !trial.inboxesCancelledAt) {
     push('cancel-inboxes', 'Cancel the trial inboxes at the provider, then tick done', `Domain retired ${dateOf(domain.retiredAt)} · reminded daily until done`, true, domain.retiredAt, api(`/api/mc/clients/${id}`, { action: 'inboxesCancelled' }, 'Confirm the inboxes are cancelled at the provider?'));
@@ -430,21 +448,45 @@ export function todosFor(ctx) {
  * ever the stored ones; a missing counter is left out, never shown as 0.
  */
 export function simpleFor(ctx, todos = todosFor(ctx)) {
-  const out = simpleBase(ctx, todos);
+  const base = simpleBase(ctx);
   // Their last message has no answer yet (the conversation's needsReply, docs/REPLYBOT-MEET.md §1): the
   // hub shows "Sam wrote — answer them" in red. Outside the onboarding call it is also the next thing to do.
   const needsReply = needsReplyFor(ctx.client, ctx.callRaw) || Boolean(ctx.onboardCall?.needsReply);
   const msg = todos.find((t) => t.id === `message-reply:${ctx.client.id}`);
-  return { ...out, ...(msg ? { next: msg.text } : {}), needsReply, needsYou: out.needsYou || needsReply };
+  // Anything urgent on the to-do list turns the dot on (to-dos are urgent first, oldest first).
+  const urgent = todos.find((t) => t.urgent) || null;
+  const needsYou = base.needsYou || needsReply || Boolean(urgent);
+  let next = msg ? msg.text : base.next;
+  // A red dot never comes with "Nothing for you": `next` is then the thing to do.
+  if (needsYou && urgent && /^Nothing\b/.test(next)) next = todoNext(urgent, ctx);
+  return { ...base, next, needsReply, needsYou };
 }
 
-function simpleBase(ctx, todos) {
+/** What to do for an urgent alert, in plain words (the alert to-do's text is the alert's title). */
+const ALERT_NEXT = {
+  angry_reply: 'Read the angry reply and mark it as seen',
+  customer_hit: 'Read which customer was emailed and mark it as seen',
+  autobuy_problem: 'Fix the inbox setup problem named in the alert, then mark it as seen',
+  emergency: 'Read the deliverability alert and mark it as seen',
+  hot_lead_failed: 'Send the hot lead to {person} by hand, then mark the alert as seen',
+  paused_quiet: 'Write to {person} — the trial is paused until they answer',
+  trial_ended_quiet: 'Write to {person} — the trial ended because they went quiet',
+};
+function todoNext(todo, ctx) {
+  if (!String(todo.id).startsWith('alert-')) return todo.text;
+  const alert = (ctx.alerts || []).find((a) => a && `alert-${a.id}:${ctx.client.id}` === todo.id) || null;
+  const person = firstOf(ctx.client.contactName) || 'them';
+  const line = alert && ALERT_NEXT[alert.key];
+  if (line) return line.replace('{person}', person);
+  return `Read the alert “${alert?.title || String(todo.text).replace(/ \(\d+ alerts\)$/, '')}” and mark it as seen`;
+}
+
+function simpleBase(ctx) {
   const { client, trial = {}, shopping = {}, domain = {}, counters = {} } = ctx;
   const st = client.state;
-  const urgent = todos.some((t) => t.urgent);
   const since0 = client.stateChangedAt || client.createdAt || null;
   const r = (step, label, next, needsYou = false, since = since0, dayOf30 = null) => ({
-    step, label, next, needsYou: Boolean(needsYou) || urgent, since: since || since0 || null,
+    step, label, next, needsYou: Boolean(needsYou), since: since || since0 || null,
     person: client.contactName || null, company: client.name || client.id, dayOf30,
   });
   const booked = n(counters.booked);
@@ -485,8 +527,11 @@ function simpleBase(ctx, todos) {
       return heldSimple(ctx, r) || r('sending', `Free extension — day ${ctx.day ?? '—'}${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, ctx.day ?? null);
     case 'paused':
       return r('sending', `Paused — ${client.pausedReason || 'by you'}`, 'No emails go out until it is cleared', false, since0, ctx.day ?? null);
-    case 'deciding':
-      return r('finished', 'Trial finished — waiting for their decision', trial.talkRequestedAt ? `Call ${client.contactName || 'them'} — they asked to talk` : 'Nothing for you: they choose on their decision page', Boolean(trial.talkRequestedAt));
+    case 'deciding': {
+      // Day 30 → their click: its own step (the hub draws it at ⑤ like `finished`), plain words on who decides.
+      const who = firstOf(client.contactName);
+      return r('deciding', 'Trial finished — waiting for their decision', trial.talkRequestedAt ? `Call ${client.contactName || 'them'} — they asked to talk` : `Nothing. ${who ? `${who} chooses` : 'They choose'} on the decision page.`, Boolean(trial.talkRequestedAt));
+    }
     case 'converted':
       return r('finished', 'Finished — became a client', client.paidAt ? 'Nothing for you' : 'Mark the invoice paid when the money lands');
     case 'not_now': case 'retired': case 'deleted':
@@ -582,13 +627,6 @@ export async function loadContext(client, { alerts = null, now = new Date(), onb
   ]);
   const domain = { ...(await getDomain(id)), ...(domainRead.domain || {}) };
   const checks = domainRead.checks || {};
-  // CheapInboxes auto-buy (docs/AUTO-BUY.md): one read, only at the buying / setup / warm-up steps.
-  let autobuyCtx = null;
-  if (AUTOBUY_STATES.has(client.state) || String(client.autobuyOpen) === '1') {
-    const a = autobuy || {};
-    const [rec, connected, s] = await Promise.all([readAutobuy(id), a.connected ?? cheapInboxesConnected(), a.settings || autobuySettings()]);
-    autobuyCtx = autobuyView({ client, rec, connected, domain, s });
-  }
   const inboxes = inboxesRaw.map(publicInbox);
   // The warm-up card (docs/WARMUP-HUB.md): from the inbox records just read + what the board shares (rules, today's
   // sends, the circle — read once per board; the circle only matters while a trial warms).
@@ -596,6 +634,14 @@ export async function loadContext(client, { alerts = null, now = new Date(), onb
   if (id !== 'aviance' && WARMUP_VIEW_STATES.has(client.state) && inboxesRaw.some((r) => r.passwordEnc)) {
     const w = warm || await hubWarmupData({ now, circle: client.state === 'warming' }).catch(() => null);
     if (w) warmup = warmupView({ client, inboxes: inboxesRaw, now: vnow, circle: w.circle, dayStats: w.dayStats, s: w.settings });
+  }
+  // CheapInboxes auto-buy (docs/AUTO-BUY.md): one read, only at the buying / setup / warm-up steps. The warm-up
+  // card says whether warm-up has really started (the circle may still be short).
+  let autobuyCtx = null;
+  if (AUTOBUY_STATES.has(client.state) || String(client.autobuyOpen) === '1') {
+    const a = autobuy || {};
+    const [rec, connected, s] = await Promise.all([readAutobuy(id), a.connected ?? cheapInboxesConnected(), a.settings || autobuySettings()]);
+    autobuyCtx = autobuyView({ client, rec, connected, domain, s, warmup });
   }
   const hot = Object.values((await kv.hgetall(K.hot(id)).catch(() => null)) || {});
   const application = applicationView(await kv.hgetall(K.application(id)).catch(() => null));
@@ -698,7 +744,7 @@ async function machineTodos(board, queue, { cheapInboxes = false } = {}) {
   if (cheapInboxes) {
     for (const u of unmatchedOf(await readDomainIndex().catch(() => ({})))) {
       t.push({ id: `unmatched:${u.domain}`, clientId: null, clientName: 'CheapInboxes', text: `You bought ${u.domain} — which trial is it for? Pick in Settings`,
-        detail: `${u.mailboxes != null ? `${u.mailboxes} inbox${u.mailboxes === 1 ? '' : 'es'} · ` : ''}bought ${u.boughtAt ? ago(u.boughtAt, new Date()) : 'recently'} · the machine connects it once you pick`,
+        detail: `${u.mailboxes != null ? `${u.mailboxes} inbox${u.mailboxes === 1 ? '' : 'es'} · ` : ''}bought ${u.boughtAt ? ago(u.boughtAt, new Date()) : 'recently'} · we connect it by ourselves once you pick`,
         urgent: true, since: u.boughtAt, action: { type: 'view', view: 'settings', section: 'inboxes', domain: u.domain } });
     }
   }
@@ -724,7 +770,9 @@ async function machineTodos(board, queue, { cheapInboxes = false } = {}) {
 export async function hubClient(id, { now = new Date() } = {}) {
   const client = await getClient(id);
   if (!client) return null;
-  const row = await hubRow(client, { now });
+  // The same alert log the board reads, so `row` (health, openAlerts, urgentAlerts) matches the board row.
+  const alerts = await getAlertLog(500);
+  const row = await hubRow(client, { alerts, now });
   const { _ctx: ctx, ...rowOut } = row;
   const last = jobRecords(client);
   const jobs = {};
@@ -767,7 +815,8 @@ export async function hubClient(id, { now = new Date() } = {}) {
     conversation: await conversationFor(id, { now, client }).catch(() => null),
     deliverability: await deliverabilityView(id).catch(() => null),
     leadQuality: await leadQualityView(id).catch(() => null),
-    links: {},
+    // The last onboarding / approval / decision link they were sent, while it still works (docs/HUB-API.md).
+    links: await currentLinks(id, ctx.trial).catch(() => ({})),
     virtualNow: id === '_test' ? clientNow(client, now).toISOString() : null,
   };
 }

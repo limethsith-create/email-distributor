@@ -142,7 +142,7 @@ export default function ClientPage({ params }) {
         <Eyebrow>Reports rendered</Eyebrow>
         {d.reports.length === 0 && <p style={{ margin: 0 }}>None yet.</p>}
         {d.reports.map((r) => <div key={r.name} style={row}><span className="mono" style={{ minWidth: 160 }}>{r.name}</span><span>{r.renderedAt ? ago(r.renderedAt) : '—'}</span>{r.blockedReason && <span style={{ color: 'var(--danger)' }}>BLOCKED: {r.blockedReason}</span>}</div>)}
-        {inv && <div style={row}><span className="mono" style={{ minWidth: 160 }}>invoice {inv.invoiceNo}</span><span>{inv.plan} · ${inv.amount} · {inv.status}{inv.paidAt ? ` · paid ${dt(inv.paidAt)}` : ''}{inv.blockedReason ? ` · ${inv.blockedReason}` : ''}</span></div>}
+        {inv && <div style={row}><span className="mono" style={{ minWidth: 160 }}>invoice {inv.number}</span><span>{inv.plan} · ${inv.amount} · {inv.status}{inv.paidAt ? ` · paid ${dt(inv.paidAt)}` : ''}{inv.blockedReason ? ` · ${inv.blockedReason}` : ''}</span></div>}
       </section>
 
       <section style={{ ...box, display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>

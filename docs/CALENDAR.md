@@ -219,7 +219,13 @@ ONBOARDCALL inbox)
 **Alerts** — `meeting_requested` ("Sam (eCreek IT) asked for … — say yes in
 the Calendar") and `meeting_accepted` ("Sam (eCreek IT) said yes to …"):
 phone push + email, not urgent (the Calendar list and the trial's to-do carry
-the red dot), push `url` = `/#calendar`.
+the red dot), push `url` = `/#calendar`. `meeting_requested` is acknowledged
+by the machine when the owner answers the request in the Calendar (Yes,
+Suggest another time, Decline, Cancel), so it does not stay open in the hub.
+
+**The trial page** — `onboardCall.meetLink` (docs/ONBOARD-CALL.md) carries
+the confirmed call's Google Meet link, so "Join Google Meet" works there
+without the Calendar week loaded.
 
 **Not built** — no nudge to the owner when a request sits unanswered (the
 red dot stays); unanswered requests whose time has passed stay in `requests`

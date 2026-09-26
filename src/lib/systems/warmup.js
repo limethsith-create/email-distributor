@@ -1237,8 +1237,10 @@ export async function helpersAlert(pool, { now = new Date(), min }) {
 
 // ── a trial's warm-up card ───────────────────────────────────────────────────
 
+/** States past warm-up whose card still shows how it ended (the decision weeks; the inboxes are back in the circle if they convert). */
+const PAST_WARMUP = new Set(['deciding']);
 /** States in which a trial's warm-up card shows (null before the inboxes are connected). */
-export const WARMUP_VIEW_STATES = new Set(['setup_check', ...WARMUP_STATES]);
+export const WARMUP_VIEW_STATES = new Set(['setup_check', ...WARMUP_STATES, ...PAST_WARMUP]);
 
 /** The rules the card reads (global, like the daily readiness run): readiness, ramp, slide window, circle size. */
 export async function warmupHubSettings() {
@@ -1301,7 +1303,7 @@ export function warmupView({ client, inboxes = [], now = new Date(), circle = nu
   const connected = (inboxes || []).filter((r) => r && r.email && (r.passwordEnc || r.hasPassword));
   if (!connected.length) return null;
   const today = dayKeyIn(ET, now);
-  const warmingState = WARMUP_STATES.has(st);
+  const warmingState = WARMUP_STATES.has(st) || PAST_WARMUP.has(st);
   const sending = SENDING_STATES.has(st) || st === 'paused';
   const rows = connected.map((r) => {
     const on = warmingState && Boolean(r.warmupStartedAt) && r.warmupEnabled !== '0';
@@ -1318,13 +1320,15 @@ export function warmupView({ client, inboxes = [], now = new Date(), circle = nu
     };
   });
   const on = rows.filter((x) => x._on);
-  const minDay = on.length ? Math.min(...on.map((x) => x.day)) : 0;
-  const rates = on.map((x) => x.inboxRate7d).filter((x) => x != null);
-  const inboxRate = rates.length ? Math.min(...rates) : null;
   let status = 'warming';
   if (!on.length) status = 'paused';
   else if (st !== 'warming' || on.every((x) => x.ready)) status = 'ready';
   else if (circle && circle.members < circle.min) status = 'waiting_for_helpers';
+  // Before warm-up really runs (the circle is short) every inbox is on day 0 with nothing to send.
+  if (status === 'waiting_for_helpers') for (const x of rows) { x.day = 0; x.quota = 0; }
+  const minDay = on.length ? Math.min(...on.map((x) => x.day)) : 0;
+  const rates = on.map((x) => x.inboxRate7d).filter((x) => x != null);
+  const inboxRate = rates.length ? Math.min(...rates) : null;
 
   const readyBy = status === 'warming'
     ? estimateReadyBy(on.map((x) => ({ start: dayKeyIn(ET, new Date(x._rec.warmupStartedAt)), rate: x.inboxRate7d, streak: x._rec.readyStreak, checkedDay: x._rec.readyCheckedDay || null, ready: x.ready })), { today, readyRate: s.readyRate, need: s.need, minDays: s.minDays, maxSlideDays: s.maxSlideDays })
