@@ -717,3 +717,162 @@ proposes_time_busy|wants_time|price|what_needed}` (plain text with
 `{firstName}` `{ownerName}` `{bookingLink}` `{times}` `{when}`
 `{onboardingLink}` `{callMinutes}`). The on/off switch for everyone is
 `REPLYBOT.enabled`; show each answer read-only.
+
+---
+
+# CheapInboxes auto-buy (2026-09-26)
+
+Contract: docs/AUTO-BUY.md (its "As built" lists every decision); the
+owner's steps to show in the hub: docs/CHEAPINBOXES-SETUP.md. The owner buys
+a domain + 2 inboxes in his CheapInboxes account; the machine never buys or
+pays for anything — it writes the shopping list, finds the purchase, and
+connects it (forwarding, logins, setup checks, warm-up). Without a key
+everything below is `not_set_up` and today's manual path (paste the logins)
+is unchanged. Every field is additive.
+
+## Settings › Inboxes & domains
+
+`GET /api/mc/cheapinboxes` →
+```jsonc
+{
+  "status": "not_set_up|connected|broken",
+  "account": "Aviance Outreach|null",         // their organization name
+  "hasPaymentMethod": true|false|null,        // a default card on file (null = unknown)
+  "webhook": "registered|missing",
+  "unmatched": [ { "domain": "randomname.com", "mailboxes": 2, "boughtAt": "ISO" } ],  // bought, on no trial's list — pick the trial
+  "keyFrom": "saved|env|null",
+  "checkedAt": "ISO|null", "lastSyncAt": "ISO|null",
+  "problem": "No card on your CheapInboxes account — add one under Billing before you buy.|null",  // one plain sentence, null when fine
+  "encKey": true                              // false: the key cannot be saved (ENC_KEY missing)
+}
+```
+`problem` (first that applies): "The key was refused by CheapInboxes — create
+a new one (Integrations → API), paste it here and press Test." · "No card on
+your CheapInboxes account — add one under Billing before you buy." · "The
+webhook is not registered, so purchases are found a little later — press Test
+to register it again." The API key and the webhook secret are never in any
+answer.
+
+`POST /api/mc/cheapinboxes`, one of:
+- `{ action: 'saveKey', apiKey }` → `{ ok, …status }` · 400 (not a
+  `ci_…` key / CheapInboxes refused it — nothing saved) · 409 (set on the
+  server: `CHEAPINBOXES_API_KEY`) · 503 (no ENC_KEY). Checks the key, reads
+  whether a card is on file, registers the ONE webhook (a re-save replaces
+  it); may carry `webhookError` (saved anyway, `webhook: 'missing'`). The
+  first look at the account runs right after the answer.
+- `{ action: 'test' }` → `{ ok, …status, webhookRenewed }` (a missing webhook
+  is registered again) · 400 refused (→ `status: 'broken'`) · 409 not set up.
+- `{ action: 'forget' }` → `{ ok, …status, webhookRemoved }` · 409 when the
+  key is set on the server.
+Show `unmatched` with a trial picker (trials in "Waiting for you to buy")
+that calls `POST /api/mc/clients/{id}/autobuy { action: 'link', domain }`.
+
+## `GET /api/mc/hub/{id}` gains `autobuy`
+
+`null` outside the buying / setup / warm-up steps (and for trials that never
+used this path once past buying).
+```jsonc
+"autobuy": {
+  "status": "not_set_up|ready_to_buy|provisioning|connecting|done|failed",
+  "buy": {                                     // only while ready_to_buy (null while the list is being made)
+    "domain": "acmehq.com", "price": 9.99, "currency": "USD",
+    "alternatives": [ { "domain": "tryacme.com", "price": 9.99 } ],     // up to 3; "Buy this instead" → pick
+    "provider": "google",
+    "mailboxes": [ { "firstName": "Jordan", "lastName": "Test", "prefix": "jordan", "email": "jordan@acmehq.com" },
+                   { "firstName": "Jordan", "lastName": "Test", "prefix": "jordan.test", "email": "jordan.test@acmehq.com" } ],
+    "orderUrl": "https://app.cheapinboxes.com/add",                    // the "Open CheapInboxes" button (new tab)
+    "builtAt": "ISO"
+  } | null,
+  "label": "Buy acmehq.com and 2 inboxes on CheapInboxes",            // one plain sentence for the card
+  "domain": "acmehq.com|null",
+  "steps": [ { "key": "bought", "label": "You bought it", "done": true, "at": "ISO" },
+             { "key": "domain", "label": "Domain live + spam protection set", "done": false, "at": null },
+             { "key": "inboxes", "label": "2 inboxes created", "done": false, "at": null },
+             { "key": "connected", "label": "Connected to our system", "done": false, "at": null },
+             { "key": "warmup", "label": "Warm-up started", "done": false, "at": null } ],
+  "mailboxes": [ { "email": "jordan@acmehq.com", "status": "provisioning|active|connected" } ],
+  "problem": "No login came back for jordan@acmehq.com|null",          // plain words; also "none of the names is free …" while ready_to_buy
+  "linkedBy": "match|owner|null",
+  "canUnlink": true                                                    // show "Not this trial" only when true
+}
+```
+Labels: ready_to_buy "Buy {domain} and 2 inboxes on CheapInboxes" ·
+provisioning "Setting up {domain} — about 48 hours" · connecting "Connecting
+{domain} to our system" (or "… — a setup check failed") · done "{domain} and 2
+inboxes are ready — warm-up has started" · failed = the problem · not_set_up
+"CheapInboxes is not connected — buy by hand and paste the logins, or connect
+it in Settings › Inboxes & domains".
+
+## `POST /api/mc/clients/{id}/autobuy`
+
+- `{ action: 'recheck' }` — look for the purchase now (the shopping list is
+  made again when over an hour old).
+- `{ action: 'link', domain }` — this domain (in the CheapInboxes account) is
+  this trial's (the trial must be waiting to buy).
+- `{ action: 'unlink' }` — undo a wrong link; refused once an inbox is
+  connected. The domain goes back to `unmatched` and is not matched to this
+  trial again by itself.
+- `{ action: 'pick', domain }` — buy this alternative instead (the old domain
+  stays listed as an alternative).
+
+Every answer is `{ ok: true, autobuy, sync? }` or `{ ok: false, error,
+autobuy }` with 400 (bad domain / not an alternative / unknown action) · 404
+(client, or the domain is not in the account yet) · 409 (not connected,
+already linked — to this trial or another —, not waiting to buy, already
+connected). Redraw from `autobuy`. `GET` on the same path → `{ ok, autobuy }`.
+
+## Board rows and to-dos
+
+- `simple` while buying with CheapInboxes connected: step `setting_up`,
+  "Buy their domain and 2 inboxes on CheapInboxes", next "Open CheapInboxes
+  and buy {domain} with 2 inboxes — the rest sets itself up", `needsYou:
+  true`. After the purchase (awaiting_purchase or setup_check): "Setting up
+  their inboxes (about 2 days)", next "Nothing for you: the domain and inboxes
+  connect by themselves, then warm-up starts" — or "Setting up their inboxes
+  (about 2 days) — needs you", next "Fix: {problem}", `needsYou: true`. A
+  failed setup check keeps today's text.
+- To-do `buy:{id}` while ready to buy: "Buy {domain} and 2 inboxes on
+  CheapInboxes", detail "$9.99 for the domain · the machine connects
+  everything after you buy", `action: { type: 'view', view: 'detail',
+  clientId, section: 'autobuy' }` (urgent after 12 h).
+- Machine to-do `unmatched:{domain}` (urgent, `clientId: null`, clientName
+  "CheapInboxes"): "You bought {domain} — which trial is it for? Pick in
+  Settings", `action: { type: 'view', view: 'settings', section: 'inboxes',
+  domain }` — a new `view` value: open Settings › Inboxes & domains.
+- System card `purchase`: the `autobuy.label` with the steps as detail lines
+  while buying / setting up.
+
+## `POST /api/mc/onboard-calls/check`
+
+Also looks at the CheapInboxes account (in parallel, throttled to
+`CHEAPINBOXES.checkEveryMinutes`, shared with the `autobuy` job): shopping
+lists made, purchases found and connected, setup checks moved on. The answer
+carries `autobuy: { ok, found: [{clientId, domain}], connected: [ids],
+ready: [ids], unmatched: n, problems: n, skipped?: 'too soon'|'busy', error? }`
+only while a key is set. Reload the board when `found`, `connected` or
+`ready` is non-empty.
+
+## Public
+
+`POST /api/webhooks/cheapinboxes` — CheapInboxes' events (registered by
+`saveKey`). Always 200 `{ received: true }`; only wakes a look (see
+docs/AUTO-BUY.md "As built").
+
+## Alerts (phone + email)
+
+- `purchase_found` "We found acmehq.com — connecting it to Acme" · push
+  `url` `/#trial/{id}`.
+- `inboxes_ready` "acmehq.com and 2 inboxes are ready — warm-up has started" ·
+  `/#trial/{id}`.
+- `autobuy_problem` (urgent, also Telegram) "Inbox setup: {what}" — e.g. "The
+  CheapInboxes order for acmehq.com failed", "No login came back for …",
+  "acmehq.com is still not ready 73 hours after you bought it", "CheapInboxes
+  refused the API key" (that one `/#settings/inboxes`).
+- `purchase_unmatched` "You bought randomname.com — which trial is it for?
+  Pick in Settings" · `/#settings/inboxes`.
+
+## Config `CHEAPINBOXES` (machine-wide, `/mc/config`)
+
+`provider` ('google'), `mailboxes` (2), `stuckHours` (72), `orderUrl`,
+`alternatives` (3), `maxSearches` (6), `refreshHours` (24),
+`credentialsGraceHours` (2), `checkEveryMinutes` (2), `jobEveryMinutes` (10).

@@ -8,7 +8,7 @@
 
 import { assertClientId } from '@/lib/db/keys';
 import { getClient } from '@/lib/db/client';
-import { getInboxRecords } from '@/lib/db/inboxes';
+import { getInboxRecords, publicInbox } from '@/lib/db/inboxes';
 import { hasEncKey } from '@/lib/crypto';
 import { getShopping } from '@/lib/systems/pricescout';
 import { setupSummary } from '@/lib/systems/setupcheck';
@@ -26,7 +26,7 @@ export async function GET(_req, { params }) {
     client: { id, name: client.name, state: client.state, mainDomain: client.mainDomain },
     shopping,
     setup,
-    inboxes: inboxes.map(({ passwordEnc, ...r }) => ({ ...r, hasPassword: Boolean(passwordEnc) })),
+    inboxes: inboxes.map(publicInbox),
     encKey: hasEncKey(),
   });
 }

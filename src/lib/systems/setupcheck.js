@@ -264,7 +264,12 @@ export async function runSetupCheck(clientId, { deadline = Date.now() + 15000, n
   }
   if (pending('autorenew')) {
     const off = domain.autoRenew === false || String(domain.autoRenew).toLowerCase() === 'false';
-    await put('autorenew', off ? { status: 'pass', detail: 'auto-renew off (confirmed by owner)' } : { status: 'fail', detail: `auto-renew is "${domain.autoRenew ?? 'not confirmed'}"` });
+    // A domain bought with CheapInboxes inboxes (docs/AUTO-BUY.md) is part of that subscription: it is
+    // cancelled there with the inboxes when the trial ends (the cancel-inboxes to-do), not at a registrar.
+    const bundled = domain.registrar === 'cheapinboxes';
+    await put('autorenew', off ? { status: 'pass', detail: bundled ? 'auto-renew off at CheapInboxes' : 'auto-renew off (confirmed by owner)' }
+      : bundled ? { status: 'pass', detail: 'bought with the CheapInboxes inboxes: it renews with that subscription and is cancelled there with the inboxes when the trial ends' }
+        : { status: 'fail', detail: `auto-renew is "${domain.autoRenew ?? 'not confirmed'}"` });
   }
   if (pending('blacklist') && left() > 6000) {
     const bl = await checkBlacklist(name);

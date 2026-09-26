@@ -32,6 +32,7 @@ import { getPricing, checkDomain, porkbunKeys, rdapAvailable, balance, createDom
 import { dayKeyIn, ET } from '@/lib/time';
 import { io, asArray, asObject, firstNameOf, ownerName, sendClient } from '@/lib/systems/intake-io';
 import { rankCandidates, checkNames, livePrices, refreshLivePrices, priceRows, registrarList, inboxPlan, inboxUsers, buildOffers, totalsOf } from '@/lib/systems/domains';
+import { isConnected as cheapInboxesConnected } from '@/lib/ext/cheapinboxes';
 
 const SYSTEM = 'pricescout';
 /** Runs a list may wait for availability answers before it goes out with what it has. */
@@ -421,13 +422,17 @@ export async function runPurchaseNudge({ clientId, now = io.now() }) {
   const hours = (now.getTime() - Date.parse(shop.sentAt)) / 3600e3;
   const [first, second] = await cfg(clientId, 'PURCHASE.reminderHours');
   const link = `${baseUrl()}/mc/clients/${clientId}/purchase`;
+  // With CheapInboxes connected (docs/AUTO-BUY.md) he only buys; the machine finds the purchase and connects it.
+  const how = (await cheapInboxesConnected())
+    ? `Buy them on CheapInboxes — the hub shows exactly which domain and inboxes (${await cfg(null, 'CHEAPINBOXES.orderUrl')}). The machine connects everything after.`
+    : `Paste the logins: ${link}`;
   if (hours >= second && !shop.escalatedAt) {
-    await io.alertOwner('purchase_reminder', { clientId, scope: `${clientId}:${second}`, vars: { clientId, hours: second }, body: `The domain and inboxes for ${client.name || clientId} are still not bought, ${second} hours after the shopping list (${shop.chosenDomain || 'see list'}).\nPaste the logins: ${link}`, did: 'Escalated: this also heads the morning digest until the logins are pasted.' });
+    await io.alertOwner('purchase_reminder', { clientId, scope: `${clientId}:${second}`, vars: { clientId, hours: second }, body: `The domain and inboxes for ${client.name || clientId} are still not bought, ${second} hours after the shopping list (${shop.chosenDomain || 'see list'}).\n${how}`, did: 'Escalated: this also heads the morning digest until the purchase is in.' });
     await kv.hset(K.shopping(clientId), { escalatedAt: now.toISOString(), reminded12At: shop.reminded12At || now.toISOString() });
     return { escalated: true };
   }
   if (hours >= first && !shop.reminded12At) {
-    await io.alertOwner('purchase_reminder', { clientId, scope: `${clientId}:${first}`, vars: { clientId, hours: first }, body: `Still to buy for ${client.name || clientId}: ${shop.chosenDomain || 'the domain'} and 2 inboxes.\nPaste the logins: ${link}`, did: `Reminder ${first} h after the shopping list.` });
+    await io.alertOwner('purchase_reminder', { clientId, scope: `${clientId}:${first}`, vars: { clientId, hours: first }, body: `Still to buy for ${client.name || clientId}: ${shop.chosenDomain || 'the domain'} and 2 inboxes.\n${how}`, did: `Reminder ${first} h after the shopping list.` });
     await kv.hset(K.shopping(clientId), { reminded12At: now.toISOString() });
     return { reminded: true };
   }

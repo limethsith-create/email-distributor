@@ -235,6 +235,33 @@ export const K = {
   /** Booking-page tries per link per hour (string counter, INCR + EX). */
   bookRate: (tokenHash, hour) => `meetings:rate:${hour}:${tokenHash}`,
   // ── end calendar ──
+
+  // ── CheapInboxes: buy once, the rest sets itself up (docs/AUTO-BUY.md) ──
+  /**
+   * The owner's CheapInboxes connection (hash): apiKeyEnc, webhookSecretEnc (ENC_KEY-encrypted,
+   * never returned by any API, stripped from backups), account, orgId, hasPaymentMethod ('1'|'0'),
+   * webhookId, webhookUrl, savedAt, checkedAt, brokenAt, brokenReason, baselineAt, lastSyncAt.
+   */
+  cheapinboxes: () => 'cheapinboxes:account',
+  /**
+   * What the account owns (hash): domain → JSON { id, status, boughtAt, firstSeenAt, seenAt,
+   * clientId|null, linkedAt, linkedBy, preexisting?, blocked?: [clientIds], mailboxes, gone?,
+   * alertedAt? }. One domain belongs to at most one client.
+   */
+  cheapinboxesDomains: () => 'cheapinboxes:domains',
+  /** Last sync (string ISO, with EX): one sync per CHEAPINBOXES.checkEveryMinutes across the job and the hub. */
+  cheapinboxesSync: () => 'cheapinboxes:syncedat',
+  /** One sync at a time (string, NX + EX). */
+  cheapinboxesLock: () => 'cheapinboxes:sync_lock',
+  /** Webhook wake-ups (string, NX + EX): `signed` / `unsigned` — each kind may start a sync this often. */
+  cheapinboxesWake: (kind) => `cheapinboxes:wake:${kind === 'signed' ? 'signed' : 'unsigned'}`,
+  /**
+   * One trial's auto-buy (hash): buy (JSON, the shopping list), buyAt, pinned, shown (JSON), domain,
+   * domainId, linkedAt, linkedBy, boughtAt, expected, domainStatus, domainLiveAt, forwardingSetAt,
+   * mailboxes (JSON), inboxesActiveAt, connectedAt, warmupAt, problem, problemKind, problemAt.
+   */
+  autobuy: (id) => `${c(id)}:autobuy`,
+  // ── end CheapInboxes ──
 };
 
 /**

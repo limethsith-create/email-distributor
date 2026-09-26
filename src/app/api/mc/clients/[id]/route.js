@@ -1,7 +1,7 @@
 import { kv } from '@vercel/kv';
 import { K, assertClientId } from '@/lib/db/keys';
 import { getClient, getProfile, getTrial, getDomain, setState, STATES } from '@/lib/db/client';
-import { getInboxRecords, saveInbox, removeInbox, patchInbox } from '@/lib/db/inboxes';
+import { getInboxRecords, saveInbox, removeInbox, patchInbox, publicInbox } from '@/lib/db/inboxes';
 import { getEvents, logEvent } from '@/lib/db/events';
 import { runTick, jobRecords } from '@/lib/scheduler';
 import { JOBS } from '@/lib/jobs';
@@ -17,11 +17,6 @@ export const maxDuration = 30;
 
 // Profile fields the owner may edit here (SPEC §3 client:{id}:profile).
 const PROFILE_FIELDS = ['senderName', 'senderTitle', 'senderPrefix', 'postalAddress', 'calendarUrl', 'defaultNiche', 'defaultIcp', 'sellsTo', 'industry', 'capacityPerWeek', 'winCondition'];
-
-function publicInbox(r) {
-  const { passwordEnc, ...rest } = r;
-  return { ...rest, hasPassword: Boolean(passwordEnc) };
-}
 
 export async function GET(_req, { params }) {
   const id = assertClientId(params.id);

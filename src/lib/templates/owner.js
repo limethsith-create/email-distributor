@@ -124,4 +124,12 @@ export const ALERTS = {
   meeting_requested: { urgent: false, title: '{who} asked for {when} — say yes in the Calendar' },
   meeting_accepted: { urgent: false, title: '{who} said yes to {when}' },
   // ── end calendar ──
+  // ── CheapInboxes auto-buy (docs/AUTO-BUY.md) ── phone + email. Each fires once per purchase
+  // (the machine's own once-claims, on top of the daily dedupe). A problem is urgent: something
+  // stopped that only the owner can fix in CheapInboxes. {what} is one plain sentence.
+  purchase_found: { urgent: false, title: 'We found {domain} — connecting it to {company}' },
+  inboxes_ready: { urgent: false, title: '{domain} and {count} inboxes are ready — warm-up has started' },
+  autobuy_problem: { urgent: true, title: 'Inbox setup: {what}' },
+  purchase_unmatched: { urgent: false, title: 'You bought {domain} — which trial is it for? Pick in Settings' },
+  // ── end CheapInboxes ──
 };

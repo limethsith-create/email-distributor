@@ -523,6 +523,33 @@ export const DEFAULTS = {
     usZone: 'America/New_York',
   },
   // ── end calendar ──
+  // ── CheapInboxes: buy once, the rest sets itself up (docs/AUTO-BUY.md) ── one machine-wide
+  // block. The machine never buys anything and never spends money: it tells you what to buy,
+  // finds the purchase in your CheapInboxes account, and connects it by itself.
+  CHEAPINBOXES: {
+    // The mailboxes to buy: 'google' (Google Workspace) or 'microsoft'.
+    provider: 'google',
+    // Mailboxes per trial. The shopping list names this many; setup starts when this many are connected.
+    mailboxes: 2,
+    // Hours after you bought it before a domain or inbox that is still not ready counts as stuck (one alert).
+    stuckHours: 72,
+    // The CheapInboxes page the hub's "Open CheapInboxes" button opens (their order form).
+    orderUrl: 'https://app.cheapinboxes.com/add',
+    // Alternatives shown next to the domain to buy (0–5).
+    alternatives: 3,
+    // Read-only availability searches per shopping list at most (CheapInboxes allows 120 calls a minute).
+    maxSearches: 6,
+    // Hours before a shopping list that was not bought yet is checked again (availability and price change).
+    refreshHours: 24,
+    // Hours an active inbox may wait for its login from CheapInboxes before that is a problem (one alert).
+    credentialsGraceHours: 2,
+    // How often the account may be looked at — the hub's check and the job share it (minutes).
+    checkEveryMinutes: 2,
+    // How often the job on the tick looks while a trial waits to buy or is being set up (minutes).
+    // Webhooks and the hub wake it sooner; slower keeps the Redis bill down.
+    jobEveryMinutes: 10,
+  },
+  // ── end CheapInboxes ──
   // US federal holidays, observed dates. Update once a year (one line per year).
   US_HOLIDAYS: [
     '2026-01-01', '2026-01-19', '2026-02-16', '2026-05-25', '2026-06-19', '2026-07-03',

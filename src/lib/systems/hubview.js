@@ -12,7 +12,7 @@ import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { cfg } from '@/lib/config';
 import { getAllClients, getClient, getProfile, getTrial, getDomain } from '@/lib/db/client';
-import { getInboxRecords } from '@/lib/db/inboxes';
+import { getInboxRecords, publicInbox } from '@/lib/db/inboxes';
 import { getEvents } from '@/lib/db/events';
 import { getAlertLog, baseUrl } from '@/lib/notify';
 import { clientNow } from '@/lib/testclock';
@@ -36,6 +36,8 @@ import { JOBS } from '@/lib/jobs';
 import { onboardSettings, onboardCallView, onboardCallFor, ownerWhen, ownerDayWord } from '@/lib/systems/onboardcall';
 import { conversationFor, needsReplyFor } from '@/lib/systems/conversation';
 import { formatDay } from '@/lib/systems/intake-io';
+import { autobuyView, readRec as readAutobuy, autobuySettings, AUTOBUY_STATES } from '@/lib/systems/autobuy';
+import { isConnected as cheapInboxesConnected, readDomainIndex, unmatchedOf } from '@/lib/ext/cheapinboxes';
 
 export const STATE_LABELS = {
   applied: 'Applied', queued: 'In the queue', onboarding: 'Onboarding', awaiting_purchase: 'Waiting for you to buy',
@@ -169,8 +171,11 @@ export function systemsFor(ctx) {
   else if (est != null) out.push(sys('market', 'ok', `${est.toLocaleString('en-US')} matching companies (minimum ${minMarket.toLocaleString('en-US')})${profile.marketSource === 'override' ? ' · overridden by you' : ''}`, [profile.marketCheckedAt ? `checked ${dateOf(profile.marketCheckedAt)}` : null]));
   else out.push(sys('market', 'off', 'Runs when the agreement is accepted'));
 
-  // 3. Domain & inboxes (Price Scout + purchase)
-  if (shopping.boughtAt) out.push(sys('purchase', 'ok', `Bought ${dateOf(shopping.boughtAt)} · ${domain.name || shopping.chosenDomain || ''} · ${inboxes.length} inbox${inboxes.length === 1 ? '' : 'es'}`));
+  // 3. Domain & inboxes (Price Scout + purchase; CheapInboxes auto-buy, docs/AUTO-BUY.md)
+  const ab = ctx.autobuy || null;
+  if (ab && ab.status === 'ready_to_buy') out.push(sys('purchase', 'waiting', ab.label, [ab.buy?.price != null ? `domain $${ab.buy.price} at CheapInboxes` : null, ...(ab.buy?.alternatives || []).map((a) => `or ${a.domain}${a.price != null ? ` ($${a.price})` : ''}`), ab.problem]));
+  else if (ab && ab.domain && ab.status !== 'done' && !past(st, 'setup_check')) out.push(sys('purchase', ab.problem ? 'blocked' : 'working', ab.label, [...ab.steps.map((x) => `${x.label}: ${x.done ? 'done' : 'waiting'}`), ab.problem]));
+  else if (shopping.boughtAt) out.push(sys('purchase', 'ok', `Bought ${dateOf(shopping.boughtAt)} · ${domain.name || shopping.chosenDomain || ''} · ${inboxes.length} inbox${inboxes.length === 1 ? '' : 'es'}`));
   else if (shopping.sentAt) out.push(sys('purchase', shopping.escalatedAt ? 'blocked' : 'waiting', `Shopping list sent ${ago(shopping.sentAt, now)} · ${shopping.chosenDomain || 'domain'}${has(shopping.total) ? ` · about $${shopping.total}` : ''}`, [shopping.escalatedAt ? 'Overdue — 48 h without a purchase' : null, (shopping.unconfirmed || []).length ? `${shopping.unconfirmed.length} price(s) unconfirmed` : null]));
   else if (client.intakeStep === 'pricescout') out.push(sys('purchase', 'working', 'Finding the cheapest domain and inboxes…'));
   else if (past(st, 'awaiting_purchase')) out.push(sys('purchase', 'ok', `${domain.name || ''} · ${inboxes.length} inbox${inboxes.length === 1 ? '' : 'es'}`.trim()));
@@ -335,7 +340,14 @@ export function todosFor(ctx) {
     const since = client.msgWaitingAt || oc?.lastReplyAt || null;
     push('message-reply', `Answer ${firstOf(client.contactName) || client.contactName || client.name || id}'s message`, `They wrote ${ago(since, now)} · it goes from the onboarding inbox, in the same thread`, true, since, view('detail', id, 'conversation'));
   }
-  if (st === 'awaiting_purchase' && shopping.sentAt && !shopping.boughtAt) {
+  const ab = ctx.autobuy || null;
+  if (st === 'awaiting_purchase' && ab?.status === 'ready_to_buy') {
+    // CheapInboxes is connected: he buys there; the machine finds the purchase and does the rest.
+    const since = ab.buy?.builtAt || shopping.sentAt || client.stateChangedAt || null;
+    push('buy', `Buy ${ab.buy?.domain || 'their domain'} and ${ab.buy?.mailboxes?.length || 2} inboxes on CheapInboxes`,
+      ab.buy ? `${ab.buy.price != null ? `$${ab.buy.price} for the domain · ` : ''}the machine connects everything after you buy` : (ab.problem || 'The shopping list is being made'),
+      Boolean(shopping.escalatedAt) || (since && now.getTime() - Date.parse(since) > 12 * 3600e3), since, view('detail', id, 'autobuy'));
+  } else if (st === 'awaiting_purchase' && shopping.sentAt && !shopping.boughtAt) {
     push('buy', `Buy ${shopping.chosenDomain || 'the domain'} and 2 inboxes, then paste the logins`,
       `Shopping list sent ${ago(shopping.sentAt, now)}${has(shopping.total) ? ` · about $${shopping.total}` : ''}${shopping.escalatedAt ? ' · overdue' : ''}`,
       Boolean(shopping.escalatedAt) || (now.getTime() - Date.parse(shopping.sentAt)) > 12 * 3600e3, shopping.sentAt, view('purchase', id));
@@ -424,8 +436,14 @@ function simpleBase(ctx, todos) {
     case 'onboarding':
       return onboardingSimple(ctx, r);
     case 'awaiting_purchase':
+      if (ctx.autobuy && ctx.autobuy.status === 'ready_to_buy') {
+        const b = ctx.autobuy.buy;
+        return r('setting_up', `Buy their domain and ${b?.mailboxes?.length || 2} inboxes on CheapInboxes`, b ? `Open CheapInboxes and buy ${b.domain} with ${b.mailboxes?.length || 2} inboxes — the rest sets itself up` : (ctx.autobuy.problem || 'The shopping list is being made — it shows here in a minute'), true, b?.builtAt || shopping.sentAt);
+      }
+      if (ctx.autobuy && ctx.autobuy.domain) return autobuySimple(ctx, r);
       return r('setting_up', 'Setting up their emails — your turn to buy the domain', shopping.sentAt ? `Buy ${shopping.chosenDomain || 'the domain'} and 2 inboxes, then paste the logins` : 'The shopping list is on its way to you', Boolean(shopping.sentAt && !shopping.boughtAt), shopping.sentAt);
     case 'setup_check':
+      if (ctx.autobuy && ctx.autobuy.domain && domain.setupPhase !== 'failed') return autobuySimple(ctx, r);
       if (domain.setupPhase === 'failed') return r('setting_up', 'Setting up their emails — a domain check failed', 'Fix the record named in the to-do; the checks run again every hour', true, domain.setupFailedAt);
       return r('setting_up', 'Setting up their emails — checking the new domain', 'Nothing for you: warm-up starts when the checks pass');
     case 'warming':
@@ -451,6 +469,14 @@ function simpleBase(ctx, todos) {
     default:
       return r('new', STATE_LABELS[st] || st, 'Nothing for you yet');
   }
+}
+
+/** `simple` while a CheapInboxes purchase sets itself up (docs/AUTO-BUY.md): nothing for him unless a problem says so. */
+function autobuySimple(ctx, r) {
+  const ab = ctx.autobuy;
+  const since = ab.steps?.[0]?.at || null;
+  if (ab.problem) return r('setting_up', 'Setting up their inboxes (about 2 days) — needs you', `Fix: ${ab.problem}`, true, since);
+  return r('setting_up', 'Setting up their inboxes (about 2 days)', 'Nothing for you: the domain and inboxes connect by themselves, then warm-up starts', false, since);
 }
 
 /** `simple` while onboarding: the onboarding call first, then the signed page. */
@@ -485,7 +511,7 @@ function onboardingSimple(ctx, r) {
 
 const parseJson = (v, fallback) => { if (v == null || v === '') return fallback; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return fallback; } };
 
-export async function loadContext(client, { alerts = null, now = new Date(), onboard = null } = {}) {
+export async function loadContext(client, { alerts = null, now = new Date(), onboard = null, autobuy = null } = {}) {
   const id = client.id;
   const vnow = clientNow(client, now);
   // The onboarding call is read only for clients that were sent one (flag on the client hash).
@@ -509,7 +535,14 @@ export async function loadContext(client, { alerts = null, now = new Date(), onb
   ]);
   const domain = { ...(await getDomain(id)), ...(domainRead.domain || {}) };
   const checks = domainRead.checks || {};
-  const inboxes = inboxesRaw.map(({ passwordEnc, ...r }) => ({ ...r, hasPassword: Boolean(passwordEnc) }));
+  // CheapInboxes auto-buy (docs/AUTO-BUY.md): one read, only at the buying / setup / warm-up steps.
+  let autobuyCtx = null;
+  if (AUTOBUY_STATES.has(client.state) || String(client.autobuyOpen) === '1') {
+    const a = autobuy || {};
+    const [rec, connected, s] = await Promise.all([readAutobuy(id), a.connected ?? cheapInboxesConnected(), a.settings || autobuySettings()]);
+    autobuyCtx = autobuyView({ client, rec, connected, domain, s });
+  }
+  const inboxes = inboxesRaw.map(publicInbox);
   const hot = Object.values((await kv.hgetall(K.hot(id)).catch(() => null)) || {});
   const application = applicationView(await kv.hgetall(K.application(id)).catch(() => null));
   const fitScore = application ? scoreBadge(await kv.hget(K.research(id), 'score').catch(() => null)) : null;
@@ -520,13 +553,13 @@ export async function loadContext(client, { alerts = null, now = new Date(), onb
     bookings: extras.bookings || [], replies: extras.replies || [], repliesByKind: extras.repliesByKind || {}, hot,
     invoice: extras.invoice, promises: extras.promises || [], pacelog, reports: extras.reports || [], upcoming: extras.upcoming || [],
     runState, application, fitScore, alerts: openAlerts, day: extras.trialDay, health: extras.health, now: vnow, minMarket: await cfg(id, 'MIN_MARKET'),
-    onboardCall, callRaw,
+    onboardCall, callRaw, autobuy: autobuyCtx,
   };
 }
 
 /** One board row (docs/HUB-API.md "Client row"). */
-export async function hubRow(client, { alerts, now = new Date(), onboard = null } = {}) {
-  const [base, ctx] = await Promise.all([clientRow(client, { alerts, now }), loadContext(client, { alerts, now, onboard })]);
+export async function hubRow(client, { alerts, now = new Date(), onboard = null, autobuy = null } = {}) {
+  const [base, ctx] = await Promise.all([clientRow(client, { alerts, now }), loadContext(client, { alerts, now, onboard, autobuy })]);
   const next = ctx.upcoming[0] || null;
   const todo = todosFor(ctx);
   return {
@@ -547,7 +580,10 @@ export async function hubBoard({ now = new Date() } = {}) {
   const alerts = await getAlertLog(500);
   // ONBOARDCALL settings once per board (one read), only when some trial has an onboarding call.
   const onboard = clients.some((c) => c.onboardCallSentAt) ? await onboardSettings().catch(() => null) : null;
-  const rows = await Promise.all(clients.map((c) => hubRow(c, { alerts, now, onboard })));
+  // Whether CheapInboxes is connected + its settings, once per board.
+  const ciOn = await cheapInboxesConnected();
+  const autobuy = clients.some((c) => AUTOBUY_STATES.has(c.state) || String(c.autobuyOpen) === '1') ? { connected: ciOn, settings: await autobuySettings() } : null;
+  const rows = await Promise.all(clients.map((c) => hubRow(c, { alerts, now, onboard, autobuy })));
   const byId = new Map(rows.map((r) => [r.id, r]));
   const strip = (r) => { const { _ctx, ...rest } = r; return rest; };
   const stages = STAGES.map((s) => ({ ...s, clients: board.clients.filter((c) => s.states.includes(c.state) && c.id !== 'aviance' && c.id !== '_test').map((c) => strip(byId.get(c.id))).filter(Boolean) }));
@@ -559,7 +595,7 @@ export async function hubBoard({ now = new Date() } = {}) {
       detail: `${q.name}${q.plan ? ` · ${q.plan[0].toUpperCase()}${q.plan.slice(1)}` : ''}${q.whenHost ? ` · booked for ${q.whenHost}` : ''}`,
       urgent: true, since: q.at, action: { type: 'view', view: 'inquiry', inquiryId: q.id } });
   }
-  todos.push(...(await machineTodos(board, queue)));
+  todos.push(...(await machineTodos(board, queue, { cheapInboxes: ciOn })));
   todos.sort((a, b) => Number(b.urgent) - Number(a.urgent) || String(a.since || '').localeCompare(String(b.since || '')));
   const migrations = (await kv.hgetall(K.migrations()).catch(() => ({}))) || {};
   return {
@@ -589,8 +625,16 @@ export async function hubBoard({ now = new Date() } = {}) {
 }
 
 /** Machine-level to-dos (no client): setup still missing, first-time setup, queue with a free slot. */
-async function machineTodos(board, queue) {
+async function machineTodos(board, queue, { cheapInboxes = false } = {}) {
   const t = [];
+  // A CheapInboxes purchase no trial claims (docs/AUTO-BUY.md §3): he picks the trial in Settings.
+  if (cheapInboxes) {
+    for (const u of unmatchedOf(await readDomainIndex().catch(() => ({})))) {
+      t.push({ id: `unmatched:${u.domain}`, clientId: null, clientName: 'CheapInboxes', text: `You bought ${u.domain} — which trial is it for? Pick in Settings`,
+        detail: `${u.mailboxes != null ? `${u.mailboxes} inbox${u.mailboxes === 1 ? '' : 'es'} · ` : ''}bought ${u.boughtAt ? ago(u.boughtAt, new Date()) : 'recently'} · the machine connects it once you pick`,
+        urgent: true, since: u.boughtAt, action: { type: 'view', view: 'settings', section: 'inboxes', domain: u.domain } });
+    }
+  }
   const missing = [];
   if (!process.env.ENC_KEY) missing.push('ENC_KEY');
   if (!process.env.CRON_SECRET) missing.push('CRON_SECRET');
@@ -648,6 +692,8 @@ export async function hubClient(id, { now = new Date() } = {}) {
     application: ctx.application ? { ...ctx.application, research: await researchView(id).catch(() => null) } : null,
     // The onboarding call with its whole conversation (docs/ONBOARD-CALL.md §5); null when no acceptance email went.
     onboardCall: client.onboardCallSentAt ? await onboardCallFor(id, { now, client }).catch(() => null) : null,
+    // The CheapInboxes purchase (docs/AUTO-BUY.md "Status for the hub"); null outside the buying / setup / warm-up steps.
+    autobuy: ctx.autobuy || null,
     // The client's one conversation, any state, with the reply bot's switch (docs/REPLYBOT-MEET.md §1).
     conversation: await conversationFor(id, { now, client }).catch(() => null),
     deliverability: await deliverabilityView(id).catch(() => null),

@@ -23,6 +23,8 @@
  *  promo-check       monthly, 1st 09:00  (global)              expired promos, Cloudflare .com price
  *  research          every minute        researchStep=running  Applicant Research (Intake v2), bounded + resumable
  *  registrar-prices  monthly, 1st 09:10  (global)              live Porkbun prices (keyless) for the shopping list
+ *  autobuy           every CHEAPINBOXES.jobEveryMinutes (global) while a trial waits to buy or its
+ *                    CheapInboxes purchase is being set up: shopping list, find + connect (docs/AUTO-BUY.md)
  */
 
 import { kv } from '@vercel/kv';
@@ -291,6 +293,28 @@ const onboardCalls = {
   },
 };
 
+// CheapInboxes (docs/AUTO-BUY.md): the shopping list, finding the owner's purchase in his
+// account and connecting it — only while some client's hash (already loaded by the tick) is
+// waiting to buy or has a purchase being set up (`autobuyOpen`). Without a key the run returns
+// at once. Shares one throttle with the hub's check; webhooks wake it sooner.
+const autobuy = {
+  name: 'autobuy',
+  scope: 'global',
+  cost: 4,
+  minBudgetMs: 15_000,
+  claimTtl: 1800,
+  async due({ now, clients }) {
+    if (!(clients || []).some((c) => c.id !== 'aviance' && (c.state === 'awaiting_purchase' || c.autobuyOpen === '1' || c.autobuyOpen === 1))) return null;
+    const every = Math.max(1, Number(await cfg(null, 'CHEAPINBOXES.jobEveryMinutes')) || 10);
+    return bucketKey(et(now), every);
+  },
+  async run({ now, deadline }) {
+    // Every client, not the tick's list (a forced single-client tick would make the others' domains look unmatched).
+    const { syncAutobuy } = await import('@/lib/systems/autobuy');
+    return syncAutobuy({ now, deadline: deadline - 1000, reason: 'job' });
+  },
+};
+
 const promoCheck = {
   name: 'promo-check',
   scope: 'global',
@@ -307,4 +331,4 @@ const promoCheck = {
   },
 };
 
-export const JOBS = [onboardingNudge, queuePromote, onboardCalls, research, market, pricescout, purchaseNudge, setupCheck, welcome, auth, blacklist, dmarc, bookingTest, bookingReminder, promoCheck, registrarPrices].map(onClientClock);
+export const JOBS = [onboardingNudge, queuePromote, onboardCalls, research, market, pricescout, purchaseNudge, autobuy, setupCheck, welcome, auth, blacklist, dmarc, bookingTest, bookingReminder, promoCheck, registrarPrices].map(onClientClock);
