@@ -6,13 +6,17 @@ when they're bought, you put them together and figure the whole thing out."
 
 CheapInboxes (our inbox provider) has a full API
 (`https://api.cheapinboxes.com/v1`, bearer API key `ci_live_…`; spec saved at
-`docs/vendor/cheapinboxes-openapi.json`): one `POST /v1/orders/checkout`
-registers the domain, creates Google Workspace (or Microsoft) mailboxes with
-our persona, and sets DNS, DKIM, DMARC; webhooks say when things are ready;
-`GET /v1/mailboxes/{id}/credentials` gives `email, password, app_password,
-imap_host/port, smtp_host/port`; `PATCH /v1/domains/{id}/forwarding` sets the
-domain's redirect. So the machine does the whole purchase + setup itself when
-the owner presses ONE button. No AI; plain rules.
+`docs/vendor/cheapinboxes-openapi.json`). When the OWNER buys a domain +
+mailboxes in his CheapInboxes account, CheapInboxes registers the domain,
+creates Google Workspace (or Microsoft) mailboxes and sets DNS, DKIM, DMARC
+itself; webhooks say when things are ready; `GET /v1/mailboxes/{id}/credentials`
+gives `email, password, app_password, imap_host/port, smtp_host/port`;
+`PATCH /v1/domains/{id}/forwarding` sets the domain's redirect.
+
+**The machine NEVER places an order or spends money** (it never calls
+`/v1/orders/checkout`, `/v1/billing/*` actions, or anything that charges).
+It tells the owner exactly what to buy, notices the purchase, matches it to
+the client, and does everything after it. No AI; plain rules.
 
 ## 1. The owner's one-time setup (hub › Settings › Inboxes & domains)
 - He makes a CheapInboxes account, saves a card there, creates an API key,
