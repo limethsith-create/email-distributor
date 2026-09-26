@@ -458,7 +458,9 @@ test('POST /api/mc/onboard-calls/check is throttled to checkEveryMinutes; the jo
   const { POST } = await import('@/app/api/mc/onboard-calls/check/route');
   io.now = () => at(MON, 1);
   const first = await (await POST()).json();
-  assert.deepEqual(first, { ok: true, checked: 1, newReplies: 0, booked: 0, remindersSent: 0 });
+  // `carried` (the catch-up of other jobs when no heartbeat ran, systems/carry.js) depends on the day's jobs: not this test's subject.
+  const { carried, ...core } = first;
+  assert.deepEqual(core, { ok: true, checked: 1, newReplies: 0, booked: 0, remindersSent: 0 });
   io.now = () => at(MON, 1 + 1 / 60);
   assert.equal((await (await POST()).json()).skipped, 'too soon');
   io.now = () => at(MON, 1 + 2.5 / 60);
