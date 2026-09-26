@@ -1,4 +1,4 @@
-# One-click buy and set up (CheapInboxes API) — shared contract (2026-09-26)
+# Buy once, the rest sets itself up (CheapInboxes API) — shared contract (2026-09-26)
 
 The owner's words: "When I click purchase on the inboxes and the domains, the
 system should do all the DKIM / DNS / connecting by itself. You get a message
@@ -26,34 +26,38 @@ the owner presses ONE button. No AI; plain rules.
   order.completed, order.failed, billing.invoice_failed`), storing its id and
   secret encrypted. Re-saving the key replaces the webhook.
 
-## 2. Picking the domain (machine, replaces the manual shopping list step)
+## 2. What to buy (machine)
+The machine never buys anything and never spends money: **the owner buys** in
+his CheapInboxes account (their order form registers the domain and sets up
+DNS, DKIM, DMARC by itself). The machine tells him exactly what to buy and
+then does everything after the purchase.
+
 When a client reaches `awaiting_purchase` (existing state), the machine
-builds the domain candidates as today (systems/domains.js / pricescout.js)
-and asks CheapInboxes which are free and what they cost
-(`POST /v1/discovery/domains/search`, keyword + allowed TLDs from config
-`ALLOWED_TLDS`), then prices the whole cart with `POST /v1/orders/quote`
-(same shape as checkout: the best domain + `INBOX.count` mailboxes, provider
-from config). The hub shows: the domain, "$X today, $Y a month", the two
-inbox addresses it will create, and up to 3 other free names he can pick.
+builds the domain candidates as today (systems/domains.js / pricescout.js),
+checks which are free and their CheapInboxes price with the read-only
+`POST /v1/discovery/domains/search` (keyword + allowed TLDs from config
+`ALLOWED_TLDS`), and shows the owner: the domain to buy (+ up to 3
+alternatives), provider (Google), 2 mailboxes with the persona (from the
+onboarding profile: `senderName` → first/last name; `senderPrefix` → two
+different lower-case prefixes, e.g. `jordan`, `jordan.test`), and a link to
+the CheapInboxes order page. This is the "shopping list" (`autobuy.buy`).
 
-Personas: from the onboarding profile — `senderName` → first/last name,
-`senderPrefix` → email prefixes (`jordan`, `jordan.<last>` or `j.<last>` for
-the second; always 2 different ones, lower-case, a–z0–9 and dots).
+## 3. Matching a purchase to a client (machine)
+The machine finds new purchases itself — never from a webhook body:
+- `GET /v1/domains` (+ each domain's mailboxes via `GET /v1/mailboxes`
+  filtered by domain) lists what the account owns.
+- A domain equal to a client's shopping-list domain (or any listed
+  alternative) is that client's → linked automatically.
+- A new domain that matches no client is listed as **unmatched** for the
+  owner to assign in the hub (`link`).
+- One domain belongs to at most one client; linking is idempotent.
 
-## 3. The button (machine)
-`POST /api/mc/clients/{id}/autobuy` `{ action: 'quote' | 'buy' | 'retry' | 'pick', domain? }`
-- `quote` → fresh quote `{ domain, alternatives:[{domain, price}], mailboxes:[email], totalTodayCents, monthlyCents, currency }`.
-- `pick` → choose another listed domain, returns the new quote.
-- `buy` → safety first: client in `awaiting_purchase`; no order yet for this
-  client (one order per client, KV claim); a fresh quote whose total ≤
-  `CHEAPINBOXES.maxOrderCents` (default 4 000 = $40) and equal to what the hub
-  showed (`expectCents` in the body — mismatch → 409 "price changed, check
-  again"); then `POST /v1/orders/checkout` (name "Aviance trial — {company}").
-  Stores `order_id`, domain id, mailbox ids; state → the existing
-  purchase/setup path; owner alert `bought` ("Bought acmeoutreach.com and 2
-  inboxes for $16.49 — setting up now, about 48 h").
-- `retry` → after `order.failed`: re-sync; if the order is dead, allow a new
-  order (the claim is released) — never two live orders.
+Endpoints:
+- `POST /api/mc/clients/{id}/autobuy` `{ action: 'recheck' }` (look for the
+  purchase now) · `{ action: 'link', domain }` (this domain is this client's)
+  · `{ action: 'unlink' }` (undo a wrong link before anything was connected)
+  · `{ action: 'pick', domain }` (buy this alternative instead — updates the
+  shopping list) → `{ ok, autobuy }`.
 
 ## 4. Setup runs by itself
 Truth always comes from the API, never from a webhook body: every webhook
@@ -63,8 +67,9 @@ signature in the common header forms, e.g. `x-cheapinboxes-signature`,
 `t=…,v1=…`) is only a wake-up: the machine re-reads the order
 (`GET /v1/orders/{id}`, `GET /v1/domains/{id}`, `GET /v1/mailboxes/{id}`).
 An unverifiable delivery is still allowed to trigger a (rate-limited) re-sync
-— it can never change anything by itself. The same sync also runs from the
-hub's check call, the job on the tick, and `after()` of `buy`.
+— it can never change anything by itself. The same sync (find new
+purchases, match, connect) also runs from the hub's check call, the job on
+the tick, `recheck`, and `link`.
 
 Sync steps, idempotent, in order:
 1. domain `provisioned` / `dns_configured` → set forwarding to the client's
@@ -77,15 +82,18 @@ Sync steps, idempotent, in order:
    the existing path to `warming` (warm-up starts on its own); owner alert
    `inboxes_ready` ("acmeoutreach.com and 2 inboxes are ready — warm-up has
    started").
-4. `order.failed` / a mailbox stuck > 72 h / checkout error → owner alert
+4. `order.failed` / a mailbox stuck > 72 h → owner alert
    `autobuy_problem` with the plain reason and what to do.
 
 Status for the hub (trial detail `autobuy`):
 ```jsonc
-{ "status": "not_set_up|ready_to_buy|ordering|provisioning|connecting|done|failed",
+{ "status": "not_set_up|ready_to_buy|provisioning|connecting|done|failed",
+  "buy": { "domain": "acmeoutreach.com", "price": 9.99, "alternatives": [ { "domain": "…", "price": 9.99 } ],
+           "provider": "google", "mailboxes": [ { "firstName": "Jordan", "lastName": "Test", "prefix": "jordan", "email": "jordan@acmeoutreach.com" } ],
+           "orderUrl": "https://www.cheapinboxes.com/…" } | null,   // what to buy (while ready_to_buy)
   "label": "Setting up acmeoutreach.com — about 48 hours",
-  "domain": "acmeoutreach.com", "orderId": "…", "chargedCents": 1649, "monthlyCents": 700,
-  "steps": [ { "key": "ordered", "label": "Bought", "done": true, "at": "ISO" },
+  "domain": "acmeoutreach.com",
+  "steps": [ { "key": "bought", "label": "You bought it", "done": true, "at": "ISO" },
              { "key": "domain", "label": "Domain live + spam protection set", "done": false, "at": null },
              { "key": "inboxes", "label": "2 inboxes created", "done": false, "at": null },
              { "key": "connected", "label": "Connected to our system", "done": false, "at": null },
@@ -94,10 +102,10 @@ Status for the hub (trial detail `autobuy`):
   "problem": "plain words|null" }
 ```
 `simple` (board rows): "Setting up their inboxes (about 2 days)" /
-"Ready to buy — press Buy and set up" (`needsYou: true`).
+"Buy their domain and 2 inboxes on CheapInboxes" (`needsYou: true`).
 
 Settings status: `GET /api/mc/cheapinboxes` →
-`{ status: 'not_set_up|connected|broken', account, hasPaymentMethod, webhook: 'registered|missing' }`;
+`{ status: 'not_set_up|connected|broken', account, hasPaymentMethod, webhook: 'registered|missing', unmatched: [ { domain, mailboxes: n, boughtAt } ] }`;
 `POST /api/mc/cheapinboxes` `{ action: 'saveKey', apiKey }` · `{ action: 'test' }` · `{ action: 'forget' }`.
 
 The manual path (buy anywhere, paste logins) stays for when the key is not set.
