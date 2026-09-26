@@ -846,3 +846,11 @@ test('middleware: the webhook is public, the settings and actions need a sign-in
     assert.equal(res.status, 401, p);
   }
 });
+
+test('a CheapInboxes domain passes DMARC with their report address (the machine may not edit it)', async () => {
+  const { evalDmarc } = await import('@/lib/systems/setupcheck');
+  const rec = [['v=DMARC1; p=none; rua=mailto:reports@cheapinboxes-dmarc.com']];
+  assert.equal(evalDmarc(rec, 'acmeoutreach.com').status, 'fail', 'our own domains still need our report address');
+  assert.equal(evalDmarc(rec, 'acmeoutreach.com', null, { anyRua: true }).status, 'pass');
+  assert.equal(evalDmarc([['v=DMARC1; rua=mailto:x@y.com']], 'acmeoutreach.com', null, { anyRua: true }).status, 'fail', 'a policy is still required');
+});

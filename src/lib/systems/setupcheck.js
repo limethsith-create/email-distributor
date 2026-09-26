@@ -58,7 +58,7 @@ export function evalDkim(records) {
   return t ? { status: 'pass', detail: `${t.slice(0, 40)}…` } : { status: 'fail', detail: 'no v=DKIM1 record at google._domainkey' };
 }
 
-export function evalDmarc(records, domain, collector = null) {
+export function evalDmarc(records, domain, collector = null, { anyRua = false } = {}) {
   const rec = joinTxt(records).find((x) => /^v=DMARC1/i.test(x.trim()));
   if (!rec) return { status: 'fail', detail: 'no DMARC record' };
   const p = (rec.match(/;\s*p=(\w+)/i) || [])[1];
@@ -66,6 +66,9 @@ export function evalDmarc(records, domain, collector = null) {
   const rua = (rec.match(/rua=([^;]+)/i) || [])[1] || '';
   const targets = rua.split(',').map((s) => s.trim().toLowerCase().replace(/^mailto:/, ''));
   const okTargets = [`dmarc@${domain}`, collector && String(collector).toLowerCase()].filter(Boolean);
+  // A domain CheapInboxes set up (docs/AUTO-BUY.md): their DMARC is valid as it stands and the machine may
+  // not edit it, so any report address passes (our own DMARC reports just don't arrive for it).
+  if (anyRua) return { status: 'pass', detail: `${rec} (set by CheapInboxes)` };
   if (!targets.some((t) => okTargets.includes(t))) return { status: 'fail', detail: `DMARC rua must be mailto:${okTargets.join(' or mailto:')} (found "${rua || 'none'}")` };
   return { status: 'pass', detail: rec };
 }
@@ -141,13 +144,13 @@ async function dnsLookup(fn, name, ms) {
 }
 
 /** SPF/DKIM/DMARC/MX for a domain → { spf, dkim, dmarc, mx } results. */
-export async function checkDns(domain, which = ['spf', 'dkim', 'dmarc', 'mx'], { collector = null } = {}) {
+export async function checkDns(domain, which = ['spf', 'dkim', 'dmarc', 'mx'], { collector = null, anyRua = false } = {}) {
   const setup = await cfg(null, 'SETUP');
   const ms = setup.dnsTimeoutMs;
   const tasks = {
     spf: async () => { const r = await dnsLookup(io.dns.resolveTxt, domain, ms); return r.ok ? evalSpf(r.value, setup.spfInclude) : { status: 'fail', transient: r.transient, detail: `lookup failed: ${r.error}` }; },
     dkim: async () => { const r = await dnsLookup(io.dns.resolveTxt, `${setup.dkimSelector}._domainkey.${domain}`, ms); return r.ok ? evalDkim(r.value) : { status: 'fail', transient: r.transient, detail: `lookup failed: ${r.error}` }; },
-    dmarc: async () => { const r = await dnsLookup(io.dns.resolveTxt, `_dmarc.${domain}`, ms); return r.ok ? evalDmarc(r.value, domain, collector) : { status: 'fail', transient: r.transient, detail: `lookup failed: ${r.error}` }; },
+    dmarc: async () => { const r = await dnsLookup(io.dns.resolveTxt, `_dmarc.${domain}`, ms); return r.ok ? evalDmarc(r.value, domain, collector, { anyRua }) : { status: 'fail', transient: r.transient, detail: `lookup failed: ${r.error}` }; },
     mx: async () => { const r = await dnsLookup(io.dns.resolveMx, domain, ms); return r.ok ? evalMx(r.value, setup.googleMx) : { status: 'fail', transient: r.transient, detail: `lookup failed: ${r.error}` }; },
   };
   const entries = await Promise.all(which.map(async (k) => [k, await tasks[k]()]));
@@ -259,7 +262,7 @@ export async function runSetupCheck(clientId, { deadline = Date.now() + 15000, n
 
   const dnsWanted = ['spf', 'dkim', 'dmarc', 'mx'].filter(pending);
   if (dnsWanted.length && left() > 5000) {
-    const r = await checkDns(name, dnsWanted, { collector });
+    const r = await checkDns(name, dnsWanted, { collector, anyRua: domain.registrar === 'cheapinboxes' });
     for (const [c, v] of Object.entries(r)) await put(c, { ...v, fix: v.status === 'pass' ? undefined : fixFor(c, name, collector) });
   }
   if (pending('autorenew')) {

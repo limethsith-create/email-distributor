@@ -53,14 +53,14 @@ Treat the key like a password: do not email it or paste it anywhere else.
 
 8. Open the hub → **Settings** → **Inboxes & domains**.
 9. Paste the key into the box and press **Save**.
-10. Press **Test**. You should see:
+10. Press **Test it**. You should see:
     - **Connected** and your CheapInboxes account name
     - **Card on file: yes**
     - **Webhook: registered** (this is how CheapInboxes tells the machine
       when something is ready)
 
 If it says **"No card on your CheapInboxes account"**, do Part 2 again and
-press **Test**. If it says **"The key was refused"**, make a new key (Part 3)
+press **Test it**. If it says **"The key was refused"**, make a new key (Part 3)
 and paste it again.
 
 That's all for the setup. You never need to do it again unless you delete the
@@ -98,11 +98,11 @@ nothing during that time; the trial says **"Setting up their inboxes (about 2
 days)"**. When everything is connected and checked you get **"acmehq.com and 2
 inboxes are ready — warm-up has started"**.
 
-**The domain is taken?** In the hub, press **Buy this instead** next to one
+**The domain is taken?** In the hub, press **Buy this one instead** next to one
 of the alternatives *first* (so the inbox addresses change to match), then buy
 that one.
 
-**In a hurry?** Press **Check now** on the trial to make the machine look at
+**In a hurry?** Press **I've bought it — check now** on the trial to make the machine look at
 your account straight away.
 
 ---
@@ -113,10 +113,10 @@ Every message tells you what happened and what to do. The most common ones:
 
 - **"You bought randomname.com — which trial is it for? Pick in Settings"** —
   you bought a domain that is not on any trial's list. Go to **Settings ›
-  Inboxes & domains**, find the domain under *Bought, not matched*, and pick
-  the trial. The machine connects it straight away.
+  Inboxes & domains**, find the domain under *Bought, but not matched to a trial*, pick the trial under **This is for…** and press **Link it**.
+  The machine connects it straight away.
 - **The purchase was matched to the wrong trial** — open that trial and press
-  **Not this trial**. This only works before the inboxes are connected. Then
+  **Wrong domain? Undo**. This only works before the inboxes are connected. Then
   pick the right trial in Settings.
 - **"Inbox setup: The CheapInboxes order for acmehq.com failed"** — open
   **Orders** in CheapInboxes to see why, or ask their support (the chat on
@@ -134,7 +134,7 @@ Every message tells you what happened and what to do. The most common ones:
   domain in CheapInboxes (its DNS / DMARC page), set the record as the message
   says, and wait: the checks run again every hour.
 - **"Inbox setup: CheapInboxes refused the API key"** — make a new key
-  (Part 3), paste it in **Settings › Inboxes & domains** and press **Test**.
+  (Part 3), paste it in **Settings › Inboxes & domains** and press **Test it**.
 
 ---
 
@@ -152,6 +152,6 @@ paste the logins on the trial's purchase page.
 
 ## Removing the connection
 
-**Settings › Inboxes & domains → Forget** removes the key and the webhook
+**Settings › Inboxes & domains → Forget the key** removes the key and the webhook
 from the machine. Trials already set up keep running. You can also delete the
 key in CheapInboxes under **Integrations → API**.
