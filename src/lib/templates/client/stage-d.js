@@ -51,7 +51,7 @@ export const REPORT_LINES = [
   '',
   'The market report: attached — every reply, tagged, plus the {openCount} conversations still open.',
   '',
-  'One recommendation: {recommendation}',
+  '{recommendation}',
   '',
   'Your Day 30 page: {decisionUrl}',
 ];

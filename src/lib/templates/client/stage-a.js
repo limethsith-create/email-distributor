@@ -139,7 +139,7 @@ Once they pass their checks, they start warming up. When they're ready, I'll ema
     subject: 'We start on {day1Date}',
     body: `Hi {firstName},
 
-The inboxes are warmed up and ready, so we start on {startWhen}.
+Everything's on track, so we start on {startWhen}.
 
 The emails go out {inWhoseName} from {inboxes}, {sendWindow}. That's Day 1 of your 30. Day 30 is {day30Date}.
 

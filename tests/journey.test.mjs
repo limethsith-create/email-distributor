@@ -699,6 +699,10 @@ test('the journey: website form → Day 30 → converted, through the real route
   const startMail = sL21.detail.conversation.thread.filter((e) => e.template === 'welcome_two_dates');
   assert.equal(startMail.length, 1, 'one "we start on" email');
   assert.ok(Date.parse(startMail[0].at) >= et('2026-10-20', '11:40').getTime(), `sent ${startMail[0].at}, after the launch call`);
+  // A day's notice: it went on Tuesday (only that night's warm-up check was left), in her daytime — not Day 1's morning.
+  assert.equal(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(startMail[0].at)), '2026-10-20', `start email ${startMail[0].at}`);
+  assert.ok(hourOf(startMail[0].at) >= 8 && hourOf(startMail[0].at) < 20);
+  assert.match(startMail[0].text, /we start on Wednesday 21 October at 9:00 am Eastern Time\./);
   assert.ok(['delivered', 'opened'].includes(startMail[0].status), startMail[0].status);
   // Journey fix: the booking test went on a business day (Day −4 was a Saturday → the Friday before), inside US hours.
   const testMail = sim.sent.find((m) => m.to === APPLICANT.email && linkIn(m.text, 'booking-ok'));
@@ -713,9 +717,10 @@ test('the journey: website form → Day 30 → converted, through the real route
   for (const inbox of await (await import('@/lib/db/inboxes')).getInboxRecords(clientId)) {
     assert.deepEqual([inbox.warmupReady, inbox.readyCheckedDay >= '2026-10-20', Number(inbox.readyStreak) >= 2], ['1', true, true], inbox.email);
   }
-  // The seed test says in plain words how many mailboxes it used (8 helpers; the usual is 10).
+  // The seed test used the 8 helpers the hub asks for, on more than one filter: no "thin test" note.
   const seedTest = sL21.detail.deliverability.placement.find((p) => p.tool === 'seed');
-  assert.match(seedTest?.detail?.[0] || '', /^Tested with \d+ mailboxes.* the usual is 10\./, JSON.stringify(seedTest));
+  assert.ok(seedTest, 'a seed test ran');
+  assert.doesNotMatch(seedTest.detail?.[0] || '', /^Tested with/, JSON.stringify(seedTest));
 
   // ── 9. Sending: Day 1 → Day 30 ────────────────────────────────────────────
   const sentLeads = async () => (await getLeads(clientId)).filter((l) => l.sent_at && l.status === 'in_sequence' && l.original_message_id).sort((a, b) => a.email.localeCompare(b.email));

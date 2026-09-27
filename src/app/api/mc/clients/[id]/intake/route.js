@@ -7,7 +7,7 @@
  *   rerunPriceScout         rebuild and resend the shopping list
  *   rerunSetup              start a full Setup Checker round now
  *   rerunBookingTest        test the calendar link now
- *   resendWelcome           retry welcome_two_dates
+ *   resendWelcome           the "we start on …" email again (once Day 1 is fixed) → { sent, again } | { skipped }
  *   rerunResearch           research the applicant again (website + Google listing)
  *   approveApplication      owner approves a website application (→ onboarding with the one
  *                           accepted_call email, or the queue); the onboarding-call check runs in after()
@@ -98,7 +98,8 @@ export async function POST(request, { params }) {
       case 'rerunBookingTest':
         return Response.json({ ok: true, result: await runBookingTest(id, { force: true }) });
       case 'resendWelcome':
-        return Response.json({ ok: true, result: await sendWelcome(id) });
+        // The "we start on …" email again (it went already) — or the first time, when Day 1 is fixed and it has not gone.
+        return Response.json({ ok: true, result: await sendWelcome(id, { resend: true }) });
       default:
         return Response.json({ error: 'unknown action' }, { status: 400 });
     }

@@ -2085,22 +2085,6 @@
     }
    },
    {
-    "at": "2026-10-17T11:00:00.000Z",
-    "system": "mailwatch",
-    "event": "opened",
-    "detail": {
-     "template": "launch_invite"
-    }
-   },
-   {
-    "at": "2026-10-17T11:00:00.000Z",
-    "system": "onboardcall",
-    "event": "opened",
-    "detail": {
-     "call": "launch"
-    }
-   },
-   {
     "at": "2026-10-17T10:15:01.210Z",
     "system": "authguard",
     "event": "blacklist_checked",
@@ -2291,6 +2275,24 @@
      "date": "2026-10-16",
      "variant": "build",
      "words": 58
+    }
+   },
+   {
+    "at": "2026-10-16T13:00:01.400Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "friday_update",
+     "to": "dana@ridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-16T13:00:01.150Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "booking_test_request",
+     "to": "dana@ridgelineit.com"
     }
    }
   ],
@@ -3813,7 +3815,7 @@
      "template": null,
      "accepted": true,
      "messageId": "<MSGID_11>",
-     "openedAt": "2026-10-17T11:00:00.000Z",
+     "openedAt": "2026-10-16T14:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": "2026-10-16T14:00:00.000Z",
@@ -3998,7 +4000,7 @@
    "status": "booked",
    "label": "Call booked for Tue 20 Oct, 8:30 pm (your time)",
    "sentAt": "2026-10-16T13:00:00.000Z",
-   "openedAt": "2026-10-17T11:00:00.000Z",
+   "openedAt": "2026-10-16T14:00:00.000Z",
    "lastReplyAt": "2026-10-16T14:00:00.000Z",
    "bookedFor": "2026-10-20T15:00:00.000Z",
    "bookedAt": "2026-10-16T15:00:00.000Z",
@@ -4037,7 +4039,7 @@
      "key": "opened",
      "label": "They opened it",
      "done": true,
-     "at": "2026-10-17T11:00:00.000Z"
+     "at": "2026-10-16T14:00:00.000Z"
     },
     {
      "key": "replied",
@@ -4313,7 +4315,7 @@
      "template": null,
      "accepted": true,
      "messageId": "<MSGID_11>",
-     "openedAt": "2026-10-17T11:00:00.000Z",
+     "openedAt": "2026-10-16T14:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": "2026-10-16T14:00:00.000Z",
@@ -4828,7 +4830,7 @@
      "template": null,
      "accepted": true,
      "messageId": "<MSGID_11>",
-     "openedAt": "2026-10-17T11:00:00.000Z",
+     "openedAt": "2026-10-16T14:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": "2026-10-16T14:00:00.000Z",
@@ -5053,7 +5055,6 @@
      "inboxRate": 1,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 100% inbox (6/6)",
       "yahoo: 100% inbox (2/2)",
       "aol: 100% inbox (2/2)",
@@ -5075,7 +5076,6 @@
      "inboxRate": 0.938,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 100% inbox (6/6)",
       "yahoo: 100% inbox (2/2)",
       "aol: 100% inbox (2/2)",

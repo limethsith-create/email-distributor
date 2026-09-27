@@ -689,10 +689,10 @@
    "buildCheckAt": "2026-10-14T13:00:00.000Z",
    "approvalLink": "https://machine.test/c/TOKEN_2/approve",
    "approvalLinkAt": "2026-10-20T15:40:00.300Z",
+   "welcomeSentAt": "2026-10-20T16:00:00.000Z",
+   "startEmailFor": "2026-10-21",
    "day1Held": "",
    "readyAt": "2026-10-21T03:30:00.000Z",
-   "welcomeSentAt": "2026-10-21T12:00:00.000Z",
-   "startEmailFor": "2026-10-21",
    "firstSendAt": "2026-10-21T13:00:00.000Z",
    "day1NoticeAt": "2026-10-21T13:00:00.000Z"
   },
@@ -1879,6 +1879,14 @@
    },
    {
     "at": "2026-10-21T12:15:00.000Z",
+    "system": "mailwatch",
+    "event": "opened",
+    "detail": {
+     "template": "welcome_two_dates"
+    }
+   },
+   {
+    "at": "2026-10-21T12:15:00.000Z",
     "system": "placement",
     "event": "done",
     "detail": {
@@ -1910,7 +1918,7 @@
     }
    },
    {
-    "at": "2026-10-21T12:00:00.250Z",
+    "at": "2026-10-21T12:00:00.000Z",
     "system": "placement",
     "event": "started",
     "detail": {
@@ -1919,24 +1927,6 @@
       "dana@getridgelineit.com",
       "dana.whitfield@getridgelineit.com"
      ]
-    }
-   },
-   {
-    "at": "2026-10-21T12:00:00.250Z",
-    "system": "startemail",
-    "event": "sent",
-    "detail": {
-     "day1": "2026-10-21",
-     "zone": "America/New_York"
-    }
-   },
-   {
-    "at": "2026-10-21T12:00:00.250Z",
-    "system": "notify",
-    "event": "client_email_sent",
-    "detail": {
-     "key": "welcome_two_dates",
-     "to": "dana@ridgelineit.com"
     }
    },
    {
@@ -1994,21 +1984,38 @@
    },
    {
     "at": "2026-10-21T03:30:00.000Z",
-    "system": "startemail",
-    "event": "waits",
-    "detail": {
-     "until": "08:00 America/New_York",
-     "day1": "2026-10-21"
-    }
-   },
-   {
-    "at": "2026-10-21T03:30:00.000Z",
     "system": "state",
     "event": "changed",
     "detail": {
      "from": "warming",
      "to": "ready",
      "reason": "readiness gate green (approval, list, warm-up, seed + spam tests, booking link)"
+    }
+   },
+   {
+    "at": "2026-10-20T16:00:00.250Z",
+    "system": "readiness",
+    "event": "start_email_day_before",
+    "detail": {
+     "day1": "2026-10-21"
+    }
+   },
+   {
+    "at": "2026-10-20T16:00:00.250Z",
+    "system": "startemail",
+    "event": "sent",
+    "detail": {
+     "day1": "2026-10-21",
+     "zone": "America/New_York"
+    }
+   },
+   {
+    "at": "2026-10-20T16:00:00.250Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "welcome_two_dates",
+     "to": "dana@ridgelineit.com"
     }
    },
    {
@@ -2352,18 +2359,6 @@
      "spamAssassin": -0.1,
      "pass": "[redacted]"
     }
-   },
-   {
-    "at": "2026-10-18T12:00:00.000Z",
-    "system": "placement",
-    "event": "started",
-    "detail": {
-     "tool": "dkimvalidator",
-     "inboxes": [
-      "dana@getridgelineit.com",
-      "dana.whitfield@getridgelineit.com"
-     ]
-    }
    }
   ],
   "jobs": {
@@ -2386,11 +2381,7 @@
    },
    "purchase-nudge": null,
    "setup-check": null,
-   "welcome": {
-    "at": "2026-10-21T12:00:00.250Z",
-    "ms": 250,
-    "ok": true
-   },
+   "welcome": null,
    "auth": {
     "at": "2026-10-21T10:00:00.160Z",
     "ms": 160,
@@ -3917,7 +3908,7 @@
      "template": null,
      "accepted": true,
      "messageId": "<MSGID_10>",
-     "openedAt": "2026-10-17T11:00:00.000Z",
+     "openedAt": "2026-10-16T14:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": "2026-10-16T14:00:00.000Z",
@@ -4096,28 +4087,28 @@
      "statusText": "delivered · opened Tue 4:30 pm"
     },
     {
-     "id": "out-8e63fccefc17d406",
+     "id": "out-6ac594f6ed7f33f6",
      "dir": "out",
-     "at": "2026-10-21T12:00:00.250Z",
+     "at": "2026-10-20T16:00:00.250Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "We start on Wednesday 21 October",
-     "text": "Hi Dana,\n\nThe inboxes are warmed up and ready, so we start on Wednesday 21 October at 9:00 am Eastern Time.\n\nThe emails go out in your name from dana.whitfield@getridgelineit.com and dana@getridgelineit.com, between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone. That's Day 1 of your 30. Day 30 is Thursday 19 November.\n\nEvery Friday you'll get a short update from me, quiet weeks included.\n\nReply to this email any time.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nEverything's on track, so we start on Wednesday 21 October at 9:00 am Eastern Time.\n\nThe emails go out in your name from dana.whitfield@getridgelineit.com and dana@getridgelineit.com, between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone. That's Day 1 of your 30. Day 30 is Thursday 19 November.\n\nEvery Friday you'll get a short update from me, quiet weeks included.\n\nReply to this email any time.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "welcome_two_dates",
      "accepted": true,
      "messageId": "<MSGID_17>",
-     "openedAt": null,
+     "openedAt": "2026-10-21T12:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": null,
      "milestone": true,
      "unopenedAt": null,
-     "status": "delivered",
-     "statusAt": "2026-10-21T12:00:00.000Z",
-     "statusText": "delivered · not opened yet"
+     "status": "opened",
+     "statusAt": "2026-10-21T12:15:00.000Z",
+     "statusText": "delivered · opened Wed 5:45 pm"
     },
     {
      "id": "out-59bc61e782c7d927",
@@ -4150,7 +4141,7 @@
    "status": "held",
    "label": "Approved on the call — sending can start",
    "sentAt": "2026-10-16T13:00:00.000Z",
-   "openedAt": "2026-10-17T11:00:00.000Z",
+   "openedAt": "2026-10-16T14:00:00.000Z",
    "lastReplyAt": "2026-10-16T14:00:00.000Z",
    "bookedFor": "2026-10-20T15:00:00.000Z",
    "bookedAt": "2026-10-16T15:00:00.000Z",
@@ -4189,7 +4180,7 @@
      "key": "opened",
      "label": "They opened it",
      "done": true,
-     "at": "2026-10-17T11:00:00.000Z"
+     "at": "2026-10-16T14:00:00.000Z"
     },
     {
      "key": "replied",
@@ -4465,7 +4456,7 @@
      "template": null,
      "accepted": true,
      "messageId": "<MSGID_10>",
-     "openedAt": "2026-10-17T11:00:00.000Z",
+     "openedAt": "2026-10-16T14:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": "2026-10-16T14:00:00.000Z",
@@ -4644,28 +4635,28 @@
      "statusText": "delivered · opened Tue 4:30 pm"
     },
     {
-     "id": "out-8e63fccefc17d406",
+     "id": "out-6ac594f6ed7f33f6",
      "dir": "out",
-     "at": "2026-10-21T12:00:00.250Z",
+     "at": "2026-10-20T16:00:00.250Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "We start on Wednesday 21 October",
-     "text": "Hi Dana,\n\nThe inboxes are warmed up and ready, so we start on Wednesday 21 October at 9:00 am Eastern Time.\n\nThe emails go out in your name from dana.whitfield@getridgelineit.com and dana@getridgelineit.com, between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone. That's Day 1 of your 30. Day 30 is Thursday 19 November.\n\nEvery Friday you'll get a short update from me, quiet weeks included.\n\nReply to this email any time.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nEverything's on track, so we start on Wednesday 21 October at 9:00 am Eastern Time.\n\nThe emails go out in your name from dana.whitfield@getridgelineit.com and dana@getridgelineit.com, between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone. That's Day 1 of your 30. Day 30 is Thursday 19 November.\n\nEvery Friday you'll get a short update from me, quiet weeks included.\n\nReply to this email any time.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "welcome_two_dates",
      "accepted": true,
      "messageId": "<MSGID_17>",
-     "openedAt": null,
+     "openedAt": "2026-10-21T12:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": null,
      "milestone": true,
      "unopenedAt": null,
-     "status": "delivered",
-     "statusAt": "2026-10-21T12:00:00.000Z",
-     "statusText": "delivered · not opened yet"
+     "status": "opened",
+     "statusAt": "2026-10-21T12:15:00.000Z",
+     "statusText": "delivered · opened Wed 5:45 pm"
     },
     {
      "id": "out-59bc61e782c7d927",
@@ -4978,7 +4969,7 @@
      "template": null,
      "accepted": true,
      "messageId": "<MSGID_10>",
-     "openedAt": "2026-10-17T11:00:00.000Z",
+     "openedAt": "2026-10-16T14:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": "2026-10-16T14:00:00.000Z",
@@ -5157,28 +5148,28 @@
      "statusText": "delivered · opened Tue 4:30 pm"
     },
     {
-     "id": "out-8e63fccefc17d406",
+     "id": "out-6ac594f6ed7f33f6",
      "dir": "out",
-     "at": "2026-10-21T12:00:00.250Z",
+     "at": "2026-10-20T16:00:00.250Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "We start on Wednesday 21 October",
-     "text": "Hi Dana,\n\nThe inboxes are warmed up and ready, so we start on Wednesday 21 October at 9:00 am Eastern Time.\n\nThe emails go out in your name from dana.whitfield@getridgelineit.com and dana@getridgelineit.com, between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone. That's Day 1 of your 30. Day 30 is Thursday 19 November.\n\nEvery Friday you'll get a short update from me, quiet weeks included.\n\nReply to this email any time.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nEverything's on track, so we start on Wednesday 21 October at 9:00 am Eastern Time.\n\nThe emails go out in your name from dana.whitfield@getridgelineit.com and dana@getridgelineit.com, between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone. That's Day 1 of your 30. Day 30 is Thursday 19 November.\n\nEvery Friday you'll get a short update from me, quiet weeks included.\n\nReply to this email any time.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "welcome_two_dates",
      "accepted": true,
      "messageId": "<MSGID_17>",
-     "openedAt": null,
+     "openedAt": "2026-10-21T12:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": null,
      "milestone": true,
      "unopenedAt": null,
-     "status": "delivered",
-     "statusAt": "2026-10-21T12:00:00.000Z",
-     "statusText": "delivered · not opened yet"
+     "status": "opened",
+     "statusAt": "2026-10-21T12:15:00.000Z",
+     "statusText": "delivered · opened Wed 5:45 pm"
     },
     {
      "id": "out-59bc61e782c7d927",
@@ -5251,7 +5242,6 @@
      "inboxRate": 1,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 100% inbox (6/6)",
       "yahoo: 100% inbox (2/2)",
       "aol: 100% inbox (2/2)",
@@ -5305,7 +5295,6 @@
      "inboxRate": 0.875,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 83% inbox (5/6)",
       "yahoo: 50% inbox (1/2)",
       "aol: 100% inbox (2/2)",
@@ -5327,7 +5316,6 @@
      "inboxRate": 1,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 100% inbox (6/6)",
       "yahoo: 100% inbox (2/2)",
       "aol: 100% inbox (2/2)",
@@ -5349,7 +5337,6 @@
      "inboxRate": 0.938,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 100% inbox (6/6)",
       "yahoo: 100% inbox (2/2)",
       "aol: 100% inbox (2/2)",

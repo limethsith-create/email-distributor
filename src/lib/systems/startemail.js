@@ -107,16 +107,21 @@ export async function startVars(clientId, day1Date, { day30Date = null } = {}) {
  * → { sent } | { already } | { waiting: 'daytime' } | { skipped: why }.
  * A failed send throws (the Notifier keeps it for the delivery watch's retry).
  */
-export async function sendStartEmail(clientId, { now = io.now(), notify = null } = {}) {
+export async function sendStartEmail(clientId, { now = io.now(), notify = null, dayBefore = false, resend = false } = {}) {
   assertClientId(clientId);
   const [client, trial] = await Promise.all([getClient(clientId), getTrial(clientId)]);
   if (!client || !client.contactEmail) return { skipped: 'no contact email' };
   const clearWait = async () => { if (client.intakeStep === 'welcome') await updateClient(clientId, { intakeStep: '' }); };
-  if (!trial?.day1Date || !FIXED_STATES.has(client.state)) { await clearWait(); return { skipped: 'Day 1 is not fixed yet' }; }
-  if (trial.startEmailFor === trial.day1Date) { await clearWait(); return { already: true }; }
+  // `dayBefore`: the readiness run saw only tonight's warm-up check left (readiness.onlyTonightLeft) — the trial is still
+  // `warming`; outside their daytime it simply tries again next hour (no morning flag: that is for a fixed Day 1).
+  if (!trial?.day1Date || !(FIXED_STATES.has(client.state) || (dayBefore && client.state === 'warming'))) { await clearWait(); return { skipped: 'Day 1 is not fixed yet' }; }
+  // `resend`: the owner's "Send it again" in the hub — the same email once more, now (his choice, any hour).
+  if (trial.startEmailFor === trial.day1Date && !resend) { await clearWait(); return { already: true }; }
   const { zoneOfClient } = await import('@/lib/systems/calendar');
   const zone = await zoneOfClient(clientId);
-  if (!inTheirDaytime(now, zone)) {
+  if (!inTheirDaytime(now, zone) && dayBefore) return { waiting: 'daytime' };
+  // Their daytime — except the owner's "send it again", which goes when he presses it.
+  if (!resend && !inTheirDaytime(now, zone)) {
     if (client.intakeStep !== 'welcome') await updateClient(clientId, { intakeStep: 'welcome' });
     await logEvent(clientId, SYSTEM, 'waits', { until: `08:00 ${zone}`, day1: trial.day1Date });
     return { waiting: 'daytime' };
@@ -125,10 +130,11 @@ export async function sendStartEmail(clientId, { now = io.now(), notify = null }
     firstName: firstNameOf(client.contactName), ownerName: await ownerName(clientId), callMinutes: await cfg(clientId, 'LAUNCH.callMinutes'),
     ...(await startVars(clientId, trial.day1Date, { day30Date: trial.day30Date || null })),
   };
-  const opts = { dedupe: `welcome_two_dates:${trial.day1Date}`, now };
+  const resends = resend ? (Number(trial.startEmailResends) || 0) + 1 : 0;
+  const opts = { dedupe: resend ? `welcome_two_dates:${trial.day1Date}:again${resends}` : `welcome_two_dates:${trial.day1Date}`, now };
   const res = notify ? await notify(clientId, 'welcome_two_dates', vars, opts) : await sendClient(clientId, 'welcome_two_dates', vars, opts);
-  await kv.hset(K.trial(clientId), { welcomeSentAt: now.toISOString(), startEmailFor: trial.day1Date });
+  await kv.hset(K.trial(clientId), { welcomeSentAt: now.toISOString(), startEmailFor: trial.day1Date, ...(resend ? { startEmailResends: String(resends) } : {}) });
   await clearWait();
   await logEvent(clientId, SYSTEM, 'sent', { day1: trial.day1Date, zone, deduped: Boolean(res?.deduped) || undefined });
-  return { sent: true, day1: trial.day1Date };
+  return { sent: true, day1: trial.day1Date, ...(resend ? { again: resends } : {}) };
 }

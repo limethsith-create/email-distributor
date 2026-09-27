@@ -105,7 +105,7 @@ test('plan recommender: every branch, with the arithmetic paragraph', () => {
   assert.match(g.text, /3 qualified calls from 412 companies is 0\.73%/);
   assert.match(g.text, /about 14 calls; we guarantee 10/);
   assert.match(g.text, /about 29 at your rate/);
-  assert.match(g.text, /You told us on Thu 17 Sep you can take 5 calls a week\. That’s Growth — \$3,997, and it works out at \$200 a call/);
+  assert.match(g.text, /You told us on Thu 17 Sep you can take 5 calls a week, so I recommend Growth — \$3,997 a month, which works out at \$200 a call/);
   assert.equal(recommendPlan({ ...base, qualified: 4, capacityPerWeek: 2 }).plan, 'starter');
   assert.equal(recommendPlan({ ...base, qualified: 4, capacityPerWeek: 3 }).plan, 'starter');
   assert.equal(recommendPlan({ ...base, qualified: 4, capacityPerWeek: 7 }).plan, 'growth');

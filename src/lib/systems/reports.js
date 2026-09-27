@@ -70,24 +70,24 @@ export function recommendPlan({ qualified, positive, companies, capacityPerWeek,
     const cap = Number(capacityPerWeek);
     if (!Number.isFinite(cap) || cap <= 0) {
       return done({ plan: 'starter', kind: 'capacity_unknown', rate, rateText, projections, short: line('starter'),
-        text: `${arithmetic} You didn’t give us a capacity number, so the recommendation is the smallest plan that fits the rate: ${line('starter')}.` });
+        text: `${arithmetic} You didn’t give us a capacity number, so I recommend the smallest plan that fits the rate: ${line('starter')}.` });
     }
     const plan = cap <= capacity.starterMax ? 'starter' : cap <= capacity.growthMax ? 'growth' : 'scale';
     const when = kickoffDate ? `on ${kickoffDate}` : 'during onboarding';
     return done({ plan, kind: 'capacity', rate, rateText, projections, short: line(plan),
-      text: `${arithmetic} You told us ${when} you can take ${cap} calls a week. That’s ${PLAN_NAMES[plan]} — ${money(plans[plan].price)}, and it works out at ${perCall(plans[plan])} a call.` });
+      text: `${arithmetic} You told us ${when} you can take ${cap} calls a week, so I recommend ${PLAN_NAMES[plan]} — ${money(plans[plan].price)} a month, which works out at ${perCall(plans[plan])} a call.` });
   }
   if (q >= 1) {
     return done({ plan: 'starter', kind: 'thin', rate, rateText, projections, short: line('starter'),
-      text: `${arithmetic} With ${q} qualified call${q === 1 ? '' : 's'} so far, the recommendation is Starter, and only Starter — ${money(plans.starter.price)} for ${plans.starter.calls} calls — to prove the rate holds at volume before going bigger.` });
+      text: `${arithmetic} With ${q} qualified call${q === 1 ? '' : 's'} so far, I recommend Starter, and only Starter — ${money(plans.starter.price)} for ${plans.starter.calls} calls — to prove the rate holds at volume before going bigger.` });
   }
   if (pos > 0) {
     return done({ plan: 'starter', kind: 'pay_per_show', rate, rateText, projections, short: line('starter'),
-      text: `${pos} positive repl${pos === 1 ? 'y' : 'ies'} from ${c.toLocaleString('en-US')} companies is ${pct(pos, c)} — demand exists; the booking step is the problem. Recommendation: Starter — ${money(plans.starter.price)} for ${plans.starter.calls} guaranteed calls. The other honest option: pay per show, ${money(plans.payPerShow)} for every qualified call that actually attends, billed weekly.` });
+      text: `${pos} positive repl${pos === 1 ? 'y' : 'ies'} from ${c.toLocaleString('en-US')} companies is ${pct(pos, c)} — demand exists; the booking step is the problem. I recommend Starter — ${money(plans.starter.price)} for ${plans.starter.calls} guaranteed calls. The other honest option: pay per show, ${money(plans.payPerShow)} for every qualified call that actually attends, billed weekly.` });
   }
   if (!extensionUsed) {
     return done({ plan: null, kind: 'extension', rate, rateText, projections, short: 'no plan yet — the free extension',
-      text: 'No positive replies, so no plan: the free extension is the recommendation. We keep sending at our cost and change the campaign, not the deal.' });
+      text: 'No positive replies, so no plan: I recommend the free extension. We keep sending at our cost and change the campaign, not the deal.' });
   }
   return done({ plan: null, kind: 'winback', rate, rateText, projections, short: 'no plan — change the offer or the market first',
     text: `No positive replies from ${c.toLocaleString('en-US')} companies, so no plan. If nobody wanted it at this volume, more volume won’t change that. The honest next step is to change the offer or the market before outbound can work; we’ll check back in 90 days.` });

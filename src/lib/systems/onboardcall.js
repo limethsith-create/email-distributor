@@ -467,7 +467,7 @@ export function onboardCallView(raw, thread = [], { now = new Date(), settings, 
     steps: [
       { key: 'sent', label: specOf(k).firstStep, done: true, at: isoOrNull(raw.sentAt) },
       // A reply or a booking means they read it, even when the pixel was blocked.
-      { key: 'opened', label: 'They opened it', done: flag(raw.openedAt) || Boolean(firstReplyAt) || booked, at: isoOrNull(raw.openedAt) },
+      { key: 'opened', label: 'They opened it', done: flag(raw.openedAt) || Boolean(firstReplyAt) || booked, at: [isoOrNull(raw.openedAt), firstReplyAt].filter(Boolean).sort()[0] || null },
       { key: 'replied', label: 'They replied', done: Boolean(firstReplyAt), at: firstReplyAt },
       { key: 'booked', label: 'Call booked', done: booked, at: isoOrNull(raw.bookedAt) },
       { key: 'held', label: 'Call done', done: flag(raw.heldAt), at: isoOrNull(raw.heldAt) },
@@ -738,6 +738,9 @@ async function recordReply(w, meta, now) {
     await patch(id, {
       lastReplyAt: ms(raw.lastReplyAt) > ms(at) ? raw.lastReplyAt : at,
       ...(flag(raw.firstReplyAt) ? {} : { firstReplyAt: at }),
+      // A reply means they read it: the first open is then, and a pixel that loads later (a blocked image
+      // shown on another day) never puts "opened" after "replied".
+      ...(flag(raw.openedAt) ? {} : { openedAt: at }),
       replies: (Number(raw.replies) || 0) + 1,
       ...(meta.subject ? { lastInSubject: meta.subject } : {}),
       ...(meta.messageId ? { lastInMessageId: bracket(meta.messageId), messageIds: JSON.stringify(withId(raw, meta.messageId)) } : {}),

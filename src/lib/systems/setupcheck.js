@@ -422,9 +422,9 @@ export function inDaytime(now) {
  * welcome_two_dates — now the "we start on …" email, sent once Day 1 is fixed
  * (systems/startemail.js; the hub's "resend welcome" lands here).
  */
-export async function sendWelcome(clientId, { now = io.now() } = {}) {
+export async function sendWelcome(clientId, { now = io.now(), resend = false } = {}) {
   const { sendStartEmail } = await import('@/lib/systems/startemail');
-  return sendStartEmail(clientId, { now });
+  return sendStartEmail(clientId, { now, resend });
 }
 
 /** Profile + domain summary for the Mission Control purchase page. */

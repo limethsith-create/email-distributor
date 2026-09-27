@@ -120,7 +120,7 @@ export function ownerShort(v, now = new Date()) {
   if (t == null) return '';
   ownerFmt ||= new Intl.DateTimeFormat('en-US', { timeZone: OWNER_TZ, weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
   const p = Object.fromEntries(ownerFmt.formatToParts(new Date(t)).map((x) => [x.type, x.value]));
-  const clock = `${p.minute === '00' ? p.hour : `${p.hour}:${p.minute}`} ${String(p.dayPeriod).toLowerCase()}`;
+  const clock = p.minute === '00' && p.hour === '12' ? (String(p.dayPeriod).toLowerCase() === 'am' ? 'midnight' : 'noon') : `${p.minute === '00' ? p.hour : `${p.hour}:${p.minute}`} ${String(p.dayPeriod).toLowerCase()}`;
   const recent = Math.abs(ms(now) - t) < 6 * 864e5;
   return recent ? `${p.weekday} ${clock}` : `${p.weekday} ${Number(p.day)} ${MONTHS[Number(p.month) - 1]}, ${clock}`;
 }
@@ -384,7 +384,8 @@ export async function noteReply(clientId, { threadIds = [], at = null, now = io.
   try {
     const when = isoOrNull(at) || now.toISOString();
     const rec = pickReplied(Object.values(await readTrack(clientId)), threadIds);
-    if (rec && !flag(rec.repliedAt)) await saveRec(clientId, { ...rec, repliedAt: when });
+    // A reply means they read it: openedAt is set then when no pixel came first (a later pixel is not the first open).
+    if (rec && !flag(rec.repliedAt)) await saveRec(clientId, { ...rec, repliedAt: when, ...(flag(rec.openedAt) ? {} : { openedAt: when, openedBy: 'reply' }) });
     await clearUnopened(clientId, { before: when, reason: 'they wrote', now });
     return rec;
   } catch (err) {

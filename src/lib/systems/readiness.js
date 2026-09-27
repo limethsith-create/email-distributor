@@ -32,7 +32,8 @@ import { alertOwner, notifyClient } from '@/lib/notify';
 import { ET, dayKeyIn, trialDay, addDays } from '@/lib/time';
 import { getStoredSequence } from '@/lib/systems/copy';
 import { listReady } from '@/lib/systems/leadfinder';
-import { inboxesReady } from '@/lib/systems/warmup';
+import { inboxesReady, warmupDays } from '@/lib/systems/warmup';
+import { getInboxRecords } from '@/lib/db/inboxes';
 import { latestCanary, priorCanary, gateCanary } from '@/lib/systems/canary';
 import { spamTestGate } from '@/lib/systems/placement';
 import { isSendingDay } from '@/lib/systems/ramp';
@@ -130,6 +131,21 @@ export async function runReadiness({ client, now = new Date(), deps = {} }) {
     return { ready: moved, checks: gate.checks };
   }
 
+  // The day before Day 1 with only tonight's warm-up check left: the "we start on …" email goes now (their daytime),
+  // not the morning of Day 1. Once per Day 1 (sendStartEmail keeps `startEmailFor`); the gate turning green tonight
+  // then sends nothing more, and a failed check moves Day 1 with day1_moved.
+  if (trial.day1Date && trial.day1Date > today && nextSendingDay(today) === trial.day1Date && trial.startEmailFor !== trial.day1Date) {
+    const [recs, readyRate, need, minDays] = await Promise.all([getInboxRecords(id), cfg(id, 'WARMUP.readyRate'), cfg(id, 'WARMUP.readyConsecutiveDays'), cfg(id, 'BUILD.warmupReadyMinDays')]);
+    if (onlyTonightLeft(gate, recs, { today, readyRate, need, minDays, now })) {
+      try {
+        const r = await (deps.startEmail || sendStartEmail)(id, { now, notify: deps.notify || null, dayBefore: true });
+        if (r?.sent) await logEvent(id, 'readiness', 'start_email_day_before', { day1: trial.day1Date });
+      } catch (err) {
+        await logEvent(id, 'readiness', 'start_email_failed', { error: String(err?.message || err).slice(0, 200) });
+      }
+    }
+  }
+
   // Warm-up readiness is decided by the daily check (23:45, or the warm-up
   // run that sees the day's warm-up over — warmup.js readinessCheckpoint, which
   // also calls this gate at once), so the last chance for Day 1 is that check
@@ -151,6 +167,29 @@ export async function runReadiness({ client, now = new Date(), deps = {} }) {
   await setTrial(id, { day1Slides: String(slides + 1) });
   await announceMove(id, trial, newDay1, gate, { deps });
   return { ready: false, slid: newDay1, checks: summarize(gate.checks) };
+}
+
+/**
+ * Only tonight's warm-up check stands between the trial and Day 1 (pure):
+ * every other check of the gate is green, and each inbox not ready yet
+ * reaches its day `minDays` today, passed its last daily check yesterday
+ * (rate ≥ `readyRate`) and needs just one more passing check. Then the
+ * "we start on …" email can go today, in their daytime — a day's notice —
+ * instead of the morning of Day 1 (the last check runs at 23:30 ET, after
+ * their evening). If tonight's check fails, Day 1 moves and `day1_moved` says so.
+ */
+export function onlyTonightLeft(gate, recs = [], { today, readyRate = 0.9, need = 2, minDays = 14, now = new Date() } = {}) {
+  if (!gate?.checks || gate.ok) return false;
+  if (!Object.entries(gate.checks).every(([k, c]) => k === 'inboxes' || !c || c.ok)) return false;
+  const warming = (recs || []).filter((r) => r && r.passwordEnc && r.warmupEnabled !== '0');
+  if (!warming.length) return false;
+  const yesterday = addDays(today, -1);
+  return warming.every((r) => {
+    if (r.warmupReady === '1') return true;
+    if (!r.warmupStartedAt || r.warmupAwaitingFirstSend === '1') return false;
+    const rate = r.inboxRate7d === '' || r.inboxRate7d == null ? null : Number(r.inboxRate7d);
+    return warmupDays(r, now) >= minDays && r.readyCheckedDay === yesterday && (Number(r.readyStreak) || 0) >= need - 1 && rate != null && rate >= readyRate;
+  });
 }
 
 function summarize(checks) {

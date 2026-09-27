@@ -95,17 +95,20 @@ export function placementLow(res, prev = {}, { warn = 0.85, emergency = 0.70 } =
  * are not helpers, or one mail filter only. null for `want` helpers on more
  * than one filter.
  */
-export function canaryNote(seeds, want = 10) {
+export function canaryNote(seeds, want = 10, { enough = 8 } = {}) {
   const n = (seeds || []).length;
   if (!n) return null;
   const helpers = seeds.filter((x) => x.isHelper !== false).length;
   const others = n - helpers;
   const families = new Set(seeds.map((x) => familyOf(x.provider || 'google')));
-  if (helpers >= want && families.size > 1) return null;
+  // `enough` = the warm-up circle's minimum (WARMUP.minPool): the helpers the hub asks the owner for. At that many
+  // helpers on more than one filter there is nothing to say — the note is for a test that really was thin.
+  const target = Math.max(1, Math.min(want, enough));
+  if (helpers >= target && families.size > 1) return null;
   const who = !others ? ''
     : !helpers ? ' (other inboxes in the warm-up circle — no warm-up helpers yet)'
       : ` (${helpers} warm-up helper${helpers === 1 ? '' : 's'} and ${others} other inbox${others === 1 ? '' : 'es'} in the warm-up circle)`;
-  const parts = [`Tested with ${n} mailbox${n === 1 ? '' : 'es'}${who}${n < want ? ` — the usual is ${want}` : ''}.`];
+  const parts = [`Tested with ${n} mailbox${n === 1 ? '' : 'es'}${who}${n < target ? ` — ${target} or more gives a steadier number` : ''}.`];
   if (n < THIN_SEEDS) parts.push(`With fewer than ${THIN_SEEDS}, one email in spam moves the rate a lot — add warm-up helpers for a steadier number.`);
   if (families.size === 1 && n > 1) {
     const p = seeds[0].provider || 'google';
@@ -307,7 +310,7 @@ async function finalize({ client, run, key, now }) {
   const seeds = parse(run.seeds, null);
   if (Array.isArray(seeds)) {
     res.seeds = seeds.length;
-    const note = canaryNote(seeds, Number(run.want) || seeds.length);
+    const note = canaryNote(seeds, Number(run.want) || seeds.length, { enough: Number(await cfg(id, 'WARMUP.minPool')) || 8 });
     if (note) res.note = note;
   }
   const warn = await cfg(id, 'CANARY.warn');

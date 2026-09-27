@@ -755,10 +755,10 @@
    "buildCheckAt": "2026-10-14T13:00:00.000Z",
    "approvalLink": "https://machine.test/c/TOKEN_2/approve",
    "approvalLinkAt": "2026-10-23T19:00:00.300Z",
+   "welcomeSentAt": "2026-10-20T16:00:00.000Z",
+   "startEmailFor": "2026-10-21",
    "day1Held": "",
    "readyAt": "2026-10-21T03:30:00.000Z",
-   "welcomeSentAt": "2026-10-21T12:00:00.000Z",
-   "startEmailFor": "2026-10-21",
    "firstSendAt": "2026-10-21T13:00:00.000Z",
    "day1NoticeAt": "2026-10-21T13:00:00.000Z",
    "lastClientActivityAt": "2026-10-26T13:00:00.250Z",
@@ -2519,11 +2519,7 @@
    },
    "purchase-nudge": null,
    "setup-check": null,
-   "welcome": {
-    "at": "2026-10-21T12:00:00.250Z",
-    "ms": 250,
-    "ok": true
-   },
+   "welcome": null,
    "auth": {
     "at": "2026-10-26T10:00:00.160Z",
     "ms": 160,
@@ -4070,7 +4066,7 @@
      "template": null,
      "accepted": true,
      "messageId": "<MSGID_10>",
-     "openedAt": "2026-10-17T11:00:00.000Z",
+     "openedAt": "2026-10-16T14:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": "2026-10-16T14:00:00.000Z",
@@ -4249,28 +4245,28 @@
      "statusText": "delivered · opened Tue 20 Oct, 4:30 pm"
     },
     {
-     "id": "out-8e63fccefc17d406",
+     "id": "out-6ac594f6ed7f33f6",
      "dir": "out",
-     "at": "2026-10-21T12:00:00.250Z",
+     "at": "2026-10-20T16:00:00.250Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "We start on Wednesday 21 October",
-     "text": "Hi Dana,\n\nThe inboxes are warmed up and ready, so we start on Wednesday 21 October at 9:00 am Eastern Time.\n\nThe emails go out in your name from dana.whitfield@getridgelineit.com and dana@getridgelineit.com, between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone. That's Day 1 of your 30. Day 30 is Thursday 19 November.\n\nEvery Friday you'll get a short update from me, quiet weeks included.\n\nReply to this email any time.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nEverything's on track, so we start on Wednesday 21 October at 9:00 am Eastern Time.\n\nThe emails go out in your name from dana.whitfield@getridgelineit.com and dana@getridgelineit.com, between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone. That's Day 1 of your 30. Day 30 is Thursday 19 November.\n\nEvery Friday you'll get a short update from me, quiet weeks included.\n\nReply to this email any time.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "welcome_two_dates",
      "accepted": true,
      "messageId": "<MSGID_17>",
-     "openedAt": "2026-10-22T11:00:00.000Z",
+     "openedAt": "2026-10-21T12:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": null,
      "milestone": true,
      "unopenedAt": null,
      "status": "opened",
-     "statusAt": "2026-10-22T11:00:00.000Z",
-     "statusText": "delivered · opened Thu 4:30 pm"
+     "statusAt": "2026-10-21T12:15:00.000Z",
+     "statusText": "delivered · opened Wed 5:45 pm"
     },
     {
      "id": "out-59bc61e782c7d927",
@@ -4318,7 +4314,7 @@
      "unopenedAt": null,
      "status": "opened",
      "statusAt": "2026-10-23T18:30:00.000Z",
-     "statusText": "delivered · opened Sat 12 am"
+     "statusText": "delivered · opened Sat midnight"
     },
     {
      "id": "out-eddde900a952738c",
@@ -4543,7 +4539,7 @@
    "status": "held",
    "label": "Approved on the call — sending can start",
    "sentAt": "2026-10-16T13:00:00.000Z",
-   "openedAt": "2026-10-17T11:00:00.000Z",
+   "openedAt": "2026-10-16T14:00:00.000Z",
    "lastReplyAt": "2026-10-16T14:00:00.000Z",
    "bookedFor": "2026-10-20T15:00:00.000Z",
    "bookedAt": "2026-10-16T15:00:00.000Z",
@@ -4582,7 +4578,7 @@
      "key": "opened",
      "label": "They opened it",
      "done": true,
-     "at": "2026-10-17T11:00:00.000Z"
+     "at": "2026-10-16T14:00:00.000Z"
     },
     {
      "key": "replied",
@@ -4858,7 +4854,7 @@
      "template": null,
      "accepted": true,
      "messageId": "<MSGID_10>",
-     "openedAt": "2026-10-17T11:00:00.000Z",
+     "openedAt": "2026-10-16T14:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": "2026-10-16T14:00:00.000Z",
@@ -5037,28 +5033,28 @@
      "statusText": "delivered · opened Tue 20 Oct, 4:30 pm"
     },
     {
-     "id": "out-8e63fccefc17d406",
+     "id": "out-6ac594f6ed7f33f6",
      "dir": "out",
-     "at": "2026-10-21T12:00:00.250Z",
+     "at": "2026-10-20T16:00:00.250Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "We start on Wednesday 21 October",
-     "text": "Hi Dana,\n\nThe inboxes are warmed up and ready, so we start on Wednesday 21 October at 9:00 am Eastern Time.\n\nThe emails go out in your name from dana.whitfield@getridgelineit.com and dana@getridgelineit.com, between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone. That's Day 1 of your 30. Day 30 is Thursday 19 November.\n\nEvery Friday you'll get a short update from me, quiet weeks included.\n\nReply to this email any time.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nEverything's on track, so we start on Wednesday 21 October at 9:00 am Eastern Time.\n\nThe emails go out in your name from dana.whitfield@getridgelineit.com and dana@getridgelineit.com, between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone. That's Day 1 of your 30. Day 30 is Thursday 19 November.\n\nEvery Friday you'll get a short update from me, quiet weeks included.\n\nReply to this email any time.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "welcome_two_dates",
      "accepted": true,
      "messageId": "<MSGID_17>",
-     "openedAt": "2026-10-22T11:00:00.000Z",
+     "openedAt": "2026-10-21T12:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": null,
      "milestone": true,
      "unopenedAt": null,
      "status": "opened",
-     "statusAt": "2026-10-22T11:00:00.000Z",
-     "statusText": "delivered · opened Thu 4:30 pm"
+     "statusAt": "2026-10-21T12:15:00.000Z",
+     "statusText": "delivered · opened Wed 5:45 pm"
     },
     {
      "id": "out-59bc61e782c7d927",
@@ -5106,7 +5102,7 @@
      "unopenedAt": null,
      "status": "opened",
      "statusAt": "2026-10-23T18:30:00.000Z",
-     "statusText": "delivered · opened Sat 12 am"
+     "statusText": "delivered · opened Sat midnight"
     },
     {
      "id": "out-eddde900a952738c",
@@ -5611,7 +5607,7 @@
      "template": null,
      "accepted": true,
      "messageId": "<MSGID_10>",
-     "openedAt": "2026-10-17T11:00:00.000Z",
+     "openedAt": "2026-10-16T14:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": "2026-10-16T14:00:00.000Z",
@@ -5790,28 +5786,28 @@
      "statusText": "delivered · opened Tue 20 Oct, 4:30 pm"
     },
     {
-     "id": "out-8e63fccefc17d406",
+     "id": "out-6ac594f6ed7f33f6",
      "dir": "out",
-     "at": "2026-10-21T12:00:00.250Z",
+     "at": "2026-10-20T16:00:00.250Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "We start on Wednesday 21 October",
-     "text": "Hi Dana,\n\nThe inboxes are warmed up and ready, so we start on Wednesday 21 October at 9:00 am Eastern Time.\n\nThe emails go out in your name from dana.whitfield@getridgelineit.com and dana@getridgelineit.com, between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone. That's Day 1 of your 30. Day 30 is Thursday 19 November.\n\nEvery Friday you'll get a short update from me, quiet weeks included.\n\nReply to this email any time.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nEverything's on track, so we start on Wednesday 21 October at 9:00 am Eastern Time.\n\nThe emails go out in your name from dana.whitfield@getridgelineit.com and dana@getridgelineit.com, between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone. That's Day 1 of your 30. Day 30 is Thursday 19 November.\n\nEvery Friday you'll get a short update from me, quiet weeks included.\n\nReply to this email any time.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "welcome_two_dates",
      "accepted": true,
      "messageId": "<MSGID_17>",
-     "openedAt": "2026-10-22T11:00:00.000Z",
+     "openedAt": "2026-10-21T12:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
      "repliedAt": null,
      "milestone": true,
      "unopenedAt": null,
      "status": "opened",
-     "statusAt": "2026-10-22T11:00:00.000Z",
-     "statusText": "delivered · opened Thu 4:30 pm"
+     "statusAt": "2026-10-21T12:15:00.000Z",
+     "statusText": "delivered · opened Wed 5:45 pm"
     },
     {
      "id": "out-59bc61e782c7d927",
@@ -5859,7 +5855,7 @@
      "unopenedAt": null,
      "status": "opened",
      "statusAt": "2026-10-23T18:30:00.000Z",
-     "statusText": "delivered · opened Sat 12 am"
+     "statusText": "delivered · opened Sat midnight"
     },
     {
      "id": "out-eddde900a952738c",
@@ -6124,7 +6120,6 @@
      "inboxRate": 1,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 100% inbox (6/6)",
       "yahoo: 100% inbox (2/2)",
       "aol: 100% inbox (2/2)",
@@ -6146,7 +6141,6 @@
      "inboxRate": 1,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 100% inbox (6/6)",
       "yahoo: 100% inbox (2/2)",
       "aol: 100% inbox (2/2)",
@@ -6168,7 +6162,6 @@
      "inboxRate": 0.938,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 100% inbox (6/6)",
       "yahoo: 100% inbox (2/2)",
       "aol: 100% inbox (2/2)",
@@ -6190,7 +6183,6 @@
      "inboxRate": 0.938,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 100% inbox (6/6)",
       "yahoo: 100% inbox (2/2)",
       "aol: 100% inbox (2/2)",
@@ -6212,7 +6204,6 @@
      "inboxRate": 1,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 100% inbox (6/6)",
       "yahoo: 100% inbox (2/2)",
       "aol: 100% inbox (2/2)",
@@ -6234,7 +6225,6 @@
      "inboxRate": 1,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 100% inbox (6/6)",
       "yahoo: 100% inbox (2/2)",
       "aol: 100% inbox (2/2)",
@@ -6288,7 +6278,6 @@
      "inboxRate": 0.875,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 83% inbox (5/6)",
       "yahoo: 50% inbox (1/2)",
       "aol: 100% inbox (2/2)",
@@ -6310,7 +6299,6 @@
      "inboxRate": 1,
      "pass": null,
      "detail": [
-      "Tested with 8 mailboxes — the usual is 10.",
       "google: 100% inbox (6/6)",
       "yahoo: 100% inbox (2/2)",
       "aol: 100% inbox (2/2)",

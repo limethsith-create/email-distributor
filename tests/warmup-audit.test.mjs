@@ -21,7 +21,7 @@ import {
   runWarmupSend, warmupDays,
 } from '@/lib/systems/warmup';
 import { canarySeeds, canaryNote, runCanary, latestCanary, THIN_SEEDS, placementLow, gateCanary } from '@/lib/systems/canary';
-import { readinessGate } from '@/lib/systems/readiness';
+import { readinessGate, onlyTonightLeft } from '@/lib/systems/readiness';
 import { placementHistory } from '@/lib/systems/placement';
 import { simpleFor } from '@/lib/systems/hubview';
 
@@ -239,7 +239,7 @@ test('the canary tests with the warm-up circle when there are no helpers — nev
   assert.equal(boxes['a@acme-trial.com'], undefined, 'never its own inboxes');
   const latest = await latestCanary('acme', t0);
   assert.equal(latest.seeds, 3);
-  assert.equal(latest.note, 'Tested with 3 mailboxes (other inboxes in the warm-up circle — no warm-up helpers yet) — the usual is 10. With fewer than 4, one email in spam moves the rate a lot — add warm-up helpers for a steadier number. All of them use the same mail filter (Gmail / Google Workspace), so other providers were not tested.');
+  assert.equal(latest.note, 'Tested with 3 mailboxes (other inboxes in the warm-up circle — no warm-up helpers yet) — 8 or more gives a steadier number. With fewer than 4, one email in spam moves the rate a lot — add warm-up helpers for a steadier number. All of them use the same mail filter (Gmail / Google Workspace), so other providers were not tested.');
   // The note is the first line of the seed test in the placement history (the hub's deliverability card) …
   const seed = (await placementHistory('acme')).find((e) => e.tool === 'seed');
   assert.equal(seed.detail[0], latest.note);
@@ -262,9 +262,10 @@ test('canary seeds: helpers first, then the circle, up to the usual number; the 
 
   const H = (n, provider = 'google') => Array.from({ length: n }, (_, i) => ({ email: `h${i}@x${i}.com`, provider: i % 2 ? 'yahoo' : provider, isHelper: true }));
   assert.equal(canaryNote(H(10), 10), null, 'the usual ten helpers on more than one filter');
-  assert.equal(canaryNote(H(8), 10), 'Tested with 8 mailboxes — the usual is 10.');
-  assert.match(canaryNote(H(2), 10), new RegExp(`^Tested with 2 mailboxes — the usual is 10\\. With fewer than ${THIN_SEEDS}, one email in spam`));
-  assert.equal(canaryNote([...H(5), { email: 'x@bolt.com', provider: 'google', isHelper: false }], 10), 'Tested with 6 mailboxes (5 warm-up helpers and 1 other inbox in the warm-up circle) — the usual is 10.');
+  assert.equal(canaryNote(H(8), 10), null, 'the 8 helpers the hub asks for: nothing to say');
+  assert.equal(canaryNote(H(7), 10), 'Tested with 7 mailboxes — 8 or more gives a steadier number.');
+  assert.match(canaryNote(H(2), 10), new RegExp(`^Tested with 2 mailboxes — 8 or more gives a steadier number\\. With fewer than ${THIN_SEEDS}, one email in spam`));
+  assert.equal(canaryNote([...H(5), { email: 'x@bolt.com', provider: 'google', isHelper: false }], 10), 'Tested with 6 mailboxes (5 warm-up helpers and 1 other inbox in the warm-up circle) — 8 or more gives a steadier number.');
   assert.match(canaryNote(Array.from({ length: 10 }, (_, i) => ({ email: `g${i}@gmail.com`, provider: 'google', isHelper: true })), 10), /^Tested with 10 mailboxes\. All of them use the same mail filter \(Gmail \/ Google Workspace\)/);
   assert.equal(canaryNote([], 10), null);
 });
@@ -334,4 +335,24 @@ test('Day 1 gate: the latest seed test pooled with the one before it — one nor
   // An inbox the latest run could not read holds; no run at all holds.
   assert.equal(gateCanary({ overall: 1, perInbox: { 'a@x.com': { sent: 8, inbox: 8, placement: 1 }, 'b@x.com': { sent: 8, inbox: 0, placement: null } } }, run(8, 8), lines).ok, false);
   assert.equal(gateCanary(null, null, lines).ok, false);
+});
+
+test('the "we start on" email a day ahead: only when every other check is green and each inbox needs just tonight\'s passing check', () => {
+  const now = et('2026-10-14', '12:00'); // warm-up day 14 (start 1 Oct)
+  const green = { ok: true };
+  const gate = (over = {}) => ({ ok: false, checks: { approval: green, list: green, inboxes: { ok: false }, canary: green, spamTest: green, booking: green, ...over } });
+  const rec = (x = {}) => ({ email: 'a@x.com', passwordEnc: 'e', warmupStartedAt: START, readyCheckedDay: '2026-10-13', readyStreak: '1', inboxRate7d: '0.950', warmupReady: '0', ...x });
+  const opts = { today: '2026-10-14', readyRate: 0.9, need: 2, minDays: 14, now };
+  assert.equal(onlyTonightLeft(gate(), [rec(), rec({ email: 'b@x.com', warmupReady: '1' })], opts), true);
+  // Anything else still open: no.
+  assert.equal(onlyTonightLeft(gate({ approval: { ok: false } }), [rec()], opts), false);
+  assert.equal(onlyTonightLeft(gate({ booking: { ok: false } }), [rec()], opts), false);
+  // An inbox that needs more than tonight: no streak yet, under the line, a missed check, or before day 14.
+  assert.equal(onlyTonightLeft(gate(), [rec({ readyStreak: '0' })], opts), false);
+  assert.equal(onlyTonightLeft(gate(), [rec({ inboxRate7d: '0.880' })], opts), false);
+  assert.equal(onlyTonightLeft(gate(), [rec({ readyCheckedDay: '2026-10-12' })], opts), false);
+  assert.equal(onlyTonightLeft(gate(), [rec()], { ...opts, today: '2026-10-13', now: et('2026-10-13', '12:00') }), false);
+  assert.equal(onlyTonightLeft(gate(), [rec({ warmupAwaitingFirstSend: '1' })], opts), false);
+  // Already green: the normal path sends it.
+  assert.equal(onlyTonightLeft({ ok: true, checks: {} }, [rec()], opts), false);
 });

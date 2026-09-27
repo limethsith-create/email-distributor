@@ -14,7 +14,7 @@ import nodemailer from 'nodemailer';
 import { __reset, kv } from '@vercel/kv';
 import { io } from '@/lib/systems/intake-io';
 import { K } from '@/lib/db/keys';
-import { createClient, getClient } from '@/lib/db/client';
+import { createClient, getClient, updateClient } from '@/lib/db/client';
 import { saveInbox, patchInbox } from '@/lib/db/inboxes';
 import { insertLeads } from '@/lib/db/leads';
 import { notifyClient, alertOwner, getAlertLog } from '@/lib/notify';
@@ -26,7 +26,7 @@ import { conversationFor, entryView } from '@/lib/systems/conversation';
 import { hubClient } from '@/lib/systems/hubview';
 import { runReadiness } from '@/lib/systems/readiness';
 import {
-  readTrack, noteClientBounces, markMailOpened, businessHoursLater, statusOf, deliveryView, ownerShort,
+  readTrack, noteClientBounces, markMailOpened, noteReply, businessHoursLater, statusOf, deliveryView, ownerShort,
   pickBounced, pickReplied, watchStep, trackKeyOf, entryIdOf, MILESTONES, WATCH,
 } from '@/lib/systems/mailwatch';
 import { sendStartEmail, startVars, startFacts, clockWord, inTheirDaytime } from '@/lib/systems/startemail';
@@ -498,4 +498,40 @@ test('startVars reads their zone from the profile, the Sender\'s window and the 
   await patchInbox(ID, 'sam.t@ecreek-mail.com', { enabled: '0' });
   const v = await startVars(ID, '2026-10-21');
   assert.deepEqual([v.theirZoneName, v.inboxName, v.inboxes], ['Central Time', 'Sam Test <sam@ecreek-mail.com>', 'sam@ecreek-mail.com']);
+});
+
+test('a reply counts as the first open: the image loading a day later never puts "opened" after "replied"', async () => {
+  await client('ready');
+  await notifyClient(ID, 'welcome_two_dates', { firstName: 'Sam', ownerName: 'Limeth Sith', day1Date: 'Wednesday 21 October', day30Date: 'Thursday 19 November', callMinutes: 30, ...START }, { dedupe: 'w-open', now: FRI });
+  const m = toSam()[0];
+  const replyAt = at(FRI, 2);
+  await noteReply(ID, { threadIds: [normId(m.messageId)], at: replyAt.toISOString(), now: replyAt });
+  let rec = await recOf(m);
+  assert.equal(rec.repliedAt, replyAt.toISOString());
+  assert.equal(rec.openedAt, replyAt.toISOString(), 'read when they replied');
+  assert.equal(statusOf(rec).status, 'replied');
+  // The pixel loads the next day: counted, but not the first open.
+  const first = await markMailOpened(ID, trackKeyOf(m.messageId), SAM, { now: at(FRI, 24) });
+  assert.equal(first, false);
+  rec = await recOf(m);
+  assert.equal(rec.openedAt, replyAt.toISOString());
+});
+
+test('the owner\'s "send it again": the "we start on" email once more, at once; nothing before Day 1 is fixed; plain times say noon and midnight', async () => {
+  await client('warming');
+  await saveInbox(ID, { email: 'sam@trysamtest.com', password: 'pw', provider: 'google', displayName: 'Sam Test' });
+  await patchInbox(ID, 'sam@trysamtest.com', { enabled: '1' });
+  await kv.hset(K.trial(ID), { day1Date: '2026-10-21', day30Date: '2026-11-19' });
+  assert.deepEqual(await sendStartEmail(ID, { now: FRI, resend: true }), { skipped: 'Day 1 is not fixed yet' });
+  await updateClient(ID, { state: 'ready' });
+  const first = await sendStartEmail(ID, { now: FRI });
+  assert.equal(first.sent, true);
+  assert.deepEqual(await sendStartEmail(ID, { now: FRI }), { already: true }, 'once per Day 1 by itself');
+  const night = new Date('2026-10-17T03:30:00Z'); // 11:30 pm ET
+  const again = await sendStartEmail(ID, { now: night, resend: true });
+  assert.equal(again.sent, true);
+  assert.equal(again.again, 1);
+  assert.equal(toSam().filter((m) => /^We start on/.test(m.subject)).length, 2);
+  assert.equal(ownerShort('2026-10-16T18:30:00Z', new Date('2026-10-16T19:00:00Z')), 'Sat midnight'); // Colombo +5:30
+  assert.equal(ownerShort('2026-10-16T06:30:00Z', new Date('2026-10-16T07:00:00Z')), 'Fri noon');
 });

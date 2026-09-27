@@ -1439,3 +1439,31 @@ invites a reply any time. When Day 1 moves, `day1_moved` goes with the same
 facts; a move made as the gate turns green IS the start email for that date.
 The trial hash gains `startEmailFor` (the Day 1 it went for); `welcomeSentAt`
 is when it went.
+
+## Integration notes (2026-09-27, after the hub's delivery-status pass)
+
+- **The "we start on …" email goes the day before Day 1** when every check of
+  the Day 1 gate is green except that night's last warm-up check, and each
+  inbox needs just that one passing check (readiness.js `onlyTonightLeft`), in
+  their daytime — a day's notice, not the morning of Day 1. If that check
+  fails, Day 1 moves and `day1_moved` says so. Its first line: "Everything's
+  on track, so we start on {day, time in their zone}".
+- **`POST /api/mc/clients/{id}/intake` `{action:'resendWelcome'}`** sends the
+  "we start on …" email again, at once (the owner's choice, any hour) →
+  `{ ok, result: { sent: true, day1, again: n } }`, or `{ skipped: 'Day 1 is
+  not fixed yet' }` before Day 1 is fixed. Suggested button: "Send the “we
+  start on” email again" with the confirm "Send Sam the “we start on” email
+  again?".
+- **A reply counts as the first open**: an email they replied to has
+  `openedAt` = the reply's time when no open came before it (a later image
+  load is counted, not first); the call cards' "They opened it" step is never
+  after "They replied".
+- **The seed test's note** (`placement[].detail[0]`) appears only when the test
+  really was thin: fewer mailboxes than `WARMUP.minPool` (8), mailboxes that
+  are not helpers, or one mail filter. With the 8 helpers the hub asks for,
+  there is no note.
+- `statusText` writes 12:00 as "noon" and 00:00 as "midnight".
+- `bot_later_due` is a quiet note (not urgent): no to-do, no big button.
+- A send that failed is not a conversation entry: the retry is 10 minutes
+  later, and a second failure is the urgent `client_email_failed` alert (its
+  to-do and the big button).
