@@ -105,7 +105,7 @@ export default function Onboard({ params }) {
       {accepted ? (
         <div style={box}>
           <p style={{ marginTop: 0 }}><strong>Signed</strong> by {data.accepted.name} on {new Date(data.accepted.at).toUTCString()}.</p>
-          <p style={{ marginBottom: 0 }}>{data.market?.status === 'passed' || data.state === 'awaiting_purchase' ? 'Your market count passed — setup has started. Watch your inbox for the two dates.' : data.state === 'declined' ? 'We emailed you the result of the market count.' : 'We are counting the companies that match your profile now. You will hear from us by email.'}</p>
+          <p style={{ marginBottom: 0 }}>{data.market?.status === 'passed' || data.state === 'awaiting_purchase' ? 'Your market count passed — setup has started. The day before we start, you get an email with the exact day and time.' : data.state === 'declined' ? 'We emailed you the result of the market count.' : 'We are counting the companies that match your profile now. You will hear from us by email.'}</p>
         </div>
       ) : closed ? (
         <div style={box}>This page is closed. Reply to our last email if you need anything.</div>
