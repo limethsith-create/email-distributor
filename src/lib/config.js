@@ -184,6 +184,13 @@ export const DEFAULTS = {
     maxHops: 4,                   // research runs that may hand over to a fresh function (≈ 50 s each)
     historySnapshots: 6,          // Wayback Machine home-page captures read (one per year, first and latest always)
     secUserAgent: 'AvianceBot/1.0 (aviance.online; research@aviance.online)', // SEC asks every client to name itself and a contact
+    // Research v4 (docs/IMPROVE-PASS.md A): news, topics, customers, competitors, the brief, crawl speed.
+    deepConcurrencyFast: 8,       // pages fetched at once when their site answers fast (same page budget)
+    deepFastMs: 800,              // "fast" = the median page answer under this many ms (at least 3 pages timed)
+    deepStaleYears: 3,            // with more pages than the budget, skip pages whose sitemap lastmod is older (posts first)
+    newsItems: 5,                 // Google News RSS stories kept (one keyless request per applicant)
+    competitors: 5,               // businesses of their Google category in their city (Places key only; one Enterprise-SKU call; never contacted)
+    briefMax: 12,                 // sentences in research.brief at most (fewer when facts are missing — never made up)
   },
   // ── Fit Score (systems/fitscore.js): the applicant against the owner's fit gate ──
   FITSCORE: {

@@ -44,7 +44,7 @@
      "pct": null
     },
     "places": {
-     "used": 1,
+     "used": 2,
      "limit": 1000,
      "pct": 0
     },
@@ -2317,7 +2317,7 @@
     "status": "done",
     "at": "2026-10-01T19:40:12.760Z",
     "error": null,
-    "summary": "Ridgeline IT is a computer support and services in Charlotte, NC (4.8★, 61 Google reviews). The website lists services such as Managed IT services, Cybersecurity and Cloud backup and recovery, names Charlotte, NC and Raleigh, NC, says “Founded in 2012” and shows 4 people on the team page. A quick Google Maps count suggests at least 360 law firms and accounting firms in Charlotte, NC. Read 22 pages and 1 document (1,111 words): 110 facts — 4 named people, 3 named clients, 1 testimonial, 2 case studies, 8 certifications / partners, online since 2013.",
+    "summary": "Ridgeline IT is a computer support and services in Charlotte, NC (4.8★, 61 Google reviews). The website lists services such as Managed IT services, Cybersecurity and Cloud backup and recovery, names Charlotte, NC and Raleigh, NC, says “Founded in 2012” and shows 4 people on the team page. A quick Google Maps count suggests at least 360 law firms and accounting firms in Charlotte, NC. Read 22 pages and 1 document (1,139 words): 125 facts — 4 named people, 3 named clients, 1 testimonial, 2 case studies, 8 certifications / partners, online since 2013.",
     "website": {
      "url": "https://www.ridgelineit.com/",
      "title": "Ridgeline IT | Managed IT for Law & Accounting Firms in Charlotte",
@@ -2362,7 +2362,12 @@
      "source": "places",
      "capped": true
     },
-    "flags": [],
+    "flags": [
+     {
+      "level": "info",
+      "text": "In the news for “Ridgeline IT”: new office — “Ridgeline IT opens a Raleigh office & adds six staff” (Charlotte Business Journal, 2026-06-15)"
+     }
+    ],
     "score": {
      "score": 94,
      "grade": "A",
@@ -2504,7 +2509,7 @@
          "points": 1.5
         },
         {
-         "text": "A real website (1,111 words across 8 pages)",
+         "text": "A real website (1,139 words across 8 pages)",
          "status": "good",
          "max": 2.3,
          "evidence": null,
@@ -2616,7 +2621,7 @@
     "deep": {
      "pagesRead": 22,
      "sitemapPages": 22,
-     "words": 1111,
+     "words": 1139,
      "people": [
       {
        "name": "Marcus Hale",
@@ -2663,11 +2668,17 @@
      "caseStudies": [
       {
        "title": "How Hollis & Grant Law moved 40 people over one weekend",
-       "page": "/case-studies/law-firm-office-move"
+       "page": "/case-studies/law-firm-office-move",
+       "segments": [
+        "law firms"
+       ]
       },
       {
        "title": "Carolina Tax Partners recovered from ransomware in six hours",
-       "page": "/case-studies/cpa-ransomware-recovery"
+       "page": "/case-studies/cpa-ransomware-recovery",
+       "segments": [
+        "accounting firms"
+       ]
       }
      ],
      "credentials": [
@@ -2948,20 +2959,20 @@
       ],
       "revenue": [
        {
-        "low": 1920000,
-        "high": 3360000,
-        "basis": "16 people × $120,000–$210,000 revenue per employee for accounting / CPA firms (Census SUSB 2022 NAICS 541211, Rosenberg survey)",
+        "low": 2240000,
+        "high": 4000000,
+        "basis": "16 people × $140,000–$250,000 revenue per employee for IT services / MSPs (Census SUSB 2022 NAICS 541512/541513, Service Leadership)",
         "floor": false
        },
        {
-        "low": 1160000,
-        "high": 1322000,
-        "basis": "2019 payroll about $568,320 (their PPP loan) ÷ payroll being 43–49% of revenue for accounting / CPA firms (Census SUSB 2022 NAICS 541211)",
+        "low": 1496000,
+        "high": 1776000,
+        "basis": "2019 payroll about $568,320 (their PPP loan) ÷ payroll being 32–38% of revenue for IT services / MSPs (Census SUSB 2022 NAICS 541512/541513)",
         "floor": true,
         "year": 2019
        }
       ],
-      "benchmark": "accounting / CPA firms"
+      "benchmark": "IT services / MSPs"
      },
      "offers": {
       "ctas": [
@@ -3009,7 +3020,244 @@
       ]
      },
      "ads": [],
-     "facts": 110
+     "orgPage": "/",
+     "customers": {
+      "segments": [
+       {
+        "name": "law firms",
+        "count": 10,
+        "pages": [
+         "/",
+         "/about",
+         "/case-studies"
+        ]
+       },
+       {
+        "name": "accounting firms",
+        "count": 8,
+        "pages": [
+         "/",
+         "/about",
+         "/services"
+        ]
+       }
+      ],
+      "examples": [
+       {
+        "name": "Hollis & Grant Law",
+        "page": "/",
+        "how": "client list"
+       },
+       {
+        "name": "Carolina Tax Partners",
+        "page": "/",
+        "how": "client list"
+       },
+       {
+        "name": "Queen City Family Law",
+        "page": "/",
+        "how": "client list"
+       }
+      ],
+      "line": "They mostly serve law firms and accounting firms; named clients include Hollis & Grant Law, Carolina Tax Partners and Queen City Family Law."
+     },
+     "topics": {
+      "pairs": [
+       {
+        "text": "microsoft 365",
+        "count": 2,
+        "posts": 1
+       },
+       {
+        "text": "phishing emails",
+        "count": 2,
+        "posts": 1
+       }
+      ],
+      "rhythm": {
+       "text": "about 6 posts a year, last one 58 days ago",
+       "perMonth": 0.5,
+       "inLastYear": 5,
+       "last": "2026-08-04",
+       "lastDays": 58,
+       "atLeast": false
+      }
+     },
+     "news": {
+      "query": "Ridgeline IT",
+      "url": "https://news.google.com/rss/search?q=%22Ridgeline+IT%22+Charlotte&hl=en-US&gl=US&ceid=US:en",
+      "items": [
+       {
+        "title": "Charlotte law firms turn to managed IT after a ransomware summer",
+        "source": "WSOC-TV",
+        "date": "2026-09-10",
+        "link": "https://news.google.com/rss/articles/CBMi-ridgeline-wsoc"
+       },
+       {
+        "title": "Ridgeline IT opens a Raleigh office & adds six staff",
+        "source": "Charlotte Business Journal",
+        "date": "2026-06-15",
+        "link": "https://news.google.com/rss/articles/CBMi-ridgeline-cbj"
+       }
+      ],
+      "flags": [
+       {
+        "kind": "new office",
+        "level": "info",
+        "title": "Ridgeline IT opens a Raleigh office & adds six staff",
+        "source": "Charlotte Business Journal",
+        "date": "2026-06-15",
+        "link": "https://news.google.com/rss/articles/CBMi-ridgeline-cbj"
+       }
+      ],
+      "error": null
+     },
+     "competitors": {
+      "query": "Computer support and services in Charlotte, NC",
+      "items": [
+       {
+        "name": "Queen City Tech Partners",
+        "rating": 4.9,
+        "reviews": 212,
+        "website": "https://www.qctechpartners.com/",
+        "mapsUrl": "https://maps.google.com/?cid=5101",
+        "address": "5101 Tryon St, Charlotte, NC 28202, USA"
+       },
+       {
+        "name": "Carolina Network Solutions",
+        "rating": 4.6,
+        "reviews": 88,
+        "website": "https://www.carolinanetworks.com/",
+        "mapsUrl": "https://maps.google.com/?cid=5102",
+        "address": "5102 Tryon St, Charlotte, NC 28202, USA"
+       },
+       {
+        "name": "Piedmont Managed IT",
+        "rating": 4.7,
+        "reviews": 45,
+        "website": "https://www.piedmontmanagedit.com/",
+        "mapsUrl": "https://maps.google.com/?cid=5103",
+        "address": "5103 Tryon St, Charlotte, NC 28202, USA"
+       },
+       {
+        "name": "Uptown Computer Help",
+        "rating": 4.2,
+        "reviews": 19,
+        "website": null,
+        "mapsUrl": "https://maps.google.com/?cid=5104",
+        "address": "5104 Tryon St, Charlotte, NC 28202, USA"
+       },
+       {
+        "name": "Crown Cyber",
+        "rating": 5,
+        "reviews": 9,
+        "website": "https://www.crowncyber.io/",
+        "mapsUrl": "https://maps.google.com/?cid=5105",
+        "address": "5105 Tryon St, Charlotte, NC 28202, USA"
+       }
+      ]
+     },
+     "facts": 125
+    },
+    "brief": {
+     "text": "Ridgeline IT sells Managed IT services, Cybersecurity, Cloud backup and recovery, and Compliance for law and CPA firms. They mostly serve law firms and accounting firms; named clients include Hollis & Grant Law, Carolina Tax Partners and Queen City Family Law. Ridgeline IT has been in business since 2012, and their website has been online since 2013. About 16 people work there (website lists 16 employees, schema.org), from an office at 2100 South Blvd, Suite 300, Charlotte, NC 28203. Revenue is likely $2.2M–$4M a year (16 people × $140,000–$250,000 revenue per employee for IT services / MSPs); the public record shows a $118,400 PPP loan from April 2020. Their website shows 1 testimonial, 2 case studies, and 3 named clients; they name Microsoft Partner, Microsoft Solutions Partner, and SOC 2; Google rates them 4.8★ from 61 reviews. Offers they run: their main call to action is “Book a free network assessment”; they promise no long-term contracts, unlimited help desk, and 15-minute response; published plans: Essentials ($99 per user / month), Complete ($149 per user / month). On the 22 pages read, their website has no booking link. Their blog: about 6 posts a year, last one 58 days ago; the posts mostly talk about microsoft 365 and phishing emails. In the news: “Ridgeline IT opens a Raleigh office & adds six staff” (Charlotte Business Journal, 15 Jun 2026) — the headline mentions new office. Two angles for the call: website talks to businesses (37 mentions); and a new customer is worth $5,000–$20,000 in year one. Still open — ask them: Name three companies that would be perfect customers.",
+     "sentences": [
+      {
+       "text": "Ridgeline IT sells Managed IT services, Cybersecurity, Cloud backup and recovery, and Compliance for law and CPA firms.",
+       "sources": [
+        "https://www.ridgelineit.com/services"
+       ]
+      },
+      {
+       "text": "They mostly serve law firms and accounting firms; named clients include Hollis & Grant Law, Carolina Tax Partners and Queen City Family Law.",
+       "sources": [
+        "https://www.ridgelineit.com/"
+       ]
+      },
+      {
+       "text": "Ridgeline IT has been in business since 2012, and their website has been online since 2013.",
+       "sources": [
+        "https://www.ridgelineit.com/",
+        "https://web.archive.org/web/*/www.ridgelineit.com"
+       ]
+      },
+      {
+       "text": "About 16 people work there (website lists 16 employees, schema.org), from an office at 2100 South Blvd, Suite 300, Charlotte, NC 28203.",
+       "sources": [
+        "https://www.ridgelineit.com/"
+       ]
+      },
+      {
+       "text": "Revenue is likely $2.2M–$4M a year (16 people × $140,000–$250,000 revenue per employee for IT services / MSPs); the public record shows a $118,400 PPP loan from April 2020.",
+       "sources": [
+        "Census SUSB 2022 NAICS 541512/541513, Service Leadership",
+        "USAspending.gov"
+       ]
+      },
+      {
+       "text": "Their website shows 1 testimonial, 2 case studies, and 3 named clients; they name Microsoft Partner, Microsoft Solutions Partner, and SOC 2; Google rates them 4.8★ from 61 reviews.",
+       "sources": [
+        "https://www.ridgelineit.com/",
+        "https://www.ridgelineit.com/case-studies/law-firm-office-move",
+        "https://www.ridgelineit.com/about",
+        "https://maps.google.com/?cid=4411"
+       ]
+      },
+      {
+       "text": "Offers they run: their main call to action is “Book a free network assessment”; they promise no long-term contracts, unlimited help desk, and 15-minute response; published plans: Essentials ($99 per user / month), Complete ($149 per user / month).",
+       "sources": [
+        "https://www.ridgelineit.com/",
+        "https://www.ridgelineit.com/pricing"
+       ]
+      },
+      {
+       "text": "On the 22 pages read, their website has no booking link.",
+       "sources": [
+        "https://www.ridgelineit.com/"
+       ]
+      },
+      {
+       "text": "Their blog: about 6 posts a year, last one 58 days ago; the posts mostly talk about microsoft 365 and phishing emails.",
+       "sources": [
+        "https://www.ridgelineit.com/blog/wisp-template",
+        "https://www.ridgelineit.com/blog/clio-security"
+       ]
+      },
+      {
+       "text": "In the news: “Ridgeline IT opens a Raleigh office & adds six staff” (Charlotte Business Journal, 15 Jun 2026) — the headline mentions new office.",
+       "sources": [
+        "https://news.google.com/rss/articles/CBMi-ridgeline-cbj"
+       ]
+      },
+      {
+       "text": "Two angles for the call: website talks to businesses (37 mentions); and a new customer is worth $5,000–$20,000 in year one.",
+       "sources": [
+        "https://www.ridgelineit.com/",
+        "fit score"
+       ]
+      },
+      {
+       "text": "Still open — ask them: Name three companies that would be perfect customers.",
+       "sources": [
+        "fit score"
+       ]
+      }
+     ],
+     "sources": [
+      "https://www.ridgelineit.com/services",
+      "https://www.ridgelineit.com/",
+      "https://web.archive.org/web/*/www.ridgelineit.com",
+      "Census SUSB 2022 NAICS 541512/541513, Service Leadership",
+      "USAspending.gov",
+      "https://www.ridgelineit.com/case-studies/law-firm-office-move",
+      "https://www.ridgelineit.com/about",
+      "https://maps.google.com/?cid=4411",
+      "https://www.ridgelineit.com/pricing",
+      "https://www.ridgelineit.com/blog/wisp-template",
+      "https://www.ridgelineit.com/blog/clio-security",
+      "https://news.google.com/rss/articles/CBMi-ridgeline-cbj",
+      "fit score"
+     ]
     }
    }
   },

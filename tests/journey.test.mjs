@@ -236,6 +236,18 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(research.deep.money.federal.ppp.length, 1, 'their PPP loan (not the roofing company\'s)');
   assert.equal(research.deep.emailSetup.mailHost, 'Microsoft 365');
   assert.ok(research.deep.history.firstSeen.startsWith('2013'));
+  // Research v4: the news, what they write about, who buys from them, who is nearby — and the brief for the launch call.
+  assert.equal(research.deep.news.items.length, 2);
+  assert.deepEqual(research.deep.news.flags.map((f) => f.kind), ['new office']);
+  assert.deepEqual(research.deep.topics.pairs.map((p) => p.text), ['microsoft 365', 'phishing emails']);
+  assert.deepEqual(research.deep.customers.segments.slice(0, 2).map((x) => x.name), ['law firms', 'accounting firms']);
+  assert.equal(research.deep.competitors.items.length, 5);
+  assert.ok(!research.deep.competitors.items.some((c) => c.name === 'Ridgeline IT'), 'never themselves');
+  assert.match(research.deep.money.benchmark, /IT services/, 'what they sell (IT), not who buys it (law and accounting firms)');
+  assert.ok(research.brief.sentences.length >= 8 && research.brief.sentences.length <= 12, research.brief.text);
+  assert.ok(research.brief.sentences.every((x) => x.sources.length), 'every sentence cites its source');
+  const scoredMail = sim.sent.find((m) => m.to === OWNER.email && /Fit score for Ridgeline IT/.test(m.subject));
+  assert.ok(scoredMail.text.includes(`${research.brief.sentences[0].text} ${research.brief.sentences[1].text}`), 'the score email ends with the brief');
   // Journey fix: Google lists at most 60 a search, so the research's quick count is a floor — never "Market too small".
   assert.equal(research.market.capped, true);
   assert.ok(!research.score.dealbreakers.some((d) => /Market too small/.test(d.text)), JSON.stringify(research.score.dealbreakers));

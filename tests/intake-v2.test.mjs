@@ -289,7 +289,7 @@ test('research run: crawl (robots honoured), Places, domain age, market preview,
   const id = await applied();
   await startResearch(id, { now: NOW });
   assert.equal((await getClient(id)).researchStep, 'running');
-  assert.deepEqual(await researchView(id), { status: 'pending', at: NOW.toISOString(), error: null, summary: null, website: null, business: null, market: null, flags: [], score: null, deep: null });
+  assert.deepEqual(await researchView(id), { status: 'pending', at: NOW.toISOString(), error: null, summary: null, website: null, business: null, market: null, flags: [], score: null, deep: null, brief: null });
 
   const r = await runResearch(id, { now: NOW, deadline: Date.now() + 60000 });
   assert.equal(r.status, 'done');
@@ -297,10 +297,12 @@ test('research run: crawl (robots honoured), Places, domain age, market preview,
   // robots.txt first (after a redirect to www), then pages; /contact-us is disallowed and never fetched.
   assert.deepEqual(pageLog.map((p) => p.url).slice(0, 3), ['https://acme-plumbing.com/robots.txt', 'https://www.acme-plumbing.com/robots.txt', 'https://www.acme-plumbing.com/']);
   assert.ok(!pageLog.some((p) => p.url.includes('contact-us')), 'robots.txt disallow honoured');
-  assert.ok(pageLog.every((p) => p.ua === 'AvianceBot/1.0 (+aviance.online/bot)' && p.redirect === 'manual' && p.service === 'crawl'));
+  // Every page of their site: the bot's name, redirects checked by hand. Plus one Google News request (Research v4).
+  assert.ok(pageLog.filter((p) => p.service !== 'news').every((p) => p.ua === 'AvianceBot/1.0 (+aviance.online/bot)' && p.redirect === 'manual' && p.service === 'crawl'));
+  assert.deepEqual(pageLog.filter((p) => p.service === 'news').map((p) => new URL(p.url).hostname), ['news.google.com']);
 
   const v = await researchView(id);
-  assert.deepEqual(Object.keys(v), ['status', 'at', 'error', 'summary', 'website', 'business', 'market', 'flags', 'score', 'deep']);
+  assert.deepEqual(Object.keys(v), ['status', 'at', 'error', 'summary', 'website', 'business', 'market', 'flags', 'score', 'deep', 'brief']);
   assert.deepEqual(Object.keys(v.website), ['url', 'title', 'description', 'headline', 'services', 'locations', 'phones', 'emails', 'socials', 'teamHint', 'yearsHint', 'pagesRead']);
   assert.deepEqual(Object.keys(v.business), ['name', 'address', 'category', 'rating', 'reviews', 'mapsUrl', 'phone']);
   // `capped`: a search filled Google's 60-per-search limit, so the estimate is a floor (journey fix).
@@ -319,10 +321,11 @@ test('research run: crawl (robots honoured), Places, domain age, market preview,
   assert.match(v.summary, /^Acme Plumbing is a plumber in Charlotte, NC \(4\.7★, 128 Google reviews\)\./);
   assert.deepEqual(v.flags, [], 'nothing to warn about');
 
-  // Places business lookup counted once under the Enterprise budget; IDs-only separately.
+  // Places: the business lookup and the competitors search (Research v4) counted under the Enterprise budget; IDs-only separately.
   const month = NOW.toISOString().slice(0, 7);
   const usage = await kv.hgetall(`usage:places:${new Date().toISOString().slice(0, 7)}`);
-  assert.equal(Number(usage.enterprise), 1);
+  assert.equal(Number(usage.enterprise), 2);
+  assert.deepEqual(v.deep.competitors, { query: 'Plumber in Charlotte, NC', items: [] }, 'the only plumber Google gave back is Acme itself');
   assert.equal(Number(usage.idsOnly), 6);
   assert.ok(month);
 

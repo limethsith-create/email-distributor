@@ -161,7 +161,9 @@ export const BENCHMARKS = {
 
 /** The benchmark for what they sell: the copy niche, refined by their own words. */
 export function benchmarkFor({ niche = 'trial-default', text = '' } = {}) {
-  const t = String(text || '').toLowerCase();
+  // What they SELL, not who buys it: "Managed IT for law firms and accounting firms" is IT, so the words
+  // after "for" (to the end of the sentence or title part) are left out (Research v4).
+  const t = String(text || '').toLowerCase().replace(/\bfor\b[^.|;\n]*/g, ' ');
   if (/\b(staffing|recruit\w*|temp agency)\b/.test(t)) return null;
   if (/\b(accounting|accountants?|cpas?|bookkeep\w*|tax (?:prep\w*|services?))\b/.test(t)) return BENCHMARKS.accounting;
   if (/\b(law firm|attorneys?|legal services?|lawyers?)\b/.test(t) && !/\bfor (?:law|legal)\b/.test(t)) return BENCHMARKS.law;

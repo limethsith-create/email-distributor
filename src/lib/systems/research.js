@@ -22,6 +22,12 @@
  *                   phrase (text after " for " / " to ").
  *  6. flags + a 2–3 sentence summary assembled from the facts above only.
  *
+ * Research v3 adds the whole site, documents, email setup, money and history
+ * (docs/assumptions/research-v3.md); v4 adds the news (Google News RSS), what
+ * they write about, who buys from them, competitors nearby (Places key only)
+ * and `brief` — up to 12 sentences for the launch call, each with its sources
+ * (systems/researchbrief.js) — and reads a fast site 8 pages at a time.
+ *
  * No AI anywhere: every value is a string found on a page or an API field;
  * anything not found stays null. Bounded per tick and resumable: progress
  * lives in the research hash and the `research` job continues it every
@@ -48,8 +54,9 @@ import { pageSignals, mergeSignals } from '@/lib/systems/fitsignals';
 import { scoreFit, fitScoreLine, teamFrom } from '@/lib/systems/fitscore';
 import { nicheOf } from '@/lib/systems/copy';
 import zlib from 'node:zlib';
-import { parseSitemap, robotsSitemaps, pickPages, normUrl, pageLinks, deepFactsOf, mergeDeep, emptyDeep, pdfText, docFacts, countFacts, CAPS } from '@/lib/systems/deepsite';
-import { emailSetup, webHistory, lookalikes, outboundSignal } from '@/lib/systems/webintel';
+import { parseSitemap, robotsSitemaps, pickPages, normUrl, pageLinks, deepFactsOf, mergeDeep, emptyDeep, pdfText, docFacts, countFacts, CAPS, crawlConcurrency, customersFrom, topPairs, postingRhythm, POST_PATH } from '@/lib/systems/deepsite';
+import { emailSetup, webHistory, lookalikes, outboundSignal, newsFor, newsFlagLine } from '@/lib/systems/webintel';
+import { buildBrief } from '@/lib/systems/researchbrief';
 import { federalMoney, secFilings, captureList, yearlyCaptures, timeline, benchmarkFor, revenueRange, nameCandidates } from '@/lib/systems/bizintel';
 
 const SYSTEM = 'research';
@@ -466,6 +473,7 @@ export function extractPage(html, { url, kind = 'home' } = {}) {
   const signals = pageSignals(lines.join('\n'), { hrefs: as.map((a) => a.href), page: base.pathname || '/' });
   const every = pageLinks(html, base.href);
   return {
+    path: base.pathname || '/',
     title: squash(decodeEntities((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '')) || null,
     description: metaContent(html, 'description') || metaContent(html, 'og:description') || null,
     headline: tagTexts(html, 'h1')[0] || null,
@@ -492,6 +500,15 @@ const uniqCI = (arr) => { const seen = new Set(); const out = []; for (const v o
 /** Fold one page into the accumulated facts (first value wins for single fields). */
 export function mergeFacts(acc, page, kind) {
   const a = acc || { title: null, description: null, headline: null, orgName: null, svcChild: [], svcHead: [], svcItems: [], svcHome: [], locations: [], phones: [], emails: [], socials: {}, teamCount: null, teamText: null, yearsHint: null };
+  // The page each fact first came from (the research brief cites it).
+  const src = a.src || (a.src = {});
+  const path = page.path || (kind === 'home' ? '/' : null);
+  if (path) {
+    if (!src.services && (page.services?.child?.length || (kind === 'services' && (page.services.headings.length || page.services.items.length)) || (kind === 'home' && page.services?.headings?.length))) src.services = path;
+    if (!src.years && page.yearsHint && !a.yearsHint) src.years = path;
+    if (!src.team && ((page.teamText && !a.teamText) || (page.teamCount && !a.teamCount))) src.team = path;
+    if (!src.locations && page.locations?.length) src.locations = path;
+  }
   if (kind === 'home') { a.title = a.title || page.title; a.description = a.description || page.description; a.headline = a.headline || page.headline; a.copyright = a.copyright || page.copyright; a.brand = a.brand || page.brand; }
   a.orgName = a.orgName || page.orgName;
   a.svcChild = uniqCI([...a.svcChild, ...page.services.child]);
@@ -587,6 +604,48 @@ export function pickBusiness(results, { mainDomain, name }) {
   return { business: list[0], matched: false, how: 'first' };
 }
 
+/**
+ * Competitors from a Places search: never the applicant itself (same website,
+ * a shared name word, or the same Maps listing), each business once, at most
+ * `max`, in Google's order.
+ */
+export function pickCompetitors(results, { mainDomain, name, self = null, max = 5 } = {}) {
+  const own = String(mainDomain || '').replace(/^www\./, '');
+  const label = own.split('.')[0];
+  const out = [];
+  for (const r of results || []) {
+    if (!r?.name || out.length >= max) continue;
+    if (r.website && own && hostOfUrl(r.website) === own) continue;
+    if (namesMatch(r.name, name) || (label && namesMatch(r.name, label))) continue;
+    if (self?.mapsUrl && r.mapsUrl === self.mapsUrl) continue;
+    if (out.some((c) => c.name.toLowerCase() === r.name.toLowerCase())) continue;
+    out.push({ name: r.name, rating: r.rating ?? null, reviews: r.reviews ?? null, website: r.website || null, mapsUrl: r.mapsUrl || null, address: r.address || null });
+  }
+  return out;
+}
+
+/**
+ * Competitors nearby (Research v4): one Places Text Search "{their Google
+ * category} in {their city}" — only with the Places key and a matched Google
+ * listing (the category is Google's, never guessed). Shown on the call only:
+ * never contacted, never stored as leads. Counted under usage:places
+ * `enterprise` (rating and review count are Enterprise fields).
+ * → { competitors: { query, items } | null, skipped: reason | null }
+ */
+export async function findCompetitors({ business = null, city = '', mainDomain = '', name = '', max = 5, timeoutMs = 8000 } = {}) {
+  if (!(await placesConfigured())) return { competitors: null, skipped: 'no_key' };
+  if (!business?.category) return { competitors: null, skipped: 'no_category' };
+  if (await isThrottled('places')) return { competitors: null, skipped: 'throttled' };
+  const where = squash(city);
+  const query = `${business.category}${where ? ` in ${where}` : ''}`;
+  try {
+    const results = await textSearchBusiness(query, { pageSize: Math.min(20, max * 2), timeoutMs });
+    return { competitors: { query, items: pickCompetitors(results, { mainDomain, name, self: business, max }) }, skipped: null };
+  } catch (err) {
+    return { competitors: null, skipped: `failed: ${String(err?.message || err).slice(0, 120)}` };
+  }
+}
+
 /** 'Unit 4, 123 Main St, Charlotte, NC 28202, USA' → 'Charlotte, NC'. */
 export function cityStateOf(address) {
   const m = String(address || '').match(/([A-Za-z][A-Za-z .'-]+),\s*([A-Z]{2})\s+\d{5}/);
@@ -664,6 +723,10 @@ async function loadState(clientId) {
     intel: asObject(raw.intel),
     money: asObject(raw.money),
     timeline: asArray(raw.timeline),
+    news: asObject(raw.news),
+    competitors: asObject(raw.competitors),
+    times: asArray(raw.times),
+    postUrls: Number(raw.postUrls) || 0,
   };
 }
 
@@ -675,6 +738,7 @@ async function saveState(clientId, s, extra = {}) {
     placesNote: s.placesNote || '', mkt: J(s.mkt), market: J(s.market), attempts: s.attempts,
     sitemaps: J(s.sitemaps || []), doneUrls: J((s.doneUrls || []).slice(-400)), deepQueue: J(s.deepQueue || []), deepRead: s.deepRead || 0, sitemapUrls: s.sitemapUrls || 0,
     bfs: s.bfs ? '1' : '0', deepAcc: J(s.deepAcc), docsDone: J(s.docsDone || []), intel: J(s.intel), money: J(s.money), timeline: J(s.timeline || []),
+    news: J(s.news), competitors: J(s.competitors), times: J((s.times || []).slice(-40)), postUrls: s.postUrls || 0,
     ...extra,
   });
 }
@@ -848,7 +912,9 @@ export async function runResearch(clientId, { now = io.now(), deadline = Date.no
       if (!robotsAllows(s.robots, '/')) { s.homeError = ROBOTS_BLOCKED; s.step = 'intel'; }
       else {
         if (timeoutFor() < 2500) { await saveState(clientId, s); return { status: 'pending' }; }
+        const t0 = Date.now();
         const home = await fetchPage(`${s.origin}/`, opts());
+        if (home.ok) s.times = [...(s.times || []), Date.now() - t0];
         s.tried = ['home'];
         if (!home.ok) { s.homeError = home.error || 'no answer'; s.step = 'intel'; }
         else {
@@ -874,8 +940,10 @@ export async function runResearch(clientId, { now = io.now(), deadline = Date.no
       let path = '/';
       try { path = new URL(next.url).pathname; } catch {}
       if (robotsAllows(s.robots, path)) {
+        const t0 = Date.now();
         const res = await fetchPage(next.url, opts());
         if (res.ok) {
+          s.times = [...(s.times || []), Date.now() - t0];
           s.acc = mergeFacts(s.acc, extractPage(res.html, { url: res.url, kind: next.kind }), next.kind);
           s.deepAcc = mergeDeep(s.deepAcc, deepFactsOf(res.html, { url: res.url }));
           s.pagesRead += 1;
@@ -889,6 +957,7 @@ export async function runResearch(clientId, { now = io.now(), deadline = Date.no
     if (s.step === 'discover') {
       const maps = [...new Set([...(s.sitemaps || []), `${s.origin}/sitemap.xml`, `${s.origin}/sitemap_index.xml`, `${s.origin}/wp-sitemap.xml`])];
       const urls = [];
+      const lastmod = {};
       let fetched = 0;
       while (maps.length && fetched < R.deepSitemaps && urls.length < R.deepMaxPages * 4) {
         if (timeoutFor() < 2500) break;
@@ -901,12 +970,15 @@ export async function runResearch(clientId, { now = io.now(), deadline = Date.no
         if (!r.ok) continue;
         const parsed = parseSitemap(r.html);
         if (parsed.index) maps.unshift(...parsed.locs.filter((u) => !/image|video|author|tag|category/i.test(u)).slice(0, 6));
-        else urls.push(...parsed.locs);
+        else { urls.push(...parsed.locs); for (const l of parsed.lastmods) if (l.lastmod) lastmod[normUrl(l.url)] = l.lastmod; }
         if (urls.length && !parsed.index && !maps.some((m) => (s.sitemaps || []).includes(m))) break; // a real list found; the rest are fallbacks
       }
       s.sitemapUrls = urls.length;
       s.bfs = urls.length === 0;
-      s.deepQueue = pickPages([...urls, ...(s.acc?.siteLinks || [])], { origin: s.origin, done: s.doneUrls || [], max: R.deepMaxPages });
+      // Posts their site lists (the posting rhythm says "at least" when more were listed than read).
+      s.postUrls = new Set(urls.filter((u) => { try { return POST_PATH.test(new URL(u).pathname); } catch { return false; } }).map(normUrl)).size;
+      // Speed: with more pages than the budget, pages last changed over RESEARCH.deepStaleYears ago are skipped (posts first).
+      s.deepQueue = pickPages([...urls, ...(s.acc?.siteLinks || [])], { origin: s.origin, done: s.doneUrls || [], max: R.deepMaxPages, lastmod, staleYears: R.deepStaleYears || 0, now: now.getTime() });
       s.step = 'deep';
       await saveState(clientId, s);
     }
@@ -914,16 +986,20 @@ export async function runResearch(clientId, { now = io.now(), deadline = Date.no
     while (s.step === 'deep') {
       if (!s.deepQueue.length || s.deepRead >= R.deepMaxPages) { s.step = 'docs'; await saveState(clientId, s); break; }
       if (timeoutFor() < 3000) { await saveState(clientId, s); return { status: 'pending' }; }
-      const batch = s.deepQueue.splice(0, R.deepConcurrency);
+      // Speed: 5 pages at a time, 8 when the site answers fast (median under RESEARCH.deepFastMs); the page budget stays the same.
+      const batch = s.deepQueue.splice(0, Math.min(crawlConcurrency(s.times, R), R.deepMaxPages - s.deepRead));
       const results = await Promise.all(batch.map(async (url) => {
         let path = '/';
         try { path = new URL(url).pathname; } catch {}
         if (!robotsAllows(s.robots, path)) return { url, res: null };
-        return { url, res: await fetchPage(url, opts()) };
+        const t0 = Date.now();
+        const res = await fetchPage(url, opts());
+        return { url, res, ms: Date.now() - t0 };
       }));
-      for (const { url, res } of results) {
+      for (const { url, res, ms } of results) {
         s.doneUrls = [...new Set([...(s.doneUrls || []), normUrl(url), ...(res?.ok ? [normUrl(res.url)] : [])])];
         if (!res?.ok) continue;
+        s.times = [...(s.times || []), ms].slice(-40);
         s.deepRead += 1;
         const kind = Object.entries(LINK_PATTERNS).find(([, re]) => { try { return re.test(new URL(res.url).pathname); } catch { return false; } })?.[0] || 'other';
         const page = extractPage(res.html, { url: res.url, kind });
@@ -994,6 +1070,19 @@ export async function runResearch(clientId, { now = io.now(), deadline = Date.no
         secFilings(names[0] || client.name, { userAgent: R.secUserAgent, timeoutMs: Math.min(8000, left() - 1500) }),
       ]);
       s.money = { federal: fed.status === 'fulfilled' ? fed.value : null, sec: sec.status === 'fulfilled' ? sec.value : null, names, states };
+      s.step = 'news';
+      await saveState(clientId, s);
+    }
+
+    // 2e'. the news: one Google News RSS request (keyless) for their name in their city
+    if (s.step === 'news') {
+      if (domain || client.name) {
+        if (left() < 10000) { await saveState(clientId, s); return { status: 'pending' }; }
+        const application = (await kv.hgetall(K.application(clientId)).catch(() => null)) || {};
+        const name = (s.money?.names || [])[0] || client.name || domain;
+        const city = application.web_city || cityStateOf(s.business?.address) || (s.acc?.locations || [])[0] || '';
+        s.news = await newsFor({ name, city, max: R.newsItems || 5, timeoutMs: Math.min(8000, left() - 1500), userAgent: R.userAgent });
+      }
       s.step = 'history';
       await saveState(clientId, s);
     }
@@ -1046,6 +1135,20 @@ export async function runResearch(clientId, { now = io.now(), deadline = Date.no
           s.placesNote = `failed: ${String(err?.message || err).slice(0, 120)}`;
         }
       }
+      s.step = R.deep ? 'competitors' : 'market';
+      await saveState(clientId, s);
+    }
+
+    // 4b. competitors nearby: businesses of the same Google category in their city (Places key only; never contacted, never leads)
+    if (s.step === 'competitors') {
+      if (left() < 3000) { await saveState(clientId, s); return { status: 'pending' }; }
+      const application = (await kv.hgetall(K.application(clientId)).catch(() => null)) || {};
+      const r = await findCompetitors({
+        business: s.businessMatched ? s.business : null, city: cityStateOf(s.business?.address) || application.web_city || (s.acc?.locations || [])[0] || '',
+        mainDomain: domain, name: client.name, max: R.competitors || 5, timeoutMs: Math.min(8000, left() - 500),
+      });
+      s.competitors = r.competitors;
+      if (String(r.skipped || '').startsWith('failed')) await logEvent(clientId, SYSTEM, 'competitors_failed', { error: r.skipped });
       s.step = 'market';
       await saveState(clientId, s);
     }
@@ -1202,17 +1305,19 @@ async function finish(clientId, client, s, { now, R }) {
     homeError: s.homeError && s.homeError !== ROBOTS_BLOCKED ? s.homeError : null, robotsBlocked: s.homeError === ROBOTS_BLOCKED,
     registeredAt: s.registeredAt, agencyHit, now, newSiteDays: R.newSiteDays,
   });
-  const deep = deepOut(s, website);
+  const deep = deepOut(s, website, { now, names: [name, ...(s.money?.names || [])], domain: client.mainDomain });
   if (deep?.money) {
     // Revenue: a range from public facts only (headcount and/or PPP payroll), with its basis — never a single guessed number.
     const team = teamFrom({ employees: application.employees, teamText: s.acc?.teamText, teamCount: s.acc?.teamCount, people: deep.people.length, schemaEmployees: deep.company?.employees });
-    const bench = benchmarkFor({ niche: nicheOf({ ...(await getProfile(clientId)), sellsTo: application.web_sellsTo }), text: `${application.web_sellsTo || ''} ${website.title || ''} ${website.description || ''}` });
+    const bench = benchmarkFor({ niche: nicheOf({ ...(await getProfile(clientId)), sellsTo: application.web_sellsTo }), text: [application.web_sellsTo, website.title, website.description].filter(Boolean).join('. ') });
     deep.money.revenue = revenueRange({ headcount: team?.n || null, headcountExact: Boolean(team?.exact), payroll: deep.money.federal?.payroll || null, bench });
     deep.money.benchmark = bench ? bench.label : null;
   }
   const outbound = outboundSignal(s.intel?.lookalikes || []);
   if (outbound) flags.push(outbound);
   if (deep && deep.emailSetup?.dmarc === 'missing') flags.push({ level: 'info', text: `${client.mainDomain} has no DMARC record (their own email security is basic)` });
+  const newsFlag = newsFlagLine(deep?.news);
+  if (newsFlag) flags.push(newsFlag);
   const summary = [buildSummary({ name, host: client.mainDomain, website, business: s.business, businessMatched: s.businessMatched, market: s.market }), deep ? deepLine(deep) : ''].filter(Boolean).join(' ');
   const profile = await getProfile(clientId);
   const customers = customerPhrase(profile.sellsTo || application.web_sellsTo || '');
@@ -1228,28 +1333,46 @@ async function finish(clientId, client, s, { now, R }) {
   } catch (err) {
     await logEvent(clientId, SYSTEM, 'score_failed', { error: String(err?.message || err).slice(0, 200) });
   }
+  // The brief the owner reads before the launch call: plain sentences from the facts above, each with its source.
+  let brief = null;
+  try {
+    brief = buildBrief({
+      name, origin: s.origin, website, deep, business: s.business, businessMatched: s.businessMatched, score, application, customers,
+      registeredAt: s.registeredAt, src: s.acc?.src || {}, signals: s.acc?.signals || {}, teamText: s.acc?.teamText, teamCount: s.acc?.teamCount, max: R.briefMax || 12,
+    });
+  } catch (err) {
+    await logEvent(clientId, SYSTEM, 'brief_failed', { error: String(err?.message || err).slice(0, 200) });
+  }
   await kv.hset(K.research(clientId), {
     status: 'done', step: 'done', at: now.toISOString(), error: '', summary,
-    website: J(website), business: J(s.business), market: J(s.market), flags: J(flags), prefilled: J(prefilled), score: J(score), deep: J(deep),
-    acc: '', queue: '', mkt: '', deepAcc: '', deepQueue: '', doneUrls: '', docsDone: '',
+    website: J(website), business: J(s.business), market: J(s.market), flags: J(flags), prefilled: J(prefilled), score: J(score), deep: J(deep), brief: J(brief),
+    acc: '', queue: '', mkt: '', deepAcc: '', deepQueue: '', doneUrls: '', docsDone: '', news: '', competitors: '', times: '',
   });
   await updateClient(clientId, { researchStep: '' });
-  await logEvent(clientId, SYSTEM, 'done', { pagesRead: s.pagesRead, deepPages: s.deepRead || 0, facts: deep?.facts ?? null, business: Boolean(s.business), market: s.market?.estimate ?? null, flags: flags.length, prefilled, score: score?.score ?? null, grade: score?.grade ?? null });
+  await logEvent(clientId, SYSTEM, 'done', { pagesRead: s.pagesRead, deepPages: s.deepRead || 0, facts: deep?.facts ?? null, business: Boolean(s.business), market: s.market?.estimate ?? null, flags: flags.length, prefilled, score: score?.score ?? null, grade: score?.grade ?? null, brief: brief?.sentences.length ?? 0 });
   // The owner already had the application alert without the score (research ran past the request): send the score now.
   if (score && application.alertedAt && application.review === 'pending' && client.state === 'applied') {
     await io.alertOwner('application_scored', {
       clientId,
       scope: `${clientId}:score`,
       vars: { company: name, score: typeof score.score === 'number' ? `${score.score}/100 (${score.label})` : score.label },
-      body: `${score.summary}${score.dealbreakers.length ? `\n\nDealbreakers:\n${score.dealbreakers.map((d) => `- ${d.text}`).join('\n')}` : ''}${score.questions.length ? `\n\nAsk them:\n${score.questions.slice(0, 4).map((q) => `- ${q}`).join('\n')}` : ''}`,
+      body: `${score.summary}${score.dealbreakers.length ? `\n\nDealbreakers:\n${score.dealbreakers.map((d) => `- ${d.text}`).join('\n')}` : ''}${score.questions.length ? `\n\nAsk them:\n${score.questions.slice(0, 4).map((q) => `- ${q}`).join('\n')}` : ''}${briefLead(brief) ? `\n\n${briefLead(brief)}` : ''}`,
       did: 'The full scorecard is on the application in the hub. Nothing was sent to them.',
     }).catch(() => {});
   }
-  return { status: 'done', summary, flags, score };
+  return { status: 'done', summary, flags, score, brief };
 }
 
-/** The deep record the hub shows (docs/HUB-API.md "research.deep"), or null when the deep pass did not run. */
-export function deepOut(s, website = {}) {
+/** The brief's first two sentences (the end of the owner's application_scored alert), '' without a brief. */
+export function briefLead(brief) {
+  return (brief?.sentences || []).slice(0, 2).map((x) => x.text).join(' ');
+}
+
+/**
+ * The deep record the hub shows (docs/HUB-API.md "research.deep"), or null when the deep pass did not run.
+ * `names` / `domain`: the company's own names (their words are kept out of the blog topics).
+ */
+export function deepOut(s, website = {}, { now = new Date(), names = [], domain = '' } = {}) {
   const d = s.deepAcc;
   if (!d && !s.intel) return null;
   const dd = d || emptyDeep();
@@ -1280,12 +1403,23 @@ export function deepOut(s, website = {}) {
     money: s.money || null,
     offers: dd.offers || { ctas: [], promos: [], magnets: [], plans: [] },
     ads: (dd.tech || []).filter((t) => t.kind === 'ads').map((t) => t.name),
+    orgPage: dd.orgPage || null,
+    // Research v4: who buys from them, what they write about, the news, who is nearby.
+    customers: customersFrom(dd),
+    topics: {
+      pairs: topPairs(dd.pairs || {}, { max: 8, exclude: [...new Set((names || []).flatMap((n) => nameTokens(n)))], label: String(domain || '').split('.')[0] }),
+      rhythm: postingRhythm(dd.posts || [], { now, known: s.postUrls || 0 }),
+    },
+    news: s.news || null,
+    competitors: s.competitors || null,
   };
   out.facts = countFacts(dd) + (out.emailSetup ? 2 + (out.emailSetup.senders || []).length + (out.emailSetup.verifiedTools || []).length : 0)
     + (out.history?.firstSeen ? 2 : 0) + (out.lookalikes || []).length
     + (out.timeline || []).reduce((n, y) => n + [y.title, y.headline, y.description].filter(Boolean).length, 0)
     + (out.money?.federal ? (out.money.federal.ppp || []).length * 2 + (out.money.federal.contracts || []).length * 2 + (out.money.federal.grants || []).length * 2 + (out.money.federal.payroll ? 1 : 0) : 0)
     + (out.money?.sec ? (out.money.sec.filings || []).length : 0)
+    + out.customers.segments.length + out.customers.examples.length + out.topics.pairs.length + (out.topics.rhythm ? 1 : 0)
+    + (out.news?.items || []).length + (out.competitors?.items || []).length
     + (website.services || []).length + (website.locations || []).length + (website.phones || []).length + (website.emails || []).length + Object.keys(website.socials || {}).length;
   return out;
 }
@@ -1350,6 +1484,7 @@ export function researchFromHash(raw) {
     flags: asArray(raw.flags).filter((f) => f && typeof f === 'object'),
     score: raw.score ? asObject(raw.score) : null,
     deep: raw.deep ? asObject(raw.deep) : null,
+    brief: raw.brief ? asObject(raw.brief) : null,
   };
 }
 

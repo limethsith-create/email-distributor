@@ -254,6 +254,7 @@ Places + a quick market count). No AI: extracted facts only. Re-run:
   "business": { "name": "…", "address": "…", "category": "Plumber", "rating": 4.7, "reviews": 128, "mapsUrl": "…", "phone": "…" } | null,
   "market": { "query": "property management companies in Charlotte, NC", "estimate": 1450, "source": "places|overpass" } | null,
   "flags": [ { "level": "warn|info", "text": "Website mentions 'appointment setting' — could be an agency" } ],
+  "brief": { "text": "…", "sentences": [ { "text": "…", "sources": ["…"] } ], "sources": ["…"] } | null,   // Research v4 — see below
   "score": {                                          // Fit Score (systems/fitscore.js), null until research is done
     "score": 82 | null,                               // points earned out of the points that could be checked, 0–100
     "grade": "A|B|C|D" | null,                        // A ≥ 80, B ≥ 65, C ≥ 50 (FITSCORE.grades); any dealbreaker → D
@@ -275,7 +276,7 @@ webintel.js, bizintel.js), null when the deep pass did not run:
   "facts": 212, "pagesRead": 48, "sitemapPages": 130, "words": 31240,
   "people": [ { "name": "Jane Hill", "title": "Founder & CEO", "page": "/team" } ],
   "clients": [ { "name": "Smith & Lowe Law", "page": "/" } ], "testimonials": [ { "quote": "…", "by": "Ann Lowe", "page": "/" } ],
-  "caseStudies": [ { "title": "…", "page": "/case-studies/x" } ], "industries": ["law firms"],
+  "caseStudies": [ { "title": "…", "page": "/case-studies/x", "segments": ["law firms"] } ], "industries": ["law firms"],   // segments: v4, the customer segments its title names
   "credentials": [ { "name": "SOC 2", "quote": "…", "page": "/about" } ], "prices": [ { "text": "$129 per user per month", "page": "/pricing" } ],
   "addresses": ["100 Main St, Charlotte, NC 28202"], "jobs": [ { "title": "Account Executive", "sales": true, "page": "/careers" } ],
   "blog": { "posts": 30, "dated": 28, "first": "2019-02-01", "latest": "2026-08-01", "recent": [ … ] },
@@ -295,9 +296,57 @@ webintel.js, bizintel.js), null when the deep pass did not run:
     "sec": { "total": 0, "filings": [ { "form": "D", "date": "…", "entity": "…", "url": "…" } ], "raisedMoney": false } | null,
     "revenue": [ { "low": 2520000, "high": 4500000, "basis": "18 people × $140,000–$250,000 revenue per employee …", "floor": false, "year": 2019 } ] | null,
     "benchmark": "IT services / MSPs" | null
-  }
+  },
+  "orgPage": "/" | null,                              // the page their schema.org company data came from
+  // ── Research v4 (2026-09-27) ──
+  "news": {                                           // Google News RSS, one keyless request: "{name}" + their city; null when not asked
+    "query": "Ridgeline IT", "url": "https://news.google.com/rss/search?q=…",
+    "items": [ { "title": "Ridgeline IT opens a Raleigh office & adds six staff", "source": "Charlotte Business Journal", "date": "2026-06-15" | null, "link": "https://news.google.com/rss/articles/…" | null } ],   // newest first, RESEARCH.newsItems (5) at most
+    "flags": [ { "kind": "layoffs|lawsuit|acquisition|funding|new office|award", "level": "warn|info", "title": "…", "source": "…", "date": "…", "link": "…" } ],   // rules on the headlines only
+    "error": "HTTP 503|not a news feed|timed out" | null
+  } | null,
+  "topics": {                                         // what they write about (their blog / news posts only)
+    "pairs": [ { "text": "microsoft 365", "count": 4, "posts": 3 } ],   // the 8 most frequent two-word phrases (stop words and their own name out; seen ≥ 2 times)
+    "rhythm": { "text": "about 2 posts a month, last one 12 days ago", "perMonth": 2.1, "inLastYear": 25, "last": "2026-09-15", "lastDays": 12, "atLeast": false } | null   // atLeast: their sitemap lists more posts than were read
+  },
+  "customers": {                                      // who buys from them: industry pages, page words, testimonials, case studies, client names
+    "segments": [ { "name": "law firms", "count": 10, "pages": ["/", "/industries/law-firms"] } ],   // counted (one per page / testimonial / case study / client), most first, ≤ 6
+    "examples": [ { "name": "Hollis & Grant Law", "page": "/", "how": "client list|testimonial" } ],   // named clients, ≤ 8 (tech vendors and badges left out)
+    "line": "They mostly serve law firms and accounting firms; named clients include Hollis & Grant Law, …" | null
+  },
+  "competitors": {                                    // only with the Places key and a matched Google listing: "{their Google category} in {their city}"
+    "query": "Computer support and services in Charlotte, NC",
+    "items": [ { "name": "Queen City Tech Partners", "rating": 4.9, "reviews": 212, "website": "…" | null, "mapsUrl": "…", "address": "…" } ]   // ≤ RESEARCH.competitors (5), never the applicant
+  } | null                                            // shown on the call only — never contacted, never leads
 }
 ```
+`research.brief` — the brief the owner reads before the launch call (Research
+v4, systems/researchbrief.js): up to `RESEARCH.briefMax` (12) plain sentences
+built by rules from the facts above — what they sell, to whom, since when,
+size, money on the record, proof, the offers they run, what their website is
+missing, what they write about, the news, who is nearby, two angles for the
+call (the Fit Score's strongest facts) and the risk to raise (a dealbreaker,
+a warning, a news warning, else the weakest fact). A sentence is written only
+when its fact exists, so a thin site gives fewer (never made up); null when
+nothing at all was found. Show it **at the top of the trial's research
+section**, and on the **launch-call card as "Before the call"** (the card
+reads `application.research.brief`; no extra call).
+```jsonc
+"brief": {
+  "text": "Ridgeline IT sells Managed IT services, … (all sentences as one paragraph)",
+  "sentences": [ { "text": "They mostly serve law firms and accounting firms; named clients include …", "sources": ["https://www.ridgelineit.com/", "…"] } ],
+  "sources": ["https://www.ridgelineit.com/services", "https://web.archive.org/web/*/ridgelineit.com", "USAspending.gov", "fit score"]
+} | null
+```
+Every sentence has at least one source: a full URL (a page of their site, a
+Google Maps listing, a news story, the Wayback Machine, an SEC filing) or a
+plain label when the fact has no page ("their application", "fit score",
+"USAspending.gov", "domain registration (RDAP)", a Census benchmark's name).
+`brief.sources` is every source once, in order of first use — link the URLs,
+show labels as text. A news story about layoffs or a lawsuit also adds a
+`warn` line to `research.flags` ("In the news for “…”: lawsuit — “…”"; other
+kinds are `info`). The `application_scored` alert's body ends with the brief's
+first two sentences.
 Research runs the moment an application arrives (after() in /api/apply,
 RESEARCH.* limits) and hands over to a fresh function when it needs more time
 (`POST /api/cron/research?client=&hop=`, cron key, RESEARCH.maxHops).

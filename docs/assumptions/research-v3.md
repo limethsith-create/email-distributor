@@ -35,3 +35,25 @@ Timing: research starts in `after()` of POST /api/apply the moment the form
 is sent and hands over to a fresh function (`/api/cron/research`, cron key,
 `RESEARCH.maxHops`) until done; the new_application alert goes out at once and
 one application_scored alert follows with the score.
+
+## v4 additions (2026-09-27, docs/IMPROVE-PASS.md A)
+
+| Source | What it gives | Module |
+|---|---|---|
+| Google News RSS (`news.google.com/rss/search?q="{name}"+{city}`, keyless, one request per applicant, no retry) | the 5 newest stories (title, source, date, link); a flag when a headline says layoffs, lawsuit, acquisition, funding, new office or award (rules on the headline only) | webintel.js `newsFor` |
+| Their blog / news posts (already crawled) | the 8 most frequent two-word phrases (stop words and their own name out, seen ≥ 2 times; the tail of a three-word run dropped) and the posting rhythm | deepsite.js `topPairs`, `postingRhythm` |
+| Their pages, testimonials, case-study titles, client logos, industry pages | customer segments counted (one per source), up to 8 named clients (tech vendors and badges left out), one plain line | deepsite.js `customersFrom` |
+| Google Places (key only; one Enterprise-SKU call) | 5 businesses of their Google category in their city — shown on the call, never contacted, never leads | research.js `findCompetitors` |
+| All of the above + the Fit Score | `research.brief`: up to 12 sentences, each with its sources; a sentence only when its fact exists | researchbrief.js |
+
+GDELT stays out (rate limits); Google News RSS is used instead because it is
+keyless and one request per applicant is well inside what it tolerates. Its
+search matches the whole article, so a story can be about their market rather
+than them: the brief prefers a flagged headline, then one that names them.
+
+Speed: pages are timed; the deep crawl reads 8 at a time (not 5) once the
+median answer is under 800 ms, with the same page budget. When the sitemap
+lists more pages than the budget, pages whose `lastmod` is older than 3 years
+are skipped — posts first; the about / team / services / industries pages
+never. The revenue benchmark now reads what they sell, not who buys it
+("Managed IT for … accounting firms" is IT, not accounting).
