@@ -347,7 +347,7 @@ export function teamFacts(html, text, kind, schema) {
     const n = Number(m[1]);
     if (n >= 2 && n <= 10000) teamText = m[2] ? `Website says ${m[0].replace(/\s+/g, ' ').trim()}` : `Website says a team of ${m[1]}${/\+/.test(m[0]) ? '+' : ''}`;
   }
-  if (!teamText && schema.employees) teamText = `Website lists ${schema.employees} employees (schema.org)`;
+  if (!teamText && schema.employees) teamText = `Website lists ${schema.employees} employees`;
   let teamCount = null;
   if (kind === 'team') {
     const counts = {};

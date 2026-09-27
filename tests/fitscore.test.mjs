@@ -51,7 +51,7 @@ test('a strong applicant: A, every part explained, most points checked', () => {
   assert.equal(f.parts.reduce((s, p) => s + p.max, 0), 100);
   for (const p of f.parts) for (const i of p.items) assert.doesNotMatch(i.text, /undefined|null|NaN/);
   const team = f.parts.find((p) => p.key === 'size').items[0];
-  assert.equal(team.text, 'About 18 people (Website says a team of 18) — inside 5–50');
+  assert.equal(team.text, 'About 18 people (website says a team of 18) — inside 5–50');
   assert.deepEqual(f.dealbreakers, []);
   assert.match(fitScoreLine(f), /^Fit score: \d+\/100 \(A\) — Strong fit/);
 });

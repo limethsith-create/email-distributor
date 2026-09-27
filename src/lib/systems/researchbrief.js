@@ -31,6 +31,22 @@ const dayText = (iso) => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(
 /** Drop-order when there are more than `max` sentences (the least needed on the call first). */
 const DROP = ['competitors', 'money', 'topics', 'news'];
 
+/** A news flag's kind (webintel NEWS_RULES) as the thing a story mentions. */
+const MENTIONS = { layoffs: 'layoffs', lawsuit: 'a lawsuit', acquisition: 'an acquisition', funding: 'funding', 'new office': 'a new office', award: 'an award' };
+const mentions = (kind) => MENTIONS[kind] || String(kind || '');
+
+/** The public source behind a revenue range's basis: the Census survey's page, plus any named industry benchmark. */
+const CENSUS_URL = 'https://www.census.gov/programs-surveys/susb.html';
+function basisSources(basis) {
+  const inner = String(basis || '').match(/\(([^)]*)\)\s*$/)?.[1] || '';
+  const out = /census/i.test(inner) ? [CENSUS_URL] : [];
+  for (const part of inner.split(',').map((s) => s.trim()).filter(Boolean)) {
+    if (/census|NAICS|SUSB|:/i.test(part) || part.length > 40) continue;
+    out.push(`${part} (industry benchmark)`);
+  }
+  return out.length ? out : [CENSUS_URL];
+}
+
 /**
  * @param {object} x
  *   name, origin         the company's name; their site's origin ("https://www.x.com")
@@ -104,7 +120,7 @@ export function buildBrief(x = {}) {
   const mon = [];
   const monSrc = [];
   const rev = (m?.revenue || [])[0];
-  if (rev && rev.low && rev.high) { mon.push(`Revenue is likely ${rev.floor ? 'at least ' : ''}${money(rev.low)}–${money(rev.high)} a year (${clip(String(rev.basis || '').replace(/\s*\([^)]*\)\s*$/, ''), 110)})`); monSrc.push(String(rev.basis || '').match(/\(([^)]*)\)\s*$/)?.[1] || 'Census SUSB benchmark'); }
+  if (rev && rev.low && rev.high) { mon.push(`Revenue is likely ${rev.floor ? 'at least ' : ''}${money(rev.low)}–${money(rev.high)} a year (${clip(String(rev.basis || '').replace(/\s*\([^)]*\)\s*$/, ''), 110)})`); monSrc.push(...basisSources(rev.basis)); }
   const ppp = (m?.federal?.ppp || []).filter((l) => l.amount > 0).sort((p, q) => String(p.date).localeCompare(String(q.date)))[0];
   if (ppp) { mon.push(`${mon.length ? 'the' : 'The'} public record shows a $${Math.round(ppp.amount).toLocaleString('en-US')} PPP loan${monthYear(ppp.date) ? ` from ${monthYear(ppp.date)}` : ''}`); monSrc.push('USAspending.gov'); }
   const contracts = (m?.federal?.contracts || []).filter((c) => c.amount > 0);
@@ -175,7 +191,7 @@ export function buildBrief(x = {}) {
   const story = flag || named || (news?.items || [])[0];
   if (story?.title) {
     const when = [story.source, dayText(story.date)].filter(Boolean).join(', ');
-    say('news', flag ? `In the news: “${clip(story.title, 120)}”${when ? ` (${when})` : ''} — the headline mentions ${flag.kind}` : `Latest news found for “${news.query}”: “${clip(story.title, 120)}”${when ? ` (${when})` : ''}`, [story.link || news.url]);
+    say('news', flag ? `In the news: “${clip(story.title, 120)}”${when ? ` (${when})` : ''} — it mentions ${mentions(flag.kind)}` : `Latest news found for “${news.query}”: “${clip(story.title, 120)}”${when ? ` (${when})` : ''}`, [story.link || news.url]);
   }
 
   // 11. Who is nearby (never contacted — only shown on the call).
@@ -204,7 +220,7 @@ export function buildBrief(x = {}) {
   const weakest = [...ranked].reverse().flatMap((p) => (p.items || []).filter((i) => i.status === 'bad'))[0];
   if (sc?.dealbreakers?.length) say('risk', `The risk to raise: ${lowerFirst(sc.dealbreakers[0].text)} — a dealbreaker`, [sc.dealbreakers[0].evidence?.page || 'fit score']);
   else if (sc?.warnings?.length) say('risk', `The risk to raise: ${lowerFirst(sc.warnings[0].text)}`, [sc.warnings[0].evidence?.page || 'fit score']);
-  else if (newsWarn) say('risk', `The risk to raise: a news story mentions ${newsWarn.kind} (“${clip(newsWarn.title, 100)}”)`, [newsWarn.link || news.url]);
+  else if (newsWarn) say('risk', `The risk to raise: a news story mentions ${mentions(newsWarn.kind)} (“${clip(newsWarn.title, 100)}”)`, [newsWarn.link || news.url]);
   else if (weakest) say('risk', `The risk to raise: ${lowerFirst(weakest.text)}`, [weakest.evidence?.page || 'fit score']);
   else if (sc?.questions?.length) say('risk', `Still open — ask them: ${sc.questions[0]}`, ['fit score']);
 

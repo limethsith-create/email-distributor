@@ -59,6 +59,9 @@ export function yearsFrom(hint, now = new Date()) {
   return n ? Number(n[1]) : null;
 }
 
+/** "Website says a team of 16" → "website says a team of 16" inside a sentence. */
+const lowerSource = (s) => String(s || '').replace(/^Website\b/, 'website');
+
 /** People count from the application, the "team of 25" text, or the team page (a lower bound). */
 export function teamFrom({ employees, teamText, teamCount, people = 0, schemaEmployees = null }) {
   const e = numOr(employees);
@@ -167,10 +170,10 @@ export function scoreFit(x = {}, opts = {}) {
   const team = teamFrom({ employees: a.employees, teamText: x.teamText, teamCount: x.teamCount, people: deep?.people?.length || 0, schemaEmployees: deep?.company?.employees });
   const { employeesMin: eMin, employeesMax: eMax } = fitRules;
   if (!team) item('size', { max: 7, status: 'unknown', text: 'How many people work there: not found', ask: 'How many people work at the company?' });
-  else if (team.n >= eMin && team.n <= eMax) item('size', { max: 7, share: 1, status: 'good', text: `About ${team.n} people (${team.source}) — inside ${eMin}–${eMax}` });
-  else if (team.n > eMax) item('size', { max: 7, share: team.n <= eMax * 2 ? 0.4 : 0.15, status: 'bad', text: `About ${team.n} people (${team.source}) — bigger than ${eMax}; a committee may decide`, ask: 'Can the person on the call approve $2,497 a month alone?' });
+  else if (team.n >= eMin && team.n <= eMax) item('size', { max: 7, share: 1, status: 'good', text: `About ${team.n} people (${lowerSource(team.source)}) — inside ${eMin}–${eMax}` });
+  else if (team.n > eMax) item('size', { max: 7, share: team.n <= eMax * 2 ? 0.4 : 0.15, status: 'bad', text: `About ${team.n} people (${lowerSource(team.source)}) — bigger than ${eMax}; a committee may decide`, ask: 'Can the person on the call approve $2,497 a month alone?' });
   else if (!team.exact) item('size', { max: 7, status: 'unknown', text: `${team.source} — the page may not list everyone`, ask: 'How many people work at the company?' });
-  else item('size', { max: 7, share: team.n >= 3 ? 0.4 : 0, status: 'bad', text: `About ${team.n} people (${team.source}) — smaller than ${eMin}` });
+  else item('size', { max: 7, share: team.n >= 3 ? 0.4 : 0, status: 'bad', text: `About ${team.n} people (${lowerSource(team.source)}) — smaller than ${eMin}` });
 
   const founded = deep?.company?.founded ? yearsFrom(deep.company.founded, now) : null;
   const years = yearsFrom(web.yearsHint, now) ?? founded;

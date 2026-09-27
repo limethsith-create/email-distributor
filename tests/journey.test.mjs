@@ -239,7 +239,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   // Research v4: the news, what they write about, who buys from them, who is nearby — and the brief for the launch call.
   assert.equal(research.deep.news.items.length, 2);
   assert.deepEqual(research.deep.news.flags.map((f) => f.kind), ['new office']);
-  assert.deepEqual(research.deep.topics.pairs.map((p) => p.text), ['microsoft 365', 'phishing emails']);
+  assert.deepEqual(research.deep.topics.pairs.map((p) => p.text), ['Microsoft 365', 'phishing emails']);
   assert.deepEqual(research.deep.customers.segments.slice(0, 2).map((x) => x.name), ['law firms', 'accounting firms']);
   assert.equal(research.deep.competitors.items.length, 5);
   assert.ok(!research.deep.competitors.items.some((c) => c.name === 'Ridgeline IT'), 'never themselves');

@@ -280,7 +280,9 @@ test('brief: 8–12 plain sentences from the facts, each with its sources; order
   assert.ok(t.includes('Their website shows 1 testimonial, 1 case study, and 1 named client; they name SOC 2; Google rates them 4.8★ from 61 reviews.'));
   assert.ok(t.includes('Offers they run: their main call to action is “Book a free network assessment”; they promise no long-term contracts; published plans: Essentials ($99 per user / month); a free download (“Download the IT buyer guide”).'), 'the free assessment the button already says is not repeated');
   assert.ok(t.includes('On the 22 pages read, their website has no booking link.'), 'only what is missing: they have case studies, pricing and a testimonial');
-  assert.ok(t.includes('In the news: “Acme IT opens its Raleigh office” (CBJ, 15 Jun 2026) — the headline mentions new office.'));
+  assert.ok(t.includes('In the news: “Acme IT opens its Raleigh office” (CBJ, 15 Jun 2026) — it mentions a new office.'));
+  const moneyLine = b.sentences.find((s) => s.text.startsWith('Revenue is likely'));
+  assert.deepEqual(moneyLine.sources, ['https://www.census.gov/programs-surveys/susb.html', 'USAspending.gov'], 'the Census survey page, not its table codes');
   assert.ok(t.includes('Two angles for the call: they already sell to strangers (“yes”); and website talks to businesses (9 mentions).'));
   const angles = b.sentences.find((s) => s.text.startsWith('Two angles'));
   assert.deepEqual(angles.sources, ['fit score', `${SITE}/services`]);
@@ -319,7 +321,7 @@ test('brief: a sentence only when its fact exists — never made up', () => {
   const nb = buildBrief(nf);
   assert.ok(nb.sentences.some((s) => s.text === 'Latest news found for “Acme IT”: “Acme IT hires” (Y, 1 Aug 2026).'));
   nf.deep.news.flags = [{ kind: 'lawsuit', level: 'warn', title: 'Dental group sues Acme IT', link: 'https://n/3' }];
-  assert.equal(buildBrief(nf).sentences.at(-1).text, 'The risk to raise: a news story mentions lawsuit (“Dental group sues Acme IT”).');
+  assert.equal(buildBrief(nf).sentences.at(-1).text, 'The risk to raise: a news story mentions a lawsuit (“Dental group sues Acme IT”).');
 });
 
 test('revenue benchmark: what they sell, not who buys it', () => {

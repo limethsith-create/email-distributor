@@ -510,14 +510,22 @@ export function wordPairs(text) {
   const out = new Map();
   for (const chunk of String(text || '').replace(/[‘’]/g, "'").split(/[.!?;:,()[\]{}"“”|•·—–\n\r\t/]+|\s-\s|\s'|'\s/)) {
     const lowerChunk = /[a-z]/.test(chunk);
+    // A name keeps its capitals: an acronym (SOC, HIPAA), a word with a capital inside (QuickBooks,
+    // LinkedIn), or a capitalised word that is not the first of its sentence (Microsoft 365).
     const words = chunk.split(/\s+/).map((w) => w.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9+]+$/g, '').replace(/'s$/i, '')).filter(Boolean)
-      .map((w) => ({ key: w.toLowerCase(), show: lowerChunk && /^[A-Z]{2,5}$/.test(w) ? w : w.toLowerCase(), acronym: lowerChunk && /^[A-Z]{2,5}$/.test(w) }));
+      .map((w, i) => {
+        const acronym = lowerChunk && /^[A-Z]{2,5}$/.test(w);
+        const name = lowerChunk && (/^[A-Z][a-z]+[A-Z]/.test(w) || (i > 0 && /^[A-Z][a-z]/.test(w)));
+        return { key: w.toLowerCase(), show: acronym || name ? w : w.toLowerCase(), acronym, name };
+      });
     for (let i = 0; i + 1 < words.length; i++) {
       const [a, b] = [words[i], words[i + 1]];
       if (a.key === b.key || !topicWord(a.key, a.acronym) || !topicWord(b.key, b.acronym)) continue;
       const key = `${a.key} ${b.key}`;
       const cur = out.get(key) || { n: 0, text: `${a.show} ${b.show}` };
       cur.n += 1;
+      // "microsoft 365" at the start of one sentence, "Microsoft 365" inside another: the name wins.
+      if ((a.name || b.name) && !/[A-Z]/.test(cur.text)) cur.text = `${a.show} ${b.show}`;
       out.set(key, cur);
     }
   }

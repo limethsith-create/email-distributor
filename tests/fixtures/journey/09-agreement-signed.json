@@ -2266,7 +2266,7 @@
        "pct": 100,
        "items": [
         {
-         "text": "About 16 people (Website lists 16 employees (schema.org)) — inside 5–50",
+         "text": "About 16 people (website lists 16 employees) — inside 5–50",
          "status": "good",
          "max": 7,
          "evidence": null,
@@ -2888,7 +2888,7 @@
      "topics": {
       "pairs": [
        {
-        "text": "microsoft 365",
+        "text": "Microsoft 365",
         "count": 2,
         "posts": 1
        },
@@ -2984,7 +2984,7 @@
      "facts": 125
     },
     "brief": {
-     "text": "Ridgeline IT sells Managed IT services, Cybersecurity, Cloud backup and recovery, and Compliance for law and CPA firms. They mostly serve law firms and accounting firms; named clients include Hollis & Grant Law, Carolina Tax Partners and Queen City Family Law. Ridgeline IT has been in business since 2012, and their website has been online since 2013. About 16 people work there (website lists 16 employees, schema.org), from an office at 2100 South Blvd, Suite 300, Charlotte, NC 28203. Revenue is likely $2.2M–$4M a year (16 people × $140,000–$250,000 revenue per employee for IT services / MSPs); the public record shows a $118,400 PPP loan from April 2020. Their website shows 1 testimonial, 2 case studies, and 3 named clients; they name Microsoft Partner, Microsoft Solutions Partner, and SOC 2; Google rates them 4.8★ from 61 reviews. Offers they run: their main call to action is “Book a free network assessment”; they promise no long-term contracts, unlimited help desk, and 15-minute response; published plans: Essentials ($99 per user / month), Complete ($149 per user / month). On the 22 pages read, their website has no booking link. Their blog: about 6 posts a year, last one 58 days ago; the posts mostly talk about microsoft 365 and phishing emails. In the news: “Ridgeline IT opens a Raleigh office & adds six staff” (Charlotte Business Journal, 15 Jun 2026) — the headline mentions new office. Two angles for the call: website talks to businesses (37 mentions); and a new customer is worth $5,000–$20,000 in year one. Still open — ask them: Name three companies that would be perfect customers.",
+     "text": "Ridgeline IT sells Managed IT services, Cybersecurity, Cloud backup and recovery, and Compliance for law and CPA firms. They mostly serve law firms and accounting firms; named clients include Hollis & Grant Law, Carolina Tax Partners and Queen City Family Law. Ridgeline IT has been in business since 2012, and their website has been online since 2013. About 16 people work there (website lists 16 employees), from an office at 2100 South Blvd, Suite 300, Charlotte, NC 28203. Revenue is likely $2.2M–$4M a year (16 people × $140,000–$250,000 revenue per employee for IT services / MSPs); the public record shows a $118,400 PPP loan from April 2020. Their website shows 1 testimonial, 2 case studies, and 3 named clients; they name Microsoft Partner, Microsoft Solutions Partner, and SOC 2; Google rates them 4.8★ from 61 reviews. Offers they run: their main call to action is “Book a free network assessment”; they promise no long-term contracts, unlimited help desk, and 15-minute response; published plans: Essentials ($99 per user / month), Complete ($149 per user / month). On the 22 pages read, their website has no booking link. Their blog: about 6 posts a year, last one 58 days ago; the posts mostly talk about Microsoft 365 and phishing emails. In the news: “Ridgeline IT opens a Raleigh office & adds six staff” (Charlotte Business Journal, 15 Jun 2026) — it mentions a new office. Two angles for the call: website talks to businesses (37 mentions); and a new customer is worth $5,000–$20,000 in year one. Still open — ask them: Name three companies that would be perfect customers.",
      "sentences": [
       {
        "text": "Ridgeline IT sells Managed IT services, Cybersecurity, Cloud backup and recovery, and Compliance for law and CPA firms.",
@@ -3006,7 +3006,7 @@
        ]
       },
       {
-       "text": "About 16 people work there (website lists 16 employees, schema.org), from an office at 2100 South Blvd, Suite 300, Charlotte, NC 28203.",
+       "text": "About 16 people work there (website lists 16 employees), from an office at 2100 South Blvd, Suite 300, Charlotte, NC 28203.",
        "sources": [
         "https://www.ridgelineit.com/"
        ]
@@ -3014,7 +3014,8 @@
       {
        "text": "Revenue is likely $2.2M–$4M a year (16 people × $140,000–$250,000 revenue per employee for IT services / MSPs); the public record shows a $118,400 PPP loan from April 2020.",
        "sources": [
-        "Census SUSB 2022 NAICS 541512/541513, Service Leadership",
+        "https://www.census.gov/programs-surveys/susb.html",
+        "Service Leadership (industry benchmark)",
         "USAspending.gov"
        ]
       },
@@ -3041,14 +3042,14 @@
        ]
       },
       {
-       "text": "Their blog: about 6 posts a year, last one 58 days ago; the posts mostly talk about microsoft 365 and phishing emails.",
+       "text": "Their blog: about 6 posts a year, last one 58 days ago; the posts mostly talk about Microsoft 365 and phishing emails.",
        "sources": [
         "https://www.ridgelineit.com/blog/wisp-template",
         "https://www.ridgelineit.com/blog/clio-security"
        ]
       },
       {
-       "text": "In the news: “Ridgeline IT opens a Raleigh office & adds six staff” (Charlotte Business Journal, 15 Jun 2026) — the headline mentions new office.",
+       "text": "In the news: “Ridgeline IT opens a Raleigh office & adds six staff” (Charlotte Business Journal, 15 Jun 2026) — it mentions a new office.",
        "sources": [
         "https://news.google.com/rss/articles/CBMi-ridgeline-cbj"
        ]
@@ -3071,7 +3072,8 @@
       "https://www.ridgelineit.com/services",
       "https://www.ridgelineit.com/",
       "https://web.archive.org/web/*/www.ridgelineit.com",
-      "Census SUSB 2022 NAICS 541512/541513, Service Leadership",
+      "https://www.census.gov/programs-surveys/susb.html",
+      "Service Leadership (industry benchmark)",
       "USAspending.gov",
       "https://www.ridgelineit.com/case-studies/law-firm-office-move",
       "https://www.ridgelineit.com/about",
