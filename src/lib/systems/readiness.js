@@ -4,8 +4,10 @@
  *   list      ≥ LIST.startMin unsent contacts (listReady)
  *   inboxes   every inbox passed the warm-up readiness rule (≥ 0.90 on two
  *             consecutive daily checks and ≥ 14 days)
- *   canary    the latest canary (today/yesterday, from Day −3) has every
- *             inbox at ≥ CANARY.gate (seed placement)
+ *   canary    the latest canary (today/yesterday, from Day −3), pooled with
+ *             the run before it, has every inbox and the whole run at ≥
+ *             CANARY.gate, and no inbox under CANARY.emergency in the latest
+ *             run alone (canary.js gateCanary)
  *   spamTest  every inbox's latest spam test (mail-tester ≥ PLACEMENT.minScore
  *             of 10, or dkimvalidator within PLACEMENT.maxSpamAssassin with
  *             DKIM + SPF pass) passed within PLACEMENT.maxAgeDays — off with
@@ -31,7 +33,7 @@ import { ET, dayKeyIn, trialDay, addDays } from '@/lib/time';
 import { getStoredSequence } from '@/lib/systems/copy';
 import { listReady } from '@/lib/systems/leadfinder';
 import { inboxesReady } from '@/lib/systems/warmup';
-import { latestCanary } from '@/lib/systems/canary';
+import { latestCanary, priorCanary, gateCanary } from '@/lib/systems/canary';
 import { spamTestGate } from '@/lib/systems/placement';
 import { isSendingDay } from '@/lib/systems/ramp';
 import { approvalUrl, fmtDay } from '@/lib/systems/approval';
@@ -46,15 +48,17 @@ export function nextSendingDay(dayKey) {
 export async function readinessGate(clientId, now = new Date()) {
   const [seq, list, inboxes, canary, profile] = await Promise.all([getStoredSequence(clientId), listReady(clientId), inboxesReady(clientId), latestCanary(clientId, now), getProfile(clientId)]);
   const gate = await cfg(clientId, 'CANARY.gate');
-  const per = canary?.perInbox ? Object.values(canary.perInbox) : [];
-  const canaryOk = Boolean(canary && per.length && per.every((r) => r.placement != null && r.placement >= gate) && inboxes.inboxes.every((i) => canary.perInbox[i.email]));
+  // The latest run pooled with the one before it (a handful of seeds per inbox is noisy — canary.js gateCanary).
+  const prior = canary ? await priorCanary(clientId, canary.day) : null;
+  const read = gateCanary(canary, prior, { gate, emergency: await cfg(clientId, 'CANARY.emergency') });
+  const canaryOk = Boolean(canary && read.ok && inboxes.inboxes.every((i) => canary.perInbox[i.email]));
   const spam = await spamTestGate(clientId, now, { inboxes: inboxes.inboxes.map((i) => i.email) });
   const checks = {
     approval: { ok: Boolean(seq.approvedAt), mode: seq.approvalMode || null },
     list: list,
     inboxes,
     // seeds / note: how many mailboxes the seed test used, and its plain note when that was thin (canary.js).
-    canary: { ok: canaryOk, day: canary?.day || null, min: canary?.min ?? null, gate, seeds: canary?.seeds ?? null, note: canary?.note || null },
+    canary: { ok: canaryOk, day: canary?.day || null, min: canary?.min ?? null, gate, seeds: canary?.seeds ?? null, note: canary?.note || null, pooledWith: read.pooled ? prior.day : null, pooledMin: Object.values(read.perInbox).reduce((m, x) => (x.pooled == null ? m : m == null ? x.pooled : Math.min(m, x.pooled)), null) },
     spamTest: spam,
     booking: { ok: ['1', 'true', 1, true].includes(profile.bookingTested), testedAt: profile.bookingTestedAt || null },
   };
@@ -89,7 +93,7 @@ async function announceMove(clientId, trial, newDay1, gate, { held = false, deps
   let facts = {};
   try { facts = await startVars(clientId, newDay1, { day30Date: newDay30 }); } catch { facts = {}; }
   try {
-    await (deps.notify || notifyClient)(clientId, 'day1_moved', { ...facts, day1Date: fmtDay(newDay1), day30Date: fmtDay(newDay30), reason: held ? 'everything is now ready' : reason, waitingLine, ownerName }, { dedupe: `day1_moved:${newDay1}` });
+    await (deps.notify || notifyClient)(clientId, 'day1_moved', { day1Date: fmtDay(newDay1), day30Date: fmtDay(newDay30), startWhen: fmtDay(newDay1), ...facts, reason: held ? 'everything is now ready' : reason, waitingLine, ownerName }, { dedupe: `day1_moved:${newDay1}` });
     // Moved as the gate turned green: this email is the "we start on …" email for the new Day 1.
     if (held) await setTrial(clientId, { startEmailFor: newDay1 });
   } catch (err) {

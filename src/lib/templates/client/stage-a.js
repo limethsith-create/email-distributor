@@ -127,25 +127,25 @@ Accepted at: {acceptedAt} (UTC) from IP {agreementIp}
     subject: 'Your trial setup has started',
     body: `Hi {firstName},
 
-Your market check passed, so we're going ahead with {clientName}. I'm buying the sending domain and two inboxes now.
+Your market check passed, so we're going ahead with {clientName}. I'm setting up the sending domain and two inboxes now.
 
-Once they pass their checks, you'll get an email with your two dates: the first send and Day 30. Nothing's needed from you in the meantime.
+Once they pass their checks, they start warming up. When they're ready, I'll email you the exact day and time we start. Nothing's needed from you in the meantime.
 
 {ownerName}`,
   },
 
   welcome_two_dates: {
     from: 'owner',
-    subject: 'Your first send is {day1Date}',
+    subject: 'We start on {day1Date}',
     body: `Hi {firstName},
 
-The agreement's in, thank you. The domain is registered, and both inboxes went into warm-up today.
+The inboxes are warmed up and ready, so we start on {startWhen}.
 
-Two dates for {clientName}. First send: {day1Date}. That's Day 1 of your 30. Day 30 is {day30Date}.
-
-Near the end of warm-up, you'll get an invite to a {callMinutes}-minute launch call. We go through your list and your emails together, and you give the OK before anything is sent.
+The emails go out in {senderName}'s name from {inboxes}, {sendWindow}. That's Day 1 of your 30. Day 30 is {day30Date}.
 
 Every Friday you'll get a short update from me, quiet weeks included.
+
+Reply to this email any time.
 
 {ownerName}`,
   },

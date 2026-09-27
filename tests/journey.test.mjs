@@ -576,7 +576,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   // Day −7 passes with no approval email: the list and the copy are ready, but warm-up is only on day 8.
   await goTo(et('2026-10-15', '12:00'));
   assert.ok(!sim.sent.some((m) => m.to === APPLICANT.email && linkIn(m.text, 'approve')), 'no approval email before the launch call');
-  await goTo(et('2026-10-16', '12:00'));
+  await goTo(et('2026-10-16', '09:30'));
   const s15 = await snap('15', 'launch-invite', 'Warm-up day 10 (Friday): the list has its contacts and the four emails pass the Copy Checker, so the launch invite goes to Dana at 9 am her time — the booking page for a launch call and, below it, the approval page. The owner hears that Ridgeline IT is ready for the launch call.');
   const LAUNCH_SUBJECT = 'Your list is ready';
   const invite = sim.sent.find((m) => m.to === APPLICANT.email && m.subject === LAUNCH_SUBJECT);
@@ -839,7 +839,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   // Hub screens fix: the to-do says who wrote, when and what — not the reply's id.
   assert.match(s22.row.todo.find((t) => t.id === `legal:${clientId}`).detail, /^[^\s@]+@[^\s@]+ wrote on \w{3} \d{1,2} \w{3}, [\d:]+ [ap]m \(your time\): “Forwarding this to our attorney/);
   // The owner reads it that evening (Colombo) and presses the to-do's button.
-  await goTo(colombo('2026-10-28', '21:30'));
+  await goTo(colombo('2026-10-28', '22:30'));
   const legalTodo = (await hubLooks()).board.todos.find((t) => t.id === `legal:${clientId}`);
   assert.ok(legalTodo && legalTodo.action.type === 'api', 'a one-button to-do');
   const cleared = await call('api/mc/clients/[id]/route', 'POST', { path: legalTodo.action.path, params: { id: clientId }, body: legalTodo.action.body });

@@ -388,6 +388,17 @@ any that are not helpers, or one mail filter only, its `detail[0]` is a plain
 note: "Tested with 6 mailboxes (4 warm-up helpers and 2 other inboxes in the
 warm-up circle) — the usual is 10."
 
+(2026-09-27, integration) One seed test checks each inbox with a handful of
+emails, so one normal day can read 6 of 8. The Day 1 gate pools the latest
+test with the one before it (`checks.canary.pooledWith`: that day or null;
+`pooledMin`: the lowest inbox over both), and the urgent `placement_low`
+alert needs the whole test low, an inbox low two tests running, or an inbox
+under the emergency line with 3+ emails missing. A one-day dip of one inbox
+shows only in `placement` (its `detail` lines) — nothing for the hub to do.
+Warm-up: a new inbox stays on day 1 until its first warm-up email really goes
+out (`inboxes[].warmupStartedAt` then moves to that day), so the trial's
+`warmup.day` never counts days nothing was sent.
+
 ## Lead quality — `leadQuality` (in `GET /api/mc/hub/{id}`)
 
 ```jsonc

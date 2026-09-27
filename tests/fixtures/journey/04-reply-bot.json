@@ -607,7 +607,7 @@
     "event": "reply_received",
     "detail": {
      "from": "dana@ridgelineit.com",
-     "subject": "Re: You're in — let's book your onboarding call",
+     "subject": "Re: Let's book your onboarding call",
      "call": "onboarding",
      "rule": "wants_time",
      "bot": "queued"
@@ -620,6 +620,14 @@
     "detail": {
      "rule": "wants_time",
      "answerAfter": "2026-10-02T13:08:00.000Z"
+    }
+   },
+   {
+    "at": "2026-10-02T11:50:00.000Z",
+    "system": "mailwatch",
+    "event": "opened",
+    "detail": {
+     "template": "accepted_call"
     }
    },
    {
@@ -1982,12 +1990,23 @@
      "at": "2026-10-02T03:30:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
-     "subject": "You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_2/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_1/onboard — one page, your details and the agreement.\n\nLimeth Sith",
+     "subject": "Let's book your onboarding call",
+     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nFirst, a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_2/book\n\nThere's also one page with your details and the agreement. Fill it in before we talk if you like, or we'll do it together on the call: https://machine.test/c/TOKEN_1/onboard\n\nLimeth Sith",
      "kind": "acceptance",
      "auto": false,
      "rule": null,
-     "template": null
+     "template": null,
+     "accepted": true,
+     "messageId": "<MSGID_2>",
+     "openedAt": "2026-10-02T11:50:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": "2026-10-02T13:05:00.000Z",
+     "milestone": true,
+     "unopenedAt": null,
+     "status": "replied",
+     "statusAt": "2026-10-02T13:05:00.000Z",
+     "statusText": "replied Fri 6:35 pm"
     },
     {
      "id": "in-6afd9ae97d23270e",
@@ -1995,12 +2014,23 @@
      "at": "2026-10-02T13:05:00.000Z",
      "from": "dana@ridgelineit.com",
      "to": "hello@aviance.test",
-     "subject": "Re: You're in — let's book your onboarding call",
+     "subject": "Re: Let's book your onboarding call",
      "text": "Hi Limeth,\n\nThanks — great news! What times work for you next week?\n\nDana",
      "kind": "reply",
      "auto": false,
      "rule": "wants_time",
-     "template": null
+     "template": null,
+     "accepted": null,
+     "messageId": null,
+     "openedAt": null,
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": null,
+     "statusAt": null,
+     "statusText": null
     },
     {
      "id": "out-4700484a1918c1f0",
@@ -2008,12 +2038,23 @@
      "at": "2026-10-02T13:10:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
-     "subject": "Re: You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_3/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
+     "subject": "Re: Let's book your onboarding call",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_3/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
      "kind": "auto_reply",
      "auto": true,
      "rule": "wants_time",
-     "template": null
+     "template": null,
+     "accepted": true,
+     "messageId": "<MSGID_1>",
+     "openedAt": null,
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "delivered",
+     "statusAt": "2026-10-02T13:10:00.000Z",
+     "statusText": "delivered"
     }
    ]
   },
@@ -2028,12 +2069,23 @@
      "at": "2026-10-02T03:30:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
-     "subject": "You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_2/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_1/onboard — one page, your details and the agreement.\n\nLimeth Sith",
+     "subject": "Let's book your onboarding call",
+     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nFirst, a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_2/book\n\nThere's also one page with your details and the agreement. Fill it in before we talk if you like, or we'll do it together on the call: https://machine.test/c/TOKEN_1/onboard\n\nLimeth Sith",
      "kind": "acceptance",
      "auto": false,
      "rule": null,
-     "template": null
+     "template": null,
+     "accepted": true,
+     "messageId": "<MSGID_2>",
+     "openedAt": "2026-10-02T11:50:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": "2026-10-02T13:05:00.000Z",
+     "milestone": true,
+     "unopenedAt": null,
+     "status": "replied",
+     "statusAt": "2026-10-02T13:05:00.000Z",
+     "statusText": "replied Fri 6:35 pm"
     },
     {
      "id": "in-6afd9ae97d23270e",
@@ -2041,12 +2093,23 @@
      "at": "2026-10-02T13:05:00.000Z",
      "from": "dana@ridgelineit.com",
      "to": "hello@aviance.test",
-     "subject": "Re: You're in — let's book your onboarding call",
+     "subject": "Re: Let's book your onboarding call",
      "text": "Hi Limeth,\n\nThanks — great news! What times work for you next week?\n\nDana",
      "kind": "reply",
      "auto": false,
      "rule": "wants_time",
-     "template": null
+     "template": null,
+     "accepted": null,
+     "messageId": null,
+     "openedAt": null,
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": null,
+     "statusAt": null,
+     "statusText": null
     },
     {
      "id": "out-4700484a1918c1f0",
@@ -2054,12 +2117,23 @@
      "at": "2026-10-02T13:10:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
-     "subject": "Re: You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_3/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
+     "subject": "Re: Let's book your onboarding call",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_3/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
      "kind": "auto_reply",
      "auto": true,
      "rule": "wants_time",
-     "template": null
+     "template": null,
+     "accepted": true,
+     "messageId": "<MSGID_1>",
+     "openedAt": null,
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "delivered",
+     "statusAt": "2026-10-02T13:10:00.000Z",
+     "statusText": "delivered"
     }
    ],
    "needsReply": false,

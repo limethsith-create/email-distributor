@@ -157,3 +157,41 @@ tests), tests/journey.test.mjs (Day 1 assertions).
   reach "day 14" with a few real warm-up days, and its first real day starts
   at that day's quota (e.g. 15). Suggested: start `warmupStartedAt` at the
   first warm-up email actually sent.
+
+## Integration (2026-09-27, after A–D merged)
+
+- **The warm-up gap above — decided and fixed.** The setup check marks each
+  new inbox `warmupAwaitingFirstSend: '1'`; until its first warm-up email
+  really goes out it is on warm-up day 1 (day-1 quota), and that first send
+  (a new mail or a reply, `noteFirstWarmupSend` in warmup.js) moves
+  `warmupStartedAt` to that day (`warmupStartMovedFrom` keeps the old one,
+  `warmupFirstSentAt` the moment). The 14 days and the ramp count only days
+  that warmed. Inboxes from before the mark and Test Mode are left as they
+  were. Test: warmup-audit "warm-up day 1 is the first day …".
+- **The seed test's small sample.** A run tests each inbox with a handful of
+  emails (often 8), so one normal day reads 6 of 8 = 75 %. Two changes, no
+  line moved:
+  - the urgent `placement_low` needs the whole run under `CANARY.warn`, or
+    an inbox under it today AND on its last canary day, or an inbox under
+    `CANARY.emergency` with ≥ 3 emails missing (`placementLow`); a one-day
+    dip of one inbox is logged (`canary` / `dip`) and shown in the
+    placement history, not alerted;
+  - the Day 1 gate pools the latest run with the one before it (`gateCanary`,
+    `priorCanary`): every inbox and the whole run ≥ `CANARY.gate` over both,
+    and no inbox under `CANARY.emergency` in the latest run alone. With one
+    run (Day −3) it is as strict as before. `checks.canary` gains
+    `pooledWith` (the earlier run's day or null) and `pooledMin`.
+  The journey showed both: a one-inbox 6-of-8 day slid Day 1 and emailed
+  the client "first send moves".
+- **The "we start on" email** (`welcome_two_dates`, now sent when Day 1 is
+  fixed): subject "We start on {day1Date}"; the start in their zone
+  (`startWhen`), the name and inboxes the prospects see, the send window,
+  Day 30, the Friday note, "Reply to this email any time". `day1_moved`
+  names `startWhen` and uses the same date format; `setup_in_progress` no
+  longer promises a "two dates" email at the setup check.
+- Voice notes applied: the call fallback subjects ("Let's book your
+  onboarding call", "Your list is ready") and the next-steps opening.
+- Brief wording: no "schema.org" or Census table codes (the source is the
+  Census survey page), "it mentions a new office", names keep their capitals
+  in the topics ("Microsoft 365").
+- The journey's clock runs forward at every step (15 → 16, 27 → 28).

@@ -674,6 +674,7 @@ test('every Stage A template renders with sample data; the agreement fills all b
     expectedLine: 'Soon.', reason: 'because.', minMarket: '1,000', estimate: '500', widenedLine: ' in the areas you gave me', mainDomain: 'acme.com',
     agreementText: 'TEXT', agreementName: 'Ann Lee', agreementTitle: 'CEO', companyName: 'Acme', acceptedAt: '2026-10-05 14:00', agreementIp: '1.2.3.4',
     day1Date: 'Monday 19 October', day30Date: 'Tuesday 17 November', calendarUrl: 'https://cal', problem: 'broken.',
+  startWhen: 'Monday 19 October at 8:00 am Central Time (9:00 am Eastern)', senderName: 'Dana Whitfield', inboxes: 'dana@ridgeline-team.com and dana.w@ridgeline-team.com', sendWindow: "between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone",
     // Onboarding call (accepted_call, accepted_call_reminder, onboard_call_tomorrow, onboard_owner_reply)
     callMinutes: 30, bookingLine: 'Book a time that suits you: https://cal.com/limeth/onboarding', onboardingLink: 'https://x/c/t/onboard',
     threadSubject: "Let's book your onboarding call", when: 'Tuesday, October 13 at 11:00 AM EDT', callDay: 'tomorrow', text: 'Tuesday works.\n\nLimeth', joinLine: 'Join here: https://meet.google.com/abc-defg-hij',

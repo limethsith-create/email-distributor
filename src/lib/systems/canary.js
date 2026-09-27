@@ -66,6 +66,31 @@ export async function canarySeeds(clientId, { now = new Date(), want = 10, pool 
 }
 
 /**
+ * Whether today's canary is low enough to wake the owner (pure). An inbox is
+ * tested with only a handful of seed emails (often 8), so one inbox with two
+ * of them in spam reads 75% on a normal day. The urgent alert therefore
+ * needs one of: the whole run under `warn` (every email counted — the bigger
+ * sample); an inbox under `warn` today AND on its last canary day; or an
+ * inbox under `emergency` with at least 3 emails missing the inbox. A one-day
+ * dip of one inbox is only logged (`dips`). The Day 1 gate and the Emergency
+ * Runner keep their own lines — this only decides the alert.
+ * → { alert: boolean, dips: string[] }
+ */
+export function placementLow(res, prev = {}, { warn = 0.85, emergency = 0.70 } = {}) {
+  if (!res || res.overall == null) return { alert: false, dips: [] };
+  let alert = res.overall < warn;
+  const dips = [];
+  for (const [email, row] of Object.entries(res.perInbox || {})) {
+    if (row.placement == null || row.placement >= warn) continue;
+    const missed = Math.max(0, (Number(row.sent) || 0) - (Number(row.inbox) || 0));
+    const before = prev[email];
+    if ((before != null && Number.isFinite(before) && before < warn) || (row.placement < emergency && missed >= 3)) alert = true;
+    else dips.push(email);
+  }
+  return { alert, dips: alert ? [] : dips };
+}
+
+/**
  * The plain note on a canary run (pure): fewer seeds than `want`, seeds that
  * are not helpers, or one mail filter only. null for `want` helpers on more
  * than one filter.
@@ -290,6 +315,8 @@ async function finalize({ client, run, key, now }) {
   const day = dayKeyIn(ET, now);
   await kv.hset(key, { phase: 'done', doneAt: now.toISOString(), result: JSON.stringify(res) });
   await updateClient(id, { canaryCheckedDay: day });
+  // Each inbox's result from its last canary day, read before today's replaces it (for the dip rule below).
+  const prev = Object.fromEntries((await getInboxRecords(id)).map((r) => [r.email, r.canaryPlacement === '' || r.canaryPlacement == null ? null : Number(r.canaryPlacement)]));
   for (const [email, row] of Object.entries(res.perInbox)) {
     if (row.placement != null) await patchInbox(id, email, { canaryPlacement: row.placement.toFixed(3), canaryCheckedAt: now.toISOString() });
   }
@@ -311,9 +338,11 @@ async function finalize({ client, run, key, now }) {
     reportUrl: null,
   }).catch(() => {});
   const pct = `${Math.round(res.overall * 100)}%`;
+  const low = placementLow(res, prev, { warn, emergency });
   // A good day again: yesterday's placement_low (urgent) is handled.
   if (!(res.overall < warn || (res.min != null && res.min < warn))) await ackAlerts(id, ['placement_low'], { reason: 'canary placement back above the line', now });
-  if (res.overall < warn || (res.min != null && res.min < warn)) {
+  if (low.dips.length) await logEvent(id, 'canary', 'dip', { inboxes: low.dips, note: 'one inbox under the line on one day only — watched, not alerted (a second day under it alerts)' });
+  if (low.alert) {
     await alertOwner('placement_low', { clientId: id, vars: { clientId: id, rate: pct }, body: `Canary placement today: ${pct} overall, lowest inbox ${Math.round((res.min ?? 0) * 100)}%.\n${Object.entries(res.perInbox).map(([e, r]) => `${e}: ${r.inbox}/${r.sent}`).join('\n')}`, did: SENDING_STATES.has(client.state) ? 'Logged; the Emergency Runner is asked to act if any inbox is under the emergency line.' : 'Day 1 cannot start until every inbox is at the gate line.' });
   }
   if (res.min != null && res.min < emergency && SENDING_STATES.has(client.state)) {
@@ -324,6 +353,49 @@ async function finalize({ client, run, key, now }) {
 }
 
 /** Latest finished canary (today or yesterday) → { day, overall, min, perInbox, seeds?, note? } or null. */
+/** The newest finished canary run before `day` (within `lookback` days), or null — the Day 1 gate pools it with the latest. */
+export async function priorCanary(clientId, day, { lookback = 3 } = {}) {
+  for (let i = 1; i <= lookback; i++) {
+    const d = addDays(day, -i);
+    const run = (await kv.hgetall(K.canary(clientId, d))) || {};
+    if (run.phase === 'done') return { day: d, ...parse(run.result, {}) };
+  }
+  return null;
+}
+
+/**
+ * The Day 1 gate's reading of the seed test (pure). One run tests each inbox
+ * with only a handful of emails (often 8), so one normal day can read 6 of 8.
+ * The gate therefore pools the latest run with the one before it (the canary
+ * runs daily from Day −3): every inbox, and the whole run, must reach `gate`
+ * over both runs together — and the latest run alone must be at least
+ * `emergency` for every inbox, so a collapse today is never averaged away.
+ * With no earlier run it is the latest run alone, as strict as before.
+ * → { ok, overall, perInbox: { email: { latest, pooled, sent } }, pooled: boolean }
+ */
+export function gateCanary(latest, prior = null, { gate = 0.85, emergency = 0.70 } = {}) {
+  const out = { ok: false, overall: null, perInbox: {}, pooled: false };
+  const rows = latest?.perInbox ? Object.entries(latest.perInbox) : [];
+  if (!rows.length) return out;
+  let inbox = 0;
+  let sent = 0;
+  let ok = true;
+  for (const [email, row] of rows) {
+    const before = prior?.perInbox?.[email];
+    const both = before && Number(before.sent) > 0 && row.placement != null;
+    const s = (Number(row.sent) || 0) + (both ? Number(before.sent) : 0);
+    const n = Math.min(Number(row.inbox) || 0, Number(row.sent) || 0) + (both ? Math.min(Number(before.inbox) || 0, Number(before.sent)) : 0);
+    const pooled = row.placement == null || !s ? null : n / s;
+    if (both) out.pooled = true;
+    out.perInbox[email] = { latest: row.placement ?? null, pooled, sent: s };
+    if (row.placement == null || row.placement < emergency || pooled == null || pooled < gate) ok = false;
+    if (pooled != null) { inbox += n; sent += s; }
+  }
+  out.overall = sent ? inbox / sent : null;
+  out.ok = ok && out.overall != null && out.overall >= gate;
+  return out;
+}
+
 export async function latestCanary(clientId, now = new Date()) {
   const today = dayKeyIn(ET, now);
   for (const d of [today, addDays(today, -1)]) {

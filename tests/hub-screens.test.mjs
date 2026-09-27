@@ -254,5 +254,5 @@ test('client emails: the approval email greets by first name; the full name only
   assert.doesNotMatch(res.text, /Hi Dana Whitfield/);
   // Every email of the approval round greets the same way.
   const vars = { firstName: 'Dana', contactName: 'Dana Whitfield', approvalUrl: 'u', day1Date: 'd', silenceDate: 's', day30Date: 'd30', reason: 'r', waitingLine: 'w', ownerName: 'L' };
-  for (const key of ['approval_reminder', 'approval_updated', 'approved_by_silence', 'day1_moved']) assert.match(renderTemplate(key, vars).text, /^Hi Dana,/, key);
+  for (const key of ['approval_reminder', 'approval_updated', 'approved_by_silence', 'day1_moved']) assert.match(renderTemplate(key, { startWhen: 'Thursday 22 October at 9:00 am Eastern Time', ...vars }).text, /^Hi Dana,/, key);
 });

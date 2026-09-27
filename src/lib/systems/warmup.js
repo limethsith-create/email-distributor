@@ -160,8 +160,32 @@ export function warmupQuota(days, table) {
 
 export function warmupDays(record, now = new Date()) {
   if (!record?.warmupStartedAt) return 0;
+  // Set up but no warm-up email out yet (the circle was short, or the heartbeat not running): still day 1 —
+  // days nothing was sent do not count toward the 14 or the ramp (noteFirstWarmupSend moves the start).
+  if (record.warmupAwaitingFirstSend === '1') return 1;
   const start = dayKeyIn(ET, new Date(record.warmupStartedAt));
   return daysBetween(start, dayKeyIn(ET, now)) + 1;
+}
+
+/**
+ * A trial inbox's first warm-up email really went out: warm-up day 1 is today.
+ * The setup check sets `warmupStartedAt` when the inbox passes (and marks it
+ * `warmupAwaitingFirstSend`); when the first send comes on a later day — the
+ * circle was short, or the heartbeat was not running yet — the start moves to
+ * today, so the 14 days and the quota ramp count only days that warmed.
+ * Mutates `member.record` so the rest of the run sees it. Records from before
+ * the mark (no `warmupAwaitingFirstSend`) are left as they were.
+ */
+async function noteFirstWarmupSend(member, now) {
+  const rec = member?.record;
+  if (!rec || rec.warmupAwaitingFirstSend !== '1' || !countsForClient(member) || (member.client && hasScaledClock(member.client))) return;
+  const today = dayKeyIn(ET, now);
+  const was = rec.warmupStartedAt || null;
+  const moved = !was || dayKeyIn(ET, new Date(was)) < today;
+  const fields = { warmupAwaitingFirstSend: '', warmupFirstSentAt: now.toISOString(), ...(moved ? { warmupStartedAt: now.toISOString(), warmupStartMovedFrom: was || '' } : {}) };
+  Object.assign(rec, fields);
+  await patchInbox(member.clientId, member.email, fields);
+  await logEvent(member.clientId, 'warmup', 'first_send', { inbox: member.email, ...(moved && was ? { startMovedFrom: was } : {}) });
 }
 
 // ── pool ─────────────────────────────────────────────────────────────────────
@@ -582,6 +606,7 @@ export async function runWarmupSend({ now = new Date(), deadline = Date.now() + 
       continue;
     }
     sent[from.email] = (sent[from.email] || 0) + 1;
+    await noteFirstWarmupSend(from, now);
     await statBump(from.email, 'sent', 1, now);
     await statBump(to.email, 'received', 1, now);
     if (countsForClient(from)) await bump(from.clientId, 'warmupSent', 1, now);
@@ -745,6 +770,7 @@ export async function processMailbox(member, { mode = 'warm', tag = '', now = ne
               const res = await sendMarked(member, other, { deps, rng, tag: encodeWarmMeta(reply), subject: /^re:/i.test(subj) ? subj : `Re: ${subj}`, text: reply.text, inReplyTo: msg.envelope?.messageId || null, references: [headers.references, msg.envelope?.messageId].filter(Boolean).join(' ') || null }).catch((err) => ({ success: false, error: err.message }));
               if (res.success) {
                 out.replied++;
+                await noteFirstWarmupSend(member, now);
                 await statBump(member.email, 'sent', 1, now);
                 await statBump(member.email, 'replied', 1, now);
                 await statBump(sender, 'received', 1, now);

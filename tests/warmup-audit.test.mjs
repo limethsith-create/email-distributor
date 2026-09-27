@@ -18,8 +18,9 @@ import { insertLeads } from '@/lib/db/leads';
 import { addDays } from '@/lib/time';
 import {
   getPool, saveHelper, readinessCheckpoint, warmupDayOver, runWarmupDaily, estimateReadyBy, CATCHUP_DAYS, MARKER_HEADER,
+  runWarmupSend, warmupDays,
 } from '@/lib/systems/warmup';
-import { canarySeeds, canaryNote, runCanary, latestCanary, THIN_SEEDS } from '@/lib/systems/canary';
+import { canarySeeds, canaryNote, runCanary, latestCanary, THIN_SEEDS, placementLow, gateCanary } from '@/lib/systems/canary';
 import { readinessGate } from '@/lib/systems/readiness';
 import { placementHistory } from '@/lib/systems/placement';
 import { simpleFor } from '@/lib/systems/hubview';
@@ -266,4 +267,71 @@ test('canary seeds: helpers first, then the circle, up to the usual number; the 
   assert.equal(canaryNote([...H(5), { email: 'x@bolt.com', provider: 'google', isHelper: false }], 10), 'Tested with 6 mailboxes (5 warm-up helpers and 1 other inbox in the warm-up circle) — the usual is 10.');
   assert.match(canaryNote(Array.from({ length: 10 }, (_, i) => ({ email: `g${i}@gmail.com`, provider: 'google', isHelper: true })), 10), /^Tested with 10 mailboxes\. All of them use the same mail filter \(Gmail \/ Google Workspace\)/);
   assert.equal(canaryNote([], 10), null);
+});
+
+test('canary alert: a one-day dip of one inbox on 8 seeds is logged, not an urgent alert; a second day under the line, a whole run under it, or a big miss alerts', () => {
+  const run = (a, b) => {
+    const perInbox = { 'a@x.com': { sent: 8, inbox: a, placement: a / 8 }, 'b@x.com': { sent: 8, inbox: b, placement: b / 8 } };
+    return { overall: (a + b) / 16, min: Math.min(a, b) / 8, perInbox };
+  };
+  const lines = { warn: 0.85, emergency: 0.70 };
+  // 6 of 8 (75%) for one inbox, 15 of 16 overall (94%): a normal day's noise.
+  assert.deepEqual(placementLow(run(8, 6), {}, lines), { alert: false, dips: ['b@x.com'] });
+  assert.deepEqual(placementLow(run(8, 6), { 'b@x.com': 1 }, lines), { alert: false, dips: ['b@x.com'] });
+  // The same inbox under the line on its last canary day too: real.
+  assert.deepEqual(placementLow(run(8, 6), { 'b@x.com': 0.75 }, lines), { alert: true, dips: [] });
+  // 5 of 8 (62.5%, 3 missed): under the emergency line with 3 misses — real on day one.
+  assert.equal(placementLow(run(8, 5), {}, lines).alert, true);
+  // The whole run under the line (every email counted): real.
+  assert.equal(placementLow(run(6, 7), {}, lines).alert, true);
+  // Every inbox fine: nothing.
+  assert.deepEqual(placementLow(run(8, 7), {}, lines), { alert: false, dips: [] });
+  assert.deepEqual(placementLow({ overall: null, perInbox: {} }, {}, lines), { alert: false, dips: [] });
+});
+
+test('warm-up day 1 is the first day a warm-up email really goes out: set up Thursday, no helpers until Sunday → day 1 on Sunday, at the day-1 quota', async () => {
+  // The setup check passed Thursday 1 October (START) and marked the inbox; the circle was short, nothing went out.
+  await createClient('acme', { state: 'warming', name: 'Acme IT', contactName: 'Pat Lee', contactEmail: 'pat@acme.com' });
+  await saveInbox('acme', { email: INBOX, password: 'pw', provider: 'google', displayName: 'Ann Lee' });
+  await patchInbox('acme', INBOX, { enabled: '1', warmupStartedAt: START, warmupAwaitingFirstSend: '1' });
+  const sunday = et('2026-10-04', '10:00');
+  assert.equal(warmupDays(await recOf(), sunday), 1, 'three days set up with nothing sent still count as day 1');
+  const pool = await getPool({ now: sunday });
+  assert.equal(pool.find((m) => m.email === INBOX).quota, (await getPool({ now: et('2026-10-01', '10:00') })).find((m) => m.email === INBOX).quota, "the day-1 quota, not day 4's");
+  // Sunday the helpers arrive and the first warm-up email goes: day 1 moves to Sunday.
+  for (const [i, e] of ['h1@yahoo.com', 'h2@aol.com', 'h3@gmx.com', 'h4@icloud.com'].entries()) await saveHelper({ email: e, password: 'pw', displayName: `Helper ${i + 1}` });
+  const sent = [];
+  const deps = { rng: () => 0.5, send: async (account, mail) => { sent.push({ from: account.email, to: mail.to }); return { success: true, messageId: `<${sent.length}@x>` }; } };
+  await runWarmupSend({ now: sunday, deadline: Date.now() + 20_000, deps });
+  assert.ok(sent.some((m) => m.from === INBOX), JSON.stringify(sent));
+  const rec = await recOf();
+  assert.equal(rec.warmupStartedAt, sunday.toISOString(), 'the 14 days count from the first real send');
+  assert.equal(rec.warmupStartMovedFrom, START);
+  assert.equal(rec.warmupFirstSentAt, sunday.toISOString());
+  assert.equal(rec.warmupAwaitingFirstSend, '');
+  assert.equal(warmupDays(rec, et('2026-10-05', '10:00')), 2, 'Monday is day 2');
+  // An inbox from before the mark (no warmupAwaitingFirstSend) keeps its start — nothing is reset mid-warm-up.
+  await patchInbox('acme', INBOX, { warmupStartedAt: START, warmupStartMovedFrom: '', warmupFirstSentAt: '' });
+  await runWarmupSend({ now: et('2026-10-05', '10:00'), deadline: Date.now() + 20_000, deps });
+  assert.equal((await recOf()).warmupStartedAt, START);
+});
+
+test('Day 1 gate: the latest seed test pooled with the one before it — one normal 6-of-8 day passes, two low days or a collapse today hold Day 1', () => {
+  const run = (a, b) => ({ overall: (a + b) / 16, perInbox: { 'a@x.com': { sent: 8, inbox: a, placement: a / 8 }, 'b@x.com': { sent: 8, inbox: b, placement: b / 8 } } });
+  const lines = { gate: 0.85, emergency: 0.70 };
+  // Alone (the first run, Day −3): as strict as before.
+  assert.equal(gateCanary(run(8, 6), null, lines).ok, false);
+  assert.equal(gateCanary(run(8, 7), null, lines).ok, true);
+  // 6 of 8 today after 8 of 8 yesterday: 14 of 16 = 87.5% → passes.
+  const g = gateCanary(run(8, 6), run(8, 8), lines);
+  assert.equal(g.ok, true);
+  assert.equal(g.pooled, true);
+  assert.equal(g.perInbox['b@x.com'].pooled, 14 / 16);
+  // 6 of 8 two days running: 12 of 16 = 75% → holds.
+  assert.equal(gateCanary(run(8, 6), run(8, 6), lines).ok, false);
+  // 5 of 8 today (62.5%, under the emergency line) is never averaged away by a good yesterday.
+  assert.equal(gateCanary(run(8, 5), run(8, 8), lines).ok, false);
+  // An inbox the latest run could not read holds; no run at all holds.
+  assert.equal(gateCanary({ overall: 1, perInbox: { 'a@x.com': { sent: 8, inbox: 8, placement: 1 }, 'b@x.com': { sent: 8, inbox: 0, placement: null } } }, run(8, 8), lines).ok, false);
+  assert.equal(gateCanary(null, null, lines).ok, false);
 });

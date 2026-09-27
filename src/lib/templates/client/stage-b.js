@@ -104,7 +104,7 @@ If that time no longer works, reply to this email and we'll find another.
     subject: 'First send moves to {day1Date}',
     body: `Hi {firstName},
 
-A change of date: the first send moves to {day1Date}, and Day 30 moves to {day30Date}.
+A change of date: the first send moves to {startWhen}, and Day 30 moves to {day30Date}.
 
 Why: {reason}. We only start when everything's ready, because a rushed start costs more replies than one day does.
 

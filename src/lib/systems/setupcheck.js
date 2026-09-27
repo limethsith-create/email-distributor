@@ -396,7 +396,8 @@ export async function finishSetup(clientId, { now = io.now() } = {}) {
   const decisionDay = await cfg(clientId, 'TRIAL.decisionDay');
   const dates = computeDates(dayKeyIn(ET, now), buildDays, decisionDay);
   const inboxes = await getInboxRecords(clientId);
-  for (const r of inboxes) await patchInbox(clientId, r.email, { enabled: '1', warmupStartedAt: r.warmupStartedAt || now.toISOString() });
+  // Warm-up day 1 is fixed by the first warm-up email that really goes out (warmup.js noteFirstWarmupSend).
+  for (const r of inboxes) await patchInbox(clientId, r.email, { enabled: '1', warmupStartedAt: r.warmupStartedAt || now.toISOString(), ...(r.warmupStartedAt ? {} : { warmupAwaitingFirstSend: '1' }) });
   await initCounters(clientId);
   await kv.hset(K.trial(clientId), dates);
   await kv.hset(K.domain(clientId), { setupPhase: 'passed', setupPassedAt: now.toISOString() });

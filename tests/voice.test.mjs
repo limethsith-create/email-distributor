@@ -31,6 +31,7 @@ const SAMPLE_A = {
   expectedLine: 'Soon.', reason: 'because.', minMarket: '1,000', estimate: '500', widenedLine: ' in the areas you gave me', mainDomain: 'acme.com',
   agreementText: 'TEXT', agreementName: 'Ann Lee', agreementTitle: 'CEO', companyName: 'Acme', acceptedAt: '2026-10-05 14:00', agreementIp: '1.2.3.4',
   day1Date: 'Monday 19 October', day30Date: 'Tuesday 17 November', calendarUrl: 'https://cal', problem: 'broken.',
+  startWhen: 'Monday 19 October at 8:00 am Central Time (9:00 am Eastern)', senderName: 'Dana Whitfield', inboxes: 'dana@ridgeline-team.com and dana.w@ridgeline-team.com', sendWindow: "between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone",
   callMinutes: 30, bookingLine: 'Book a time that suits you: https://cal.com/limeth/onboarding', onboardingLink: 'https://x/c/t/onboard',
   threadSubject: "Let's book your onboarding call", when: 'Tuesday, October 13 at 11:00 AM EDT', callDay: 'tomorrow', text: 'Tuesday works.\n\nLimeth', joinLine: 'Join here: https://meet.google.com/abc-defg-hij',
   whenShort: 'Tue 13 Oct at 11:00 am ET', minutes: 30, linkLine: "I'll send the link before the call.", bookLink: 'https://x/c/t/book',
@@ -136,15 +137,15 @@ test('the fact that makes it theirs: company, exact dates, the count — in the 
   const has = (key, re) => assert.match(renderTemplate(key, varsFor1(key)).text, re, key);
   has('accepted_call', /30-day trial for Acme\./);
   has('onboarding_link', /from Acme IT/);
-  has('welcome_two_dates', /First send: Monday 19 October\. That's Day 1 of your 30\. Day 30 is Tuesday 17 November\./);
+  has('welcome_two_dates', /we start on Monday 19 October at 8:00 am Central Time \(9:00 am Eastern\)\.[\s\S]*That's Day 1 of your 30\. Day 30 is Tuesday 17 November\./);
   has('next_steps', /your list of about 400 companies/);
   has('launch_invite', /in Dana Whitfield's name/);
   has('launch_invite', /the first emails go out about Wednesday 21 October\./);
-  has('day1_moved', /moves to Monday 19 October, and Day 30 moves to Tuesday 17 November/);
+  has('day1_moved', /moves to Monday 19 October at 8:00 am Central Time \(9:00 am Eastern\), and Day 30 moves to Tuesday 17 November/);
   has('day1_started', /The first emails for Acme IT went out this morning from dana@ridgeline-team\.com\. Day 30 is Tuesday 17 November\./);
   has('onboard_call_tomorrow', /is Tuesday, October 13 at 11:00 AM EDT\./);
   has('meeting_confirmed', /is Tuesday, October 13 at 11:00 AM EDT\./);
-  assert.equal(renderTemplate('welcome_two_dates', varsFor1('welcome_two_dates')).subject, 'Your first send is Monday 19 October');
+  assert.equal(renderTemplate('welcome_two_dates', varsFor1('welcome_two_dates')).subject, 'We start on Monday 19 October');
   assert.equal(renderTemplate('launch_invite', varsFor1('launch_invite')).subject, 'Your list is ready');
 });
 

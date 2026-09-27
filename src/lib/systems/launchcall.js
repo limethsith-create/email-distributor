@@ -97,7 +97,7 @@ export async function sendNextSteps(clientId, { now = io.now(), moment = 'call' 
   const vars = {
     firstName: firstNameOf(client.contactName) || 'there',
     ownerName: await ownerName(clientId),
-    opening: moment === 'agreement' ? 'Your agreement is in and your market check passed, so we are going ahead.' : 'Good to talk with you today — thank you for your time.',
+    opening: moment === 'agreement' ? 'Your agreement\'s in and your market check passed, so we\'re going ahead.' : 'Good to talk with you today — thank you for your time.',
     listSize: Number(listSize) || 400,
     callMinutes,
     day1Line: day1Line(day1),

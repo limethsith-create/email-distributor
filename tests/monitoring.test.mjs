@@ -74,7 +74,8 @@ const check = (now) => checkOnboardCalls({ now, force: true });
 const pixelOf = (m) => { const src = /src="([^"]+\/api\/track\/open\?t=[^"]+)"/.exec(m.html || '')?.[1]; return src ? new URL(src.replace(/&amp;/g, '&')) : null; };
 const imgs = (m) => (String(m.html || '').match(/<img /g) || []).length;
 const FRIDAY = { title: 'Your week', body: 'Warm-up is on day 9.', ownerName: 'Limeth Sith' };
-const MOVED = { firstName: 'Sam', day1Date: 'Wednesday 21 October', day30Date: 'Thursday 19 November', reason: 'the list is still being built', waitingLine: 'Nothing is needed from you.', ownerName: 'Limeth Sith' };
+const START = { startWhen: 'Wednesday 21 October at 8:00 am Central Time (9:00 am Eastern)', senderName: 'Sam Test', inboxes: 'sam@trysamtest.com and sam.test@trysamtest.com', sendWindow: "between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone" };
+const MOVED = { firstName: 'Sam', day1Date: 'Wednesday 21 October', day30Date: 'Thursday 19 November', reason: 'the list is still being built', waitingLine: 'Nothing is needed from you.', ownerName: 'Limeth Sith', ...START };
 const THUNDERBIRD = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Thunderbird/128.0';
 
 async function client(state = 'sending', over = {}) {
@@ -235,7 +236,7 @@ test('a milestone email that cannot be sent is retried once 10 minutes later —
   const r = await check(at(FRI, 10 / 60));
   assert.deepEqual(r.mailWatch, { retried: 1, failed: 0, unopened: 0 });
   assert.equal(toSam().length, 1, 'the same email, once');
-  assert.equal(toSam()[0].subject, 'Your trial — first send moves to Wednesday 21 October');
+  assert.equal(toSam()[0].subject, 'First send moves to Wednesday 21 October');
   assert.deepEqual(alertKeys(), []);
   assert.deepEqual((await kv.hgetall(K.mailRetry(ID))) || {}, {}, 'nothing left to retry');
   assert.equal((await conversationFor(ID, { now: at(FRI, 1) })).thread[0].template, 'day1_moved');
@@ -277,7 +278,7 @@ test('the plan email that failed after the call is retried by its own sender (it
 
 test('not opened in 48 business hours → the to-do "Sam hasn\'t opened the … email — call or text them?" + a quiet alert; an open clears it', async () => {
   await client('ready');
-  await notifyClient(ID, 'welcome_two_dates', { firstName: 'Sam', ownerName: 'Limeth Sith', day1Date: 'Wednesday 21 October', day30Date: 'Thursday 19 November', callMinutes: 30 }, { dedupe: 'w1', now: FRI });
+  await notifyClient(ID, 'welcome_two_dates', { firstName: 'Sam', ownerName: 'Limeth Sith', day1Date: 'Wednesday 21 October', day30Date: 'Thursday 19 November', callMinutes: 30, ...START }, { dedupe: 'w1', now: FRI });
   const m = toSam()[0];
   const w = (await recOf(m)).watch;
   assert.equal(w.unopenedDueAt, '2026-10-20T14:00:00.000Z', 'Fri 10:00 ET + 48 business hours = Tue 10:00 ET (the weekend does not count)');
@@ -410,7 +411,7 @@ test('readiness: green → ready and the "we start on" email; a Day 1 that moves
   const r1 = await runReadiness({ client: await getClient(ID), now: day1, deps });
   assert.equal(r1.slid, '2026-10-22');
   assert.equal(notes[0].key, 'day1_moved');
-  assert.equal(notes[0].vars.day1Date, 'Thursday, October 22', 'the kept var (its own format)');
+  assert.equal(notes[0].vars.day1Date, 'Thursday 22 October', 'the same date format as the start email');
   assert.equal(notes[0].vars.startWhen, 'Thursday 22 October at 8:00 am Central Time (9:00 am Eastern)');
   assert.equal(notes[0].vars.inboxName, 'Sam Test <sam.t@ecreek-mail.com>');
   assert.match(notes[0].vars.sendWindow, /^between 9:00 am and 5:00 pm on weekdays/);

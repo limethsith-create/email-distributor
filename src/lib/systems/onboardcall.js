@@ -78,7 +78,7 @@ const TEXT_MAX = conv.TEXT_MAX;
 const REPLY_MAX = 2000;
 const EMAIL_RE = /\b([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})\b/gi;
 /** The acceptance email's subject (templates/client/stage-a.js accepted_call): follow-ups answer it. */
-const FIRST_SUBJECT = "You're in — let's book your onboarding call";
+const FIRST_SUBJECT = "Let's book your onboarding call";
 
 /**
  * The two calls this machinery serves (docs/LAUNCH-CALL.md "two calls, one
@@ -99,7 +99,7 @@ export const CALL_KINDS = {
   launch: {
     key: K.launchCall, sentFlag: 'launchCallSentAt', openFlag: 'launchCallOpen',
     watch: LAUNCH_WATCH_STATES, remind: new Set(['warming']),
-    name: 'launch call', firstSubject: "Your list and your emails are ready — let's go through them together", firstStep: 'Launch invite sent',
+    name: 'launch call', firstSubject: 'Your list is ready', firstStep: 'Launch invite sent',
     reminder: 'launch_invite_reminder', tomorrow: 'launch_call_tomorrow', pixel: 'launch',
     alerts: { booked: 'launch_booked', overdue: 'launch_overdue', cancelled: 'launch_cancelled' },
   },
