@@ -125,6 +125,27 @@ async function markApproved(clientId, mode, by, now = new Date()) {
   return true;
 }
 
+/**
+ * "Approved on the call" (docs/LAUNCH-CALL.md §3): every section approved at
+ * once and the sequence approved with approvalMode 'call' — what Stage C and
+ * the readiness gate read. → whether the sequence was approved now (false
+ * when the client had already approved it on the page).
+ */
+export async function approveAllOnCall(clientId, { now = new Date(), by = 'owner' } = {}) {
+  const a = await getApproval(clientId);
+  const at = now.toISOString();
+  const sections = { ...a.sections };
+  for (const s of SECTIONS) if (sections[s]?.status !== 'approved') sections[s] = { status: 'approved', at, by: 'call' };
+  await saveApproval(clientId, { sections, lastClickAt: at });
+  await logEvent(clientId, 'approval', 'approved_on_call', { by });
+  return markApproved(clientId, 'call', by, now);
+}
+
+/** The approval page link went inside the launch invite (docs/LAUNCH-CALL.md §2): the copy card and the job read `sentAt`. */
+export async function noteLinkInInvite(clientId, now = new Date()) {
+  await saveApproval(clientId, { sentAt: now.toISOString(), status: 'launch_invite' });
+}
+
 /** Everything the page renders. null when the token is invalid. */
 export async function loadApprovalPage(rawToken) {
   const tok = await readToken(rawToken, { purpose: PURPOSE });
@@ -175,6 +196,12 @@ export async function approveSection(rawToken, section, { now = new Date() } = {
   if (SECTIONS.every((s) => sections[s]?.status === 'approved')) {
     const client = await getClient(id);
     approved = await markApproved(id, 'click', client?.contactEmail || client?.contactName || 'client', now);
+    // They approved on the page while a launch call was in play: the call becomes optional (docs/LAUNCH-CALL.md §3).
+    if (approved) {
+      try { await (await import('@/lib/systems/launchcall')).noteApprovedOnPage(id, now.toISOString()); } catch (err) {
+        await logEvent(id, 'approval', 'launch_note_failed', { error: String(err?.message || err).slice(0, 200) });
+      }
+    }
   }
   return { ok: true, approved };
 }
@@ -213,8 +240,14 @@ export async function resendAfterChange(clientId, { deps = {} } = {}) {
 }
 
 /**
- * The hourly `approval` job for a client in `warming`: link at Day −7,
- * reminders at Day −5 / −3, silence rule 48 h after the second reminder.
+ * The hourly `approval` job for a client in `warming`. First the launch call
+ * (docs/LAUNCH-CALL.md §2, systems/launchcall.js): once the list and the copy
+ * are ready and warm-up is far enough, the launch invite goes instead of the
+ * plain approval email, and from then on the call's own machinery carries
+ * the approval (no page reminders, no silence rule). The plain path stays for
+ * clients from before this call, and as the fallback when the invite could
+ * not go by LAUNCH.fallbackDay: link at Day −7, reminders at Day −5 / −3,
+ * silence rule 48 h after the second reminder.
  */
 export async function runApprovalJob({ client, now = new Date(), deps = {} }) {
   const notify = deps.notify || notifyClient;
@@ -225,10 +258,13 @@ export async function runApprovalJob({ client, now = new Date(), deps = {} }) {
   const seq = await getStoredSequence(id);
   if (seq.approvedAt) return { approved: true };
   const a = await getApproval(id);
+  const { runLaunchStep } = await import('@/lib/systems/launchcall');
+  const launch = await runLaunchStep({ client, trial, td, approval: a, now });
+  if (launch.handled) return launch.result;
   const linkDay = await cfg(id, 'BUILD.approvalLinkDay');
   if (!a.sentAt) {
     if (td < linkDay) return { waiting: `link on Day ${linkDay}` };
-    return { link: await sendApprovalLink(id, { now, deps }) };
+    return { link: await sendApprovalLink(id, { now, deps }), ...(launch.fallback ? { fallback: launch.fallback } : {}) };
   }
   const reminderDays = [...(await cfg(id, 'APPROVAL.reminderDays'))].sort((x, y) => x - y);
   const today = dayKeyIn(ET, now);

@@ -470,6 +470,21 @@ export const DEFAULTS = {
     checkEveryMinutes: 2,
   },
   // ── end onboarding call ──
+  // ── Launch call (docs/LAUNCH-CALL.md) ── one machine-wide block. The second call: near the
+  // end of warm-up, with the real list and the real emails on screen, the client gives the OK.
+  // It reuses the onboarding call's machinery (its inbox, its reminder hours, its booking page).
+  LAUNCH: {
+    // How long the launch call is (the booking page books this much).
+    callMinutes: 30,
+    // No launch invite before this warm-up day (of about 14): before it there is nothing to show.
+    earliestWarmupDay: 10,
+    // US business days after the invite to have the call BOOKED; later = overdue (one owner alert).
+    bookWithinDays: 3,
+    // Trial day by which the invite must have gone. If the list or the copy is still not ready by
+    // then, the plain approval-page email goes instead, as before the launch call (null = never).
+    fallbackDay: -3,
+  },
+  // ── end launch call ──
   // ── Reply bot (docs/REPLYBOT-MEET.md §2) ── one machine-wide block. Fixed rules, no AI: it
   // answers an applicant's email while they are onboarding, from the ONBOARDCALL inbox, in the
   // same thread, signed with your name. Anything it cannot answer comes to you as before.

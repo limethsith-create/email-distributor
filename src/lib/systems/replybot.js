@@ -57,6 +57,13 @@ export const MAX_AGE_MS = 3 * DAY_MS;
 export const RULES = ['not_interested', 'reschedule', 'proposes_time', 'wants_time', 'price', 'what_needed', 'thanks'];
 /** Rules that need the booking page open (the client is onboarding and the call is not done). */
 const BOOKING_RULES = new Set(['reschedule', 'proposes_time', 'wants_time']);
+/**
+ * On the launch-call thread (docs/LAUNCH-CALL.md, a client in warm-up) the bot
+ * only books: times, another time, a proposed time, and a thank-you. A "not
+ * interested" mid-trial, a price or a "what do you need" question is the
+ * owner's.
+ */
+const LAUNCH_RULES = new Set(['reschedule', 'proposes_time', 'wants_time', 'thanks']);
 /** The placeholders an answer may use. Anything else in {braces} stops the answer (the owner gets the message). */
 const SLOTS = ['bookingLink', 'times', 'firstName', 'onboardingLink', 'ownerName', 'when', 'callMinutes'];
 
@@ -315,12 +322,14 @@ export function readTimes(text, { now = new Date(), zone = ET } = {}) {
  * Which rule answers (pure), in the contract's order; the first match wins.
  * ctx: { now, zone, canBook (booking page open), ownPage (the machine's own
  * booking page, not an outside link), openMeeting {status, start} | null,
- * booked, names }. → { rule: string|null, times?: [ISO], zone? }
+ * booked, names, kind ('launch': only LAUNCH_RULES may answer) }.
+ * → { rule: string|null, times?: [ISO], zone? }
  */
 export function classify(text, ctx = {}) {
   const t = plain(text);
   if (!t) return { rule: null };
-  if (isNotInterested(t)) return { rule: 'not_interested' };
+  const may = (rule) => ctx.kind !== 'launch' || LAUNCH_RULES.has(rule);
+  if (may('not_interested') && isNotInterested(t)) return { rule: 'not_interested' };
   if (ctx.canBook && isReschedule(t)) return { rule: 'reschedule' };
   const times = ctx.canBook ? readTimes(text, { now: ctx.now || new Date(), zone: ctx.zone || ET }) : [];
   if (ctx.canBook && ctx.ownPage) {
@@ -329,8 +338,8 @@ export function classify(text, ctx = {}) {
     if (fresh.length) return { rule: 'proposes_time', times: fresh.map((x) => x.start), zone: fresh[0].zone };
   }
   if (ctx.canBook && !times.length && !ctx.openMeeting && !ctx.booked && isWantsTime(t)) return { rule: 'wants_time' };
-  if (isPrice(t)) return { rule: 'price' };
-  if (isWhatNeeded(t)) return { rule: 'what_needed' };
+  if (may('price') && isPrice(t)) return { rule: 'price' };
+  if (may('what_needed') && isWhatNeeded(t)) return { rule: 'what_needed' };
   if (isThanks(t, ctx.names || [])) return { rule: 'thanks' };
   return { rule: null };
 }
@@ -379,17 +388,25 @@ export function nextDayTimes(open, n = 3, tz = ET) {
 
 // ─── who it may answer ───────────────────────────────────────────────────────
 
-/** Why the bot cannot answer this client now (plain words), or null. The per-client switch is checked by the caller. */
-export function notEligible(client, raw, s) {
+/**
+ * Why the bot cannot answer this client now (plain words), or null. The
+ * per-client switch is checked by the caller. `kind` 'launch' = the launch
+ * call's thread (docs/LAUNCH-CALL.md): it answers while that call is in play.
+ */
+export function notEligible(client, raw, s, kind = 'onboarding') {
   if (!s.enabled) return 'The reply bot is off for everyone (Settings › Reply bot).';
+  if (kind === 'launch') {
+    if (!client || !call.launchOpen(raw, client.state)) return 'The reply bot only answers about the launch call while it is still to happen.';
+    return null;
+  }
   if (!client || client.state !== 'onboarding' || !flag(raw?.sentAt)) return 'The reply bot only answers while they are onboarding (after the acceptance email).';
   return null;
 }
 
 /** For the hub's conversation: the switches, whether it can answer this client, and the US day its count is kept on. */
-export async function botViewFor(client, raw, { now = io.now() } = {}) {
+export async function botViewFor(client, raw, { now = io.now(), kind = 'onboarding' } = {}) {
   const s = await replyBotSettings();
-  const why = notEligible(client, raw, s);
+  const why = notEligible(client, raw, s, kind);
   return { enabled: s.enabled, maxPerDay: s.maxPerDay, answersNow: !why, why, dayKey: partsIn(ET, now).dayKey };
 }
 
@@ -402,16 +419,17 @@ async function openMeetingOf(raw, now) {
   return h && h.end > now.getTime() ? m : null;
 }
 
-/** Everything the rules need about this client right now. */
-async function botContext(client, raw, { now, settings, convo, onboard = null }) {
-  const why = notEligible(client, raw, settings) || (flag(convo.botOff) ? `You turned the reply bot off for ${firstNameOf(client?.contactName) || 'them'}.` : null);
+/** Everything the rules need about this client right now (`kind`: the call the thread is about). */
+async function botContext(client, raw, { now, settings, convo, onboard = null, kind = 'onboarding' }) {
+  const why = notEligible(client, raw, settings, kind) || (flag(convo.botOff) ? `You turned the reply bot off for ${firstNameOf(client?.contactName) || 'them'}.` : null);
   const o = onboard || await call.onboardSettings();
   const meeting = why ? null : await openMeetingOf(raw, now);
   const owner = String((await cfg(client.id, 'OWNER.signerName')) || '');
   return {
     why,
     now,
-    canBook: !why && !flag(raw.heldAt),
+    kind,
+    canBook: !why && !flag(raw.heldAt) && !flag(raw.skipped),
     ownPage: !o.bookingUrl,
     bookingUrl: o.bookingUrl,
     openMeeting: meeting ? { id: meeting.id, status: meeting.status, start: meeting.start, proposed: meeting.proposed || null } : null,
@@ -439,11 +457,11 @@ export async function dropPending(clientId) {
  * the bot may answer this client); `alert` true = the owner gets
  * onboard_reply now, exactly as before the bot.
  */
-export async function onInbound(client, raw, { entryId, at, text, subject = '', messageId = null, from = '', now = io.now() } = {}) {
+export async function onInbound(client, raw, { entryId, at, text, subject = '', messageId = null, from = '', now = io.now(), kind = 'onboarding' } = {}) {
   try {
     const s = await replyBotSettings();
     const convo = await conv.readConvo(client.id);
-    const ctx = await botContext(client, raw, { now, settings: s, convo });
+    const ctx = await botContext(client, raw, { now, settings: s, convo, kind });
     if (ctx.why) return { rule: null, alert: true, why: ctx.why };
     if (isJunkReply({ from, subject, preview: text })) return { rule: null, alert: true, why: 'it looks like an automatic message' };
     const v = classify(text, ctx);
@@ -462,7 +480,7 @@ export async function onInbound(client, raw, { entryId, at, text, subject = '', 
     const after = (ms(at) ?? now.getTime()) + s.delayMinutes * 60e3;
     await conv.patchConvo(client.id, {
       botPending: JSON.stringify({
-        id: entryId, at, rule: v.rule, times: v.times || [], zone: v.zone || ctx.zone, subject, messageId,
+        id: entryId, at, rule: v.rule, times: v.times || [], zone: v.zone || ctx.zone, subject, messageId, kind: ctx.kind,
         text: String(text || '').slice(0, 600), after: iso(after), queuedAt: now.toISOString(),
       }),
     });
@@ -500,18 +518,18 @@ async function handOver(client, p, why, now) {
   return 'handedOver';
 }
 
-/** The calendar's open times for this client now (their own request or booking set aside, as the booking page does). */
-async function freeTimesFor(raw, now) {
+/** The calendar's open times for this client now (their own request or booking set aside, as the booking page does), for a call of `kind`. */
+async function freeTimesFor(raw, now, kind = 'onboarding') {
   const cs = await cal.calendarSettings();
   const { from, to } = cal.bookingWindow(cs, now);
   const meetings = await cal.meetingsBetween(from - DAY_MS, to + DAY_MS);
   const current = raw.meetingId ? await cal.getMeeting(raw.meetingId) : null;
   const active = current && ['requested', 'confirmed'].includes(current.status) ? current : null;
-  return { cs, active, open: cal.openSlots({ settings: cs, meetings, now, from, to, exceptId: active?.id || null }) };
+  return { cs, active, open: cal.openSlots({ settings: cs, meetings, now, from, to, minutes: cal.minutesFor(cs, kind), exceptId: active?.id || null }) };
 }
 
 async function bookingLinkFor(clientId, onboard, p) {
-  return onboard.bookingUrl || cal.bookingLink(clientId, `bot-${shortHash(p.id, 8)}`);
+  return onboard.bookingUrl || cal.bookingLink(clientId, `bot-${shortHash(p.id, 8)}`, call.kindOf(p.kind));
 }
 
 /**
@@ -524,17 +542,18 @@ async function bookingLinkFor(clientId, onboard, p) {
  */
 async function proposeAnswer(client, raw, p, base, s, onboard, now) {
   const tz = p.zone || ET;
-  let { cs, active, open } = await freeTimesFor(raw, now);
+  const kind = call.kindOf(p.kind);
+  let { cs, active, open } = await freeTimesFor(raw, now, kind);
   const pick = (p.times || []).find((t) => (active?.status === 'requested' && active.proposed === t) || open.some((x) => x.start === t));
   if (pick) {
     try {
       const note = `By email: “${String(p.text || '').replace(/\s+/g, ' ').slice(0, 200)}”`;
-      const m = await cal.requestMeeting(client.id, { start: pick, zone: cal.pickZone(tz), note }, { now, source: 'reply_bot', gotIt: false });
+      const m = await cal.requestMeeting(client.id, { start: pick, zone: cal.pickZone(tz), note }, { now, source: 'reply_bot', gotIt: false, kind: call.kindOf(p.kind) });
       if (m.status === 'confirmed') return { calendar: true, did: `they said yes by email to ${cal.usAndOwner(ms(pick), cs)} — confirmed it and sent the calendar invite` };
       return { text: fillAnswer(s.answers.proposes_time_ok, { ...base, when: whenLabel(pick, tz) }), did: `their time ${cal.usAndOwner(ms(pick), cs)} is free — asked for it in the Calendar; say yes there`, calendarAsk: true };
     } catch (err) {
       if (!(err instanceof cal.CalendarError) || err.status !== 409) throw err;
-      ({ cs, active, open } = await freeTimesFor(raw, now)); // just taken: offer what is left
+      ({ cs, active, open } = await freeTimesFor(raw, now, kind)); // just taken: offer what is left
     }
   }
   const asked = (p.times || [])[0];
@@ -545,7 +564,7 @@ async function proposeAnswer(client, raw, p, base, s, onboard, now) {
 
 /** The answer for one rule → { text } (an email), { calendar } (the calendar answered), or { handOver: why }. */
 async function answerFor(client, raw, p, s, onboard, now) {
-  const base = { firstName: firstNameOf(client.contactName) || 'there', ownerName: await ownerName(client.id), callMinutes: onboard.callMinutes };
+  const base = { firstName: firstNameOf(client.contactName) || 'there', ownerName: await ownerName(client.id), callMinutes: call.settingsFor(onboard, p.kind).callMinutes };
   const tz = p.zone || ET;
   switch (p.rule) {
     case 'not_interested':
@@ -555,7 +574,7 @@ async function answerFor(client, raw, p, s, onboard, now) {
     case 'proposes_time':
       return proposeAnswer(client, raw, p, base, s, onboard, now);
     case 'wants_time': {
-      const times = onboard.bookingUrl ? [] : nextDayTimes((await freeTimesFor(raw, now)).open, 3);
+      const times = onboard.bookingUrl ? [] : nextDayTimes((await freeTimesFor(raw, now, call.kindOf(p.kind))).open, 3);
       return { text: fillAnswer(s.answers.wants_time, { ...base, bookingLink: await bookingLinkFor(client.id, onboard, p), times: timesList(times, tz) }), did: times.length ? 'sent the booking link and the next open times' : 'sent the booking link' };
     }
     case 'price':
@@ -578,14 +597,15 @@ async function answerPending(clientId, s, onboard, now) {
   if (!p) { await kv.srem(K.replyBotPending(), clientId); return 'dropped'; }
   const client = await getClient(clientId);
   if (!client) { await dropPending(clientId); return 'dropped'; }
-  const raw = await call.readCall(clientId);
+  const kind = call.kindOf(p.kind);
+  const raw = await call.readCall(clientId, kind);
   // The owner answered after their message: he has it.
   if (Math.max(ms(convo.lastAnswerAt) || 0, ms(raw.lastOwnerReplyAt) || 0) >= ms(p.at)) {
     await dropPending(clientId);
     await logEvent(clientId, SYSTEM, 'skipped', { rule: p.rule, why: 'owner answered' });
     return 'dropped';
   }
-  const ctx = await botContext(client, raw, { now, settings: s, convo, onboard });
+  const ctx = await botContext(client, raw, { now, settings: s, convo, onboard, kind });
   if (ctx.why) return handOver(client, p, ctx.why, now);
   if (BOOKING_RULES.has(p.rule) && !ctx.canBook) return handOver(client, p, 'the call is done, so the booking page is closed', now);
   if (now.getTime() < (ms(p.after) ?? 0)) return 'waiting';
@@ -600,7 +620,7 @@ async function answerPending(clientId, s, onboard, now) {
   let messageId = null;
   let text = null;
   if (a.text) {
-    const threadSubject = conv.stripRe(p.subject) || conv.stripRe(raw.subject) || "You're in — let's book your onboarding call";
+    const threadSubject = conv.stripRe(p.subject) || conv.stripRe(raw.subject) || call.CALL_KINDS[kind].firstSubject;
     const res = await sendClient(clientId, 'bot_reply', { threadSubject, text: a.text }, { dedupe: `bot_reply:${p.id}`, thread: false, linkify: true, ...call.threadHeaders(raw) });
     messageId = res.messageId || null;
     text = res.text || a.text;
@@ -610,9 +630,9 @@ async function answerPending(clientId, s, onboard, now) {
         subject: res.subject || `Re: ${threadSubject}`, text, kind: 'auto_reply', auto: true, rule: p.rule,
       });
     }
-    if (a.stop) await call.stopReminders(clientId, { now }).catch(() => {});
+    if (a.stop) await call.stopReminders(clientId, { now, kind }).catch(() => {});
   }
-  await call.markAnswered(clientId, at, messageId, { bot: true });
+  await call.markAnswered(clientId, at, messageId, { bot: true, kind });
   await conv.noteAnswered(clientId, at, { messageId });
   await conv.patchConvo(clientId, { botPending: null, botDay: day, botCount: count + 1 });
   await kv.srem(K.replyBotPending(), clientId);

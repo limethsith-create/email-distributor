@@ -36,7 +36,8 @@ import { overduePromises } from '@/lib/systems/health';
 import { jobRecords } from '@/lib/scheduler';
 import { loadAccounts } from '@/lib/smtp-accounts';
 import { JOBS } from '@/lib/jobs';
-import { onboardSettings, onboardCallView, onboardCallFor, ownerWhen, ownerDayWord } from '@/lib/systems/onboardcall';
+import { onboardSettings, onboardCallView, onboardCallFor, ownerWhen, ownerDayWord, launchOpen } from '@/lib/systems/onboardcall';
+import { launchCallFor } from '@/lib/systems/launchcall';
 import { conversationFor, needsReplyFor } from '@/lib/systems/conversation';
 import { formatDay } from '@/lib/systems/intake-io';
 import { autobuyView, readRec as readAutobuy, autobuySettings, AUTOBUY_STATES } from '@/lib/systems/autobuy';
@@ -233,12 +234,14 @@ export function systemsFor(ctx) {
       Object.entries(leads).filter(([, v]) => Number(v)).map(([k, v]) => `${k}: ${v}`)));
   } else out.push(sys('list', past(st, 'setup_check') ? 'working' : 'off', past(st, 'setup_check') ? 'Lead Finder not started yet' : 'Starts with warm-up'));
 
-  // 7. Copy & approval
+  // 7. Copy & approval (the OK comes on the launch call, docs/LAUNCH-CALL.md, or on the page)
   const openChange = Object.values(approval.sections || {}).some((s) => s?.status === 'change');
-  if (sequence.approvedAt) out.push(sys('copy', 'ok', `Approved by ${sequence.approvalMode === 'silence' ? 'silence' : 'click'} ${dateOf(sequence.approvedAt)} · version ${sequence.version || 1} · active ${sequence.active || 'both'}`));
+  const approvedHow = { silence: 'silence', call: 'the launch call', click: 'click' }[sequence.approvalMode] || 'click';
+  if (sequence.approvedAt) out.push(sys('copy', 'ok', `Approved by ${approvedHow} ${dateOf(sequence.approvedAt)} · version ${sequence.version || 1} · active ${sequence.active || 'both'}`));
   else if (openChange) out.push(sys('copy', 'waiting', `Change requested by the client (round ${approval.round || 1}) — edit the copy, then it re-sends`, (approval.changes || []).slice(-2).map((c) => `${c.section}: ${String(c.text || '').slice(0, 100)}`)));
+  else if (approval.status === 'launch_invite' && approval.sentAt) out.push(sys('copy', 'waiting', `Launch invite sent ${ago(approval.sentAt, now)} · ${ctx.launchCall?.label || 'waiting for the call'}`));
   else if (approval.sentAt) out.push(sys('copy', 'waiting', `Approval link sent ${ago(approval.sentAt, now)} · waiting for the client`));
-  else if (sequence.variantA) out.push(sys('copy', 'working', 'Copy built · approval link goes out on Day −7'));
+  else if (sequence.variantA) out.push(sys('copy', 'working', 'Copy built · the launch invite goes out near the end of warm-up'));
   else out.push(sys('copy', past(st, 'setup_check') ? 'working' : 'off', past(st, 'setup_check') ? 'Copy not built yet' : 'Built during warm-up'));
 
   // 8. Placement & ramp (canary + ramp planner)
@@ -347,9 +350,21 @@ export function todosFor(ctx) {
       push('onboard-mark', `Mark the onboarding call with ${who}: done or no-show`, `It was ${ownerWhen(oc.bookedFor)} (your time)`, true, oc.bookedFor, view('detail', id, 'onboardCall'));
     }
   }
+  // The launch call (docs/LAUNCH-CALL.md §5): a time to say yes to, a reply, an overdue booking, a call to hold and approve.
+  const lc = ctx.launchCall;
+  if (lc && !lc.skipped) {
+    const who = client.contactName || client.name || id;
+    if (lc.requestedFor && !lc.proposedFor) push('meeting-request', `Say yes to ${who}'s launch-call time — ${ownerWhen(lc.requestedFor)} (your time)`, `They asked ${ago(lc.requestedAt, now)} on the booking page · Yes, Suggest another time or Decline in the Calendar`, true, lc.requestedAt, { type: 'view', view: 'calendar', clientId: id, kind: 'launch', ...(lc.meetingId ? { meetingId: lc.meetingId } : {}) });
+    if (lc.needsReply) push('launch-reply', `Answer ${who} — they replied about the launch call`, `Reply ${ago(lc.lastReplyAt, now)} · it goes from ${lc.fromInbox || 'the onboarding inbox'}, in the same thread`, true, lc.lastReplyAt, view('detail', id, 'launchCall'));
+    else if (lc.status === 'overdue') push('launch-overdue', `Get ${who} to book the launch call — it's overdue`, `Should have been booked by ${ownerWhen(lc.dueBy)} (your time) · ${lc.remindersSent} reminder${lc.remindersSent === 1 ? '' : 's'} sent · they can also approve on the page`, true, lc.dueBy, view('detail', id, 'launchCall'));
+    const past = lc.status === 'booked' && lc.bookedFor && now.getTime() > Date.parse(lc.bookedFor) + (lc.callMinutes || 30) * 60e3;
+    const heldNoOk = lc.status === 'held' && !lc.approvedOnCall && !lc.approvedOnPage;
+    if (past) push('launch-mark', `Hold the launch call with ${who}, then press Approved on the call`, `It was booked for ${ownerWhen(lc.bookedFor)} (your time) · or They didn't show`, true, lc.bookedFor, view('detail', id, 'launchCall'));
+    else if (heldNoOk) push('launch-mark', `Press Approved on the call for ${who} — the launch call is done`, `Marked done ${ago(lc.heldAt, now)} · their OK on the list and the emails lets sending start`, true, lc.heldAt, view('detail', id, 'launchCall'));
+  }
   // A message of theirs with no answer yet, any state (docs/REPLYBOT-MEET.md §1) — the same rule as the
-  // conversation's needsReply. While the onboarding call is in play its own to-do says it.
-  if (needsReplyFor(client, ctx.callRaw) && !t.some((x) => x.id === `onboard-reply:${id}`)) {
+  // conversation's needsReply. While a call is in play its own to-do says it.
+  if (needsReplyFor(client, ctx.callRaw) && !t.some((x) => x.id === `onboard-reply:${id}` || x.id === `launch-reply:${id}`)) {
     const since = client.msgWaitingAt || oc?.lastReplyAt || null;
     push('message-reply', `Answer ${firstOf(client.contactName) || client.contactName || client.name || id}'s message`, `They wrote ${ago(since, now)} · it goes from the onboarding inbox, in the same thread`, true, since, view('detail', id, 'conversation'));
   }
@@ -451,7 +466,7 @@ export function simpleFor(ctx, todos = todosFor(ctx)) {
   const base = simpleBase(ctx);
   // Their last message has no answer yet (the conversation's needsReply, docs/REPLYBOT-MEET.md §1): the
   // hub shows "Sam wrote — answer them" in red. Outside the onboarding call it is also the next thing to do.
-  const needsReply = needsReplyFor(ctx.client, ctx.callRaw) || Boolean(ctx.onboardCall?.needsReply);
+  const needsReply = needsReplyFor(ctx.client, ctx.callRaw) || Boolean(ctx.onboardCall?.needsReply) || Boolean(ctx.launchCall?.needsReply);
   const msg = todos.find((t) => t.id === `message-reply:${ctx.client.id}`);
   // Anything urgent on the to-do list turns the dot on (to-dos are urgent first, oldest first).
   const urgent = todos.find((t) => t.urgent) || null;
@@ -512,14 +527,10 @@ function simpleBase(ctx) {
       if (ctx.autobuy && ctx.autobuy.domain && domain.setupPhase !== 'failed') return autobuySimple(ctx, r);
       if (domain.setupPhase === 'failed') return r('setting_up', 'Setting up their emails — a domain check failed', 'Fix the record named in the to-do; the checks run again every hour', true, domain.setupFailedAt);
       return r('setting_up', 'Setting up their emails — checking the new domain', 'Nothing for you: warm-up starts when the checks pass');
-    case 'warming': {
-      // The warm-up card's own sentence (docs/WARMUP-HUB.md) once the inboxes are in.
-      const w = ctx.warmup;
-      if (w && w.status === 'waiting_for_helpers') return r('warming_up', w.label, `Add ${w.helpersNeeded} warm-up helper${w.helpersNeeded === 1 ? '' : 's'} — Settings › Warm-up`, true);
-      if (w && w.status !== 'paused') return r('warming_up', w.label, trial.day1Date ? `Nothing for you: first emails${on(trial.day1Date)}` : 'Nothing for you: the inboxes warm up for about 2 weeks');
-      return r('warming_up', `Warming up their inboxes — first emails${on(trial.day1Date)}`, 'Nothing for you: the inboxes warm up for about 2 weeks');
-    }
+    case 'warming':
+      return warmingSimple(ctx, r, on);
     case 'ready':
+      if (launchDone(ctx.launchCall)) return r('warming_up', `Launch call done — first emails${on(trial.day1Date)}`, 'Nothing for you');
       return r('warming_up', `Ready — first emails${on(trial.day1Date)}`, 'Nothing for you');
     case 'sending':
       return heldSimple(ctx, r) || r('sending', `Sending — day ${ctx.day ?? '—'} of 30${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, ctx.day ?? null);
@@ -543,6 +554,40 @@ function simpleBase(ctx) {
     default:
       return r('new', STATE_LABELS[st] || st, 'Nothing for you yet');
   }
+}
+
+/** The launch call gave the OK, or is over: approved on the call, held after the page's approval, or skipped. */
+const launchDone = (lc) => Boolean(lc && (lc.approvedOnCall || lc.skipped || (lc.status === 'held' && lc.approvedOnPage)));
+
+/**
+ * `simple` while warming (docs/WARMUP-HUB.md): the warm-up card's sentence, and once the launch invite went
+ * (docs/LAUNCH-CALL.md §5) where the launch call stands after a " · ".
+ */
+function warmingSimple(ctx, r, on) {
+  const { trial = {}, now } = ctx;
+  const w = ctx.warmup;
+  const lc = ctx.launchCall || null;
+  if (w && w.status === 'waiting_for_helpers') return r('warming_up', w.label, `Add ${w.helpersNeeded} warm-up helper${w.helpersNeeded === 1 ? '' : 's'} — Settings › Warm-up`, true);
+  const base = w && w.status !== 'paused' ? w.label : `Warming up their inboxes — first emails${on(trial.day1Date)}`;
+  const nothing = trial.day1Date ? `Nothing for you: first emails${on(trial.day1Date)}` : 'Nothing for you: the inboxes warm up for about 2 weeks';
+  if (!lc) return r('warming_up', base, nothing);
+  if (launchDone(lc)) return r('warming_up', `Launch call done — first emails${on(trial.day1Date)}`, nothing, false, lc.approvedOnCall || lc.skipped || lc.heldAt);
+  if (lc.status === 'held') return r('warming_up', `${base} · launch call done`, 'Press Approved on the call if they gave the OK', true, lc.heldAt);
+  if (lc.status === 'booked' && lc.bookedFor) {
+    if (now.getTime() > Date.parse(lc.bookedFor) + (lc.callMinutes || 30) * 60e3) return r('warming_up', `${base} · launch call was ${ownerWhen(lc.bookedFor)} (your time)`, 'Hold the launch call, then press Approved on the call', true, lc.bookedFor);
+    return r('warming_up', `${base} · launch call ${ownerWhen(lc.bookedFor)} (your time)`, lc.needsReply ? 'They wrote again — answer them' : `Nothing for you until the call (${ownerDayWord(lc.bookedFor, now)})`, lc.needsReply, lc.bookedAt);
+  }
+  if (lc.status === 'booked') return r('warming_up', `${base} · launch call booked — check your calendar for the time`, 'Take the call, then press Approved on the call', lc.needsReply, lc.bookedAt);
+  if (lc.requestedFor) {
+    if (lc.proposedFor) return r('warming_up', `${base} · you suggested ${ownerWhen(lc.proposedFor)} (your time) for the launch call`, 'Nothing for you: they have a one-click link to say yes', lc.needsReply, lc.requestedAt);
+    return r('warming_up', `${base} · they asked for ${ownerWhen(lc.requestedFor)} (your time) — say yes in the Calendar`, 'Open the Calendar: Yes, Suggest another time or Decline', true, lc.requestedAt);
+  }
+  if (lc.approvedOnPage) return r('warming_up', `${base} · they approved on the page (launch call optional)`, 'Nothing for you: hold the call if you like, or press Skip the call', false, lc.approvedOnPage);
+  if (lc.needsReply) return r('warming_up', `${base} · they replied about the launch call`, 'Read their reply and answer it in the conversation', true, lc.lastReplyAt);
+  if (lc.status === 'overdue') return r('warming_up', `${base} · launch call still not booked (overdue)`, 'Write to them in the conversation, or send the invite again', true, lc.dueBy);
+  if (lc.status === 'no_show') return r('warming_up', `${base} · they missed the launch call`, 'Write to them in the conversation, or mark the new time once it is booked', false, lc.noShowAt);
+  if (lc.status === 'stopped') return r('warming_up', `${base} · launch-call reminders stopped`, 'Mark the call booked if you arrange it, or wait for their OK on the page', false, lc.stoppedAt);
+  return r('warming_up', `${base} · waiting for them to pick a launch-call time`, lc.bookingUrl ? 'Mark the call booked once they book with your link' : 'Nothing for you: the time they pick comes to your Calendar', false, lc.sentAt);
 }
 
 /**
@@ -606,11 +651,14 @@ const parseJson = (v, fallback) => { if (v == null || v === '') return fallback;
 export async function loadContext(client, { alerts = null, now = new Date(), onboard = null, autobuy = null, warm = null } = {}) {
   const id = client.id;
   const vnow = clientNow(client, now);
-  // The onboarding call is read only for clients that were sent one (flag on the client hash).
-  const callRaw = client.onboardCallSentAt ? (await kv.hgetall(K.onboardCall(id)).catch(() => null)) || {} : {};
-  const onboardCall = client.onboardCallSentAt
-    ? onboardCallView(callRaw, [], { now: vnow, settings: onboard || await onboardSettings(), clientState: client.state })
-    : null;
+  // The onboarding call is read only for clients that were sent one (flag on the client hash); the launch call
+  // (docs/LAUNCH-CALL.md) the same. `callRaw` is the call in play — what "answer them" is judged on.
+  const onboardRaw = client.onboardCallSentAt ? (await kv.hgetall(K.onboardCall(id)).catch(() => null)) || {} : {};
+  const launchRaw = client.launchCallSentAt ? (await kv.hgetall(K.launchCall(id)).catch(() => null)) || {} : {};
+  const settings = client.onboardCallSentAt || client.launchCallSentAt ? onboard || await onboardSettings() : null;
+  const onboardCall = client.onboardCallSentAt ? onboardCallView(onboardRaw, [], { now: vnow, settings, clientState: client.state }) : null;
+  const launchCall = client.launchCallSentAt ? onboardCallView(launchRaw, [], { now: vnow, settings, clientState: client.state, kind: 'launch' }) : null;
+  const callRaw = launchOpen(launchRaw, client.state) ? launchRaw : onboardRaw;
   const [extras, profile, trial, domainRead, shopping, inboxesRaw, lf, approval, sequence, pacelog, runState, allAlerts] = await Promise.all([
     clientExtras(client, now),
     getProfile(id),
@@ -653,7 +701,7 @@ export async function loadContext(client, { alerts = null, now = new Date(), onb
     bookings: extras.bookings || [], replies: extras.replies || [], repliesByKind: extras.repliesByKind || {}, hot,
     invoice: extras.invoice, promises: extras.promises || [], pacelog, reports: extras.reports || [], upcoming: extras.upcoming || [],
     runState, application, fitScore, alerts: openAlerts, day: extras.trialDay, health: extras.health, now: vnow, minMarket: await cfg(id, 'MIN_MARKET'),
-    onboardCall, callRaw, autobuy: autobuyCtx, warmup,
+    onboardCall, callRaw, launchCall, launchRaw, autobuy: autobuyCtx, warmup,
   };
 }
 
@@ -678,8 +726,8 @@ export async function hubRow(client, { alerts, now = new Date(), onboard = null,
 export async function hubBoard({ now = new Date() } = {}) {
   const [board, clients, queue] = await Promise.all([boardData(now), getAllClients(), listQueue().catch(() => ({ rows: [] }))]);
   const alerts = await getAlertLog(500);
-  // ONBOARDCALL settings once per board (one read), only when some trial has an onboarding call.
-  const onboard = clients.some((c) => c.onboardCallSentAt) ? await onboardSettings().catch(() => null) : null;
+  // ONBOARDCALL (+ LAUNCH) settings once per board (one read), only when some trial has a call.
+  const onboard = clients.some((c) => c.onboardCallSentAt || c.launchCallSentAt) ? await onboardSettings().catch(() => null) : null;
   // Whether CheapInboxes is connected + its settings, once per board.
   const ciOn = await cheapInboxesConnected();
   const autobuy = clients.some((c) => AUTOBUY_STATES.has(c.state) || String(c.autobuyOpen) === '1') ? { connected: ciOn, settings: await autobuySettings() } : null;
@@ -807,6 +855,8 @@ export async function hubClient(id, { now = new Date() } = {}) {
     application: ctx.application ? { ...ctx.application, research: await researchView(id).catch(() => null) } : null,
     // The onboarding call with its whole conversation (docs/ONBOARD-CALL.md §5); null when no acceptance email went.
     onboardCall: client.onboardCallSentAt ? await onboardCallFor(id, { now, client }).catch(() => null) : null,
+    // The launch call (docs/LAUNCH-CALL.md §5): the same shape plus approvedOnCall / approvedOnPage / skipped / approvalUrl; null until the invite went.
+    launchCall: client.launchCallSentAt ? await launchCallFor(id, { now, client }).catch(() => null) : null,
     // The CheapInboxes purchase (docs/AUTO-BUY.md "Status for the hub"); null outside the buying / setup / warm-up steps.
     autobuy: ctx.autobuy || null,
     // The warm-up card (docs/WARMUP-HUB.md); null before the inboxes are connected.

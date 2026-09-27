@@ -92,8 +92,19 @@ export async function calendarSettings() {
   const pick = (k) => (o[`CALENDAR.${k}`] !== undefined ? o[`CALENDAR.${k}`] : whole[k] !== undefined ? whole[k] : DEFAULTS.CALENDAR[k]);
   const s = Object.fromEntries(Object.keys(DEFAULTS.CALENDAR).map((k) => [k, pick(k)]));
   s.callMinutes = o['ONBOARDCALL.callMinutes'] ?? (isObj(o.ONBOARDCALL) ? o.ONBOARDCALL.callMinutes : undefined) ?? DEFAULTS.ONBOARDCALL.callMinutes;
+  // The launch call's length (docs/LAUNCH-CALL.md), for the booking page and the slots of a launch meeting.
+  s.launchMinutes = o['LAUNCH.callMinutes'] ?? (isObj(o.LAUNCH) ? o.LAUNCH.callMinutes : undefined) ?? DEFAULTS.LAUNCH.callMinutes;
   return normaliseCalendar(s);
 }
+
+/** The two kinds of client call the calendar books through the booking page (docs/ONBOARD-CALL.md, docs/LAUNCH-CALL.md). */
+const CALL_KINDS = new Set(['onboarding', 'launch']);
+const isCall = (kind) => CALL_KINDS.has(kind);
+const callKind = (kind) => (kind === 'launch' ? 'launch' : 'onboarding');
+/** How long a call of `kind` is. */
+export const minutesFor = (s, kind) => (kind === 'launch' ? s.launchMinutes : s.callMinutes);
+/** 'onboarding call' / 'launch call' / 'call' — the words the emails and alerts use for a meeting. */
+const callName = (m) => (m?.kind === 'launch' ? 'launch call' : m?.kind === 'onboarding' ? 'onboarding call' : 'call');
 
 /** Settings → safe values (a broken value falls back to the default, never to "no calls"). */
 export function normaliseCalendar(s = {}) {
@@ -114,6 +125,7 @@ export function normaliseCalendar(s = {}) {
     ownerZone: validZone(s.ownerZone || d.ownerZone) || d.ownerZone,
     usZone: validZone(s.usZone || d.usZone) || d.usZone,
     callMinutes: int(s.callMinutes, DEFAULTS.ONBOARDCALL.callMinutes, 5, 240),
+    launchMinutes: int(s.launchMinutes, DEFAULTS.LAUNCH.callMinutes, 5, 240),
   };
 }
 
@@ -412,11 +424,12 @@ function newMeeting({ client = null, kind = 'other', title, start, minutes, stat
   };
 }
 
-const onboardingTitle = (client) => `Onboarding call — ${client.name || client.mainDomain || client.id}`;
+/** 'Onboarding call — eCreek IT' / 'Launch call — eCreek IT' (the hub labels the meeting by its title too). */
+const callTitle = (client, kind) => `${kind === 'launch' ? 'Launch call' : 'Onboarding call'} — ${client.name || client.mainDomain || client.id}`;
 
-/** The client's onboarding meeting (linked from their onboarding call), or null. */
-async function onboardingMeetingOf(clientId) {
-  const raw = await call.readCall(clientId);
+/** The client's meeting for the call of `kind` (linked from that call's hash), or null — one per client per kind. */
+async function meetingOf(clientId, kind = 'onboarding') {
+  const raw = await call.readCall(clientId, kind);
   return raw.meetingId ? getMeeting(raw.meetingId) : null;
 }
 
@@ -433,12 +446,20 @@ export async function zoneOfClient(clientId) {
 /**
  * A booking-page link for this client (/c/{token}/book). Each email mints its
  * own token (purpose `book:{tag}`), so an earlier link keeps working; only the
- * token's hash is stored.
+ * token's hash is stored. A launch-call link (docs/LAUNCH-CALL.md) carries
+ * `kind: 'launch'` in the token, so the page books that call.
  */
-export async function bookingLink(clientId, tag = 'x') {
+export async function bookingLink(clientId, tag = 'x', kind = 'onboarding') {
   assertClientId(clientId);
-  const token = await mintToken(clientId, `book:${String(tag).replace(/[^a-z0-9-]/gi, '').slice(0, 40) || 'x'}`, { ttl: BOOK_TTL });
+  const token = await mintToken(clientId, `book:${String(tag).replace(/[^a-z0-9-]/gi, '').slice(0, 40) || 'x'}`, { ttl: BOOK_TTL, data: kind === 'launch' ? { kind: 'launch' } : null });
   return pageUrl(token, 'book');
+}
+
+/** The call a booking link is for: what its token says, else the client's call in play (docs/LAUNCH-CALL.md). */
+export async function kindOfLink(tok, clientId) {
+  if (tok?.data?.kind === 'launch') return 'launch';
+  if (tok?.data?.kind === 'onboarding') return 'onboarding';
+  return (await call.activeCall(clientId)).kind;
 }
 
 /**
@@ -472,7 +493,7 @@ const sentence = (t) => { const x = String(t || '').trim(); return !x ? x : /[.!
  */
 async function meetingVars(m, s, t, tag) {
   const tz = zoneOf(m, s);
-  const bookLink = m.kind === 'onboarding' && m.clientId ? await bookingLink(m.clientId, `${m.id.slice(-10)}-${tag}`) : null;
+  const bookLink = isCall(m.kind) && m.clientId ? await bookingLink(m.clientId, `${m.id.slice(-10)}-${tag}`, m.kind) : null;
   return {
     when: theirWhen(t, tz, s),
     whenShort: theirShort(t, tz),
@@ -488,7 +509,7 @@ async function inviteFor(m, s, { method = 'REQUEST', now }) {
   const sender = await onboardSender();
   const organizer = { email: sender?.email || '', name: await ownerName(m.clientId) };
   const description = [
-    m.kind === 'onboarding' ? `Our ${m.minutes}-minute onboarding call.` : `Our ${m.minutes}-minute call.`,
+    m.kind === 'launch' ? `Our ${m.minutes}-minute launch call: your list and your emails, for your OK.` : m.kind === 'onboarding' ? `Our ${m.minutes}-minute onboarding call.` : `Our ${m.minutes}-minute call.`,
     linkOf(m, s) ? `Join here: ${linkOf(m, s)}` : "I'll send the link before the call.",
   ].join('\n');
   const content = buildIcs({ method, uid: m.googleICalUid || m.id, sequence: m.sequence || 0, start: m.start, minutes: m.minutes, title: m.title, description, location: linkOf(m, s) || '', organizer, attendee: { email: m.email, name: m.person }, now });
@@ -502,7 +523,7 @@ async function inviteFor(m, s, { method = 'REQUEST', now }) {
  */
 async function emailClient(m, key, vars, { icalEvent = null, dedupe = null, now }) {
   if (!m.clientId || !m.email) return { skipped: 'no client email' };
-  return call.sendCallEmail(m.clientId, key, { firstName: firstNameOf(m.person) || 'there', ownerName: await ownerName(m.clientId), ...vars }, { icalEvent, dedupe, now });
+  return call.sendCallEmail(m.clientId, key, { firstName: firstNameOf(m.person) || 'there', ownerName: await ownerName(m.clientId), ...vars }, { icalEvent, dedupe, now, kind: callKind(m.kind) });
 }
 
 // ─── Google Meet (docs/REPLYBOT-MEET.md §3) ──────────────────────────────────
@@ -517,8 +538,8 @@ async function withMeet(m, s) {
 
 // ─── the booking page ────────────────────────────────────────────────────────
 
-/** Client states in which the booking page takes a time (the onboarding call is still to happen). */
-const pageOpen = (client, raw) => Boolean(client) && call.WATCH_STATES.has(client.state) && !(raw.heldAt && String(raw.heldAt) !== '0');
+/** The booking page takes a time while the call of `kind` is still to happen (docs/ONBOARD-CALL.md, docs/LAUNCH-CALL.md). */
+const pageOpen = (client, raw, kind) => Boolean(client) && call.callOpen(raw, client.state, kind);
 /** Their request or booking that is still ahead (one whose time has passed no longer blocks a new pick). */
 const stillAhead = (m, now) => Boolean(m) && OPEN.has(m.status) && (heldInterval(m)?.end ?? 0) > now.getTime();
 
@@ -534,24 +555,27 @@ export function publicMeeting(m, tz) {
 /**
  * Everything the booking page shows: their zone (asked for, else the one on
  * their meeting, else from their state), the open times grouped by day in
- * that zone, and their current request or booking.
+ * that zone, and their current request or booking. `kind` = the call the
+ * page books (the onboarding call, or the launch call — docs/LAUNCH-CALL.md).
  */
-export async function bookingPageData(clientId, { tz = null, now = io.now() } = {}) {
-  const [client, raw, s] = await Promise.all([getClient(clientId), call.readCall(clientId), calendarSettings()]);
+export async function bookingPageData(clientId, { tz = null, now = io.now(), kind = 'onboarding' } = {}) {
+  const k = callKind(kind);
+  const [client, raw, s] = await Promise.all([getClient(clientId), call.readCall(clientId, k), calendarSettings()]);
   const current = raw.meetingId ? await getMeeting(raw.meetingId) : null;
   const existing = stillAhead(current, now) ? current : null;
   const zone = pickZone(tz) || pickZone(existing?.theirZone) || await zoneOfClient(clientId);
+  const minutes = minutesFor(s, k);
   const base = {
-    clientId, closed: !pageOpen(client, raw), held: Boolean(raw.heldAt && String(raw.heldAt) !== '0'),
+    clientId, kind: k, closed: !pageOpen(client, raw, k), held: Boolean(raw.heldAt && String(raw.heldAt) !== '0'),
     company: client ? client.name || client.mainDomain || clientId : '', firstName: firstNameOf(client?.contactName),
     zone, zoneName: zoneInfo(zone).name, zones: US_ZONES.map(({ tz: z, name }) => ({ tz: z, name })),
-    callMinutes: s.callMinutes, daysAhead: s.daysAhead, meetingLink: existing?.status === 'confirmed' ? linkOf(existing, s) : null,
+    callMinutes: minutes, daysAhead: s.daysAhead, meetingLink: existing?.status === 'confirmed' ? linkOf(existing, s) : null,
     existing: publicMeeting(existing, zone), slots: [], days: [],
   };
   if (base.closed) return base;
   const { from, to } = bookingWindow(s, now);
   const meetings = await meetingsBetween(from - DAY_MS, to + DAY_MS);
-  base.slots = openSlots({ settings: s, meetings, now, from, to, exceptId: existing?.id || null }).map((x) => ({ start: x.start, label: slotLabel(x.start, zone) }));
+  base.slots = openSlots({ settings: s, meetings, now, from, to, minutes, exceptId: existing?.id || null }).map((x) => ({ start: x.start, label: slotLabel(x.start, zone) }));
   for (const x of base.slots) {
     const key = dayKeyOf(x.start, zone);
     let d = base.days[base.days.length - 1];
@@ -569,18 +593,21 @@ export async function bookingPageData(clientId, { tz = null, now = io.now() } = 
  * answers). The same pick twice changes nothing and emails nothing; picking
  * the time the owner suggested is their yes to it (acceptSuggestion).
  * The reply bot (docs/REPLYBOT-MEET.md §2) asks with `source: 'reply_bot'` and
- * `gotIt: false` — its own answer is their "got it".
+ * `gotIt: false` — its own answer is their "got it". `kind` = the call they
+ * are booking (the launch call has its own meeting, docs/LAUNCH-CALL.md).
  */
-export async function requestMeeting(clientId, { start, note = '', zone = null } = {}, { now = io.now(), source = 'booking_page', gotIt = true } = {}) {
+export async function requestMeeting(clientId, { start, note = '', zone = null } = {}, { now = io.now(), source = 'booking_page', gotIt = true, kind = 'onboarding' } = {}) {
   assertClientId(clientId);
+  const k = callKind(kind);
   const t = msOf(start);
   if (t == null) throw new CalendarError('Pick a time first.');
   const startIso = iso(t);
   const cleanNote = String(note || '').replace(/\r\n/g, '\n').trim().slice(0, NOTE_MAX);
   const s = await calendarSettings();
+  const minutes = minutesFor(s, k);
   const done = await withLock(async () => {
-    const [client, raw] = await Promise.all([getClient(clientId), call.readCall(clientId)]);
-    if (!pageOpen(client, raw)) throw new CalendarError("This page is closed — reply to my last email and we'll find a time.", 409);
+    const [client, raw] = await Promise.all([getClient(clientId), call.readCall(clientId, k)]);
+    if (!pageOpen(client, raw, k)) throw new CalendarError("This page is closed — reply to my last email and we'll find a time.", 409);
     const current = raw.meetingId ? await getMeeting(raw.meetingId) : null;
     const active = current && OPEN.has(current.status) ? current : null;
     if (active && active.status === 'requested' && active.proposed === startIso) return { accept: active.id };
@@ -590,19 +617,19 @@ export async function requestMeeting(clientId, { start, note = '', zone = null }
     }
     const { from, to } = bookingWindow(s, now);
     const meetings = await meetingsBetween(from - DAY_MS, to + DAY_MS);
-    const open = openSlots({ settings: s, meetings, now, from, to, exceptId: active?.id || null });
+    const open = openSlots({ settings: s, meetings, now, from, to, minutes, exceptId: active?.id || null });
     if (!open.some((x) => x.start === startIso)) throw new CalendarError('Sorry — that time was just taken. Please pick another.', 409);
     const theirZone = pickZone(zone) || active?.theirZone || await zoneOfClient(clientId);
     const at = now.toISOString();
     let m;
     if (active) {
       m = {
-        ...active, status: 'requested', start: startIso, minutes: s.callMinutes, proposed: null, declineReason: null,
+        ...active, status: 'requested', start: startIso, minutes, proposed: null, declineReason: null,
         note: cleanNote || active.note || '', theirZone, requestedAt: at, updatedAt: at,
         history: [...(active.history || []), step('requested', 'them', now, { from: active.start, was: active.status, ...(source !== 'booking_page' ? { via: source } : {}) })],
       };
     } else {
-      m = newMeeting({ client, kind: 'onboarding', title: onboardingTitle(client), start: startIso, minutes: s.callMinutes, status: 'requested', source, theirZone, note: cleanNote, now, by: 'them' });
+      m = newMeeting({ client, kind: k, title: callTitle(client, k), start: startIso, minutes, status: 'requested', source, theirZone, note: cleanNote, now, by: 'them' });
     }
     m = await saveMeeting(m);
     await call.syncCallFromMeeting(clientId, m, { now });
@@ -624,7 +651,7 @@ export async function requestMeeting(clientId, { start, note = '', zone = null }
     clientId,
     scope: `${clientId}:request:${m.id}:${m.start}`,
     vars: { who: who(m), when: usAndOwner(t, s) },
-    body: `${m.person || m.email} (${m.email}) from ${m.company} ${moving ? 'asked to move the onboarding call to' : 'asked for'} ${usAndOwner(t, s)} (${theirShort(t, zoneOf(m, s))} for them)${source === 'reply_bot' ? ' in an email (the reply bot read it and told them you will confirm)' : ''}.${moving ? ` It was ${usAndOwner(msOf(done.was.start), s)}; that time is free again until you answer.` : ''}${m.note ? `\n\nTheir note: “${m.note}”` : ''}`,
+    body: `${m.person || m.email} (${m.email}) from ${m.company} ${moving ? `asked to move the ${callName(m)} to` : `asked for${m.kind === 'launch' ? ' the launch call at' : ''}`} ${usAndOwner(t, s)} (${theirShort(t, zoneOf(m, s))} for them)${source === 'reply_bot' ? ' in an email (the reply bot read it and told them you will confirm)' : ''}.${moving ? ` It was ${usAndOwner(msOf(done.was.start), s)}; that time is free again until you answer.` : ''}${m.note ? `\n\nTheir note: “${m.note}”` : ''}`,
     did: 'Holding that time for them. In the hub\'s Calendar press Yes, Suggest another time, or Decline.',
     url: '/#calendar',
   });
@@ -655,7 +682,7 @@ export async function acceptSuggestion(clientId, meetingId, { now = io.now() } =
       sequence: m.confirmedAt ? (Number(m.sequence) || 0) + 1 : Number(m.sequence) || 0,
       history: [...(m.history || []), step('accepted', 'them', now, { from: m.start }), step('confirmed', 'them', now)],
     }, s));
-    if (next.kind === 'onboarding') await call.syncCallFromMeeting(clientId, next, { now });
+    if (isCall(next.kind)) await call.syncCallFromMeeting(clientId, next, { now });
     return { meeting: next };
   });
   if (done.same) return done.meeting;
@@ -675,7 +702,7 @@ export async function acceptSuggestion(clientId, meetingId, { now = io.now() } =
     scope: `${clientId}:accepted:${m.id}:${m.start}`,
     vars: { who: who(m), when: usAndOwner(t, s) },
     body: `${m.person || m.email} from ${m.company} said yes to the time you suggested: ${usAndOwner(t, s)} (${theirShort(t, zoneOf(m, s))} for them).${emailError ? `\n\nThe confirmation email to them failed (${emailError}) — write to them.` : ''}`,
-    did: emailError ? 'Confirmed it in the Calendar and marked the onboarding call booked.' : 'Confirmed it in the Calendar, sent them the confirmation with a calendar invite, and marked the onboarding call booked.',
+    did: emailError ? `Confirmed it in the Calendar and marked the ${callName(m)} booked.` : `Confirmed it in the Calendar, sent them the confirmation with a calendar invite, and marked the ${callName(m)} booked.`,
     url: '/#calendar',
   });
   return m;
@@ -802,7 +829,7 @@ async function cancel(id, reason, s, now) {
   try {
     const t = msOf(m.start);
     const v = await meetingVars(next, s, t, 'cx');
-    const nextLine = m.kind === 'onboarding' && m.clientId ? `When you're ready, pick a new time here: ${v.bookLink}` : "Reply to this email if you'd like a new time.";
+    const nextLine = isCall(m.kind) && m.clientId ? `When you're ready, pick a new time here: ${v.bookLink}` : "Reply to this email if you'd like a new time.";
     const cancelText = `I'm sorry — I've had to cancel our call on ${v.when}.${why ? ` ${why}` : ''}`;
     const ics = m.confirmedAt && m.email ? await inviteFor({ ...next, start: m.status === 'confirmed' ? m.start : lastConfirmedStart(m) }, s, { method: 'CANCEL', now }) : null;
     await emailClient(next, 'meeting_cancelled', { when: v.when, whenShort: v.whenShort, cancelText, nextLine }, { icalEvent: ics, dedupe: `meeting_cancelled:${m.id}:${next.sequence}`, now });
@@ -817,23 +844,23 @@ function markOutcome(m, what, now) {
   return { ...m, status: what, updatedAt: now.toISOString(), history: [...(m.history || []), step(what, 'owner', now)] };
 }
 
-/** A meeting the owner arranged himself (confirmed, nobody is emailed). kind 'onboarding' makes it that client's onboarding call. */
+/** A meeting the owner arranged himself (confirmed, nobody is emailed). kind 'onboarding' / 'launch' makes it that client's call of that kind. */
 async function addMeeting(body, s, now) {
   const t = ownerTime(body.start, now, { future: false });
-  const minutes = Math.round(Number(body.minutes) || s.callMinutes);
-  if (minutes < 5 || minutes > 240) throw new CalendarError('A meeting is 5 to 240 minutes.');
   let client = null;
   if (body.clientId) {
     try { assertClientId(String(body.clientId)); } catch { throw new CalendarError('Unknown client.', 404); }
     client = await getClient(String(body.clientId));
     if (!client) throw new CalendarError('Unknown client.', 404);
   }
-  const kind = body.kind === 'onboarding' && client ? 'onboarding' : 'other';
-  if (kind === 'onboarding') {
-    const current = await onboardingMeetingOf(client.id);
-    if (current && OPEN.has(current.status)) throw new CalendarError('They already have an onboarding call in the calendar — move that one instead.', 409);
+  const kind = isCall(body.kind) && client ? body.kind : 'other';
+  const minutes = Math.round(Number(body.minutes) || (kind === 'other' ? s.callMinutes : minutesFor(s, kind)));
+  if (minutes < 5 || minutes > 240) throw new CalendarError('A meeting is 5 to 240 minutes.');
+  if (kind !== 'other') {
+    const current = await meetingOf(client.id, kind);
+    if (current && OPEN.has(current.status)) throw new CalendarError(`They already have ${kind === 'launch' ? 'a launch call' : 'an onboarding call'} in the calendar — move that one instead.`, 409);
   }
-  const title = String(body.title || '').trim() || (kind === 'onboarding' ? onboardingTitle(client) : client ? `Call — ${client.name || client.id}` : '');
+  const title = String(body.title || '').trim() || (kind !== 'other' ? callTitle(client, kind) : client ? `Call — ${client.name || client.id}` : '');
   if (!title) throw new CalendarError('Give the meeting a title.');
   await assertFree(t, minutes, null, s);
   const theirZone = client ? await zoneOfClient(client.id) : null;
@@ -881,7 +908,7 @@ export async function calendarAction(body = {}, { now = io.now() } = {}) {
       default: throw new CalendarError('Unknown action — use confirm, suggest, decline, move, held, noShow, cancel, add, block or unblock.');
     }
     const saved = await saveMeeting(m);
-    if (saved.kind === 'onboarding' && saved.clientId) await call.syncCallFromMeeting(saved.clientId, saved, { now });
+    if (isCall(saved.kind) && saved.clientId) await call.syncCallFromMeeting(saved.clientId, saved, { now });
     return saved;
   });
   await logEvent(meeting.clientId || null, SYSTEM, `owner_${body.action}`, { meetingId: meeting.id, start: meeting.start, status: meeting.status });
@@ -895,17 +922,19 @@ export async function calendarAction(body = {}, { now = io.now() } = {}) {
 // ─── the onboarding card and the inbox → the calendar ────────────────────────
 
 /**
- * Keep the client's onboarding meeting in step with the onboarding card
+ * Keep the client's meeting for the call of `kind` in step with its card
  * ("Mark call booked", "Call done", "They didn't show") and with calendar
- * invites found in the inbox — one meeting per client's onboarding call, no
- * emails (the owner or their own calendar tool already told them).
- * `what`: 'booked' (with `start`), 'held', 'no_show', 'cancelled'.
+ * invites found in the inbox — one meeting per client per call, no emails
+ * (the owner or their own calendar tool already told them).
+ * `what`: 'booked' (with `start`), 'held', 'no_show', 'cancelled'. The launch
+ * card's own booking comes with `source: 'launch_card'` (docs/LAUNCH-CALL.md).
  */
-export async function syncFromOnboardCall(clientId, what, { start = null, source = 'onboard_card', by = 'owner', now = io.now() } = {}) {
+export async function syncFromOnboardCall(clientId, what, { start = null, source = 'onboard_card', by = 'owner', now = io.now(), kind = 'onboarding' } = {}) {
   assertClientId(clientId);
+  const k = callKind(kind);
   const s = await calendarSettings();
   return withLock(async () => {
-    const current = await onboardingMeetingOf(clientId);
+    const current = await meetingOf(clientId, k);
     const at = now.toISOString();
     let m = null;
     if (what === 'booked') {
@@ -921,7 +950,7 @@ export async function syncFromOnboardCall(clientId, what, { start = null, source
       } else {
         const client = await getClient(clientId);
         if (!client) return null;
-        m = newMeeting({ client, kind: 'onboarding', title: onboardingTitle(client), start: startIso, minutes: s.callMinutes, status: 'confirmed', source, theirZone: await zoneOfClient(clientId), now, by });
+        m = newMeeting({ client, kind: k, title: callTitle(client, k), start: startIso, minutes: minutesFor(s, k), status: 'confirmed', source, theirZone: await zoneOfClient(clientId), now, by });
       }
     } else if (what === 'held' || what === 'no_show') {
       if (!current || !['confirmed', 'held', 'no_show'].includes(current.status) || current.status === what) return current;
@@ -934,8 +963,8 @@ export async function syncFromOnboardCall(clientId, what, { start = null, source
     if (m.googleEventId && m.status === 'cancelled') m = { ...m, ...(await google.dropMeet(m)) };
     else if (m.googleEventId && current?.start !== m.start) m = { ...m, ...(await google.moveMeet(m)) };
     m = await saveMeeting(m);
-    await call.linkMeeting(clientId, m.id);
-    await logEvent(clientId, SYSTEM, `synced_${what}`, { meetingId: m.id, start: m.start, source });
+    await call.linkMeeting(clientId, m.id, k);
+    await logEvent(clientId, SYSTEM, `synced_${what}`, { meetingId: m.id, start: m.start, source, kind: k });
     return m;
   });
 }

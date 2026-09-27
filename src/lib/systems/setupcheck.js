@@ -427,12 +427,10 @@ export async function sendWelcome(clientId, { now = io.now() } = {}) {
   const trial = await kv.hgetall(K.trial(clientId));
   if (!trial?.day1Date) throw new Error('no day1Date');
   if (trial.welcomeSentAt) { await updateClient(clientId, { intakeStep: '' }); return { skipped: 'sent' }; }
-  // The approval link goes out on Day −7 (SPEC §7.6). Build days count from
-  // signedDay = Day −14 (time.js trialDay), so Day −7 is signedDay + 7.
-  const approvalDate = addDays(trial.signedDay || dayKeyIn(ET, now), 7);
+  // The OK on the list and the emails comes on the launch call near the end of warm-up (docs/LAUNCH-CALL.md).
   await sendClient(clientId, 'welcome_two_dates', {
     firstName: firstNameOf(client.contactName), ownerName: await ownerName(clientId),
-    day1Date: formatDay(trial.day1Date), day30Date: formatDay(trial.day30Date), approvalDate: formatDay(approvalDate),
+    day1Date: formatDay(trial.day1Date), day30Date: formatDay(trial.day30Date), callMinutes: await cfg(clientId, 'LAUNCH.callMinutes'),
   }, { dedupe: 'welcome_two_dates' });
   await kv.hset(K.trial(clientId), { welcomeSentAt: now.toISOString() });
   await updateClient(clientId, { intakeStep: '' });

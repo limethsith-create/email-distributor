@@ -85,8 +85,10 @@ const trimmed = (snap) => { const s = structuredClone(snap); if (s.detail?.event
 // docs/HUB-API.md: the fields the hub reads, checked on every answer.
 const ROW_KEYS = ['id', 'name', 'state', 'stateLabel', 'plan', 'trialDay', 'day1Date', 'day30Date', 'contactName', 'contactEmail', 'website', 'health', 'healthReasons', 'five', 'inboxRate', 'openAlerts', 'urgentAlerts', 'todo', 'systems', 'nextUp', 'simple', 'fitScore'];
 const SIMPLE_KEYS = ['step', 'label', 'next', 'needsYou', 'since', 'person', 'company', 'dayOf30', 'needsReply'];
-const DETAIL_KEYS = ['row', 'profile', 'trial', 'domain', 'shopping', 'inboxes', 'leadsByStatus', 'leadfinder', 'sequence', 'counters', 'repliesByKind', 'replies', 'bookings', 'pacelog', 'reports', 'invoice', 'promises', 'upcoming', 'events', 'jobs', 'holds', 'links', 'application', 'onboardCall', 'autobuy', 'warmup', 'conversation', 'deliverability', 'leadQuality'];
+const DETAIL_KEYS = ['row', 'profile', 'trial', 'domain', 'shopping', 'inboxes', 'leadsByStatus', 'leadfinder', 'sequence', 'counters', 'repliesByKind', 'replies', 'bookings', 'pacelog', 'reports', 'invoice', 'promises', 'upcoming', 'events', 'jobs', 'holds', 'links', 'application', 'onboardCall', 'launchCall', 'autobuy', 'warmup', 'conversation', 'deliverability', 'leadQuality'];
 const ONBOARDCALL_KEYS = ['status', 'label', 'sentAt', 'openedAt', 'lastReplyAt', 'bookedFor', 'bookedAt', 'bookedBy', 'heldAt', 'dueBy', 'overdue', 'remindersSent', 'nextReminderAt', 'stopped', 'bookingUrl', 'fromInbox', 'noShowAt', 'stoppedAt', 'lastOwnerReplyAt', 'needsReply', 'callMinutes', 'requestedFor', 'requestedAt', 'proposedFor', 'meetingId', 'steps', 'thread'];
+// docs/LAUNCH-CALL.md §5: the same shape as onboardCall plus how the OK came.
+const LAUNCHCALL_KEYS = [...ONBOARDCALL_KEYS, 'kind', 'meetLink', 'approvedOnCall', 'approvedOnPage', 'skipped', 'approvalUrl'];
 const CONVERSATION_KEYS = ['thread', 'needsReply', 'lastInAt', 'lastOutAt', 'bot', 'canReply', 'fromInbox'];
 const AUTOBUY_KEYS = ['status', 'buy', 'label', 'domain', 'steps', 'mailboxes', 'problem', 'linkedBy', 'canUnlink'];
 const WARMUP_KEYS = ['status', 'label', 'day', 'of', 'readyBy', 'inboxRate', 'inboxes', 'problem', 'helpersNeeded'];
@@ -102,6 +104,7 @@ function contractCheck(nn, look) {
   if (d) {
     gaps.push(...missing(d, DETAIL_KEYS, 'detail'));
     if (d.onboardCall) gaps.push(...missing(d.onboardCall, ONBOARDCALL_KEYS, 'detail.onboardCall'));
+    if (d.launchCall) gaps.push(...missing(d.launchCall, LAUNCHCALL_KEYS, 'detail.launchCall'));
     if (d.conversation) gaps.push(...missing(d.conversation, CONVERSATION_KEYS, 'detail.conversation'));
     if (d.autobuy) gaps.push(...missing(d.autobuy, AUTOBUY_KEYS, 'detail.autobuy'));
     if (d.warmup) gaps.push(...missing(d.warmup, WARMUP_KEYS, 'detail.warmup'));
@@ -349,9 +352,16 @@ test('the journey: website form → Day 30 → converted, through the real route
   clock.set(et('2026-10-06', '11:40'));
   const held = await call('api/mc/calendar/route', 'POST', { path: '/api/mc/calendar', body: { action: 'held', id: meetingId } });
   assert.equal(held.status, 200, JSON.stringify(held.json));
-  const s8 = await snap('08', 'call-held', 'Tuesday 11:40 am Eastern: the call happened; the owner marks it done in the Calendar.');
+  const s8 = await snap('08', 'call-held', 'Tuesday 11:40 am Eastern: the call happened; the owner marks it done in the Calendar. Dana gets the one “what happens now” email — the plan, the launch call named, Day 1 only as “in about three weeks” (nothing has started).');
   assert.equal(s8.detail.onboardCall.status, 'held');
   assert.equal(s8.row.simple.label, 'Call done — waiting for them to finish the onboarding page');
+  const plan = steps.at(-1).mail.filter((m) => m.to === APPLICANT.email);
+  assert.deepEqual(plan.map((m) => m.subject), ['Your trial — what happens now'], 'exactly one email to her on Call done');
+  const planMail = sim.sent.find((m) => m.to === APPLICANT.email && m.subject === 'Your trial — what happens now');
+  assert.match(planMail.text, /^Hi Dana,\n\nGood to talk with you today/);
+  assert.match(planMail.text, /30-minute launch call/);
+  assert.match(planMail.text, /The first emails go out in about three weeks\./, 'never a made-up date');
+  assert.equal(s8.detail.conversation.thread.at(-1).kind, 'next_steps');
 
   // ── 6. The onboarding page and the agreement (the link from the acceptance email) ──
   clock.set(et('2026-10-06', '14:05'));
@@ -379,7 +389,9 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal((await getClient(clientId)).state, 'awaiting_purchase', 'the market count passed inside the agreement request');
   // Journey fix: without a heartbeat the Price Scout ran in the agreement's after(): Dana hears
   // "setup in progress", the owner gets the list — with the CheapInboxes wording, not "paste the logins".
+  // (The plan already went after the call, so the short setup note goes as before — never two "what happens now".)
   assert.ok(toDana().some((m) => /set/i.test(m.subject || '') && !/agreement/i.test(m.subject || '')), `setup_in_progress reached Dana: ${toDana().map((m) => m.subject)}`);
+  assert.ok(!toDana().some((m) => m.subject === 'Your trial — what happens now'), 'the plan is not sent twice');
   const shopAlert = sim.sent.filter((m) => m.to === OWNER.email && /Shopping list ready/.test(m.subject)).at(-1);
   assert.ok(shopAlert, 'the owner got the shopping list');
   assert.match(shopAlert.text, /CheapInboxes/);
@@ -509,21 +521,7 @@ test('the journey: website form → Day 30 → converted, through the real route
     const done = await call('api/webhooks/leadfinder/route', 'POST', { path: '/api/webhooks/leadfinder', headers: { authorization: 'Bearer journey-leadfinder' }, body: { clientId, type: 'done', runId: 'lf1', mode: 'initial', found: 452, candidates: 900 } });
     assert.equal(done.status, 200, JSON.stringify(done.json));
   };
-  // Dana answers her emails in her business hours.
-  let approvedAt = null;
-  const danaApproves = async (now) => {
-    if (approvedAt || !usHours(now)) return;
-    const mail = sim.sent.find((m) => m.to === APPLICANT.email && linkIn(m.text, 'approve'));
-    if (!mail) return;
-    const token = linkIn(mail.text, 'approve');
-    const page = await call('api/c/approve/route', 'POST', { path: '/api/c/approve', body: { op: 'load', token } });
-    assert.equal(page.status, 200, JSON.stringify(page.json));
-    for (const section of ['profile', 'list', 'copy']) {
-      const r = await call('api/c/approve/route', 'POST', { path: '/api/c/approve', body: { op: 'approve', token, section } });
-      assert.equal(r.status, 200, JSON.stringify(r.json));
-    }
-    approvedAt = clock.iso();
-  };
+  // Dana answers her emails in her business hours. (The OK on the list and the emails comes on the launch call, below.)
   let bookingTestedAt = null;
   const danaTestsBooking = async (now) => {
     if (bookingTestedAt || !usHours(now)) return;
@@ -533,7 +531,7 @@ test('the journey: website form → Day 30 → converted, through the real route
     assert.equal(r.status, 200, JSON.stringify(r.json));
     bookingTestedAt = clock.iso();
   };
-  hooks = [leadFinder, danaApproves, danaTestsBooking];
+  hooks = [leadFinder, danaTestsBooking];
 
   clock.set(et('2026-10-07', '09:40'));
   await goTo(et('2026-10-09', '12:00'));
@@ -546,23 +544,128 @@ test('the journey: website form → Day 30 → converted, through the real route
   for (const i of s14.detail.warmup.inboxes) assert.ok(i.sentToday <= i.quota, `${i.email}: ${i.sentToday} sent, quota ${i.quota}`);
   assert.ok(Number(s14.detail.leadsByStatus.unsent) >= 400, 'the list is in');
   assert.equal(s14.detail.leadQuality.grades.rejected, 2, 'the customer and the role address are out');
-  await goTo(et('2026-10-14', '12:00'));
-  const s15 = await snap('15', 'approval-sent', 'Day −7: the list and the four emails go to Dana for her OK — at 9 am her time — and she approves.');
-  const approvalMail = sim.sent.find((m) => m.to === APPLICANT.email && linkIn(m.text, 'approve'));
-  assert.ok(approvalMail, 'the approval link went');
-  // Journey fix: never at midnight their time.
-  assert.ok(hourOf(approvalMail.at) >= 9 && hourOf(approvalMail.at) < 17, `approval link at ${approvalMail.at}`);
-  assert.ok(approvedAt, 'Dana approved it');
-  assert.equal(s15.detail.sequence.approvalMode, 'click');
-  // Hub screens fix: first name in the greeting, the full name where a name is signed; the approval link is in `links`.
-  assert.match(approvalMail.text, /^Hi Dana,\n/);
-  assert.match(approvalMail.text, /in Dana Whitfield's name/);
-  assert.ok(String(s15.detail.links.approval || '').endsWith(`/c/${linkIn(approvalMail.text, 'approve')}/approve`), JSON.stringify(s15.detail.links));
+  // ── The launch call (docs/LAUNCH-CALL.md): the OK on the list and the emails, at the end of warm-up ──
+  // Day −7 passes with no approval email: the list and the copy are ready, but warm-up is only on day 8.
+  await goTo(et('2026-10-15', '12:00'));
+  assert.ok(!sim.sent.some((m) => m.to === APPLICANT.email && linkIn(m.text, 'approve')), 'no approval email before the launch call');
+  await goTo(et('2026-10-16', '12:00'));
+  const s15 = await snap('15', 'launch-invite', 'Warm-up day 10 (Friday): the list has its contacts and the four emails pass the Copy Checker, so the launch invite goes to Dana at 9 am her time — the booking page for a launch call and, below it, the approval page. The owner hears that Ridgeline IT is ready for the launch call.');
+  const LAUNCH_SUBJECT = "Your list and your emails are ready — let's go through them together";
+  const invite = sim.sent.find((m) => m.to === APPLICANT.email && m.subject === LAUNCH_SUBJECT);
+  assert.ok(invite, `the launch invite went: ${steps.at(-1).mail.map((m) => m.subject)}`);
+  assert.equal(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(invite.at)), '2026-10-16', 'on warm-up day 10, not before');
+  assert.ok(hourOf(invite.at) >= 9 && hourOf(invite.at) < 17, `launch invite at ${invite.at}`);
+  assert.equal(invite.from, OWNER.inbox, 'from the onboarding inbox, where replies are read');
+  assert.ok(!sim.sent.some((m) => m.to === APPLICANT.email && /for your OK/.test(m.subject || '')), 'the plain approval email never went');
+  assert.match(invite.text, /^Hi Dana,\n/);
+  assert.match(invite.text, /in Dana Whitfield's name/);
+  assert.match(invite.text, /30-minute launch call/);
+  assert.match(invite.text, /the first emails go out about Wednesday 21 October\./, 'the Day 1 from the ramp');
+  assert.ok(linkIn(invite.text, 'book'), 'the booking page (kind launch)');
+  assert.ok(linkIn(invite.text, 'approve'), 'the approval page, below');
+  assert.ok(steps.at(-1).alerts.some((a) => a.key === 'launch_ready'), JSON.stringify(steps.at(-1).alerts.map((a) => a.key)));
+  assert.equal(s15.detail.launchCall.status, 'sent');
+  assert.equal(s15.detail.launchCall.kind, 'launch');
+  assert.equal(s15.detail.launchCall.label, 'Invite sent — waiting for them to book');
+  assert.deepEqual([s15.detail.launchCall.approvedOnCall, s15.detail.launchCall.approvedOnPage, s15.detail.launchCall.skipped], [null, null, null]);
+  assert.ok(String(s15.detail.links.approval || '').endsWith(`/c/${linkIn(invite.text, 'approve')}/approve`), JSON.stringify(s15.detail.links));
+  assert.equal(s15.detail.launchCall.approvalUrl, s15.detail.links.approval);
+  assert.equal(s15.detail.sequence.approvedAt, null);
+  assert.match(s15.row.simple.label, /^Warming up — day 10 of about 14.* · waiting for them to pick a launch-call time$/);
+  assert.equal(s15.row.simple.needsYou, false);
+  assert.ok(s15.detail.conversation.thread.some((e) => e.kind === 'launch_invite'), 'the invite is in the conversation under its own kind');
+
+  // Dana asks for times (10 am her time); the tick's check reads it and the reply bot answers on the launch thread.
+  clock.set(et('2026-10-16', '10:00'));
+  const inviteId = invite.messageId.replace(/[<>]/g, '').toLowerCase();
+  const herAsk = deliver(OWNER.inbox, { from: APPLICANT.email, fromName: APPLICANT.name, to: [OWNER.inbox], subject: `Re: ${invite.subject}`, text: `Hi Limeth,\n\nGreat news. What times work for you next week?\n\nDana\n\nOn Fri, Oct 16, 2026 at 9:00 AM Limeth Sith <${OWNER.inbox}> wrote:\n> Your list of companies and the four emails`, threadIds: [inviteId], inReplyTo: [inviteId], references: [inviteId], date: clock.iso() });
+  await goTo(et('2026-10-16', '10:20'));
+  const sL16 = await snap('16', 'launch-bot-reply', 'Dana writes back “What times work for you next week?”. The reply bot answers on the launch thread: the booking page for the launch call and three free times.');
+  const launchBot = sim.sent.filter((m) => m.to === APPLICANT.email).at(-1);
+  assert.equal(launchBot.inReplyTo, herAsk.messageId, 'threaded under her question');
+  assert.ok(launchBot.references.includes(invite.messageId), 'in the invite\'s thread');
+  assert.equal((launchBot.text.match(/^• /gm) || []).length, 3, 'three free times');
+  assert.equal(sL16.detail.conversation.thread.at(-1).rule, 'wants_time');
+  assert.equal(sL16.detail.launchCall.label, 'The reply bot answered — waiting for them to book');
+  assert.equal(sL16.row.simple.needsYou, false);
+  assert.ok(!steps.at(-1).alerts.some((a) => a.key === 'onboard_reply'), 'the bot had it');
+
+  // She opens the launch booking page and picks Tuesday 20 October 11:00 (her time).
+  clock.set(et('2026-10-16', '10:32'));
+  const launchPageToken = linkIn(launchBot.text, 'book');
+  const launchPage = await call('c/[token]/book/route', 'GET', { path: `/c/${launchPageToken}/book`, params: { token: launchPageToken } });
+  assert.equal(launchPage.status, 200);
+  assert.match(launchPage.text, /Aviance · launch call/);
+  assert.match(launchPage.text, /launch call, where we go through your list and your emails together/);
+  const tue20 = et('2026-10-20', '11:00').toISOString();
+  assert.ok([...launchPage.text.matchAll(/name="start" value="([^"]+)"/g)].map((m) => m[1]).includes(tue20), 'Tue 20 Oct 11:00 ET is offered');
+  const picked2 = await call('api/c/book/route', 'POST', { path: '/api/c/book', form: { token: launchPageToken, tz: 'America/New_York', start: tue20 } });
+  assert.equal(picked2.status, 303);
+  assert.match(picked2.headers.get('location'), /flash=sent/);
+  const sL17 = await snap('17', 'launch-time-requested', 'Dana picks Tuesday 20 October 11:00 am (her time) for the launch call. The owner is asked to say yes in the Calendar.', { extra: { calendar: (await call('api/mc/calendar/route', 'GET', { path: '/api/mc/calendar' })).json } });
+  assert.ok(steps.at(-1).alerts.some((a) => a.key === 'meeting_requested'), JSON.stringify(steps.at(-1).alerts.map((a) => a.key)));
+  assert.match(sL17.row.simple.label, /· they asked for Tue 20 Oct, 8:30 pm \(your time\) — say yes in the Calendar$/);
+  assert.equal(sL17.row.simple.needsYou, true);
+  assert.equal(sL17.detail.launchCall.requestedFor, tue20);
+  const launchRequest = sL17.row.todo.find((t) => t.id === `meeting-request:${clientId}`);
+  assert.equal(launchRequest?.action?.kind, 'launch', JSON.stringify(sL17.row.todo));
+
+  // The owner says yes in the Calendar (Friday evening in Colombo): a second Google event with a Meet link.
+  clock.set(colombo('2026-10-16', '20:30'));
+  const cal2 = (await call('api/mc/calendar/route', 'GET', { path: '/api/mc/calendar' })).json;
+  const launchReq = cal2.requests.find((m) => m.clientId === clientId);
+  assert.equal(launchReq?.kind, 'launch', JSON.stringify(cal2.requests));
+  const confirm2 = await call('api/mc/calendar/route', 'POST', { path: '/api/mc/calendar', body: { action: 'confirm', id: launchReq.id } });
+  assert.equal(confirm2.status, 200, JSON.stringify(confirm2.json));
+  const meetLink2 = confirm2.json.meeting.meetLink;
+  assert.match(meetLink2, /^https:\/\/meet\.google\.com\//);
+  assert.notEqual(meetLink2, meetLink, 'its own Meet');
+  const confirmation2 = toDana();
+  assert.equal(confirmation2.length, 1, 'one confirmation email');
+  assert.ok(confirmation2[0].icalEvent && confirmation2[0].icalEvent.content.includes(meetLink2), 'an .ics invite with the Meet link');
+  assert.equal(world.google.events.size, 2, 'two events on the owner\'s Google Calendar: the onboarding call and the launch call');
+  const sL18 = await snap('18', 'launch-call-confirmed', 'The owner presses Yes in the Calendar: a Google Calendar event with a Meet link is made, and Dana gets the confirmation with the invite. The row says when the launch call is.', { extra: { calendar: (await call('api/mc/calendar/route', 'GET', { path: '/api/mc/calendar' })).json } });
+  assert.equal(sL18.detail.launchCall.status, 'booked');
+  assert.equal(sL18.detail.launchCall.bookedFor, tue20);
+  assert.equal(sL18.detail.launchCall.meetLink, meetLink2);
+  assert.match(sL18.row.simple.label, /· launch call Tue 20 Oct, 8:30 pm \(your time\)$/);
+  assert.equal(sL18.row.simple.needsYou, false);
+  assert.ok((await allAlerts()).filter((a) => a.key === 'meeting_requested').every((a) => a.acknowledged), 'meeting_requested closed by the Yes');
+
+  // Monday: the day-before reminder with the Meet link and the approval page goes on the tick, in US hours.
+  await goTo(et('2026-10-19', '09:30'));
+  const sL19 = await snap('19', 'launch-day-before', 'Monday morning (US): the day-before reminder for the launch call goes to Dana with the Meet link and the approval page.');
+  const tomorrow2 = sim.sent.filter((m) => m.to === APPLICANT.email && m.subject === 'Our launch call tomorrow');
+  assert.equal(tomorrow2.length, 1, 'one day-before reminder');
+  assert.ok(tomorrow2[0].text.includes(meetLink2), 'with the Meet link');
+  assert.match(tomorrow2[0].text, /is Tuesday 20 October at 11:00 am Eastern Time\./);
+  assert.ok(linkIn(tomorrow2[0].text, 'approve'), 'and the approval page');
+  assert.ok(hourOf(tomorrow2[0].at) >= 9, 'inside US hours');
+  assert.equal(sL19.detail.launchCall.status, 'booked');
+
+  // Tuesday: the call happens; the owner presses Approved on the call.
+  await goTo(et('2026-10-20', '11:40'));
+  const approvedCall = await call('api/mc/clients/[id]/launch-call/route', 'POST', { path: `/api/mc/clients/${clientId}/launch-call`, params: { id: clientId }, body: { action: 'approvedOnCall' } });
+  assert.equal(approvedCall.status, 200, JSON.stringify(approvedCall.json));
+  assert.equal(approvedCall.json.launchCall.status, 'held');
+  const sL20 = await snap('20', 'launch-approved', 'Tuesday 11:40 am Eastern: the launch call happened — the list and the four emails on screen. The owner presses Approved on the call: every section is approved, the call is done, sending can start on Day 1.');
+  assert.equal(sL20.detail.sequence.approvalMode, 'call');
+  assert.ok(sL20.detail.sequence.approvedAt);
+  assert.equal(sL20.detail.launchCall.approvedOnCall, et('2026-10-20', '11:40').toISOString());
+  assert.equal(sL20.detail.launchCall.approvedOnPage, null);
+  assert.equal(sL20.detail.launchCall.label, 'Approved on the call — sending can start');
+  assert.equal(sL20.row.simple.label, 'Launch call done — first emails on Wednesday 21 October');
+  assert.equal(sL20.row.simple.needsYou, false);
+  assert.deepEqual(sL20.row.todo.filter((t) => /^launch-|^meeting-request/.test(t.id)), [], 'nothing left to do about the call');
+  assert.equal(sL20.detail.row.systems.find((s) => s.key === 'copy').line.startsWith('Approved by the launch call'), true);
+  assert.equal(steps.at(-1).mail.filter((m) => m.to === APPLICANT.email).length, 0, 'nothing is emailed to her by the button');
+
   await goTo(et('2026-10-21', '12:00'));
-  const s16 = await snap('16', 'day-1', 'Day 1: warm-up done, list and copy approved, the booking link tested — the first emails went out at 9 am their time.');
-  assert.equal(s16.row.state, 'sending');
-  assert.equal(s16.detail.trial.day1Date, '2026-10-21');
-  assert.equal(s16.row.simple.label, 'Sending — day 1 of 30, 0 calls booked');
+  const sL21 = await snap('21', 'day-1', 'Day 1: warm-up done, the list and the emails approved on the launch call, the booking link tested — the first emails went out at 9 am their time.');
+  assert.equal(sL21.row.state, 'sending');
+  assert.equal(sL21.detail.trial.day1Date, '2026-10-21');
+  assert.equal(sL21.row.simple.label, 'Sending — day 1 of 30, 0 calls booked');
+  assert.equal(sL21.detail.launchCall.status, 'held', 'the launch call stays on the trial');
   // Journey fix: the booking test went on a business day (Day −4 was a Saturday → the Friday before), inside US hours.
   const testMail = sim.sent.find((m) => m.to === APPLICANT.email && linkIn(m.text, 'booking-ok'));
   assert.equal(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(new Date(testMail.at)), 'Fri');
@@ -624,7 +727,7 @@ test('the journey: website form → Day 30 → converted, through the real route
     else deliver(lead.account_used, { from: lead.email, subject: `Re: ${lead.original_subject}`, text: TEXT[kind].replace('{host}', lead.email.split('@')[1]), threadIds });
   }
   await goTo(et('2026-10-23', '13:00'));
-  const s17 = await snap('17', 'replies', 'Day 3: replies of every kind come in. Interested and questions go to Dana as hot leads; “no” and angry ones are suppressed everywhere; a referral becomes a new lead; an out-of-office waits.');
+  const s17 = await snap('22', 'replies', 'Day 3: replies of every kind come in. Interested and questions go to Dana as hot leads; “no” and angry ones are suppressed everywhere; a referral becomes a new lead; an out-of-office waits.');
   const kinds = [...new Set(Object.values((await kv.hgetall(K.replies(clientId))) || {}).map((r) => r.kind))];
   for (const k of ['angry', 'interested', 'no', 'notnow', 'ooo', 'question', 'unclear', 'wrongperson']) assert.ok(kinds.includes(k), `${k} handled`);
   assert.ok(sim.sent.some((m) => m.to === APPLICANT.email && /^Hot/.test(m.subject)), 'hot leads reach Dana');
@@ -645,7 +748,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   const dt = slot.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   deliver(lead.account_used, { from: 'notifications@cal.com', subject: `New Event: Intro call with ${lead.name}`, text: `A new event was booked with ${lead.name}.`, kind: 'human', ics: [['BEGIN:VCALENDAR', 'METHOD:REQUEST', 'BEGIN:VEVENT', `UID:cal-${lead.email}`, `DTSTART:${dt}`, `DTEND:${dt}`, 'SUMMARY:Intro call', `ORGANIZER;CN=Dana Whitfield:mailto:${lead.account_used}`, `ATTENDEE;CN=${lead.name}:mailto:${lead.email}`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n')] });
   await goTo(et('2026-10-23', '15:00'));
-  const s18 = await snap('18', 'prospect-booked', "The interested prospect books a call on Dana's calendar; Dana gets the hand-off.");
+  const s18 = await snap('23', 'prospect-booked', "The interested prospect books a call on Dana's calendar; Dana gets the hand-off.");
   assert.equal(Object.values((await kv.hgetall(K.bookings(clientId))) || {}).length, 1);
   assert.equal(s18.row.simple.label, 'Sending — day 3 of 30, 1 call booked');
 
@@ -653,13 +756,13 @@ test('the journey: website form → Day 30 → converted, through the real route
   await goTo(et('2026-10-26', '10:12'));
   deliver(OWNER.inbox, { from: APPLICANT.email, subject: 'Question about the trial', text: 'Hi Limeth — could we add Columbia, SC to the cities next week?\n\nDana', date: clock.iso() });
   await goTo(et('2026-10-26', '10:30'));
-  const s19 = await snap('19', 'client-writes', "Day 6: Dana emails the owner a question. The hub shows “Answer Dana's message”.");
+  const s19 = await snap('24', 'client-writes', "Day 6: Dana emails the owner a question. The hub shows “Answer Dana's message”.");
   assert.equal(s19.row.simple.needsReply, true);
   assert.equal(s19.row.simple.next, "Answer Dana's message");
   const replied = await call('api/mc/clients/[id]/messages/route', 'POST', { path: `/api/mc/clients/${clientId}/messages`, params: { id: clientId }, body: { action: 'reply', text: 'Hi Dana — yes, I will add Columbia from Monday.' } });
   assert.equal(replied.status, 200, JSON.stringify(replied.json));
   await goTo(et('2026-10-26', '10:45'));
-  const s20 = await snap('20', 'owner-answered', 'The owner answers from the hub (it goes from the onboarding inbox, in her thread); the red dot goes.');
+  const s20 = await snap('25', 'owner-answered', 'The owner answers from the hub (it goes from the onboarding inbox, in her thread); the red dot goes.');
   assert.equal(s20.row.simple.needsReply, false);
   // Hub screens fix: her "wrote — needs your answer" alert is handled by the answer.
   assert.ok((await allAlerts()).filter((a) => a.key === 'onboard_reply').every((a) => a.acknowledged), 'onboard_reply closed by the answer');
@@ -674,7 +777,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(tapView.status, 200, JSON.stringify(tapView.json));
   const tapped = await call('api/c/tap/route', 'POST', { path: '/api/c/tap', body: { t: tapToken, action: 'showed' } });
   assert.equal(tapped.status, 200, JSON.stringify(tapped.json));
-  const s21 = await snap('21', 'call-showed', 'The prospect showed up; Dana taps “Showed”. That is the first qualified call.');
+  const s21 = await snap('26', 'call-showed', 'The prospect showed up; Dana taps “Showed”. That is the first qualified call.');
   assert.equal(Number(s21.detail.counters.qualified), 1);
 
   // A legal reply holds sending on this domain until the owner has read it.
@@ -682,7 +785,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   const late = (await sentLeads()).find((l) => !Object.values(used).some((x) => x.email === l.email));
   deliver(late.account_used, { from: late.email, subject: `Re: ${late.original_subject}`, text: 'Forwarding this to our attorney. Cease and desist.', threadIds: [late.original_message_id.replace(/[<>]/g, '')] });
   await goTo(et('2026-10-28', '12:00'));
-  const s22 = await snap('22', 'legal-hold', 'Day 6: a prospect answers with a legal threat. The address is suppressed everywhere and sending stops until the owner has read it.');
+  const s22 = await snap('27', 'legal-hold', 'Day 6: a prospect answers with a legal threat. The address is suppressed everywhere and sending stops until the owner has read it.');
   assert.ok(s22.detail.holds.legalHoldAt);
   // Journey fix: the status must not say "Sending — day 6" while nothing is sent.
   assert.equal(s22.row.simple.label, 'Sending stopped — a prospect replied with a legal threat');
@@ -696,18 +799,18 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.ok(legalTodo && legalTodo.action.type === 'api', 'a one-button to-do');
   const cleared = await call('api/mc/clients/[id]/route', 'POST', { path: legalTodo.action.path, params: { id: clientId }, body: legalTodo.action.body });
   assert.equal(cleared.status, 200, JSON.stringify(cleared.json));
-  const s23 = await snap('23', 'hold-cleared', 'The owner reads the legal reply and clears the hold; sending continues. The alert goes with it.');
+  const s23 = await snap('28', 'hold-cleared', 'The owner reads the legal reply and clears the hold; sending continues. The alert goes with it.');
   assert.equal(s23.detail.holds.legalHoldAt, null);
   assert.ok(!s23.row.todo.some((t) => /LEGAL/.test(t.text)), 'the legal alert does not linger as a to-do');
 
   await goTo(et('2026-11-04', '12:00'));
-  const s24 = await snap('24', 'day-15', 'Day 15: halfway (US clocks went back on 1 November; the sends follow their 9–5).');
+  const s24 = await snap('29', 'day-15', 'Day 15: halfway (US clocks went back on 1 November; the sends follow their 9–5).');
   assert.equal(s24.row.simple.dayOf30, 15);
   await goTo(et('2026-11-18', '12:00'));
-  const s25 = await snap('25', 'day-29', 'Day 29: the trial report and the market report go to Dana.');
+  const s25 = await snap('30', 'day-29', 'Day 29: the trial report and the market report go to Dana.');
   assert.ok(s25.detail.reports.some((r) => r.name === 'day29' && r.renderedAt));
   await goTo(et('2026-11-19', '12:00'));
-  const s26 = await snap('26', 'day-30', 'Day 30: the handover (everything from the trial) and the decision page go to Dana.');
+  const s26 = await snap('31', 'day-30', 'Day 30: the handover (everything from the trial) and the decision page go to Dana.');
   assert.equal(s26.row.state, 'deciding');
   // Hub screens fix: its own step in plain words, the bonus deadline with its zones, the warm-up card kept, the decision link shown.
   assert.deepEqual([s26.row.simple.step, s26.row.simple.label, s26.row.simple.next, s26.row.simple.needsYou], ['deciding', 'Trial finished — waiting for their decision', 'Nothing. Dana chooses on the decision page.', false]);
@@ -723,7 +826,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(view.status, 200, JSON.stringify(view.json));
   const start = await call('api/c/decide/route', 'POST', { path: '/api/c/decide', body: { token: dToken, action: 'start' } });
   assert.equal(start.status, 200, JSON.stringify(start.json));
-  const s27 = await snap('27', 'converted', 'Dana presses Start: Ridgeline IT becomes a client on Starter. The month-one invoice goes out.');
+  const s27 = await snap('32', 'converted', 'Dana presses Start: Ridgeline IT becomes a client on Starter. The month-one invoice goes out.');
   assert.equal(s27.row.state, 'converted');
   assert.equal(s27.row.simple.label, 'Finished — became a client');
   assert.equal(steps.at(-1).alerts.find((a) => a.key === 'converted').title, 'Converted: Ridgeline IT on Starter');
@@ -737,7 +840,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.ok(paidTodo, 'a to-do to mark the invoice paid');
   const paid = await call('api/mc/clients/[id]/route', 'POST', { path: paidTodo.action.path, params: { id: clientId }, body: paidTodo.action.body });
   assert.equal(paid.status, 200, JSON.stringify(paid.json));
-  const s28 = await snap('28', 'paid', 'The money lands; the owner marks the invoice paid. The trial pair keeps sending for the new client until the plan’s inboxes are added.');
+  const s28 = await snap('33', 'paid', 'The money lands; the owner marks the invoice paid. The trial pair keeps sending for the new client until the plan’s inboxes are added.');
   assert.equal(s28.row.simple.next, 'Nothing for you');
   // Hub screens fix: alerts do not pile up — one digest of each kind open at most, handled alerts closed.
   const open28 = (await allAlerts()).filter((a) => !a.acknowledged);

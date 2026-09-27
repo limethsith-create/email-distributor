@@ -10,7 +10,7 @@
  */
 
 import { readToken } from '@/lib/pagetokens';
-import { requestMeeting, publicMeeting, pickZone, allowBookTry, CalendarError } from '@/lib/systems/calendar';
+import { requestMeeting, publicMeeting, pickZone, allowBookTry, kindOfLink, CalendarError } from '@/lib/systems/calendar';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -36,7 +36,8 @@ export async function POST(request) {
   if (!t) return Response.json({ ok: false, error: 'This link has expired or is not valid. Reply to my email and I will send a new one.' }, { status: 401 });
   if (!(await allowBookTry(token))) return form ? back('limit') : Response.json({ ok: false, error: 'Too many tries for now — please wait a few minutes.' }, { status: 429 });
   try {
-    const m = await requestMeeting(t.clientId, { start: body.start, note: body.note, zone });
+    // The link says which call they are booking (a launch-call link carries it, docs/LAUNCH-CALL.md).
+    const m = await requestMeeting(t.clientId, { start: body.start, note: body.note, zone }, { kind: await kindOfLink(t, t.clientId) });
     return form ? back('sent') : Response.json({ ok: true, meeting: publicMeeting(m, m.theirZone || zone || 'America/New_York') });
   } catch (err) {
     if (err instanceof CalendarError) {

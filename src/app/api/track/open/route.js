@@ -240,7 +240,8 @@ async function recordOnboardOpen(token, meta) {
   const sinceSend = token.sentAt ? Math.max(0, Date.now() - token.sentAt) : null;
   if (suspectReasons(classify(meta.ua), sinceSend, meta).length) return;
   const { markOpened } = await import('@/lib/systems/onboardcall');
-  await markOpened(token.clientId, token.email, { now: new Date() });
+  // Purpose `launch` = the launch invite (docs/LAUNCH-CALL.md): the same open, on the launch call.
+  await markOpened(token.clientId, token.email, { now: new Date(), kind: token.purpose === 'launch' ? 'launch' : 'onboarding' });
 }
 
 function requestMeta(request) {
@@ -263,7 +264,7 @@ export async function GET(request) {
     if (token) {
       // Awaited (not fire-and-forget) so the serverless runtime never kills the
       // write; the pixel still goes out the moment recording finishes.
-      if (token.purpose === 'onboard') await recordOnboardOpen(token, requestMeta(request));
+      if (token.purpose === 'onboard' || token.purpose === 'launch') await recordOnboardOpen(token, requestMeta(request));
       else if (!token.purpose) await recordOpen(token, requestMeta(request));
     }
   } catch {

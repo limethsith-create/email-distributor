@@ -608,6 +608,7 @@
     "detail": {
      "from": "dana@ridgelineit.com",
      "subject": "Re: You're in — let's book your onboarding call",
+     "call": "onboarding",
      "rule": "wants_time",
      "bot": "queued"
     }
@@ -625,7 +626,9 @@
     "at": "2026-10-02T11:50:00.000Z",
     "system": "onboardcall",
     "event": "opened",
-    "detail": {}
+    "detail": {
+     "call": "onboarding"
+    }
    },
    {
     "at": "2026-10-02T03:30:00.250Z",
@@ -1661,6 +1664,7 @@
    }
   },
   "onboardCall": {
+   "kind": "onboarding",
    "status": "replied",
    "label": "The reply bot answered — waiting for them to book",
    "sentAt": "2026-10-02T03:30:00.000Z",
@@ -1762,6 +1766,7 @@
     }
    ]
   },
+  "launchCall": null,
   "autobuy": null,
   "warmup": null,
   "conversation": {

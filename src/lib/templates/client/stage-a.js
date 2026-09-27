@@ -5,8 +5,8 @@
  * written new is listed in docs/assumptions/stage-a.md.
  *
  * Verbatim sources (The 30-Day Trial, Section 10 / Section 2 / Section 5):
- *  - welcome_two_dates: "Welcome — Day −14", adapted to slots; the build-call
- *    date is replaced by the approval page date (SPEC §16 #9).
+ *  - welcome_two_dates: "Welcome — Day −14", adapted to slots; the build call
+ *    became the launch call near the end of warm-up (docs/LAUNCH-CALL.md).
  *  - onboarding_link opens with the Day −14 ask from Section 5.
  *  - decline_fit / decline_market reuse Section 2 wording.
  * Everything else is new, plain text, one ask, in the owner's voice.
@@ -134,7 +134,7 @@ Once they pass their checks you'll get an email with your two dates: the first s
 
 Two dates. First send: {day1Date} — that's day 1 of your 30. Day 30 is {day30Date}.
 
-Instead of a build call, on {approvalDate} you'll get a link to one page where you check the customer profile and approve the copy.
+Near the end of warm-up you'll get an invite to a {callMinutes}-minute launch call: we go through your list and your emails together, and you give the OK before anything is sent.
 
 Every Friday you'll get a short update from me, including the quiet weeks.
 
@@ -210,6 +210,33 @@ A quick reminder: our {callMinutes}-minute onboarding call is {when}.
 {joinLine}
 
 If that time no longer works, reply to this email and we'll find another.
+
+{ownerName}`,
+  },
+
+  // ── "What happens now" (docs/LAUNCH-CALL.md §1) ──
+  // Goes once, after the onboarding call is held (or at the agreement, when that came first —
+  // then it carries the setup news and setup_in_progress does not go). {opening} is the one line
+  // that differs; {day1Line} is "about Wednesday 21 October" from the ramp, or "in about three
+  // weeks" when nothing has started yet — never a made-up date.
+  next_steps: {
+    from: 'owner',
+    subject: 'Your trial — what happens now',
+    body: `Hi {firstName},
+
+{opening}
+
+Here is what happens now, from my side:
+
+- Right now we are researching your business and your market, and building your offer.
+- This week we set up your sending address and its inboxes.
+- Then two weeks of warm-up, so your emails land in the inbox and not in spam.
+- Meanwhile we build your list of about {listSize} companies and write your emails in your words.
+- Every Friday you get a short note from me, even in the quiet weeks.
+- Near the end of warm-up you get an invite to a {callMinutes}-minute launch call: we go through the list and the emails together, and you give the OK.
+- The first emails go out {day1Line}.
+
+Nothing is needed from you until the launch call.
 
 {ownerName}`,
   },

@@ -357,7 +357,7 @@ export function eventBody(m, { requestId = m.id, description = null } = {}) {
   const hub = m.clientId ? `${hubUrl()}/#trial/${m.clientId}` : `${hubUrl()}/#calendar`;
   return {
     summary: String(m.title || 'Call'),
-    description: description || `${m.kind === 'onboarding' ? 'Onboarding call' : 'Call'}${who ? ` with ${who}` : ''}, booked through Aviance.\nIn the hub: ${hub}`,
+    description: description || `${m.kind === 'launch' ? 'Launch call' : m.kind === 'onboarding' ? 'Onboarding call' : 'Call'}${who ? ` with ${who}` : ''}, booked through Aviance.\nIn the hub: ${hub}`,
     ...timesOf(m),
     ...(m.email ? { attendees: [{ email: String(m.email), ...(m.person ? { displayName: String(m.person) } : {}) }] } : {}),
     conferenceData: { createRequest: { requestId: String(requestId), conferenceSolutionKey: { type: 'hangoutsMeet' } } },

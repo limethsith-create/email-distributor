@@ -628,6 +628,8 @@
    "onboardingLinkAt": "2026-10-02T03:30:00.000Z",
    "onboardingSentAt": "2026-10-02T03:30:00.000Z",
    "onboardingClosesOn": "2026-10-13",
+   "nextStepsSentAt": "2026-10-06T15:40:00.000Z",
+   "nextStepsMoment": "call",
    "agreementAcceptedAt": "2026-10-06T18:20:00.000Z",
    "agreementName": "Dana Whitfield",
    "agreementTitle": "Director of Client Success",
@@ -1672,7 +1674,7 @@
     }
    },
    {
-    "at": "2026-10-06T15:40:00.300Z",
+    "at": "2026-10-06T15:40:00.550Z",
     "system": "gatekeeper",
     "event": "close_extended",
     "detail": {
@@ -1682,7 +1684,7 @@
     }
    },
    {
-    "at": "2026-10-06T15:40:00.000Z",
+    "at": "2026-10-06T15:40:00.250Z",
     "system": "calendar",
     "event": "owner_held",
     "detail": {
@@ -1692,12 +1694,31 @@
     }
    },
    {
+    "at": "2026-10-06T15:40:00.250Z",
+    "system": "launchcall",
+    "event": "next_steps_sent",
+    "detail": {
+     "moment": "call",
+     "day1": null
+    }
+   },
+   {
+    "at": "2026-10-06T15:40:00.250Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "next_steps",
+     "to": "dana@ridgelineit.com"
+    }
+   },
+   {
     "at": "2026-10-06T15:40:00.000Z",
     "system": "onboardcall",
     "event": "calendar_held",
     "detail": {
      "meetingId": "mmur1805c91eb6a69da",
-     "start": "2026-10-06T15:00:00.000Z"
+     "start": "2026-10-06T15:00:00.000Z",
+     "call": "onboarding"
     }
    },
    {
@@ -1705,7 +1726,8 @@
     "system": "onboardcall",
     "event": "day_before_sent",
     "detail": {
-     "bookedFor": "2026-10-06T15:00:00.000Z"
+     "bookedFor": "2026-10-06T15:00:00.000Z",
+     "call": "onboarding"
     }
    },
    {
@@ -1733,7 +1755,8 @@
     "event": "calendar_confirmed",
     "detail": {
      "meetingId": "mmur1805c91eb6a69da",
-     "start": "2026-10-06T15:00:00.000Z"
+     "start": "2026-10-06T15:00:00.000Z",
+     "call": "onboarding"
     }
    },
    {
@@ -1802,7 +1825,8 @@
     "event": "calendar_requested",
     "detail": {
      "meetingId": "mmur1805c91eb6a69da",
-     "start": "2026-10-06T15:00:00.000Z"
+     "start": "2026-10-06T15:00:00.000Z",
+     "call": "onboarding"
     }
    },
    {
@@ -1844,6 +1868,7 @@
     "detail": {
      "from": "dana@ridgelineit.com",
      "subject": "Re: You're in — let's book your onboarding call",
+     "call": "onboarding",
      "rule": "wants_time",
      "bot": "queued"
     }
@@ -1861,7 +1886,9 @@
     "at": "2026-10-02T11:50:00.000Z",
     "system": "onboardcall",
     "event": "opened",
-    "detail": {}
+    "detail": {
+     "call": "onboarding"
+    }
    },
    {
     "at": "2026-10-02T03:30:00.250Z",
@@ -1915,40 +1942,6 @@
       "push": "push not configured"
      }
     }
-   },
-   {
-    "at": "2026-10-01T19:40:27.910Z",
-    "system": "research",
-    "event": "done",
-    "detail": {
-     "pagesRead": 8,
-     "deepPages": 14,
-     "facts": 110,
-     "business": true,
-     "market": 360,
-     "flags": 0,
-     "prefilled": [
-      "companyName",
-      "postalAddress",
-      "cities",
-      "defaultIcp"
-     ],
-     "score": 94,
-     "grade": "A"
-    }
-   },
-   {
-    "at": "2026-10-01T19:40:27.910Z",
-    "system": "research",
-    "event": "prefilled",
-    "detail": {
-     "fields": [
-      "companyName",
-      "postalAddress",
-      "cities",
-      "defaultIcp"
-     ]
-    }
    }
   ],
   "jobs": {
@@ -1956,7 +1949,7 @@
    "aviance-replies": null,
    "aviance-eod-report": null,
    "onboarding-nudge": {
-    "at": "2026-10-06T15:40:00.300Z",
+    "at": "2026-10-06T15:40:00.550Z",
     "ms": 0,
     "ok": true,
     "by": "check"
@@ -2845,6 +2838,7 @@
    }
   },
   "onboardCall": {
+   "kind": "onboarding",
    "status": "held",
    "label": "Call done",
    "sentAt": "2026-10-02T03:30:00.000Z",
@@ -2986,6 +2980,19 @@
     {
      "id": "out-76ff2f098c2fcaa9",
      "dir": "out",
+     "at": "2026-10-06T15:40:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your trial — what happens now",
+     "text": "Hi Dana,\n\nGood to talk with you today — thank you for your time.\n\nHere is what happens now, from my side:\n\n- Right now we are researching your business and your market, and building your offer.\n- This week we set up your sending address and its inboxes.\n- Then two weeks of warm-up, so your emails land in the inbox and not in spam.\n- Meanwhile we build your list of about 400 companies and write your emails in your words.\n- Every Friday you get a short note from me, even in the quiet weeks.\n- Near the end of warm-up you get an invite to a 30-minute launch call: we go through the list and the emails together, and you give the OK.\n- The first emails go out in about three weeks.\n\nNothing is needed from you until the launch call.\n\nLimeth Sith",
+     "kind": "next_steps",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-7323c22503be51e2",
+     "dir": "out",
      "at": "2026-10-06T18:20:00.250Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
@@ -2997,7 +3004,7 @@
      "template": "agreement_copy"
     },
     {
-     "id": "out-186c27e7d8778e62",
+     "id": "out-a513a343bddbc101",
      "dir": "out",
      "at": "2026-10-06T18:20:07.900Z",
      "from": "hello@aviance.test",
@@ -3011,6 +3018,7 @@
     }
    ]
   },
+  "launchCall": null,
   "autobuy": {
    "status": "ready_to_buy",
    "buy": {
@@ -3172,6 +3180,19 @@
     {
      "id": "out-76ff2f098c2fcaa9",
      "dir": "out",
+     "at": "2026-10-06T15:40:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your trial — what happens now",
+     "text": "Hi Dana,\n\nGood to talk with you today — thank you for your time.\n\nHere is what happens now, from my side:\n\n- Right now we are researching your business and your market, and building your offer.\n- This week we set up your sending address and its inboxes.\n- Then two weeks of warm-up, so your emails land in the inbox and not in spam.\n- Meanwhile we build your list of about 400 companies and write your emails in your words.\n- Every Friday you get a short note from me, even in the quiet weeks.\n- Near the end of warm-up you get an invite to a 30-minute launch call: we go through the list and the emails together, and you give the OK.\n- The first emails go out in about three weeks.\n\nNothing is needed from you until the launch call.\n\nLimeth Sith",
+     "kind": "next_steps",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-7323c22503be51e2",
+     "dir": "out",
      "at": "2026-10-06T18:20:00.250Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
@@ -3183,7 +3204,7 @@
      "template": "agreement_copy"
     },
     {
-     "id": "out-186c27e7d8778e62",
+     "id": "out-a513a343bddbc101",
      "dir": "out",
      "at": "2026-10-06T18:20:07.900Z",
      "from": "hello@aviance.test",

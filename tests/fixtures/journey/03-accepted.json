@@ -1599,6 +1599,7 @@
    }
   },
   "onboardCall": {
+   "kind": "onboarding",
    "status": "sent",
    "label": "Email sent — waiting for them to book",
    "sentAt": "2026-10-02T03:30:00.000Z",
@@ -1674,6 +1675,7 @@
     }
    ]
   },
+  "launchCall": null,
   "autobuy": null,
   "warmup": null,
   "conversation": {

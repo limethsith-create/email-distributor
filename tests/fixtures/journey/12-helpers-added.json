@@ -624,6 +624,8 @@
    "onboardingLinkAt": "2026-10-02T03:30:00.000Z",
    "onboardingSentAt": "2026-10-02T03:30:00.000Z",
    "onboardingClosesOn": "2026-10-13",
+   "nextStepsSentAt": "2026-10-06T15:40:00.000Z",
+   "nextStepsMoment": "call",
    "agreementAcceptedAt": "2026-10-06T18:20:00.000Z",
    "agreementName": "Dana Whitfield",
    "agreementTitle": "Director of Client Success",
@@ -1998,7 +2000,7 @@
     }
    },
    {
-    "at": "2026-10-06T15:40:00.300Z",
+    "at": "2026-10-06T15:40:00.550Z",
     "system": "gatekeeper",
     "event": "close_extended",
     "detail": {
@@ -2008,7 +2010,7 @@
     }
    },
    {
-    "at": "2026-10-06T15:40:00.000Z",
+    "at": "2026-10-06T15:40:00.250Z",
     "system": "calendar",
     "event": "owner_held",
     "detail": {
@@ -2018,12 +2020,31 @@
     }
    },
    {
+    "at": "2026-10-06T15:40:00.250Z",
+    "system": "launchcall",
+    "event": "next_steps_sent",
+    "detail": {
+     "moment": "call",
+     "day1": null
+    }
+   },
+   {
+    "at": "2026-10-06T15:40:00.250Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "next_steps",
+     "to": "dana@ridgelineit.com"
+    }
+   },
+   {
     "at": "2026-10-06T15:40:00.000Z",
     "system": "onboardcall",
     "event": "calendar_held",
     "detail": {
      "meetingId": "mmur1805c91eb6a69da",
-     "start": "2026-10-06T15:00:00.000Z"
+     "start": "2026-10-06T15:00:00.000Z",
+     "call": "onboarding"
     }
    },
    {
@@ -2031,7 +2052,8 @@
     "system": "onboardcall",
     "event": "day_before_sent",
     "detail": {
-     "bookedFor": "2026-10-06T15:00:00.000Z"
+     "bookedFor": "2026-10-06T15:00:00.000Z",
+     "call": "onboarding"
     }
    },
    {
@@ -2059,7 +2081,8 @@
     "event": "calendar_confirmed",
     "detail": {
      "meetingId": "mmur1805c91eb6a69da",
-     "start": "2026-10-06T15:00:00.000Z"
+     "start": "2026-10-06T15:00:00.000Z",
+     "call": "onboarding"
     }
    },
    {
@@ -2090,28 +2113,6 @@
      "closesOn": "held",
      "why": "a time they asked for waits for your yes in the Calendar"
     }
-   },
-   {
-    "at": "2026-10-02T14:02:00.500Z",
-    "system": "notify",
-    "event": "alert_sent",
-    "detail": {
-     "key": "meeting_requested",
-     "title": "Dana (Ridgeline IT) asked for Tue 6 Oct 11:00 am ET = 8:30 pm Colombo — say yes in the Calendar",
-     "channels": {
-      "email": "ok",
-      "push": "push not configured"
-     }
-    }
-   },
-   {
-    "at": "2026-10-02T14:02:00.250Z",
-    "system": "notify",
-    "event": "client_email_sent",
-    "detail": {
-     "key": "meeting_received",
-     "to": "dana@ridgelineit.com"
-    }
    }
   ],
   "jobs": {
@@ -2119,7 +2120,7 @@
    "aviance-replies": null,
    "aviance-eod-report": null,
    "onboarding-nudge": {
-    "at": "2026-10-06T15:40:00.300Z",
+    "at": "2026-10-06T15:40:00.550Z",
     "ms": 0,
     "ok": true,
     "by": "check"
@@ -3013,6 +3014,7 @@
    }
   },
   "onboardCall": {
+   "kind": "onboarding",
    "status": "held",
    "label": "Call done",
    "sentAt": "2026-10-02T03:30:00.000Z",
@@ -3154,6 +3156,19 @@
     {
      "id": "out-76ff2f098c2fcaa9",
      "dir": "out",
+     "at": "2026-10-06T15:40:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your trial — what happens now",
+     "text": "Hi Dana,\n\nGood to talk with you today — thank you for your time.\n\nHere is what happens now, from my side:\n\n- Right now we are researching your business and your market, and building your offer.\n- This week we set up your sending address and its inboxes.\n- Then two weeks of warm-up, so your emails land in the inbox and not in spam.\n- Meanwhile we build your list of about 400 companies and write your emails in your words.\n- Every Friday you get a short note from me, even in the quiet weeks.\n- Near the end of warm-up you get an invite to a 30-minute launch call: we go through the list and the emails together, and you give the OK.\n- The first emails go out in about three weeks.\n\nNothing is needed from you until the launch call.\n\nLimeth Sith",
+     "kind": "next_steps",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-7323c22503be51e2",
+     "dir": "out",
      "at": "2026-10-06T18:20:00.250Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
@@ -3165,7 +3180,7 @@
      "template": "agreement_copy"
     },
     {
-     "id": "out-186c27e7d8778e62",
+     "id": "out-a513a343bddbc101",
      "dir": "out",
      "at": "2026-10-06T18:20:07.900Z",
      "from": "hello@aviance.test",
@@ -3178,13 +3193,13 @@
      "template": "setup_in_progress"
     },
     {
-     "id": "out-d8c9406fcc8fd2e6",
+     "id": "out-a75fe33e50f9a558",
      "dir": "out",
      "at": "2026-10-07T13:30:10.950Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Your trial — two dates",
-     "text": "Hi Dana, agreement's in — thank you. The domain is registered and both inboxes went into warm-up today.\n\nTwo dates. First send: Wednesday 21 October — that's day 1 of your 30. Day 30 is Thursday 19 November.\n\nInstead of a build call, on Wednesday 14 October you'll get a link to one page where you check the customer profile and approve the copy.\n\nEvery Friday you'll get a short update from me, including the quiet weeks.\n\nLimeth Sith",
+     "text": "Hi Dana, agreement's in — thank you. The domain is registered and both inboxes went into warm-up today.\n\nTwo dates. First send: Wednesday 21 October — that's day 1 of your 30. Day 30 is Thursday 19 November.\n\nNear the end of warm-up you'll get an invite to a 30-minute launch call: we go through your list and your emails together, and you give the OK before anything is sent.\n\nEvery Friday you'll get a short update from me, including the quiet weeks.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -3192,6 +3207,7 @@
     }
    ]
   },
+  "launchCall": null,
   "autobuy": {
    "status": "done",
    "buy": null,
@@ -3354,6 +3370,19 @@
     {
      "id": "out-76ff2f098c2fcaa9",
      "dir": "out",
+     "at": "2026-10-06T15:40:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your trial — what happens now",
+     "text": "Hi Dana,\n\nGood to talk with you today — thank you for your time.\n\nHere is what happens now, from my side:\n\n- Right now we are researching your business and your market, and building your offer.\n- This week we set up your sending address and its inboxes.\n- Then two weeks of warm-up, so your emails land in the inbox and not in spam.\n- Meanwhile we build your list of about 400 companies and write your emails in your words.\n- Every Friday you get a short note from me, even in the quiet weeks.\n- Near the end of warm-up you get an invite to a 30-minute launch call: we go through the list and the emails together, and you give the OK.\n- The first emails go out in about three weeks.\n\nNothing is needed from you until the launch call.\n\nLimeth Sith",
+     "kind": "next_steps",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-7323c22503be51e2",
+     "dir": "out",
      "at": "2026-10-06T18:20:00.250Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
@@ -3365,7 +3394,7 @@
      "template": "agreement_copy"
     },
     {
-     "id": "out-186c27e7d8778e62",
+     "id": "out-a513a343bddbc101",
      "dir": "out",
      "at": "2026-10-06T18:20:07.900Z",
      "from": "hello@aviance.test",
@@ -3378,13 +3407,13 @@
      "template": "setup_in_progress"
     },
     {
-     "id": "out-d8c9406fcc8fd2e6",
+     "id": "out-a75fe33e50f9a558",
      "dir": "out",
      "at": "2026-10-07T13:30:10.950Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Your trial — two dates",
-     "text": "Hi Dana, agreement's in — thank you. The domain is registered and both inboxes went into warm-up today.\n\nTwo dates. First send: Wednesday 21 October — that's day 1 of your 30. Day 30 is Thursday 19 November.\n\nInstead of a build call, on Wednesday 14 October you'll get a link to one page where you check the customer profile and approve the copy.\n\nEvery Friday you'll get a short update from me, including the quiet weeks.\n\nLimeth Sith",
+     "text": "Hi Dana, agreement's in — thank you. The domain is registered and both inboxes went into warm-up today.\n\nTwo dates. First send: Wednesday 21 October — that's day 1 of your 30. Day 30 is Thursday 19 November.\n\nNear the end of warm-up you'll get an invite to a 30-minute launch call: we go through your list and your emails together, and you give the OK before anything is sent.\n\nEvery Friday you'll get a short update from me, including the quiet weeks.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,

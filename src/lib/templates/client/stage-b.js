@@ -55,6 +55,49 @@ You can still see everything here: {approvalUrl}. If anything should change, rep
 
 {ownerName}`,
   },
+  // ── The launch call (docs/LAUNCH-CALL.md; the `next_steps` email is in stage-a.js) ──
+  // The launch invite replaces the plain approval email when the list and the copy are ready
+  // (from the ONBOARDCALL inbox, so replies land where the machine reads them). {bookingLine} is
+  // the booking page for a launch call; the approval page link sits below it.
+  launch_invite: {
+    from: 'onboard',
+    subject: "Your list and your emails are ready — let's go through them together",
+    body: `Hi {firstName},
+
+Your list of companies and the four emails that will go out in {senderName}'s name are ready. Warm-up is nearly done, so the next step is a {callMinutes}-minute launch call: we go through the list and the emails together and you give the OK, and the first emails go out {day1Line}.
+
+{bookingLine}
+
+If you'd rather read it first, everything is on one page: {approvalUrl} — you can approve each part there too, and then the call is optional.
+
+{ownerName}`,
+  },
+  launch_invite_reminder: {
+    from: 'onboard',
+    subject: 'Re: {threadSubject}',
+    body: `Hi {firstName},
+
+Just checking you saw my email — your list and your emails are ready for the {callMinutes}-minute launch call. {bookingLine}
+
+Or read and approve them on one page: {approvalUrl}
+
+{ownerName}`,
+  },
+  launch_call_tomorrow: {
+    from: 'onboard',
+    subject: 'Our launch call {callDay}',
+    body: `Hi {firstName},
+
+A quick reminder: our {callMinutes}-minute launch call is {when}. We go through your list and your emails together, and you give the OK.
+
+{joinLine}
+
+If you'd like a look before the call: {approvalUrl}
+
+If that time no longer works, reply to this email and we'll find another.
+
+{ownerName}`,
+  },
   day1_moved: {
     from: 'owner',
     subject: 'Your trial — first send moves to {day1Date}',

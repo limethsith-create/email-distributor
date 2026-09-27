@@ -34,8 +34,8 @@ import { shortHash, lower } from '@/lib/systems/stagec-common';
 
 export const THREAD_CAP = 200;
 export const TEXT_MAX = 4000;
-/** Kinds of entry (docs/REPLYBOT-MEET.md §1). */
-export const KINDS = new Set(['acceptance', 'reminder', 'reply', 'owner_reply', 'booking', 'auto_reply', 'system']);
+/** Kinds of entry (docs/REPLYBOT-MEET.md §1; `next_steps` and `launch_invite` from docs/LAUNCH-CALL.md). */
+export const KINDS = new Set(['acceptance', 'reminder', 'reply', 'owner_reply', 'booking', 'auto_reply', 'system', 'next_steps', 'launch_invite']);
 
 // ─── small helpers ───────────────────────────────────────────────────────────
 
@@ -254,8 +254,9 @@ const REPLY_MAX = 2000;
  */
 export async function ownerMessage(clientId, text, { now = io.now() } = {}) {
   const call = await import('@/lib/systems/onboardcall');
-  const raw = await call.readCall(clientId);
-  if (flag(raw.sentAt)) return call.ownerReply(clientId, text, { now });
+  // The call in play (the launch call once its invite is out, docs/LAUNCH-CALL.md), else the onboarding call.
+  const { kind, raw } = await call.activeCall(clientId);
+  if (flag(raw.sentAt)) return call.ownerReply(clientId, text, { now, kind });
   const body = String(text || '').replace(/\r\n/g, '\n').trim();
   if (!body) throw new MessagesError('Write the reply first.');
   if (body.length > REPLY_MAX) throw new MessagesError(`Keep the reply under ${REPLY_MAX.toLocaleString('en-US')} characters (it has ${body.length.toLocaleString('en-US')}).`);
@@ -294,13 +295,14 @@ export async function conversationFor(clientId, { now = io.now(), client = null 
   const c = client || await getClient(clientId);
   if (!c) return null;
   const { botViewFor } = await import('@/lib/systems/replybot');
-  const { readCall } = await import('@/lib/systems/onboardcall');
+  const { activeCall } = await import('@/lib/systems/onboardcall');
   const { onboardSender } = await import('@/lib/notify');
-  const [thread, convo, call] = await Promise.all([readThread(clientId), readConvo(clientId), readCall(clientId)]);
+  // The call in play decides the bot's view and what counts as answered (the launch call during warm-up).
+  const [thread, convo, active] = await Promise.all([readThread(clientId), readConvo(clientId), activeCall(clientId, c)]);
   let sender = null;
   try { sender = await onboardSender(); } catch { sender = null; }
-  const bot = await botViewFor(c, call, { now });
-  return conversationView({ thread, client: c, convo, call, bot, sender, dayKey: bot.dayKey });
+  const bot = await botViewFor(c, active.raw, { now, kind: active.kind });
+  return conversationView({ thread, client: c, convo, call: active.raw, bot, sender, dayKey: bot.dayKey });
 }
 
 /**

@@ -419,7 +419,13 @@ test('price scout sends the list once, then the 12 h / 48 h nudges', async () =>
   assert.match(list.body, /getacme\.com/);
   assert.match(list.body, /Porkbun \$9\.73/);
   assert.match(list.body, /https:\/\/app\.test\/mc\/clients\/acme\/purchase/);
-  assert.ok(emails.some((e) => e.key === 'setup_in_progress'));
+  // The agreement came before any onboarding call: the "what happens now" plan carries the setup news (docs/LAUNCH-CALL.md §1),
+  // with no made-up Day 1 — nothing has started yet.
+  const plan = emails.find((e) => e.key === 'next_steps');
+  assert.ok(plan, 'next_steps went at the setup moment');
+  assert.match(plan.vars.opening, /market check passed/);
+  assert.equal(plan.vars.day1Line, 'in about three weeks');
+  assert.ok(!emails.some((e) => e.key === 'setup_in_progress'), 'never two "what happens now" emails');
   assert.equal((await runPriceScout('acme', { now: t0 })).skipped, 'already sent');
 
   const h = (n) => new Date(t0.getTime() + n * 3600e3);
@@ -516,7 +522,7 @@ test('setup checker: all pass → warming, dates, inboxes on, welcome email', as
   assert.equal(Number((await kv.hgetall('client:acme:counters:total')).sent), 0);
   const welcome = emails.find((e) => e.key === 'welcome_two_dates');
   assert.equal(welcome.vars.day1Date, 'Monday 19 October');
-  assert.equal(welcome.vars.approvalDate, 'Saturday 10 October');
+  assert.equal(welcome.vars.callMinutes, 30, 'the two-dates email names the launch call, not an approval date (docs/LAUNCH-CALL.md)');
   const dom = await kv.hgetall('client:acme:domain');
   assert.equal(dom.spf, 'pass');
   assert.equal(dom.blacklist, 'clean');
@@ -660,7 +666,7 @@ test('every Stage A template renders with sample data; the agreement fills all b
     firstName: 'Ann', ownerName: 'Limeth', link: 'https://x/c/t/onboard', closeDate: 'Monday 12 October', position: 2,
     expectedLine: 'Soon.', reason: 'because.', minMarket: '1,000', estimate: '500', widenedLine: ' in the areas you gave me', mainDomain: 'acme.com',
     agreementText: 'TEXT', agreementName: 'Ann Lee', agreementTitle: 'CEO', companyName: 'Acme', acceptedAt: '2026-10-05 14:00', agreementIp: '1.2.3.4',
-    day1Date: 'Monday 19 October', day30Date: 'Tuesday 17 November', approvalDate: 'Saturday 10 October', calendarUrl: 'https://cal', problem: 'broken.',
+    day1Date: 'Monday 19 October', day30Date: 'Tuesday 17 November', calendarUrl: 'https://cal', problem: 'broken.',
     // Onboarding call (accepted_call, accepted_call_reminder, onboard_call_tomorrow, onboard_owner_reply)
     callMinutes: 30, bookingLine: 'Book a time that suits you: https://cal.com/limeth/onboarding', onboardingLink: 'https://x/c/t/onboard',
     threadSubject: "You're in — let's book your onboarding call", when: 'Tuesday, October 13 at 11:00 AM EDT', callDay: 'tomorrow', text: 'Tuesday works.\n\nLimeth', joinLine: 'Join here: https://meet.google.com/abc-defg-hij',
@@ -668,6 +674,8 @@ test('every Stage A template renders with sample data; the agreement fills all b
     whenShort: 'Tue 13 Oct at 11:00 am ET', minutes: 30, linkLine: "I'll send the link before the call.", bookLink: 'https://x/c/t/book',
     nextLine: 'If the time stops working, pick another here: https://x/c/t/book', asked: 'Tuesday at 2:00 pm', acceptLink: 'https://x/c/t/book/accept?m=m1',
     cancelText: "I'm sorry — I've had to cancel our call on Tuesday 13 October at 11:00 am Eastern Time.",
+    // "What happens now" (next_steps, docs/LAUNCH-CALL.md)
+    opening: 'Good to talk with you today — thank you for your time.', listSize: 400, day1Line: 'in about three weeks',
   };
   for (const key of Object.keys(STAGE_A_TEMPLATES)) {
     const m = renderTemplate(key, sample);

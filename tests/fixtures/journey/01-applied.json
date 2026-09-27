@@ -1594,6 +1594,7 @@
    }
   },
   "onboardCall": null,
+  "launchCall": null,
   "autobuy": null,
   "warmup": null,
   "conversation": {

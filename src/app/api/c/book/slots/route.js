@@ -5,7 +5,7 @@
  */
 
 import { readToken } from '@/lib/pagetokens';
-import { bookingPageData } from '@/lib/systems/calendar';
+import { bookingPageData, kindOfLink } from '@/lib/systems/calendar';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +14,6 @@ export async function GET(request) {
   const token = url.searchParams.get('token') || request.headers.get('x-page-token') || '';
   const t = await readToken(token, { purpose: 'book' }).catch(() => null);
   if (!t) return Response.json({ error: 'This link has expired or is not valid.' }, { status: 401 });
-  const d = await bookingPageData(t.clientId, { tz: url.searchParams.get('tz') });
-  return Response.json({ zone: d.zone, slots: d.slots, existing: d.existing, closed: d.closed }, { headers: { 'Cache-Control': 'no-store' } });
+  const d = await bookingPageData(t.clientId, { tz: url.searchParams.get('tz'), kind: await kindOfLink(t, t.clientId) });
+  return Response.json({ zone: d.zone, slots: d.slots, existing: d.existing, closed: d.closed, kind: d.kind }, { headers: { 'Cache-Control': 'no-store' } });
 }

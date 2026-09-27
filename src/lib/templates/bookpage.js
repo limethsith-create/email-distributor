@@ -40,7 +40,10 @@ const STYLE = `
   .when{font-size:20px;font-weight:700}
 `;
 
-function page(title, body) {
+/** The page's small heading: which call it books (docs/LAUNCH-CALL.md: the launch call has its own page wording). */
+const eyebrow = (kind) => (kind === 'launch' ? 'Aviance · launch call' : 'Aviance · onboarding call');
+
+function page(title, body, kind = 'onboarding') {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -52,7 +55,7 @@ function page(title, body) {
 </head>
 <body>
 <main>
-<p class="eyebrow">Aviance · onboarding call</p>
+<p class="eyebrow">${esc(eyebrow(kind))}</p>
 ${body}
 </main>
 </body>
@@ -60,10 +63,10 @@ ${body}
 }
 
 /** A page with one message (bad link, closed page, done). `link` = { href, text } for one button. */
-export function messagePage(title, text, link = null) {
+export function messagePage(title, text, link = null, { kind = 'onboarding' } = {}) {
   return page(title, `<h1>${esc(title)}</h1>
 <p>${esc(text)}</p>
-${link ? `<a class="ghost" href="${esc(link.href)}">${esc(link.text)}</a>` : ''}`);
+${link ? `<a class="ghost" href="${esc(link.href)}">${esc(link.text)}</a>` : ''}`, kind);
 }
 
 const FLASH = {
@@ -82,8 +85,9 @@ const FLASH = {
  */
 export function bookingPage(data, { token, flash = null, change = false } = {}) {
   const base = `/c/${encodeURIComponent(token)}/book`;
-  if (data.held) return messagePage('Our call is done', 'Thank you for your time. Reply to my last email if you need anything.');
-  if (data.closed) return messagePage('This page is closed', 'Reply to my last email and we\'ll sort out a time.');
+  const kind = data.kind === 'launch' ? 'launch' : 'onboarding';
+  if (data.held) return messagePage('Our call is done', 'Thank you for your time. Reply to my last email if you need anything.', null, { kind });
+  if (data.closed) return messagePage('This page is closed', 'Reply to my last email and we\'ll sort out a time.', null, { kind });
   const ex = data.existing;
   const parts = [];
   const f = Object.hasOwn(FLASH, String(flash)) ? FLASH[flash] : null;
@@ -105,7 +109,7 @@ export function bookingPage(data, { token, flash = null, change = false } = {}) 
     if (!change) { parts.push(`<a class="ghost" href="${esc(`${base}?change=1&tz=${encodeURIComponent(data.zone)}`)}">Ask for a different time</a>`); showSlots = false; }
   } else {
     parts.push(`<h1>Pick a time for our call</h1>
-<p>${data.firstName ? `Hi ${esc(data.firstName)} — c` : 'C'}hoose a time that suits you for our ${esc(data.callMinutes)}-minute onboarding call. I'll confirm by email.</p>`);
+<p>${data.firstName ? `Hi ${esc(data.firstName)} — c` : 'C'}hoose a time that suits you for our ${esc(data.callMinutes)}-minute ${kind === 'launch' ? 'launch call, where we go through your list and your emails together' : 'onboarding call'}. I'll confirm by email.</p>`);
   }
 
   if (showSlots) {
@@ -128,7 +132,7 @@ ${days}
 <p class="small">Times are in ${esc(data.zoneName)}. Nothing here works? Reply to my email.</p>`);
     }
   }
-  return page('Book your onboarding call', parts.join('\n'));
+  return page(kind === 'launch' ? 'Book your launch call' : 'Book your onboarding call', parts.join('\n'), kind);
 }
 
 /** The one-click answer to an owner's suggested time: one big button (a form POST, so link scanners cannot press it). */

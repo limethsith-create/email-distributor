@@ -1,7 +1,7 @@
 {
- "step": "14-warming-day-7",
- "what": "A week of warm-up; the list is in and graded.",
- "at": "2026-10-13T16:00:00.300Z",
+ "step": "25-owner-answered",
+ "what": "The owner answers from the hub (it goes from the onboarding inbox, in her thread); the red dot goes.",
+ "at": "2026-10-26T14:45:00.300Z",
  "check": {
   "ok": true,
   "checked": 0,
@@ -22,15 +22,15 @@
    "ok": true,
    "baseUrl": "https://machine.test",
    "heartbeat": {
-    "lastTickAt": "2026-10-13T16:00:00.000Z",
+    "lastTickAt": "2026-10-26T14:45:00.000Z",
     "ageSec": 0,
     "source": "cronjob",
-    "lastSendAt": null
+    "lastSendAt": "2026-10-26T14:00:00.500Z"
    },
    "activeTrials": 1,
    "maxActiveTrials": 3,
    "extensions": 0,
-   "openAlerts": 5,
+   "openAlerts": 7,
    "usage": {
     "redis": {
      "used": null,
@@ -94,39 +94,49 @@
      "warming",
      "ready"
     ],
+    "clients": []
+   },
+   {
+    "key": "live",
+    "label": "Sending",
+    "states": [
+     "sending",
+     "paused",
+     "extension"
+    ],
     "clients": [
      {
       "id": "ridgelineit",
       "name": "Ridgeline IT",
-      "state": "warming",
+      "state": "sending",
       "plan": "trial",
-      "trialDay": -8,
+      "trialDay": 6,
       "day1Date": "2026-10-21",
       "day30Date": "2026-11-19",
       "health": "green",
       "healthReasons": [],
       "five": {
-       "sent": 0,
-       "replies": 0,
-       "positive": 0,
-       "booked": 0,
+       "sent": 54,
+       "replies": 10,
+       "positive": 4,
+       "booked": 1,
        "qualified": 0
       },
-      "inboxRate": 0.968,
-      "lastJobAt": "2026-10-13T16:00:00.000Z",
-      "openAlerts": 3,
+      "inboxRate": 0.975,
+      "lastJobAt": "2026-10-26T14:45:00.000Z",
+      "openAlerts": 5,
       "urgentAlerts": 0,
       "extension": false,
-      "stateLabel": "Warming up — Day -8 (Day 1 on 2026-10-21)",
+      "stateLabel": "Sending — Day 6 of 30",
       "simple": {
-       "step": "warming_up",
-       "label": "Warming up — day 7 of about 14 · 97% reach the inbox",
-       "next": "Nothing for you: first emails on Wednesday 21 October",
+       "step": "sending",
+       "label": "Sending — day 6 of 30, 1 call booked",
+       "next": "Nothing for you: replies and booked calls come to you as alerts",
        "needsYou": false,
-       "since": "2026-10-07T09:40:11.590Z",
+       "since": "2026-10-21T13:00:00.000Z",
        "person": "Dana Whitfield",
        "company": "Ridgeline IT",
-       "dayOf30": null,
+       "dayOf30": 6,
        "needsReply": false
       },
       "fitScore": {
@@ -185,65 +195,69 @@
        {
         "key": "warmup",
         "label": "Warm-up",
-        "status": "working",
-        "line": "Day 7 of 14 · inbox rate 97% · 2 inboxes",
+        "status": "ok",
+        "line": "Day 20 of 14 · inbox rate 98% · 2 inboxes",
         "detail": [
          "dana@getridgelineit.com: 100%",
-         "dana.whitfield@getridgelineit.com: 97%"
+         "dana.whitfield@getridgelineit.com: 98%"
         ]
        },
        {
         "key": "list",
         "label": "Lead list",
         "status": "ok",
-        "line": "450 contacts · 450 unsent · 0 in sequence · finder done",
+        "line": "451 contacts · 401 unsent · 40 in sequence · finder done",
         "detail": [
-         "unsent: 450"
+         "unsent: 401",
+         "in_sequence: 40",
+         "replied: 5",
+         "suppressed: 4",
+         "notnow: 1"
         ]
        },
        {
         "key": "copy",
         "label": "Copy & approval",
-        "status": "working",
-        "line": "Copy built · the launch invite goes out near the end of warm-up",
+        "status": "ok",
+        "line": "Approved by the launch call 2026-10-20 · version 1 · active both",
         "detail": []
        },
        {
         "key": "canary",
         "label": "Placement & ramp",
-        "status": "working",
-        "line": "First placement test runs from Day −3",
+        "status": "ok",
+        "line": "Inbox placement 100% (2026-10-26) · gate 85%",
         "detail": [
-         "dana@getridgelineit.com: cap 0",
-         "dana.whitfield@getridgelineit.com: cap 0"
+         "dana@getridgelineit.com: cap 12 · placement 100%",
+         "dana.whitfield@getridgelineit.com: cap 12 · placement 100%"
         ]
        },
        {
         "key": "sending",
         "label": "Sending",
-        "status": "off",
-        "line": "Starts on Day 1",
+        "status": "ok",
+        "line": "54 sent · 50 first touches · bounces 0 (0%)",
         "detail": []
        },
        {
         "key": "replies",
         "label": "Replies",
         "status": "ok",
-        "line": "0 replies · 0 positive",
+        "line": "10 replies · 4 positive (19% reply rate)",
         "detail": []
        },
        {
         "key": "calls",
         "label": "Calls",
-        "status": "off",
-        "line": "Watches the calendar once sending starts",
+        "status": "ok",
+        "line": "1 booked · 0 held · 0 qualified · 0 no-shows",
         "detail": []
        },
        {
         "key": "reports",
         "label": "Reports & decision",
         "status": "ok",
-        "line": "1 Friday update",
+        "line": "3 Friday updates",
         "detail": []
        },
        {
@@ -255,21 +269,11 @@
        }
       ],
       "nextUp": {
-       "date": "2026-10-13",
-       "what": "Day −7 build check"
+       "date": "2026-10-30",
+       "what": "Friday update"
       }
      }
     ]
-   },
-   {
-    "key": "live",
-    "label": "Sending",
-    "states": [
-     "sending",
-     "paused",
-     "extension"
-    ],
-    "clients": []
    },
    {
     "key": "decide",
@@ -350,20 +354,38 @@
   },
   "alerts": [
    {
-    "id": "1791858600000-tvlnuj",
-    "at": "2026-10-13T02:30:00.000Z",
-    "key": "morning_digest",
+    "id": "1792981800250-v90nbg",
+    "at": "2026-10-26T02:30:00.250Z",
+    "key": "monday_digest",
     "clientId": null,
-    "title": "Morning digest — 2026-10-13",
+    "title": "Monday KPIs — 2026-10-26",
     "urgent": false,
     "delivered": true
    },
    {
-    "id": "1791772200250-rxeomy",
-    "at": "2026-10-12T02:30:00.250Z",
-    "key": "monday_digest",
+    "id": "1792981800000-ngn6zr",
+    "at": "2026-10-26T02:30:00.000Z",
+    "key": "morning_digest",
     "clientId": null,
-    "title": "Monday KPIs — 2026-10-12",
+    "title": "Morning digest — 2026-10-26",
+    "urgent": false,
+    "delivered": true
+   },
+   {
+    "id": "1792160400550-7sjdej",
+    "at": "2026-10-16T14:20:00.550Z",
+    "key": "bot_replied",
+    "clientId": "ridgelineit",
+    "title": "Auto-replied to Dana (Ridgeline IT): sent the booking link and the next open times",
+    "urgent": false,
+    "delivered": true
+   },
+   {
+    "id": "1792155600250-byjcds",
+    "at": "2026-10-16T13:00:00.250Z",
+    "key": "launch_ready",
+    "clientId": "ridgelineit",
+    "title": "Ridgeline IT is ready for the launch call — invite sent",
     "urgent": false,
     "delivered": true
    },
@@ -400,35 +422,35 @@
   "row": {
    "id": "ridgelineit",
    "name": "Ridgeline IT",
-   "state": "warming",
+   "state": "sending",
    "plan": "trial",
-   "trialDay": -8,
+   "trialDay": 6,
    "day1Date": "2026-10-21",
    "day30Date": "2026-11-19",
    "health": "green",
    "healthReasons": [],
    "five": {
-    "sent": 0,
-    "replies": 0,
-    "positive": 0,
-    "booked": 0,
+    "sent": 54,
+    "replies": 10,
+    "positive": 4,
+    "booked": 1,
     "qualified": 0
    },
-   "inboxRate": 0.968,
-   "lastJobAt": "2026-10-13T16:00:00.000Z",
-   "openAlerts": 3,
+   "inboxRate": 0.975,
+   "lastJobAt": "2026-10-26T14:45:00.000Z",
+   "openAlerts": 5,
    "urgentAlerts": 0,
    "extension": false,
-   "stateLabel": "Warming up — Day -8 (Day 1 on 2026-10-21)",
+   "stateLabel": "Sending — Day 6 of 30",
    "simple": {
-    "step": "warming_up",
-    "label": "Warming up — day 7 of about 14 · 97% reach the inbox",
-    "next": "Nothing for you: first emails on Wednesday 21 October",
+    "step": "sending",
+    "label": "Sending — day 6 of 30, 1 call booked",
+    "next": "Nothing for you: replies and booked calls come to you as alerts",
     "needsYou": false,
-    "since": "2026-10-07T09:40:11.590Z",
+    "since": "2026-10-21T13:00:00.000Z",
     "person": "Dana Whitfield",
     "company": "Ridgeline IT",
-    "dayOf30": null,
+    "dayOf30": 6,
     "needsReply": false
    },
    "fitScore": {
@@ -487,65 +509,69 @@
     {
      "key": "warmup",
      "label": "Warm-up",
-     "status": "working",
-     "line": "Day 7 of 14 · inbox rate 97% · 2 inboxes",
+     "status": "ok",
+     "line": "Day 20 of 14 · inbox rate 98% · 2 inboxes",
      "detail": [
       "dana@getridgelineit.com: 100%",
-      "dana.whitfield@getridgelineit.com: 97%"
+      "dana.whitfield@getridgelineit.com: 98%"
      ]
     },
     {
      "key": "list",
      "label": "Lead list",
      "status": "ok",
-     "line": "450 contacts · 450 unsent · 0 in sequence · finder done",
+     "line": "451 contacts · 401 unsent · 40 in sequence · finder done",
      "detail": [
-      "unsent: 450"
+      "unsent: 401",
+      "in_sequence: 40",
+      "replied: 5",
+      "suppressed: 4",
+      "notnow: 1"
      ]
     },
     {
      "key": "copy",
      "label": "Copy & approval",
-     "status": "working",
-     "line": "Copy built · the launch invite goes out near the end of warm-up",
+     "status": "ok",
+     "line": "Approved by the launch call 2026-10-20 · version 1 · active both",
      "detail": []
     },
     {
      "key": "canary",
      "label": "Placement & ramp",
-     "status": "working",
-     "line": "First placement test runs from Day −3",
+     "status": "ok",
+     "line": "Inbox placement 100% (2026-10-26) · gate 85%",
      "detail": [
-      "dana@getridgelineit.com: cap 0",
-      "dana.whitfield@getridgelineit.com: cap 0"
+      "dana@getridgelineit.com: cap 12 · placement 100%",
+      "dana.whitfield@getridgelineit.com: cap 12 · placement 100%"
      ]
     },
     {
      "key": "sending",
      "label": "Sending",
-     "status": "off",
-     "line": "Starts on Day 1",
+     "status": "ok",
+     "line": "54 sent · 50 first touches · bounces 0 (0%)",
      "detail": []
     },
     {
      "key": "replies",
      "label": "Replies",
      "status": "ok",
-     "line": "0 replies · 0 positive",
+     "line": "10 replies · 4 positive (19% reply rate)",
      "detail": []
     },
     {
      "key": "calls",
      "label": "Calls",
-     "status": "off",
-     "line": "Watches the calendar once sending starts",
+     "status": "ok",
+     "line": "1 booked · 0 held · 0 qualified · 0 no-shows",
      "detail": []
     },
     {
      "key": "reports",
      "label": "Reports & decision",
      "status": "ok",
-     "line": "1 Friday update",
+     "line": "3 Friday updates",
      "detail": []
     },
     {
@@ -557,8 +583,8 @@
     }
    ],
    "nextUp": {
-    "date": "2026-10-13",
-    "what": "Day −7 build check"
+    "date": "2026-10-30",
+    "what": "Friday update"
    }
   },
   "profile": {
@@ -633,7 +659,19 @@
    "marketCapped": "1",
    "marketCheckedAt": "2026-10-06T18:20:00.000Z",
    "marketSource": "places",
-   "marketRound": "base"
+   "marketRound": "base",
+   "bookingTestAt": "2026-10-16T13:00:00.000Z",
+   "bookingTestedUrl": "https://cal.com/ridgeline-it/intro",
+   "bookingHost": "calcom",
+   "bookingFirstSlotDays": "",
+   "bookingSlots7d": "",
+   "bookingLengthMin": "",
+   "bookingProblems": [],
+   "bookingCheckStatus": "ok",
+   "bookingRequestSentAt": "2026-10-16T13:00:00.000Z",
+   "bookingTested": "1",
+   "bookingTestedAt": "2026-10-16T13:00:01.400Z",
+   "bookingTestedConfirmedUrl": "https://cal.com/ridgeline-it/intro"
   },
   "trial": {
    "onboardingLink": "https://machine.test/c/TOKEN_1/onboard",
@@ -653,8 +691,18 @@
    "day1Date": "2026-10-21",
    "day30Date": "2026-11-19",
    "welcomeSentAt": "2026-10-07T13:30:10.700Z",
-   "fridayCount": 1,
-   "lastFridayAt": "2026-10-09T13:00:00.000Z"
+   "fridayCount": 3,
+   "lastFridayAt": "2026-10-23T13:00:00.000Z",
+   "buildCheckAt": "2026-10-14T13:00:00.000Z",
+   "approvalLink": "https://machine.test/c/TOKEN_2/approve",
+   "approvalLinkAt": "2026-10-26T14:30:00.550Z",
+   "day1Held": "",
+   "readyAt": "2026-10-21T04:30:00.000Z",
+   "firstSendAt": "2026-10-21T13:00:00.000Z",
+   "day1NoticeAt": "2026-10-21T13:00:00.000Z",
+   "lastClientActivityAt": "2026-10-26T13:00:00.500Z",
+   "lastClientEmailAt": "2026-10-26T13:00:00.500Z",
+   "unansweredHot": 0
   },
   "domain": {
    "name": "getridgelineit.com",
@@ -665,25 +713,25 @@
     "spf": {
      "status": "pass",
      "detail": "v=spf1 include:_spf.google.com ~all",
-     "checkedAt": "2026-10-13T10:00:00.000Z",
+     "checkedAt": "2026-10-26T10:00:00.000Z",
      "by": "authguard"
     },
     "dkim": {
      "status": "pass",
      "detail": "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQ…",
-     "checkedAt": "2026-10-13T10:00:00.000Z",
+     "checkedAt": "2026-10-26T10:00:00.000Z",
      "by": "authguard"
     },
     "dmarc": {
      "status": "pass",
      "detail": "v=DMARC1; p=none; rua=mailto:dmarc-reports@cheapinboxes.com (set by CheapInboxes)",
-     "checkedAt": "2026-10-13T10:00:00.000Z",
+     "checkedAt": "2026-10-26T10:00:00.000Z",
      "by": "authguard"
     },
     "mx": {
      "status": "pass",
      "detail": "smtp.google.com",
-     "checkedAt": "2026-10-13T10:00:00.000Z",
+     "checkedAt": "2026-10-26T10:00:00.000Z",
      "by": "authguard"
     },
     "autorenew": {
@@ -694,7 +742,7 @@
     "blacklist": {
      "status": "pass",
      "detail": "clean on 10 of 10 lists",
-     "checkedAt": "2026-10-13T10:15:00.000Z",
+     "checkedAt": "2026-10-26T10:15:00.000Z",
      "by": "authguard"
     },
     "redirect": {
@@ -1557,12 +1605,12 @@
     "cheapinboxesId": "dom_getridgelineitcom",
     "setupPhase": "passed",
     "setupRoundAt": "2026-10-07T09:40:00.000Z",
-    "check:spf": "{\"status\":\"pass\",\"detail\":\"v=spf1 include:_spf.google.com ~all\",\"checkedAt\":\"2026-10-13T10:00:00.000Z\",\"by\":\"authguard\"}",
-    "check:dkim": "{\"status\":\"pass\",\"detail\":\"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQ…\",\"checkedAt\":\"2026-10-13T10:00:00.000Z\",\"by\":\"authguard\"}",
-    "check:dmarc": "{\"status\":\"pass\",\"detail\":\"v=DMARC1; p=none; rua=mailto:dmarc-reports@cheapinboxes.com (set by CheapInboxes)\",\"checkedAt\":\"2026-10-13T10:00:00.000Z\",\"by\":\"authguard\"}",
-    "check:mx": "{\"status\":\"pass\",\"detail\":\"smtp.google.com\",\"checkedAt\":\"2026-10-13T10:00:00.000Z\",\"by\":\"authguard\"}",
+    "check:spf": "{\"status\":\"pass\",\"detail\":\"v=spf1 include:_spf.google.com ~all\",\"checkedAt\":\"2026-10-26T10:00:00.000Z\",\"by\":\"authguard\"}",
+    "check:dkim": "{\"status\":\"pass\",\"detail\":\"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQ…\",\"checkedAt\":\"2026-10-26T10:00:00.000Z\",\"by\":\"authguard\"}",
+    "check:dmarc": "{\"status\":\"pass\",\"detail\":\"v=DMARC1; p=none; rua=mailto:dmarc-reports@cheapinboxes.com (set by CheapInboxes)\",\"checkedAt\":\"2026-10-26T10:00:00.000Z\",\"by\":\"authguard\"}",
+    "check:mx": "{\"status\":\"pass\",\"detail\":\"smtp.google.com\",\"checkedAt\":\"2026-10-26T10:00:00.000Z\",\"by\":\"authguard\"}",
     "check:autorenew": "{\"status\":\"pass\",\"detail\":\"bought with the CheapInboxes inboxes: it renews with that subscription and is cancelled there with the inboxes when the trial ends\",\"checkedAt\":\"2026-10-07T09:40:00.000Z\"}",
-    "check:blacklist": "{\"status\":\"pass\",\"detail\":\"clean on 10 of 10 lists\",\"checkedAt\":\"2026-10-13T10:15:00.000Z\",\"by\":\"authguard\"}",
+    "check:blacklist": "{\"status\":\"pass\",\"detail\":\"clean on 10 of 10 lists\",\"checkedAt\":\"2026-10-26T10:15:00.000Z\",\"by\":\"authguard\"}",
     "check:redirect": "{\"status\":\"pass\",\"detail\":\"→ https://www.ridgelineit.com/\",\"checkedAt\":\"2026-10-07T09:40:00.000Z\"}",
     "check:smtp": "{\"status\":\"pass\",\"detail\":\"2 inbox(es) logged in\",\"checkedAt\":\"2026-10-07T09:40:00.000Z\"}",
     "check:imap": "{\"status\":\"pass\",\"detail\":\"2 inbox(es), spam folder found\",\"checkedAt\":\"2026-10-07T09:40:00.000Z\"}",
@@ -1573,16 +1621,16 @@
     "loopbackFrom": "dana@getridgelineit.com",
     "loopbackTo": "dana.whitfield@getridgelineit.com",
     "spf": "pass",
-    "spfCheckedAt": "2026-10-13T10:00:00.000Z",
+    "spfCheckedAt": "2026-10-26T10:00:00.000Z",
     "dkim": "pass",
-    "dkimCheckedAt": "2026-10-13T10:00:00.000Z",
+    "dkimCheckedAt": "2026-10-26T10:00:00.000Z",
     "dmarc": "pass",
-    "dmarcCheckedAt": "2026-10-13T10:30:00.000Z",
+    "dmarcCheckedAt": "2026-10-26T10:30:00.000Z",
     "mx": "pass",
-    "mxCheckedAt": "2026-10-13T10:00:00.000Z",
+    "mxCheckedAt": "2026-10-26T10:00:00.000Z",
     "blacklist": "clean",
-    "blacklistCheckedAt": "2026-10-13T10:15:00.000Z",
-    "blacklists": "{\"checkedAt\":\"2026-10-13T10:15:00.000Z\",\"listed\":[],\"warnings\":[],\"clean\":10,\"unknown\":[],\"lists\":[\"multi.uribl.com\",\"multi.surbl.org\",\"dbl.nordspam.com\",\"bl.spamcop.net\",\"psbl.surriel.com\",\"bl.mailspike.net\",\"bl.0spam.org\",\"all.s5h.net\",\"bl.nordspam.com\",\"dnsbl-1.uceprotect.net\"]}",
+    "blacklistCheckedAt": "2026-10-26T10:15:00.000Z",
+    "blacklists": "{\"checkedAt\":\"2026-10-26T10:15:00.000Z\",\"listed\":[],\"warnings\":[],\"clean\":10,\"unknown\":[],\"lists\":[\"multi.uribl.com\",\"multi.surbl.org\",\"dbl.nordspam.com\",\"bl.spamcop.net\",\"psbl.surriel.com\",\"bl.mailspike.net\",\"bl.0spam.org\",\"all.s5h.net\",\"bl.nordspam.com\",\"dnsbl-1.uceprotect.net\"]}",
     "setupPassedAt": "2026-10-07T09:40:10.490Z",
     "dmarcPassRate7d": "",
     "dmarcMessages7d": 0
@@ -1601,22 +1649,28 @@
     "imapHost": "imap.gmail.com",
     "imapPort": 993,
     "enabled": "1",
-    "updatedAt": "2026-10-13T16:00:00.000Z",
+    "updatedAt": "2026-10-26T14:30:00.000Z",
     "twoStepVerified": "1",
     "lastSmtpCheckAt": "2026-10-07T09:40:00.000Z",
     "warmupStartedAt": "2026-10-07T09:40:10.490Z",
-    "dailyCap": "0",
-    "rampStage": "pre-day1",
+    "dailyCap": "12",
+    "rampStage": "3-4",
     "rampReasons": "",
-    "rampAt": "2026-10-13T04:15:00.000Z",
-    "lastWarmReadAt": "2026-10-13T16:00:00.000Z",
+    "rampAt": "2026-10-26T04:15:00.000Z",
+    "lastWarmReadAt": "2026-10-26T14:30:00.000Z",
     "lastWarmReadError": "",
-    "readyStreak": "6",
-    "readyCheckedDay": "2026-10-12",
-    "warmupReady": "0",
+    "readyStreak": "19",
+    "readyCheckedDay": "2026-10-25",
+    "warmupReady": "1",
     "inboxRate7d": 1,
+    "spamTool": "dkimvalidator",
+    "spamScore": "",
+    "spamAssassin": "-0.1",
+    "spamPass": "1",
+    "spamTestAt": "2026-10-21T12:15:00.000Z",
+    "canaryPlacement": 1,
+    "canaryCheckedAt": "2026-10-26T13:15:00.000Z",
     "hasPassword": true,
-    "canaryPlacement": null,
     "health": "ok"
    },
    {
@@ -1631,32 +1685,38 @@
     "imapHost": "imap.gmail.com",
     "imapPort": 993,
     "enabled": "1",
-    "updatedAt": "2026-10-13T16:00:00.000Z",
+    "updatedAt": "2026-10-26T14:30:00.000Z",
     "twoStepVerified": "1",
     "lastSmtpCheckAt": "2026-10-07T09:40:00.000Z",
     "warmupStartedAt": "2026-10-07T09:40:10.490Z",
-    "dailyCap": "0",
-    "rampStage": "pre-day1",
+    "dailyCap": "12",
+    "rampStage": "3-4",
     "rampReasons": "",
-    "rampAt": "2026-10-13T04:15:00.000Z",
-    "lastWarmReadAt": "2026-10-13T16:00:00.000Z",
+    "rampAt": "2026-10-26T04:15:00.000Z",
+    "lastWarmReadAt": "2026-10-26T14:30:00.000Z",
     "lastWarmReadError": "",
-    "readyStreak": "6",
-    "readyCheckedDay": "2026-10-12",
-    "warmupReady": "0",
-    "inboxRate7d": 0.968,
+    "readyStreak": "19",
+    "readyCheckedDay": "2026-10-25",
+    "warmupReady": "1",
+    "inboxRate7d": 0.975,
+    "spamTool": "dkimvalidator",
+    "spamScore": "",
+    "spamAssassin": "-0.1",
+    "spamPass": "1",
+    "spamTestAt": "2026-10-21T12:15:00.000Z",
+    "canaryPlacement": 1,
+    "canaryCheckedAt": "2026-10-26T13:15:00.000Z",
     "hasPassword": true,
-    "canaryPlacement": null,
     "health": "ok"
    }
   ],
   "leadsByStatus": {
-   "unsent": 450,
-   "in_sequence": 0,
-   "replied": 0,
+   "unsent": 401,
+   "in_sequence": 40,
+   "replied": 5,
    "bounced": 0,
-   "suppressed": 0,
-   "notnow": 0,
+   "suppressed": 4,
+   "notnow": 1,
    "done": 0
   },
   "leadfinder": {
@@ -1678,40 +1738,147 @@
   "sequence": {
    "active": "both",
    "version": "1",
-   "approvedAt": null,
-   "approvalMode": null,
+   "approvedAt": "2026-10-20T15:40:00.000Z",
+   "approvalMode": "call",
    "round": 0,
    "changes": [],
-   "sentAt": null
+   "sentAt": "2026-10-16T13:00:00.000Z"
   },
   "counters": {
-   "sent": 0,
-   "sentD0": 0,
-   "sentD3": 0,
+   "sent": 54,
+   "sentD0": 50,
+   "sentD3": 4,
    "sentD7": 0,
    "sentD10": 0,
    "bounces": 0,
-   "replies": 0,
-   "positive": 0,
-   "booked": 0,
+   "replies": 10,
+   "positive": 4,
+   "booked": 1,
    "held": 0,
    "qualified": 0,
    "noshows": 0,
    "wrongfit": 0,
-   "warmupSent": 75,
-   "warmupInbox": 74,
-   "warmupSpam": 1,
-   "warmupRescued": 1,
-   "companiesContacted": 0
+   "warmupSent": 225,
+   "warmupInbox": 221,
+   "warmupSpam": 4,
+   "warmupRescued": 4,
+   "companiesContacted": 49
   },
-  "repliesByKind": {},
-  "replies": [],
-  "bookings": [],
+  "repliesByKind": {
+   "interested": 3,
+   "notnow": 1,
+   "no": 2,
+   "unclear": 1,
+   "question": 1,
+   "ooo": 1,
+   "wrongperson": 1,
+   "angry": 1
+  },
+  "replies": [
+   {
+    "id": "rf014fcc4d7b50c24",
+    "kind": "interested",
+    "leadEmail": "pia@irwincpa195.com",
+    "receivedAt": "2026-10-24T21:45:00.000Z",
+    "snippet": "Interested. What would this cost for 20 people?"
+   },
+   {
+    "id": "r1b6998bf45f9c83c",
+    "kind": "no",
+    "leadEmail": "reid@tranlaw236.com",
+    "receivedAt": "2026-10-24T08:45:00.000Z",
+    "snippet": "No thanks."
+   },
+   {
+    "id": "r251079e8f9ea9ea5",
+    "kind": "notnow",
+    "leadEmail": "dina@reyescpa423.com",
+    "receivedAt": "2026-10-23T15:45:00.000Z",
+    "snippet": "Not right now, maybe next quarter."
+   },
+   {
+    "id": "rd1e88ba36545559d",
+    "kind": "no",
+    "leadEmail": "dina@shawcpa203.com",
+    "receivedAt": "2026-10-23T15:45:00.000Z",
+    "snippet": "No thanks."
+   },
+   {
+    "id": "r3ddc9ad8f6c89449",
+    "kind": "unclear",
+    "leadEmail": "evan@quinnlaw344.com",
+    "receivedAt": "2026-10-23T15:45:00.000Z",
+    "snippet": "Received."
+   },
+   {
+    "id": "r9b9d85b93a402b0f",
+    "kind": "interested",
+    "leadEmail": "alan@grantlaw60.com",
+    "receivedAt": "2026-10-23T15:45:00.000Z",
+    "snippet": "Interested — we have had two outages this year. What does it cost?"
+   },
+   {
+    "id": "r721e1427d2c03eee",
+    "kind": "question",
+    "leadEmail": "dina@elliscpa63.com",
+    "receivedAt": "2026-10-23T15:45:00.000Z",
+    "snippet": "Who else in Charlotte do you look after?"
+   },
+   {
+    "id": "r9be7ae2eef89ee38",
+    "kind": "ooo",
+    "leadEmail": "dina@vancecpa3.com",
+    "receivedAt": "2026-10-23T15:45:00.000Z",
+    "snippet": "I am out of the office until next Monday."
+   },
+   {
+    "id": "r4232c9442a668078",
+    "kind": "wrongperson",
+    "leadEmail": "evan@hayeslaw24.com",
+    "receivedAt": "2026-10-23T15:45:00.000Z",
+    "snippet": "I'm not the right person — please contact maria.lopez@hayeslaw24.com, she runs operations."
+   },
+   {
+    "id": "r6fe0c910d5ff0e7a",
+    "kind": "angry",
+    "leadEmail": "evan@irwinlaw264.com",
+    "receivedAt": "2026-10-23T15:45:00.000Z",
+    "snippet": "Stop emailing me. How did you get my address?"
+   },
+   {
+    "id": "r35a2af9b52eaacbd",
+    "kind": "interested",
+    "leadEmail": "vera@jensencpa159.com",
+    "receivedAt": "2026-10-22T22:00:00.000Z",
+    "snippet": "Interested. What would this cost for 20 people?"
+   }
+  ],
+  "bookings": [
+   {
+    "id": "b9bb08827dce29202",
+    "leadEmail": "alan@grantlaw60.com",
+    "scheduledAt": "2026-10-27T15:00:00.000Z",
+    "status": "booked",
+    "qualified": false,
+    "tapped": false,
+    "disputeReason": null
+   }
+  ],
   "pacelog": [],
   "reports": [
    {
     "name": "friday:2026-10-09",
     "renderedAt": "2026-10-09T13:00:00.000Z",
+    "blockedReason": ""
+   },
+   {
+    "name": "friday:2026-10-16",
+    "renderedAt": "2026-10-16T13:00:01.150Z",
+    "blockedReason": ""
+   },
+   {
+    "name": "friday:2026-10-23",
+    "renderedAt": "2026-10-23T13:00:00.500Z",
     "blockedReason": ""
    }
   ],
@@ -1727,12 +1894,7 @@
   ],
   "upcoming": [
    {
-    "date": "2026-10-13",
-    "time": "09:00 ET",
-    "what": "Day −7 build check"
-   },
-   {
-    "date": "2026-10-16",
+    "date": "2026-10-30",
     "time": "09:00 ET",
     "what": "Friday update"
    },
@@ -1754,194 +1916,106 @@
   ],
   "events": [
    {
-    "at": "2026-10-13T10:15:01.210Z",
-    "system": "authguard",
-    "event": "blacklist_checked",
+    "at": "2026-10-26T14:30:00.800Z",
+    "system": "onboardcall",
+    "event": "owner_replied",
     "detail": {
-     "status": "clean",
-     "listed": [],
-     "warnings": [],
-     "unknown": []
+     "chars": 47
     }
    },
    {
-    "at": "2026-10-13T10:00:00.160Z",
-    "system": "authguard",
-    "event": "dns_checked",
-    "detail": {
-     "failed": []
-    }
-   },
-   {
-    "at": "2026-10-13T04:15:00.000Z",
-    "system": "ramp",
-    "event": "caps_set",
-    "detail": {
-     "sendingDay": 0,
-     "bounceRate": null,
-     "inboxes": [
-      {
-       "email": "dana@getridgelineit.com",
-       "cap": 0,
-       "stage": "pre-day1",
-       "reasons": []
-      },
-      {
-       "email": "dana.whitfield@getridgelineit.com",
-       "cap": 0,
-       "stage": "pre-day1",
-       "reasons": []
-      }
-     ]
-    }
-   },
-   {
-    "at": "2026-10-12T10:15:01.210Z",
-    "system": "authguard",
-    "event": "blacklist_checked",
-    "detail": {
-     "status": "clean",
-     "listed": [],
-     "warnings": [],
-     "unknown": []
-    }
-   },
-   {
-    "at": "2026-10-12T10:00:00.160Z",
-    "system": "authguard",
-    "event": "dns_checked",
-    "detail": {
-     "failed": []
-    }
-   },
-   {
-    "at": "2026-10-12T04:15:00.000Z",
-    "system": "ramp",
-    "event": "caps_set",
-    "detail": {
-     "sendingDay": 0,
-     "bounceRate": null,
-     "inboxes": [
-      {
-       "email": "dana@getridgelineit.com",
-       "cap": 0,
-       "stage": "pre-day1",
-       "reasons": []
-      },
-      {
-       "email": "dana.whitfield@getridgelineit.com",
-       "cap": 0,
-       "stage": "pre-day1",
-       "reasons": []
-      }
-     ]
-    }
-   },
-   {
-    "at": "2026-10-11T10:15:01.210Z",
-    "system": "authguard",
-    "event": "blacklist_checked",
-    "detail": {
-     "status": "clean",
-     "listed": [],
-     "warnings": [],
-     "unknown": []
-    }
-   },
-   {
-    "at": "2026-10-11T10:00:00.160Z",
-    "system": "authguard",
-    "event": "dns_checked",
-    "detail": {
-     "failed": []
-    }
-   },
-   {
-    "at": "2026-10-11T04:15:00.000Z",
-    "system": "ramp",
-    "event": "caps_set",
-    "detail": {
-     "sendingDay": 0,
-     "bounceRate": null,
-     "inboxes": [
-      {
-       "email": "dana@getridgelineit.com",
-       "cap": 0,
-       "stage": "pre-day1",
-       "reasons": []
-      },
-      {
-       "email": "dana.whitfield@getridgelineit.com",
-       "cap": 0,
-       "stage": "pre-day1",
-       "reasons": []
-      }
-     ]
-    }
-   },
-   {
-    "at": "2026-10-10T10:15:01.210Z",
-    "system": "authguard",
-    "event": "blacklist_checked",
-    "detail": {
-     "status": "clean",
-     "listed": [],
-     "warnings": [],
-     "unknown": []
-    }
-   },
-   {
-    "at": "2026-10-10T10:00:00.160Z",
-    "system": "authguard",
-    "event": "dns_checked",
-    "detail": {
-     "failed": []
-    }
-   },
-   {
-    "at": "2026-10-10T04:15:00.000Z",
-    "system": "ramp",
-    "event": "caps_set",
-    "detail": {
-     "sendingDay": 0,
-     "bounceRate": null,
-     "inboxes": [
-      {
-       "email": "dana@getridgelineit.com",
-       "cap": 0,
-       "stage": "pre-day1",
-       "reasons": []
-      },
-      {
-       "email": "dana.whitfield@getridgelineit.com",
-       "cap": 0,
-       "stage": "pre-day1",
-       "reasons": []
-      }
-     ]
-    }
-   },
-   {
-    "at": "2026-10-09T13:00:00.250Z",
-    "system": "friday",
-    "event": "friday_sent",
-    "detail": {
-     "date": "2026-10-09",
-     "variant": "build",
-     "words": 43
-    }
-   },
-   {
-    "at": "2026-10-09T13:00:00.250Z",
+    "at": "2026-10-26T14:30:00.800Z",
     "system": "notify",
     "event": "client_email_sent",
     "detail": {
-     "key": "friday_update",
+     "key": "onboard_owner_reply",
      "to": "dana@ridgelineit.com"
     }
    },
    {
-    "at": "2026-10-09T10:15:01.210Z",
+    "at": "2026-10-26T14:30:00.550Z",
+    "system": "notify",
+    "event": "alert_sent",
+    "detail": {
+     "key": "onboard_reply",
+     "title": "Dana Whitfield wrote — needs your answer",
+     "channels": {
+      "email": "ok",
+      "push": "push not configured"
+     }
+    }
+   },
+   {
+    "at": "2026-10-26T14:30:00.300Z",
+    "system": "onboardcall",
+    "event": "reply_received",
+    "detail": {
+     "from": "dana@ridgelineit.com",
+     "subject": "Question about the trial"
+    }
+   },
+   {
+    "at": "2026-10-26T13:15:00.000Z",
+    "system": "canary",
+    "event": "done",
+    "detail": {
+     "overall": 1,
+     "min": 1,
+     "perProvider": {
+      "google": {
+       "sent": 6,
+       "inbox": 6,
+       "placement": 1
+      },
+      "yahoo": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      },
+      "aol": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      },
+      "icloud": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      },
+      "gmx": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      },
+      "yandex": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      }
+     }
+    }
+   },
+   {
+    "at": "2026-10-26T12:00:00.250Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "hot_lead_nudge",
+     "to": "dana@ridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-26T11:30:00.000Z",
+    "system": "canary",
+    "event": "started",
+    "detail": {
+     "inboxes": 2,
+     "helpers": 8,
+     "emails": 16
+    }
+   },
+   {
+    "at": "2026-10-26T10:15:01.210Z",
     "system": "authguard",
     "event": "blacklist_checked",
     "detail": {
@@ -1952,7 +2026,7 @@
     }
    },
    {
-    "at": "2026-10-09T10:00:00.160Z",
+    "at": "2026-10-26T10:00:00.160Z",
     "system": "authguard",
     "event": "dns_checked",
     "detail": {
@@ -1960,370 +2034,419 @@
     }
    },
    {
-    "at": "2026-10-09T04:15:00.000Z",
+    "at": "2026-10-26T04:15:00.000Z",
     "system": "ramp",
     "event": "caps_set",
     "detail": {
-     "sendingDay": 0,
+     "sendingDay": 4,
      "bounceRate": null,
      "inboxes": [
       {
        "email": "dana@getridgelineit.com",
-       "cap": 0,
-       "stage": "pre-day1",
+       "cap": 12,
+       "stage": "3-4",
        "reasons": []
       },
       {
        "email": "dana.whitfield@getridgelineit.com",
-       "cap": 0,
-       "stage": "pre-day1",
+       "cap": 12,
+       "stage": "3-4",
        "reasons": []
       }
      ]
     }
    },
    {
-    "at": "2026-10-08T18:00:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-25T22:00:00.250Z",
+    "system": "outbound",
+    "event": "prospect_sent",
     "detail": {
-     "checked": 2,
-     "byStatus": {
-      "valid": 2
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
+     "template": "holding_reply",
+     "to": "pia@irwincpa195.com",
+     "inbox": "dana.whitfield@getridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-25T13:15:00.000Z",
+    "system": "canary",
+    "event": "done",
+    "detail": {
+     "overall": 1,
+     "min": 1,
+     "perProvider": {
+      "google": {
+       "sent": 6,
+       "inbox": 6,
+       "placement": 1
+      },
+      "yahoo": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      },
+      "aol": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      },
+      "icloud": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      },
+      "gmx": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      },
+      "yandex": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      }
+     }
+    }
+   },
+   {
+    "at": "2026-10-25T11:30:00.000Z",
+    "system": "canary",
+    "event": "started",
+    "detail": {
+     "inboxes": 2,
+     "helpers": 8,
+     "emails": 16
+    }
+   },
+   {
+    "at": "2026-10-25T10:15:01.210Z",
+    "system": "authguard",
+    "event": "blacklist_checked",
+    "detail": {
+     "status": "clean",
+     "listed": [],
+     "warnings": [],
+     "unknown": []
+    }
+   },
+   {
+    "at": "2026-10-25T10:00:00.160Z",
+    "system": "authguard",
+    "event": "dns_checked",
+    "detail": {
+     "failed": []
+    }
+   },
+   {
+    "at": "2026-10-25T04:15:00.000Z",
+    "system": "ramp",
+    "event": "caps_set",
+    "detail": {
+     "sendingDay": 3,
+     "bounceRate": null,
+     "inboxes": [
+      {
+       "email": "dana@getridgelineit.com",
+       "cap": 12,
+       "stage": "3-4",
+       "reasons": []
+      },
+      {
+       "email": "dana.whitfield@getridgelineit.com",
+       "cap": 12,
+       "stage": "3-4",
+       "reasons": []
+      }
      ]
     }
    },
    {
-    "at": "2026-10-08T17:45:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-24T22:00:00.500Z",
+    "system": "replies",
+    "event": "reply",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
+     "lead": "pia@irwincpa195.com",
+     "kind": "interested",
+     "rule": "(?<!not |no longer |not really |never )\\binterested\\b",
+     "action": "reply_interested sent; hot_lead sent"
+    }
+   },
+   {
+    "at": "2026-10-24T22:00:00.500Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "hot_lead",
+     "to": "dana@ridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-24T22:00:00.250Z",
+    "system": "outbound",
+    "event": "prospect_sent",
+    "detail": {
+     "template": "reply_interested",
+     "to": "pia@irwincpa195.com",
+     "inbox": "dana.whitfield@getridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-24T13:15:00.000Z",
+    "system": "canary",
+    "event": "done",
+    "detail": {
+     "overall": 0.875,
+     "min": 0.875,
+     "perProvider": {
+      "google": {
+       "sent": 6,
+       "inbox": 5,
+       "placement": 0.8333333333333334
+      },
+      "yahoo": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      },
+      "aol": {
+       "sent": 2,
+       "inbox": 1,
+       "placement": 0.5
+      },
+      "icloud": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      },
+      "gmx": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      },
+      "yandex": {
+       "sent": 2,
+       "inbox": 2,
+       "placement": 1
+      }
+     }
+    }
+   },
+   {
+    "at": "2026-10-24T11:30:00.000Z",
+    "system": "canary",
+    "event": "started",
+    "detail": {
+     "inboxes": 2,
+     "helpers": 8,
+     "emails": 16
+    }
+   },
+   {
+    "at": "2026-10-24T10:15:01.210Z",
+    "system": "authguard",
+    "event": "blacklist_checked",
+    "detail": {
+     "status": "clean",
+     "listed": [],
+     "warnings": [],
+     "unknown": []
+    }
+   },
+   {
+    "at": "2026-10-24T10:00:00.160Z",
+    "system": "authguard",
+    "event": "dns_checked",
+    "detail": {
+     "failed": []
+    }
+   },
+   {
+    "at": "2026-10-24T09:00:00.250Z",
+    "system": "replies",
+    "event": "reply",
+    "detail": {
+     "lead": "reid@tranlaw236.com",
+     "kind": "no",
+     "rule": "no thanks",
+     "action": "suppressed; reply_no sent"
+    }
+   },
+   {
+    "at": "2026-10-24T09:00:00.250Z",
+    "system": "outbound",
+    "event": "prospect_sent",
+    "detail": {
+     "template": "reply_no",
+     "to": "reid@tranlaw236.com",
+     "inbox": "dana@getridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-24T04:15:00.000Z",
+    "system": "ramp",
+    "event": "caps_set",
+    "detail": {
+     "sendingDay": 3,
+     "bounceRate": 0,
+     "inboxes": [
+      {
+       "email": "dana@getridgelineit.com",
+       "cap": 12,
+       "stage": "3-4",
+       "reasons": []
+      },
+      {
+       "email": "dana.whitfield@getridgelineit.com",
+       "cap": 12,
+       "stage": "3-4",
+       "reasons": []
+      }
      ]
     }
    },
    {
-    "at": "2026-10-08T17:30:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T23:15:00.000Z",
+    "system": "sender",
+    "event": "smoke_cleared",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "sent": 50,
+     "bounces": 0,
+     "rate": 0
     }
    },
    {
-    "at": "2026-10-08T17:15:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T20:45:00.500Z",
+    "system": "sender",
+    "event": "smoke_reached",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "sent": 50
     }
    },
    {
-    "at": "2026-10-08T17:00:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T17:30:00.250Z",
+    "system": "notify",
+    "event": "client_email_sent",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "key": "call_handoff",
+     "to": "dana@ridgelineit.com"
     }
    },
    {
-    "at": "2026-10-08T16:45:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T17:30:00.000Z",
+    "system": "bookings",
+    "event": "booking_created",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "id": "b9bb08827dce29202",
+     "lead": "alan@grantlaw60.com",
+     "scheduledAt": "2026-10-27T15:00:00.000Z",
+     "rebookOf": null
     }
    },
    {
-    "at": "2026-10-08T16:30:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T16:00:02.500Z",
+    "system": "replies",
+    "event": "reply",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "lead": "evan@irwinlaw264.com",
+     "kind": "angry",
+     "rule": "stop emailing",
+     "action": "suppressed; owner alerted"
     }
    },
    {
-    "at": "2026-10-08T16:15:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T16:00:02.500Z",
+    "system": "notify",
+    "event": "alert_sent",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "key": "angry_reply",
+     "title": "Angry reply: Ridgeline IT",
+     "channels": {
+      "email": "ok",
+      "push": "push not configured",
+      "telegram": "telegram not configured"
+     }
     }
    },
    {
-    "at": "2026-10-08T16:00:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T16:00:02.250Z",
+    "system": "replies",
+    "event": "reply",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "lead": "evan@hayeslaw24.com",
+     "kind": "wrongperson",
+     "rule": "not the right person",
+     "action": "thanks sent; referral lead created (maria.lopez@hayeslaw24.com)"
     }
    },
    {
-    "at": "2026-10-08T15:45:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T16:00:02.250Z",
+    "system": "replies",
+    "event": "referral",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "from": "evan@hayeslaw24.com",
+     "to": "maria.lopez@hayeslaw24.com",
+     "name": "Maria Lopez",
+     "guessed": false,
+     "added": 1
     }
    },
    {
-    "at": "2026-10-08T15:30:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T16:00:02.250Z",
+    "system": "outbound",
+    "event": "prospect_sent",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "template": "reply_wrongperson_thanks",
+     "to": "evan@hayeslaw24.com",
+     "inbox": "dana.whitfield@getridgelineit.com"
     }
    },
    {
-    "at": "2026-10-08T15:15:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T16:00:02.000Z",
+    "system": "replies",
+    "event": "reply",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "lead": "dina@elliscpa63.com",
+     "kind": "question",
+     "rule": "?",
+     "action": "hot_lead (needs answer) sent"
     }
    },
    {
-    "at": "2026-10-08T15:00:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T16:00:02.000Z",
+    "system": "notify",
+    "event": "client_email_sent",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "key": "hot_lead",
+     "to": "dana@ridgelineit.com"
     }
    },
    {
-    "at": "2026-10-08T14:45:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T16:00:01.750Z",
+    "system": "replies",
+    "event": "reply",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "lead": "alan@grantlaw60.com",
+     "kind": "interested",
+     "rule": "(?<!not |no longer |not really |never )\\binterested\\b",
+     "action": "reply_interested sent; hot_lead sent"
     }
    },
    {
-    "at": "2026-10-08T14:30:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T16:00:01.750Z",
+    "system": "notify",
+    "event": "client_email_sent",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "key": "hot_lead",
+     "to": "dana@ridgelineit.com"
     }
    },
    {
-    "at": "2026-10-08T14:15:00.000Z",
-    "system": "verify",
-    "event": "checked",
+    "at": "2026-10-23T16:00:01.500Z",
+    "system": "outbound",
+    "event": "prospect_sent",
     "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
-    }
-   },
-   {
-    "at": "2026-10-08T14:00:00.000Z",
-    "system": "verify",
-    "event": "checked",
-    "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
-    }
-   },
-   {
-    "at": "2026-10-08T13:45:00.000Z",
-    "system": "verify",
-    "event": "checked",
-    "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
-    }
-   },
-   {
-    "at": "2026-10-08T13:30:00.000Z",
-    "system": "verify",
-    "event": "checked",
-    "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
-    }
-   },
-   {
-    "at": "2026-10-08T13:15:00.000Z",
-    "system": "verify",
-    "event": "checked",
-    "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
-    }
-   },
-   {
-    "at": "2026-10-08T13:00:00.000Z",
-    "system": "copy",
-    "event": "sequence_built",
-    "detail": {
-     "niche": "msp",
-     "framework": "problem-first",
-     "variants": [
-      "msp-a1",
-      "msp-b1"
-     ],
-     "learningSeeded": false
-    }
-   },
-   {
-    "at": "2026-10-08T13:00:00.000Z",
-    "system": "verify",
-    "event": "checked",
-    "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
-    }
-   },
-   {
-    "at": "2026-10-08T12:45:00.000Z",
-    "system": "verify",
-    "event": "checked",
-    "detail": {
-     "checked": 4,
-     "byStatus": {
-      "valid": 4
-     },
-     "rekeyed": 0,
-     "services": [
-      "reoon"
-     ]
+     "template": "reply_interested",
+     "to": "alan@grantlaw60.com",
+     "inbox": "dana.whitfield@getridgelineit.com"
     }
    }
   ],
@@ -2354,38 +2477,38 @@
     "by": "check"
    },
    "auth": {
-    "at": "2026-10-13T10:00:00.160Z",
+    "at": "2026-10-26T10:00:00.160Z",
     "ms": 160,
     "ok": true
    },
    "blacklist": {
-    "at": "2026-10-13T10:15:01.210Z",
+    "at": "2026-10-26T10:15:01.210Z",
     "ms": 1210,
     "ok": true
    },
    "booking-test": {
-    "at": "2026-10-13T16:00:00.000Z",
+    "at": "2026-10-26T14:00:00.500Z",
     "ms": 0,
     "ok": true
    },
    "booking-reminder": {
-    "at": "2026-10-13T14:00:00.000Z",
+    "at": "2026-10-20T14:00:00.000Z",
     "ms": 0,
     "ok": true
    },
    "warmup-daily-scaled": null,
    "canary": {
-    "at": "2026-10-13T11:30:00.000Z",
+    "at": "2026-10-26T13:15:00.000Z",
     "ms": 0,
     "ok": true
    },
    "placement": {
-    "at": "2026-10-13T12:00:00.000Z",
+    "at": "2026-10-26T12:00:00.250Z",
     "ms": 0,
     "ok": true
    },
    "ramp": {
-    "at": "2026-10-13T04:15:00.000Z",
+    "at": "2026-10-26T04:15:00.000Z",
     "ms": 0,
     "ok": true
    },
@@ -2395,52 +2518,100 @@
     "ok": true
    },
    "leadfinder-refill": {
-    "at": "2026-10-13T06:00:00.000Z",
+    "at": "2026-10-26T06:00:00.000Z",
     "ms": 0,
     "ok": true
    },
    "approval": {
-    "at": "2026-10-13T16:00:00.000Z",
+    "at": "2026-10-20T20:00:00.000Z",
     "ms": 0,
     "ok": true
    },
    "readiness": {
-    "at": "2026-10-13T16:00:00.000Z",
+    "at": "2026-10-21T04:30:00.000Z",
     "ms": 0,
     "ok": true
    },
-   "emergency": null,
-   "send": null,
-   "reminders": null,
-   "client-watch": null,
-   "noshow": null,
-   "notnow": null,
-   "pace": null,
-   "replies": null,
-   "hot-chaser": null,
-   "bounces": null,
-   "bookings": null,
+   "emergency": {
+    "at": "2026-10-26T14:15:00.000Z",
+    "ms": 0,
+    "ok": true
+   },
+   "send": {
+    "at": "2026-10-26T14:00:00.500Z",
+    "ms": 500,
+    "ok": true
+   },
+   "reminders": {
+    "at": "2026-10-26T14:45:00.000Z",
+    "ms": 0,
+    "ok": true
+   },
+   "client-watch": {
+    "at": "2026-10-26T14:00:00.000Z",
+    "ms": 0,
+    "ok": true
+   },
+   "noshow": {
+    "at": "2026-10-26T14:00:00.000Z",
+    "ms": 0,
+    "ok": true
+   },
+   "notnow": {
+    "at": "2026-10-26T14:00:00.000Z",
+    "ms": 0,
+    "ok": true
+   },
+   "pace": {
+    "at": "2026-10-25T22:00:00.000Z",
+    "ms": 0,
+    "ok": true
+   },
+   "replies": {
+    "at": "2026-10-26T14:45:00.000Z",
+    "ms": 0,
+    "ok": true
+   },
+   "hot-chaser": {
+    "at": "2026-10-26T14:00:00.000Z",
+    "ms": 0,
+    "ok": true
+   },
+   "bounces": {
+    "at": "2026-10-26T13:15:00.000Z",
+    "ms": 0,
+    "ok": true
+   },
+   "bookings": {
+    "at": "2026-10-26T14:45:00.000Z",
+    "ms": 0,
+    "ok": true
+   },
    "lead-verify": {
     "at": "2026-10-08T18:00:00.000Z",
     "ms": 0,
     "ok": true
    },
    "lead-verify-daily": {
-    "at": "2026-10-13T04:15:00.000Z",
+    "at": "2026-10-26T04:15:00.000Z",
     "ms": 0,
     "ok": true
    },
-   "day1-notice": null,
+   "day1-notice": {
+    "at": "2026-10-21T13:15:00.000Z",
+    "ms": 0,
+    "ok": true
+   },
    "cancel-inboxes": null,
    "invoice": null,
    "wrapup": null,
    "friday": {
-    "at": "2026-10-09T13:00:00.250Z",
+    "at": "2026-10-23T13:00:00.750Z",
     "ms": 250,
     "ok": true
    },
    "day-jobs": {
-    "at": "2026-10-13T13:00:00.000Z",
+    "at": "2026-10-26T13:00:00.500Z",
     "ms": 0,
     "ok": true
    }
@@ -3305,7 +3476,7 @@
    "fromInbox": "hello@aviance.test",
    "noShowAt": null,
    "stoppedAt": null,
-   "lastOwnerReplyAt": null,
+   "lastOwnerReplyAt": "2026-10-26T14:30:00.550Z",
    "lastBotReplyAt": "2026-10-02T13:10:00.000Z",
    "needsReply": false,
    "callMinutes": 30,
@@ -3354,7 +3525,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_2/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_1/onboard — one page, your details and the agreement.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_3/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_1/onboard — one page, your details and the agreement.\n\nLimeth Sith",
      "kind": "acceptance",
      "auto": false,
      "rule": null,
@@ -3380,7 +3551,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_3/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_4/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
      "kind": "auto_reply",
      "auto": true,
      "rule": "wants_time",
@@ -3393,7 +3564,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_4/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_5/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -3406,7 +3577,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Confirmed: our call on Tue 6 Oct at 11:00 am ET",
-     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_5/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_6/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -3489,84 +3660,764 @@
      "auto": false,
      "rule": null,
      "template": "friday_update"
+    },
+    {
+     "id": "out-a403032f32fa5767",
+     "dir": "out",
+     "at": "2026-10-16T13:00:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your list and your emails are ready — let's go through them together",
+     "text": "Hi Dana,\n\nYour list of companies and the four emails that will go out in Dana Whitfield's name are ready. Warm-up is nearly done, so the next step is a 30-minute launch call: we go through the list and the emails together and you give the OK, and the first emails go out about Wednesday 21 October.\n\nBook a time that suits you: https://machine.test/c/TOKEN_7/book\n\nIf you'd rather read it first, everything is on one page: https://machine.test/c/TOKEN_2/approve — you can approve each part there too, and then the call is optional.\n\nLimeth Sith",
+     "kind": "launch_invite",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-318c085eaeff682e",
+     "dir": "out",
+     "at": "2026-10-16T13:00:01.150Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "60-second test of your booking link",
+     "text": "Hi Dana,\n\nBefore the first send I want to be sure a prospect who says yes can actually book. Please do this once:\n\n1. Open https://cal.com/ridgeline-it/intro from a personal email address, not your work one.\n2. Book the first slot it offers.\n3. Tap \"It worked\" below.\n4. Cancel the test booking.\n\nIt worked: https://machine.test/c/TOKEN_8/booking-ok\n\nIf anything went wrong, reply and tell me what you saw.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "booking_test_request"
+    },
+    {
+     "id": "out-922e7cece348984e",
+     "dir": "out",
+     "at": "2026-10-16T13:00:01.400Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Ridgeline IT — build week 2 of 2",
+     "text": "Your inboxes started warming on Wed 7 Oct.\n\nRidgeline IT — build week 2 of 2\nInboxes warming: day 10 of 14\nList: 450 contacts found\nEmails: awaiting your approval\nFirst send: Wed 21 Oct\nWaiting on you: approving the emails\nWatch: all green\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "friday_update"
+    },
+    {
+     "id": "in-ced2ab06a0e028a8",
+     "dir": "in",
+     "at": "2026-10-16T14:00:00.000Z",
+     "from": "dana@ridgelineit.com",
+     "to": "hello@aviance.test",
+     "subject": "Re: Your list and your emails are ready — let's go through them together",
+     "text": "Hi Limeth,\n\nGreat news. What times work for you next week?\n\nDana",
+     "kind": "reply",
+     "auto": false,
+     "rule": "wants_time",
+     "template": null
+    },
+    {
+     "id": "out-643ae3692d51502a",
+     "dir": "out",
+     "at": "2026-10-16T14:20:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: Your list and your emails are ready — let's go through them together",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_9/book\n\nThe next open times (your time):\n• Mon 19 Oct at 9:00 am ET\n• Tue 20 Oct at 9:00 am ET\n• Wed 21 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
+     "kind": "auto_reply",
+     "auto": true,
+     "rule": "wants_time",
+     "template": null
+    },
+    {
+     "id": "out-1fdd7bbddfe1480d",
+     "dir": "out",
+     "at": "2026-10-16T14:32:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: Your list and your emails are ready — let's go through them together",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 20 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_10/book\n\nLimeth Sith",
+     "kind": "booking",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-73df310af58c6b93",
+     "dir": "out",
+     "at": "2026-10-16T15:00:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Confirmed: our call on Tue 20 Oct at 11:00 am ET",
+     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 20 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-002-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_11/book\n\nLimeth Sith",
+     "kind": "booking",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-826db1ee4ae0d8a1",
+     "dir": "out",
+     "at": "2026-10-19T13:00:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Our launch call tomorrow",
+     "text": "Hi Dana,\n\nA quick reminder: our 30-minute launch call is Tuesday 20 October at 11:00 am Eastern Time. We go through your list and your emails together, and you give the OK.\n\nJoin here: https://meet.google.com/rdg-002-avc\n\nIf you'd like a look before the call: https://machine.test/c/TOKEN_2/approve\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
+     "kind": "reminder",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-59bc61e782c7d927",
+     "dir": "out",
+     "at": "2026-10-21T13:00:00.750Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Day 1",
+     "text": "Dana Whitfield — the first emails went out this morning from dana@getridgelineit.com. Day 30 is Thu 19 Nov.\n\nI handle every reply. Anything hot lands in your inbox the same day with a note on what to do. Friday update as usual.\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_12/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_12/away\n• Stop the trial: https://machine.test/c/TOKEN_12/stop\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "day1_started"
+    },
+    {
+     "id": "out-8cf55daba38101d8",
+     "dir": "out",
+     "at": "2026-10-22T22:15:00.500Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Jensen CPA 159, Vera Jensen, Owner",
+     "text": "Vera Jensen at Jensen CPA 159 (Charlotte) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Jensen CPA 159 — Charlotte, NC — https://www.jensencpa159.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-a1ea92ed0e8e93ce",
+     "dir": "out",
+     "at": "2026-10-23T12:00:00.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Still waiting — Jensen CPA 159, Vera Jensen",
+     "text": "Vera Jensen at Jensen CPA 159 replied 13 hours ago and has not heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today — response speed decides these. At 24 hours I send them a short holding note in your name.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead_nudge"
+    },
+    {
+     "id": "out-31ffbc8bee490a6a",
+     "dir": "out",
+     "at": "2026-10-23T13:00:00.750Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Ridgeline IT — trial week 1 of 4",
+     "text": "A reply came in from Jensen CPA 159 on Thu.\n\nRidgeline IT — trial week 1 of 4\nSent this week: 34 · to date: 34, to 34 companies\nReplies: 1 (2.9%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 0 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_13/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_13/away\n• Stop the trial: https://machine.test/c/TOKEN_13/stop\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "friday_update"
+    },
+    {
+     "id": "out-5b134387f17b74c4",
+     "dir": "out",
+     "at": "2026-10-23T16:00:01.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Quinn Law Group 344, Evan Quinn, Managing Partner",
+     "text": "Evan Quinn at Quinn Law Group 344 (Greenville) replied: “Received.” Tagged: unclear — your call. I have not replied. Context: Quinn Law Group 344 — Greenville, SC — https://www.quinnlaw344.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-b8a729f7a96c0bc2",
+     "dir": "out",
+     "at": "2026-10-23T16:00:01.750Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Grant Law Group 60, Alan Grant, Managing Partner",
+     "text": "Alan Grant at Grant Law Group 60 (Charlotte) replied: “Interested — we have had two outages this year. What does it cost?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Grant Law Group 60 — Charlotte, NC — https://www.grantlaw60.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-bb1980b913d5e580",
+     "dir": "out",
+     "at": "2026-10-23T16:00:02.000Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Ellis CPA 63, Dina Ellis, Owner",
+     "text": "Dina Ellis at Ellis CPA 63 (Charlotte) replied: “Who else in Charlotte do you look after?” Tagged: needs answer. I have not replied — please answer them today; response speed decides these. Context: Ellis CPA 63 — Charlotte, NC — https://www.elliscpa63.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-a94ff2549e973fb8",
+     "dir": "out",
+     "at": "2026-10-23T17:30:00.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Booked — Grant Law Group 60, Alan Grant",
+     "text": "Alan Grant (Managing Partner) at Grant Law Group 60 booked a call for Tuesday, October 27 at 11:00 AM EDT.\n\nWhy they said yes, in their words: “Interested — we have had two outages this year. What does it cost?”\n\nWhat they asked: nothing beyond the reply above\n\nThe thread so far:\n2026-10-23 — interested: “Interested — we have had two outages this year. What does it cost?”\n\nAfter the call I will send you one-tap buttons to tell me how it went.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "call_handoff"
+    },
+    {
+     "id": "out-7ebb71e25d8f95ad",
+     "dir": "out",
+     "at": "2026-10-24T22:00:00.500Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Irwin CPA 195, Pia Irwin, Owner",
+     "text": "Pia Irwin at Irwin CPA 195 (Charlotte) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Irwin CPA 195 — Charlotte, NC — https://www.irwincpa195.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-cb3bb010c56b3b2b",
+     "dir": "out",
+     "at": "2026-10-26T12:00:00.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Still waiting — Irwin CPA 195, Pia Irwin",
+     "text": "Pia Irwin at Irwin CPA 195 replied 38 hours ago and has not heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today — response speed decides these. At 24 hours I send them a short holding note in your name.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead_nudge"
+    },
+    {
+     "id": "in-782b6265daf51acc",
+     "dir": "in",
+     "at": "2026-10-26T14:12:00.000Z",
+     "from": "dana@ridgelineit.com",
+     "to": "hello@aviance.test",
+     "subject": "Question about the trial",
+     "text": "Hi Limeth — could we add Columbia, SC to the cities next week?\n\nDana",
+     "kind": "reply",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-f79c2ebacff78a9b",
+     "dir": "out",
+     "at": "2026-10-26T14:30:00.550Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: Question about the trial",
+     "text": "Hi Dana — yes, I will add Columbia from Monday.\n\nLimeth Sith",
+     "kind": "owner_reply",
+     "auto": false,
+     "rule": null,
+     "template": null
     }
    ]
   },
-  "launchCall": null,
-  "autobuy": {
-   "status": "done",
-   "buy": null,
-   "label": "getridgelineit.com and 2 inboxes are ready — warm-up has started",
-   "domain": "getridgelineit.com",
+  "launchCall": {
+   "kind": "launch",
+   "status": "held",
+   "label": "Approved on the call — sending can start",
+   "sentAt": "2026-10-16T13:00:00.000Z",
+   "openedAt": null,
+   "lastReplyAt": "2026-10-16T14:00:00.000Z",
+   "bookedFor": "2026-10-20T15:00:00.000Z",
+   "bookedAt": "2026-10-16T15:00:00.000Z",
+   "bookedBy": "calendar",
+   "heldAt": "2026-10-20T15:40:00.000Z",
+   "dueBy": "2026-10-21T13:00:00.000Z",
+   "overdue": false,
+   "remindersSent": 0,
+   "nextReminderAt": null,
+   "stopped": false,
+   "bookingUrl": null,
+   "fromInbox": "hello@aviance.test",
+   "noShowAt": null,
+   "stoppedAt": null,
+   "lastOwnerReplyAt": null,
+   "lastBotReplyAt": "2026-10-16T14:20:00.000Z",
+   "needsReply": false,
+   "callMinutes": 30,
+   "requestedFor": null,
+   "requestedAt": null,
+   "proposedFor": null,
+   "meetingId": "mmvb2gidc989594ef25",
+   "meetLink": "https://meet.google.com/rdg-002-avc",
+   "approvedOnCall": "2026-10-20T15:40:00.000Z",
+   "approvedOnPage": null,
+   "skipped": null,
+   "approvalUrl": "https://machine.test/c/TOKEN_2/approve",
    "steps": [
     {
-     "key": "bought",
-     "label": "You bought it",
+     "key": "sent",
+     "label": "Launch invite sent",
      "done": true,
-     "at": "2026-10-07T02:42:00.000Z"
+     "at": "2026-10-16T13:00:00.000Z"
     },
     {
-     "key": "domain",
-     "label": "Domain live + spam protection set",
+     "key": "opened",
+     "label": "They opened it",
      "done": true,
-     "at": "2026-10-07T06:10:00.000Z"
+     "at": null
     },
     {
-     "key": "inboxes",
-     "label": "2 inboxes created",
+     "key": "replied",
+     "label": "They replied",
      "done": true,
-     "at": "2026-10-07T09:40:00.000Z"
+     "at": "2026-10-16T14:00:00.000Z"
     },
     {
-     "key": "connected",
-     "label": "Connected to our system",
+     "key": "booked",
+     "label": "Call booked",
      "done": true,
-     "at": "2026-10-07T09:40:00.000Z"
+     "at": "2026-10-16T15:00:00.000Z"
     },
     {
-     "key": "warmup",
-     "label": "Warm-up started",
+     "key": "held",
+     "label": "Call done",
      "done": true,
-     "at": "2026-10-07T09:40:10.490Z"
+     "at": "2026-10-20T15:40:00.000Z"
     }
    ],
-   "mailboxes": [
+   "thread": [
     {
-     "email": "dana@getridgelineit.com",
-     "status": "connected"
+     "id": "out-36880654bed94f22",
+     "dir": "out",
+     "at": "2026-10-02T03:30:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "You're in — let's book your onboarding call",
+     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_3/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_1/onboard — one page, your details and the agreement.\n\nLimeth Sith",
+     "kind": "acceptance",
+     "auto": false,
+     "rule": null,
+     "template": null
     },
     {
-     "email": "dana.whitfield@getridgelineit.com",
-     "status": "connected"
+     "id": "in-6afd9ae97d23270e",
+     "dir": "in",
+     "at": "2026-10-02T13:05:00.000Z",
+     "from": "dana@ridgelineit.com",
+     "to": "hello@aviance.test",
+     "subject": "Re: You're in — let's book your onboarding call",
+     "text": "Hi Limeth,\n\nThanks — great news! What times work for you next week?\n\nDana",
+     "kind": "reply",
+     "auto": false,
+     "rule": "wants_time",
+     "template": null
+    },
+    {
+     "id": "out-4700484a1918c1f0",
+     "dir": "out",
+     "at": "2026-10-02T13:10:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: You're in — let's book your onboarding call",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_4/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
+     "kind": "auto_reply",
+     "auto": true,
+     "rule": "wants_time",
+     "template": null
+    },
+    {
+     "id": "out-d05d56c661ceeb53",
+     "dir": "out",
+     "at": "2026-10-02T14:02:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: You're in — let's book your onboarding call",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_5/book\n\nLimeth Sith",
+     "kind": "booking",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-a94a45c31a85cd37",
+     "dir": "out",
+     "at": "2026-10-02T14:30:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Confirmed: our call on Tue 6 Oct at 11:00 am ET",
+     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_6/book\n\nLimeth Sith",
+     "kind": "booking",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-a6604454448db36e",
+     "dir": "out",
+     "at": "2026-10-05T13:30:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Our onboarding call tomorrow",
+     "text": "Hi Dana,\n\nA quick reminder: our 30-minute onboarding call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
+     "kind": "reminder",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-76ff2f098c2fcaa9",
+     "dir": "out",
+     "at": "2026-10-06T15:40:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your trial — what happens now",
+     "text": "Hi Dana,\n\nGood to talk with you today — thank you for your time.\n\nHere is what happens now, from my side:\n\n- Right now we are researching your business and your market, and building your offer.\n- This week we set up your sending address and its inboxes.\n- Then two weeks of warm-up, so your emails land in the inbox and not in spam.\n- Meanwhile we build your list of about 400 companies and write your emails in your words.\n- Every Friday you get a short note from me, even in the quiet weeks.\n- Near the end of warm-up you get an invite to a 30-minute launch call: we go through the list and the emails together, and you give the OK.\n- The first emails go out in about three weeks.\n\nNothing is needed from you until the launch call.\n\nLimeth Sith",
+     "kind": "next_steps",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-7323c22503be51e2",
+     "dir": "out",
+     "at": "2026-10-06T18:20:00.250Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your trial agreement — signed copy",
+     "text": "Hi Dana,\n\nHere is a plain-text copy of the agreement you accepted. Keep it for your records; nothing else is needed from you.\n\nThe Aviance 30-Day Trial — Agreement\nBetween Aviance (“we”) and Ridgeline IT (“you”). Effective 6 October 2026.\n\n1. What this is. A 30-day cold email trial. We build and run a small outbound campaign in your name, book sales calls onto your calendar, and hand you a written report of what your market said. It costs you nothing. It is not a paid plan; it is how you decide whether to buy one.\n\n2. What we do. Register one sending domain and two inboxes. Research and verify a list of 300–500 contacts matching the customer profile you approve. Write a three-email sequence you approve. Send for 30 days. Handle every reply. Book, confirm and remind every meeting, and chase no-shows for 14 days. Send you a written update every Friday, and on day 29 a report covering the numbers, every reply we received and what it means.\n\n3. What you do. Approve the customer profile and the copy on the kickoff call. Keep at least five open slots a week on the calendar you give us, and be able to take a booked meeting within five business days. Reply to any hot lead we hand you within one business day. Give us the postal address for the email footer. Authorise us to send email in your company’s name, from the trial domain, using only copy you approved.\n\n4. The two promises. First: we will contact the approved list and give you the written report — that is guaranteed. Second: if no qualified booked call has been held by the end of the 30 days, we keep sending at our cost until one is, for up to 30 further days, after which the trial ends. Both promises hold while you hold up clause 3. If you stop responding for five business days, the trial ends and the promises end with it.\n\n5. What counts as a qualified booked call. All four must be true: the company matches the approved profile; the attendee holds an approved title; they attended; they booked in response to outreach describing your offer. Budget, timeline, level of interest and whether they buy do not affect whether a call counts. No-shows do not count; we re-book them for 14 days. You may flag a call as not qualifying within 24 business hours, in writing, stating which criterion it failed.\n\n6. The exchange. The trial is free, so its price is proof. You agree to: (a) leave a review of the trial on Clutch, or a platform we both agree, within seven days of the day-30 call. That review may be positive or negative, must be your honest opinion, and must begin with the words “I received this service for free for my review.” We will never ask you to change or remove it; (b) if at least one qualified call was held, allow us to quote you by name, title and company, using words you approve in writing before publication; (c) allow us to publish the trial’s numbers — companies contacted, replies, calls booked — as a case study, anonymised if you prefer; (d) give us ten minutes at the end for an honest debrief, whatever the outcome. We will never publish anything you have not approved in writing, and we will never ask you to say anything you do not mean.\n\n7. Day 31. On the day-30 call you decide whether to continue on one of our plans: Starter $2,497 for 10 guaranteed booked calls a month, Growth $3,997 for 20, or Scale $8,497 for 50 — month to month, 14 days’ notice to cancel, no setup fee, on the terms published at aviance.online. We will recommend one of them based on what the trial measured and how many calls a week you told us you can handle. If you continue, the trial domain, inboxes and list carry into your plan and campaigns stay live. If you don’t, we retire the trial domain and inboxes within seven days and never use them for anyone else. There is no obligation to continue and nothing to cancel.\n\n8. Ownership and data. Your leads, replies and booked meetings are yours, exported on request, whether or not you continue. The sending domain and inboxes are registered by us and stay o",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "agreement_copy"
+    },
+    {
+     "id": "out-a513a343bddbc101",
+     "dir": "out",
+     "at": "2026-10-06T18:20:07.900Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your trial — setup has started",
+     "text": "Hi Dana,\n\nYour market check passed, so we're going ahead. I'm buying the sending domain and two inboxes now.\n\nOnce they pass their checks you'll get an email with your two dates: the first send and Day 30. Nothing is needed from you in the meantime.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "setup_in_progress"
+    },
+    {
+     "id": "out-a75fe33e50f9a558",
+     "dir": "out",
+     "at": "2026-10-07T13:30:10.950Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your trial — two dates",
+     "text": "Hi Dana, agreement's in — thank you. The domain is registered and both inboxes went into warm-up today.\n\nTwo dates. First send: Wednesday 21 October — that's day 1 of your 30. Day 30 is Thursday 19 November.\n\nNear the end of warm-up you'll get an invite to a 30-minute launch call: we go through your list and your emails together, and you give the OK before anything is sent.\n\nEvery Friday you'll get a short update from me, including the quiet weeks.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "welcome_two_dates"
+    },
+    {
+     "id": "out-2ab8a664abf468e8",
+     "dir": "out",
+     "at": "2026-10-09T13:00:00.250Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Ridgeline IT — build week 1 of 2",
+     "text": "Your inboxes started warming on Wed 7 Oct.\n\nRidgeline IT — build week 1 of 2\nInboxes warming: day 3 of 14\nList: 450 contacts found\nEmails: awaiting your approval\nFirst send: Wed 21 Oct\nWaiting on you: approving the emails\nWatch: all green\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "friday_update"
+    },
+    {
+     "id": "out-a403032f32fa5767",
+     "dir": "out",
+     "at": "2026-10-16T13:00:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your list and your emails are ready — let's go through them together",
+     "text": "Hi Dana,\n\nYour list of companies and the four emails that will go out in Dana Whitfield's name are ready. Warm-up is nearly done, so the next step is a 30-minute launch call: we go through the list and the emails together and you give the OK, and the first emails go out about Wednesday 21 October.\n\nBook a time that suits you: https://machine.test/c/TOKEN_7/book\n\nIf you'd rather read it first, everything is on one page: https://machine.test/c/TOKEN_2/approve — you can approve each part there too, and then the call is optional.\n\nLimeth Sith",
+     "kind": "launch_invite",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-318c085eaeff682e",
+     "dir": "out",
+     "at": "2026-10-16T13:00:01.150Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "60-second test of your booking link",
+     "text": "Hi Dana,\n\nBefore the first send I want to be sure a prospect who says yes can actually book. Please do this once:\n\n1. Open https://cal.com/ridgeline-it/intro from a personal email address, not your work one.\n2. Book the first slot it offers.\n3. Tap \"It worked\" below.\n4. Cancel the test booking.\n\nIt worked: https://machine.test/c/TOKEN_8/booking-ok\n\nIf anything went wrong, reply and tell me what you saw.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "booking_test_request"
+    },
+    {
+     "id": "out-922e7cece348984e",
+     "dir": "out",
+     "at": "2026-10-16T13:00:01.400Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Ridgeline IT — build week 2 of 2",
+     "text": "Your inboxes started warming on Wed 7 Oct.\n\nRidgeline IT — build week 2 of 2\nInboxes warming: day 10 of 14\nList: 450 contacts found\nEmails: awaiting your approval\nFirst send: Wed 21 Oct\nWaiting on you: approving the emails\nWatch: all green\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "friday_update"
+    },
+    {
+     "id": "in-ced2ab06a0e028a8",
+     "dir": "in",
+     "at": "2026-10-16T14:00:00.000Z",
+     "from": "dana@ridgelineit.com",
+     "to": "hello@aviance.test",
+     "subject": "Re: Your list and your emails are ready — let's go through them together",
+     "text": "Hi Limeth,\n\nGreat news. What times work for you next week?\n\nDana",
+     "kind": "reply",
+     "auto": false,
+     "rule": "wants_time",
+     "template": null
+    },
+    {
+     "id": "out-643ae3692d51502a",
+     "dir": "out",
+     "at": "2026-10-16T14:20:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: Your list and your emails are ready — let's go through them together",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_9/book\n\nThe next open times (your time):\n• Mon 19 Oct at 9:00 am ET\n• Tue 20 Oct at 9:00 am ET\n• Wed 21 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
+     "kind": "auto_reply",
+     "auto": true,
+     "rule": "wants_time",
+     "template": null
+    },
+    {
+     "id": "out-1fdd7bbddfe1480d",
+     "dir": "out",
+     "at": "2026-10-16T14:32:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: Your list and your emails are ready — let's go through them together",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 20 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_10/book\n\nLimeth Sith",
+     "kind": "booking",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-73df310af58c6b93",
+     "dir": "out",
+     "at": "2026-10-16T15:00:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Confirmed: our call on Tue 20 Oct at 11:00 am ET",
+     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 20 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-002-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_11/book\n\nLimeth Sith",
+     "kind": "booking",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-826db1ee4ae0d8a1",
+     "dir": "out",
+     "at": "2026-10-19T13:00:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Our launch call tomorrow",
+     "text": "Hi Dana,\n\nA quick reminder: our 30-minute launch call is Tuesday 20 October at 11:00 am Eastern Time. We go through your list and your emails together, and you give the OK.\n\nJoin here: https://meet.google.com/rdg-002-avc\n\nIf you'd like a look before the call: https://machine.test/c/TOKEN_2/approve\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
+     "kind": "reminder",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-59bc61e782c7d927",
+     "dir": "out",
+     "at": "2026-10-21T13:00:00.750Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Day 1",
+     "text": "Dana Whitfield — the first emails went out this morning from dana@getridgelineit.com. Day 30 is Thu 19 Nov.\n\nI handle every reply. Anything hot lands in your inbox the same day with a note on what to do. Friday update as usual.\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_12/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_12/away\n• Stop the trial: https://machine.test/c/TOKEN_12/stop\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "day1_started"
+    },
+    {
+     "id": "out-8cf55daba38101d8",
+     "dir": "out",
+     "at": "2026-10-22T22:15:00.500Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Jensen CPA 159, Vera Jensen, Owner",
+     "text": "Vera Jensen at Jensen CPA 159 (Charlotte) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Jensen CPA 159 — Charlotte, NC — https://www.jensencpa159.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-a1ea92ed0e8e93ce",
+     "dir": "out",
+     "at": "2026-10-23T12:00:00.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Still waiting — Jensen CPA 159, Vera Jensen",
+     "text": "Vera Jensen at Jensen CPA 159 replied 13 hours ago and has not heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today — response speed decides these. At 24 hours I send them a short holding note in your name.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead_nudge"
+    },
+    {
+     "id": "out-31ffbc8bee490a6a",
+     "dir": "out",
+     "at": "2026-10-23T13:00:00.750Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Ridgeline IT — trial week 1 of 4",
+     "text": "A reply came in from Jensen CPA 159 on Thu.\n\nRidgeline IT — trial week 1 of 4\nSent this week: 34 · to date: 34, to 34 companies\nReplies: 1 (2.9%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 0 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_13/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_13/away\n• Stop the trial: https://machine.test/c/TOKEN_13/stop\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "friday_update"
+    },
+    {
+     "id": "out-5b134387f17b74c4",
+     "dir": "out",
+     "at": "2026-10-23T16:00:01.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Quinn Law Group 344, Evan Quinn, Managing Partner",
+     "text": "Evan Quinn at Quinn Law Group 344 (Greenville) replied: “Received.” Tagged: unclear — your call. I have not replied. Context: Quinn Law Group 344 — Greenville, SC — https://www.quinnlaw344.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-b8a729f7a96c0bc2",
+     "dir": "out",
+     "at": "2026-10-23T16:00:01.750Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Grant Law Group 60, Alan Grant, Managing Partner",
+     "text": "Alan Grant at Grant Law Group 60 (Charlotte) replied: “Interested — we have had two outages this year. What does it cost?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Grant Law Group 60 — Charlotte, NC — https://www.grantlaw60.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-bb1980b913d5e580",
+     "dir": "out",
+     "at": "2026-10-23T16:00:02.000Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Ellis CPA 63, Dina Ellis, Owner",
+     "text": "Dina Ellis at Ellis CPA 63 (Charlotte) replied: “Who else in Charlotte do you look after?” Tagged: needs answer. I have not replied — please answer them today; response speed decides these. Context: Ellis CPA 63 — Charlotte, NC — https://www.elliscpa63.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-a94ff2549e973fb8",
+     "dir": "out",
+     "at": "2026-10-23T17:30:00.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Booked — Grant Law Group 60, Alan Grant",
+     "text": "Alan Grant (Managing Partner) at Grant Law Group 60 booked a call for Tuesday, October 27 at 11:00 AM EDT.\n\nWhy they said yes, in their words: “Interested — we have had two outages this year. What does it cost?”\n\nWhat they asked: nothing beyond the reply above\n\nThe thread so far:\n2026-10-23 — interested: “Interested — we have had two outages this year. What does it cost?”\n\nAfter the call I will send you one-tap buttons to tell me how it went.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "call_handoff"
+    },
+    {
+     "id": "out-7ebb71e25d8f95ad",
+     "dir": "out",
+     "at": "2026-10-24T22:00:00.500Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Irwin CPA 195, Pia Irwin, Owner",
+     "text": "Pia Irwin at Irwin CPA 195 (Charlotte) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Irwin CPA 195 — Charlotte, NC — https://www.irwincpa195.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-cb3bb010c56b3b2b",
+     "dir": "out",
+     "at": "2026-10-26T12:00:00.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Still waiting — Irwin CPA 195, Pia Irwin",
+     "text": "Pia Irwin at Irwin CPA 195 replied 38 hours ago and has not heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today — response speed decides these. At 24 hours I send them a short holding note in your name.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead_nudge"
+    },
+    {
+     "id": "in-782b6265daf51acc",
+     "dir": "in",
+     "at": "2026-10-26T14:12:00.000Z",
+     "from": "dana@ridgelineit.com",
+     "to": "hello@aviance.test",
+     "subject": "Question about the trial",
+     "text": "Hi Limeth — could we add Columbia, SC to the cities next week?\n\nDana",
+     "kind": "reply",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-f79c2ebacff78a9b",
+     "dir": "out",
+     "at": "2026-10-26T14:30:00.550Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: Question about the trial",
+     "text": "Hi Dana — yes, I will add Columbia from Monday.\n\nLimeth Sith",
+     "kind": "owner_reply",
+     "auto": false,
+     "rule": null,
+     "template": null
     }
-   ],
-   "problem": null,
-   "linkedBy": "match",
-   "canUnlink": false
+   ]
   },
+  "autobuy": null,
   "warmup": {
-   "status": "warming",
-   "label": "Warming up — day 7 of about 14 · 97% reach the inbox",
-   "day": 7,
+   "status": "ready",
+   "label": "Warm-up done · 98% reach the inbox",
+   "day": 20,
    "of": 14,
-   "readyBy": "2026-10-20",
-   "inboxRate": 0.968,
+   "readyBy": null,
+   "inboxRate": 0.975,
    "inboxes": [
     {
      "email": "dana@getridgelineit.com",
-     "day": 7,
-     "sentToday": 7,
+     "day": 20,
+     "sentToday": 12,
      "quota": 8,
      "inboxRate7d": 1,
-     "ready": false
+     "ready": true
     },
     {
      "email": "dana.whitfield@getridgelineit.com",
-     "day": 7,
-     "sentToday": 7,
+     "day": 20,
+     "sentToday": 12,
      "quota": 8,
-     "inboxRate7d": 0.968,
-     "ready": false
+     "inboxRate7d": 0.975,
+     "ready": true
     }
    ],
    "problem": null,
@@ -3581,7 +4432,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_2/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_1/onboard — one page, your details and the agreement.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nThe next step is a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_3/book\n\nBefore the call (or on it, together): https://machine.test/c/TOKEN_1/onboard — one page, your details and the agreement.\n\nLimeth Sith",
      "kind": "acceptance",
      "auto": false,
      "rule": null,
@@ -3607,7 +4458,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_3/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_4/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
      "kind": "auto_reply",
      "auto": true,
      "rule": "wants_time",
@@ -3620,7 +4471,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: You're in — let's book your onboarding call",
-     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_4/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_5/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -3633,7 +4484,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Confirmed: our call on Tue 6 Oct at 11:00 am ET",
-     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_5/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_6/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -3716,11 +4567,271 @@
      "auto": false,
      "rule": null,
      "template": "friday_update"
+    },
+    {
+     "id": "out-a403032f32fa5767",
+     "dir": "out",
+     "at": "2026-10-16T13:00:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your list and your emails are ready — let's go through them together",
+     "text": "Hi Dana,\n\nYour list of companies and the four emails that will go out in Dana Whitfield's name are ready. Warm-up is nearly done, so the next step is a 30-minute launch call: we go through the list and the emails together and you give the OK, and the first emails go out about Wednesday 21 October.\n\nBook a time that suits you: https://machine.test/c/TOKEN_7/book\n\nIf you'd rather read it first, everything is on one page: https://machine.test/c/TOKEN_2/approve — you can approve each part there too, and then the call is optional.\n\nLimeth Sith",
+     "kind": "launch_invite",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-318c085eaeff682e",
+     "dir": "out",
+     "at": "2026-10-16T13:00:01.150Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "60-second test of your booking link",
+     "text": "Hi Dana,\n\nBefore the first send I want to be sure a prospect who says yes can actually book. Please do this once:\n\n1. Open https://cal.com/ridgeline-it/intro from a personal email address, not your work one.\n2. Book the first slot it offers.\n3. Tap \"It worked\" below.\n4. Cancel the test booking.\n\nIt worked: https://machine.test/c/TOKEN_8/booking-ok\n\nIf anything went wrong, reply and tell me what you saw.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "booking_test_request"
+    },
+    {
+     "id": "out-922e7cece348984e",
+     "dir": "out",
+     "at": "2026-10-16T13:00:01.400Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Ridgeline IT — build week 2 of 2",
+     "text": "Your inboxes started warming on Wed 7 Oct.\n\nRidgeline IT — build week 2 of 2\nInboxes warming: day 10 of 14\nList: 450 contacts found\nEmails: awaiting your approval\nFirst send: Wed 21 Oct\nWaiting on you: approving the emails\nWatch: all green\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "friday_update"
+    },
+    {
+     "id": "in-ced2ab06a0e028a8",
+     "dir": "in",
+     "at": "2026-10-16T14:00:00.000Z",
+     "from": "dana@ridgelineit.com",
+     "to": "hello@aviance.test",
+     "subject": "Re: Your list and your emails are ready — let's go through them together",
+     "text": "Hi Limeth,\n\nGreat news. What times work for you next week?\n\nDana",
+     "kind": "reply",
+     "auto": false,
+     "rule": "wants_time",
+     "template": null
+    },
+    {
+     "id": "out-643ae3692d51502a",
+     "dir": "out",
+     "at": "2026-10-16T14:20:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: Your list and your emails are ready — let's go through them together",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_9/book\n\nThe next open times (your time):\n• Mon 19 Oct at 9:00 am ET\n• Tue 20 Oct at 9:00 am ET\n• Wed 21 Oct at 9:00 am ET\nOr just reply with the one that suits you.\n\nLimeth Sith",
+     "kind": "auto_reply",
+     "auto": true,
+     "rule": "wants_time",
+     "template": null
+    },
+    {
+     "id": "out-1fdd7bbddfe1480d",
+     "dir": "out",
+     "at": "2026-10-16T14:32:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: Your list and your emails are ready — let's go through them together",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 20 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_10/book\n\nLimeth Sith",
+     "kind": "booking",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-73df310af58c6b93",
+     "dir": "out",
+     "at": "2026-10-16T15:00:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Confirmed: our call on Tue 20 Oct at 11:00 am ET",
+     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 20 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-002-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_11/book\n\nLimeth Sith",
+     "kind": "booking",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-826db1ee4ae0d8a1",
+     "dir": "out",
+     "at": "2026-10-19T13:00:00.000Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Our launch call tomorrow",
+     "text": "Hi Dana,\n\nA quick reminder: our 30-minute launch call is Tuesday 20 October at 11:00 am Eastern Time. We go through your list and your emails together, and you give the OK.\n\nJoin here: https://meet.google.com/rdg-002-avc\n\nIf you'd like a look before the call: https://machine.test/c/TOKEN_2/approve\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
+     "kind": "reminder",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-59bc61e782c7d927",
+     "dir": "out",
+     "at": "2026-10-21T13:00:00.750Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Day 1",
+     "text": "Dana Whitfield — the first emails went out this morning from dana@getridgelineit.com. Day 30 is Thu 19 Nov.\n\nI handle every reply. Anything hot lands in your inbox the same day with a note on what to do. Friday update as usual.\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_12/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_12/away\n• Stop the trial: https://machine.test/c/TOKEN_12/stop\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "day1_started"
+    },
+    {
+     "id": "out-8cf55daba38101d8",
+     "dir": "out",
+     "at": "2026-10-22T22:15:00.500Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Jensen CPA 159, Vera Jensen, Owner",
+     "text": "Vera Jensen at Jensen CPA 159 (Charlotte) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Jensen CPA 159 — Charlotte, NC — https://www.jensencpa159.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-a1ea92ed0e8e93ce",
+     "dir": "out",
+     "at": "2026-10-23T12:00:00.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Still waiting — Jensen CPA 159, Vera Jensen",
+     "text": "Vera Jensen at Jensen CPA 159 replied 13 hours ago and has not heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today — response speed decides these. At 24 hours I send them a short holding note in your name.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead_nudge"
+    },
+    {
+     "id": "out-31ffbc8bee490a6a",
+     "dir": "out",
+     "at": "2026-10-23T13:00:00.750Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Ridgeline IT — trial week 1 of 4",
+     "text": "A reply came in from Jensen CPA 159 on Thu.\n\nRidgeline IT — trial week 1 of 4\nSent this week: 34 · to date: 34, to 34 companies\nReplies: 1 (2.9%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 0 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_13/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_13/away\n• Stop the trial: https://machine.test/c/TOKEN_13/stop\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "friday_update"
+    },
+    {
+     "id": "out-5b134387f17b74c4",
+     "dir": "out",
+     "at": "2026-10-23T16:00:01.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Quinn Law Group 344, Evan Quinn, Managing Partner",
+     "text": "Evan Quinn at Quinn Law Group 344 (Greenville) replied: “Received.” Tagged: unclear — your call. I have not replied. Context: Quinn Law Group 344 — Greenville, SC — https://www.quinnlaw344.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-b8a729f7a96c0bc2",
+     "dir": "out",
+     "at": "2026-10-23T16:00:01.750Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Grant Law Group 60, Alan Grant, Managing Partner",
+     "text": "Alan Grant at Grant Law Group 60 (Charlotte) replied: “Interested — we have had two outages this year. What does it cost?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Grant Law Group 60 — Charlotte, NC — https://www.grantlaw60.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-bb1980b913d5e580",
+     "dir": "out",
+     "at": "2026-10-23T16:00:02.000Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Ellis CPA 63, Dina Ellis, Owner",
+     "text": "Dina Ellis at Ellis CPA 63 (Charlotte) replied: “Who else in Charlotte do you look after?” Tagged: needs answer. I have not replied — please answer them today; response speed decides these. Context: Ellis CPA 63 — Charlotte, NC — https://www.elliscpa63.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-a94ff2549e973fb8",
+     "dir": "out",
+     "at": "2026-10-23T17:30:00.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Booked — Grant Law Group 60, Alan Grant",
+     "text": "Alan Grant (Managing Partner) at Grant Law Group 60 booked a call for Tuesday, October 27 at 11:00 AM EDT.\n\nWhy they said yes, in their words: “Interested — we have had two outages this year. What does it cost?”\n\nWhat they asked: nothing beyond the reply above\n\nThe thread so far:\n2026-10-23 — interested: “Interested — we have had two outages this year. What does it cost?”\n\nAfter the call I will send you one-tap buttons to tell me how it went.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "call_handoff"
+    },
+    {
+     "id": "out-7ebb71e25d8f95ad",
+     "dir": "out",
+     "at": "2026-10-24T22:00:00.500Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Irwin CPA 195, Pia Irwin, Owner",
+     "text": "Pia Irwin at Irwin CPA 195 (Charlotte) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Irwin CPA 195 — Charlotte, NC — https://www.irwincpa195.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead"
+    },
+    {
+     "id": "out-cb3bb010c56b3b2b",
+     "dir": "out",
+     "at": "2026-10-26T12:00:00.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Still waiting — Irwin CPA 195, Pia Irwin",
+     "text": "Pia Irwin at Irwin CPA 195 replied 38 hours ago and has not heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today — response speed decides these. At 24 hours I send them a short holding note in your name.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead_nudge"
+    },
+    {
+     "id": "in-782b6265daf51acc",
+     "dir": "in",
+     "at": "2026-10-26T14:12:00.000Z",
+     "from": "dana@ridgelineit.com",
+     "to": "hello@aviance.test",
+     "subject": "Question about the trial",
+     "text": "Hi Limeth — could we add Columbia, SC to the cities next week?\n\nDana",
+     "kind": "reply",
+     "auto": false,
+     "rule": null,
+     "template": null
+    },
+    {
+     "id": "out-f79c2ebacff78a9b",
+     "dir": "out",
+     "at": "2026-10-26T14:30:00.550Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Re: Question about the trial",
+     "text": "Hi Dana — yes, I will add Columbia from Monday.\n\nLimeth Sith",
+     "kind": "owner_reply",
+     "auto": false,
+     "rule": null,
+     "template": null
     }
    ],
    "needsReply": false,
-   "lastInAt": "2026-10-02T13:05:00.000Z",
-   "lastOutAt": "2026-10-09T13:00:00.250Z",
+   "lastInAt": "2026-10-26T14:12:00.000Z",
+   "lastOutAt": "2026-10-26T14:30:00.550Z",
    "bot": {
     "enabled": true,
     "sentToday": 0,
@@ -3751,12 +4862,213 @@
      "yandex": 1
     },
     "todayPairs": 41,
-    "at": "2026-10-13T16:00:00.000Z",
+    "at": "2026-10-26T14:45:00.000Z",
     "external": null
    },
-   "placement": [],
+   "placement": [
+    {
+     "at": "2026-10-26T13:15:00.000Z",
+     "tool": "seed",
+     "inbox": null,
+     "score": null,
+     "spamAssassin": null,
+     "inboxRate": 1,
+     "pass": null,
+     "detail": [
+      "google: 100% inbox (6/6)",
+      "yahoo: 100% inbox (2/2)",
+      "aol: 100% inbox (2/2)",
+      "icloud: 100% inbox (2/2)",
+      "gmx: 100% inbox (2/2)",
+      "yandex: 100% inbox (2/2)",
+      "dana@getridgelineit.com: 8/8 in the inbox",
+      "dana.whitfield@getridgelineit.com: 8/8 in the inbox"
+     ],
+     "reportUrl": null,
+     "error": null
+    },
+    {
+     "at": "2026-10-25T13:15:00.000Z",
+     "tool": "seed",
+     "inbox": null,
+     "score": null,
+     "spamAssassin": null,
+     "inboxRate": 1,
+     "pass": null,
+     "detail": [
+      "google: 100% inbox (6/6)",
+      "yahoo: 100% inbox (2/2)",
+      "aol: 100% inbox (2/2)",
+      "icloud: 100% inbox (2/2)",
+      "gmx: 100% inbox (2/2)",
+      "yandex: 100% inbox (2/2)",
+      "dana@getridgelineit.com: 8/8 in the inbox",
+      "dana.whitfield@getridgelineit.com: 8/8 in the inbox"
+     ],
+     "reportUrl": null,
+     "error": null
+    },
+    {
+     "at": "2026-10-24T13:15:00.000Z",
+     "tool": "seed",
+     "inbox": null,
+     "score": null,
+     "spamAssassin": null,
+     "inboxRate": 0.875,
+     "pass": null,
+     "detail": [
+      "google: 83% inbox (5/6)",
+      "yahoo: 100% inbox (2/2)",
+      "aol: 50% inbox (1/2)",
+      "icloud: 100% inbox (2/2)",
+      "gmx: 100% inbox (2/2)",
+      "yandex: 100% inbox (2/2)",
+      "dana@getridgelineit.com: 7/8 in the inbox",
+      "dana.whitfield@getridgelineit.com: 7/8 in the inbox"
+     ],
+     "reportUrl": null,
+     "error": null
+    },
+    {
+     "at": "2026-10-23T13:15:00.000Z",
+     "tool": "seed",
+     "inbox": null,
+     "score": null,
+     "spamAssassin": null,
+     "inboxRate": 1,
+     "pass": null,
+     "detail": [
+      "google: 100% inbox (6/6)",
+      "yahoo: 100% inbox (2/2)",
+      "aol: 100% inbox (2/2)",
+      "icloud: 100% inbox (2/2)",
+      "gmx: 100% inbox (2/2)",
+      "yandex: 100% inbox (2/2)",
+      "dana@getridgelineit.com: 8/8 in the inbox",
+      "dana.whitfield@getridgelineit.com: 8/8 in the inbox"
+     ],
+     "reportUrl": null,
+     "error": null
+    },
+    {
+     "at": "2026-10-22T13:15:00.000Z",
+     "tool": "seed",
+     "inbox": null,
+     "score": null,
+     "spamAssassin": null,
+     "inboxRate": 1,
+     "pass": null,
+     "detail": [
+      "google: 100% inbox (6/6)",
+      "yahoo: 100% inbox (2/2)",
+      "aol: 100% inbox (2/2)",
+      "icloud: 100% inbox (2/2)",
+      "gmx: 100% inbox (2/2)",
+      "yandex: 100% inbox (2/2)",
+      "dana@getridgelineit.com: 8/8 in the inbox",
+      "dana.whitfield@getridgelineit.com: 8/8 in the inbox"
+     ],
+     "reportUrl": null,
+     "error": null
+    },
+    {
+     "at": "2026-10-21T13:15:00.000Z",
+     "tool": "seed",
+     "inbox": null,
+     "score": null,
+     "spamAssassin": null,
+     "inboxRate": 1,
+     "pass": null,
+     "detail": [
+      "google: 100% inbox (6/6)",
+      "yahoo: 100% inbox (2/2)",
+      "aol: 100% inbox (2/2)",
+      "icloud: 100% inbox (2/2)",
+      "gmx: 100% inbox (2/2)",
+      "yandex: 100% inbox (2/2)",
+      "dana@getridgelineit.com: 8/8 in the inbox",
+      "dana.whitfield@getridgelineit.com: 8/8 in the inbox"
+     ],
+     "reportUrl": null,
+     "error": null
+    },
+    {
+     "at": "2026-10-21T12:15:00.000Z",
+     "tool": "dkimvalidator",
+     "inbox": "dana.whitfield@getridgelineit.com",
+     "score": null,
+     "spamAssassin": -0.1,
+     "inboxRate": null,
+     "pass": true,
+     "detail": [
+      "SpamAssassin -0.1 points",
+      "DKIM pass",
+      "SPF pass"
+     ],
+     "reportUrl": "https://dkimvalidator.com/cgi-bin/sa.pl?email=aviy7fkf0jcrnnxias98",
+     "error": null
+    },
+    {
+     "at": "2026-10-21T12:15:00.000Z",
+     "tool": "dkimvalidator",
+     "inbox": "dana@getridgelineit.com",
+     "score": null,
+     "spamAssassin": -0.1,
+     "inboxRate": null,
+     "pass": true,
+     "detail": [
+      "SpamAssassin -0.1 points",
+      "DKIM pass",
+      "SPF pass"
+     ],
+     "reportUrl": "https://dkimvalidator.com/cgi-bin/sa.pl?email=avs93qgrzz2xe6rajyq5",
+     "error": null
+    },
+    {
+     "at": "2026-10-20T13:15:00.000Z",
+     "tool": "seed",
+     "inbox": null,
+     "score": null,
+     "spamAssassin": null,
+     "inboxRate": 1,
+     "pass": null,
+     "detail": [
+      "google: 100% inbox (6/6)",
+      "yahoo: 100% inbox (2/2)",
+      "aol: 100% inbox (2/2)",
+      "icloud: 100% inbox (2/2)",
+      "gmx: 100% inbox (2/2)",
+      "yandex: 100% inbox (2/2)",
+      "dana@getridgelineit.com: 8/8 in the inbox",
+      "dana.whitfield@getridgelineit.com: 8/8 in the inbox"
+     ],
+     "reportUrl": null,
+     "error": null
+    },
+    {
+     "at": "2026-10-19T13:15:00.000Z",
+     "tool": "seed",
+     "inbox": null,
+     "score": null,
+     "spamAssassin": null,
+     "inboxRate": 1,
+     "pass": null,
+     "detail": [
+      "google: 100% inbox (6/6)",
+      "yahoo: 100% inbox (2/2)",
+      "aol: 100% inbox (2/2)",
+      "icloud: 100% inbox (2/2)",
+      "gmx: 100% inbox (2/2)",
+      "yandex: 100% inbox (2/2)",
+      "dana@getridgelineit.com: 8/8 in the inbox",
+      "dana.whitfield@getridgelineit.com: 8/8 in the inbox"
+     ],
+     "reportUrl": null,
+     "error": null
+    }
+   ],
    "blacklists": {
-    "checkedAt": "2026-10-13T10:15:00.000Z",
+    "checkedAt": "2026-10-26T10:15:00.000Z",
     "status": "clean",
     "listed": [],
     "warnings": [],
@@ -3776,9 +5088,9 @@
     ]
    },
    "bounce": {
-    "rate7d": null,
-    "sent7d": null,
-    "at": null,
+    "rate7d": 0,
+    "sent7d": 50,
+    "at": "2026-10-26T04:15:00.000Z",
     "pauseAt": 0.015,
     "stopAt": 0.02,
     "halved": false
@@ -3791,16 +5103,16 @@
    }
   },
   "leadQuality": {
-   "graded": 452,
+   "graded": 453,
    "grades": {
-    "A": 450,
+    "A": 451,
     "B": 0,
     "C": 0,
     "rejected": 2
    },
-   "sendable": 450,
+   "sendable": 451,
    "verification": {
-    "valid": 450,
+    "valid": 451,
     "risky": 0,
     "catchall": 0,
     "invalid": 0,
@@ -3822,6 +5134,10 @@
     {
      "source": "leadfinder",
      "count": 450
+    },
+    {
+     "source": "referral",
+     "count": 1
     }
    ],
    "sample": [
@@ -4251,11 +5567,11 @@
      ]
     }
    ],
-   "sendableUnsent": 450,
-   "builtAt": "2026-10-13T04:15:00.000Z"
+   "sendableUnsent": 401,
+   "builtAt": "2026-10-26T04:15:00.000Z"
   },
   "links": {
-   "onboarding": "https://machine.test/c/TOKEN_1/onboard"
+   "approval": "https://machine.test/c/TOKEN_2/approve"
   },
   "virtualNow": null
  }

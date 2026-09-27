@@ -122,6 +122,11 @@ export const ALERTS = {
   onboard_booked: { urgent: false, info: true, title: 'Onboarding call booked: {person}, {when}' },
   onboard_overdue: { urgent: false, info: true, title: 'Onboarding call not booked yet: {person}' },
   onboard_cancelled: { urgent: false, info: true, title: 'Onboarding call cancelled: {person}' },
+  // Launch call (docs/LAUNCH-CALL.md): the invite went; then the same three as the onboarding call.
+  launch_ready: { urgent: false, info: true, title: '{clientId} is ready for the launch call — invite sent' },
+  launch_booked: { urgent: false, info: true, title: 'Launch call booked: {person}, {when}' },
+  launch_overdue: { urgent: false, info: true, title: 'Launch call not booked yet: {person}' },
+  launch_cancelled: { urgent: false, info: true, title: 'Launch call cancelled: {person}' },
   // ── end onboarding call ──
   // ── Reply bot (docs/REPLYBOT-MEET.md §2) ── quiet: phone push at low urgency + email, one per
   // bot email. {who} = "Sam (eCreek IT)", {did} = "sent the booking link".

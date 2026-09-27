@@ -110,7 +110,12 @@ export function trackingPixelUrl(toEmail, touch = 'd0', sentAt = Date.now()) {
   return `${TRACKING_BASE_URL}/api/track/open?t=${buildTrackingToken(toEmail, touch, sentAt)}`;
 }
 
-/** Pixel for the onboarding-call email: an open marks openedAt on client:{id}:onboardcall. */
-export function onboardPixelUrl(toEmail, clientId, sentAt = Date.now()) {
-  return `${TRACKING_BASE_URL}/api/track/open?t=${buildTrackingToken(toEmail, 'onboard', sentAt, { purpose: 'onboard', clientId })}`;
+/**
+ * Pixel for the onboarding-call email (purpose `onboard`): an open marks
+ * openedAt on client:{id}:onboardcall. Purpose `launch` = the launch invite
+ * (docs/LAUNCH-CALL.md): the same, on client:{id}:launchcall.
+ */
+export function onboardPixelUrl(toEmail, clientId, sentAt = Date.now(), purpose = 'onboard') {
+  const p = purpose === 'launch' ? 'launch' : 'onboard';
+  return `${TRACKING_BASE_URL}/api/track/open?t=${buildTrackingToken(toEmail, p, sentAt, { purpose: p, clientId })}`;
 }

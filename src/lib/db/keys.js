@@ -206,6 +206,13 @@ export const K = {
    */
   onboardCall: (id) => `${c(id)}:onboardcall`,
   /**
+   * The launch call (docs/LAUNCH-CALL.md): the same fields as onboardCall for the second call
+   * (the launch invite and the call it asks for), plus approvedOnCall, approvedOnPage, skipped.
+   */
+  launchCall: (id) => `${c(id)}:launchcall`,
+  /** The hash of one call by its kind ('onboarding' | 'launch') — the shared call machinery reads through this. */
+  callHash: (id, kind) => (kind === 'launch' ? `${c(id)}:launchcall` : `${c(id)}:onboardcall`),
+  /**
    * The client's ONE conversation (list, oldest first, 200 newest; docs/REPLYBOT-MEET.md §1 — the key is
    * kept from the onboarding call): {id, dir, at, from, to, subject, text, kind, auto?, rule?, template?}.
    */

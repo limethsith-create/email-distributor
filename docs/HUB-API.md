@@ -1173,3 +1173,85 @@ regenerated. Every change is additive except where a field is named.
   emails greet by first name ("Hi Dana,") — the full name stays only where a
   name is signed ("in Dana Whitfield's name"). Every client template may use
   `{firstName}`.
+
+# The launch call (2026-09-27)
+
+Contract: docs/LAUNCH-CALL.md (its §7 says how the machine built it). Every
+field is additive. Near the end of warm-up — the list has its contacts, the
+four emails pass the Copy Checker, warm-up is on day `LAUNCH.earliestWarmupDay`
+(10) or later — the client gets `launch_invite` instead of the plain approval
+email: the booking page for a **launch call** and, below it, the approval
+page. On the call the owner presses **Approved on the call**; or the client
+approves on the page and the call is optional. Right after the onboarding
+call is held the client gets one `next_steps` email ("what happens now").
+
+## `GET /api/mc/hub/{id}` gains `launchCall`
+
+`null` until the invite went. The same shape as `onboardCall` (status,
+label, the times, `steps`, `thread` — the shared conversation — `meetLink`,
+`requestedFor` / `requestedAt` / `proposedFor` / `meetingId`, `needsReply`,
+`callMinutes` = LAUNCH.callMinutes, …) plus:
+```jsonc
+"launchCall": {
+  "kind": "launch",
+  "approvedOnCall": "ISO|null",   // the owner pressed Approved on the call (the call is `held` too)
+  "approvedOnPage": "ISO|null",   // they approved every section on the page → the call is optional
+  "skipped": "ISO|null",          // the owner pressed Skip the call (only after approvedOnPage)
+  "approvalUrl": "https://…/c/<token>/approve"   // the page the invite carried (also in `links.approval`)
+}
+```
+Labels: "Invite sent — waiting for them to book" · "They opened the invite —
+waiting for them to book" · "Call booked for Tue 20 Oct, 8:30 pm (your time)"
+· "Call was … — press Approved on the call, or no-show" · "Call done — press
+Approved on the call if they gave the OK" · "Approved on the call — sending
+can start" · "They approved on the page — the call is optional" · "Call
+skipped — they approved on the page". `steps[0].label` is "Launch invite
+sent". Conversation entries: the invite is `kind: 'launch_invite'`, the plan
+email `kind: 'next_steps'`; reminders `reminder`, calendar emails `booking`.
+
+`sequence.approvalMode` is `'call'` when approved on the call.
+
+## `POST /api/mc/clients/{id}/launch-call`
+
+One of `{ action: 'reply', text }` · `{ action: 'markBooked', when }` ·
+`{ action: 'markHeld' }` · `{ action: 'markNoShow' }` · `{ action: 'resend' }`
+· `{ action: 'stopReminders' }` (as the onboarding card, on the launch call) ·
+**`{ action: 'approvedOnCall' }`** (every section approved, `approvalMode:
+'call'`, the call held — sending can start on Day 1) · **`{ action: 'skip' }`**
+(409 until they approved on the page, or while a time waits for your yes / a
+call is booked ahead: answer it in the Calendar first) → `{ ok, launchCall }`
+· 400/409 `{ error }` in plain words. `GET` → `{ launchCall }`.
+
+`POST /api/mc/onboard-calls/check` also checks launch calls (same throttle);
+`checked` counts both kinds.
+
+## Rows, to-dos, calendar, alerts
+
+- `simple` while warming keeps the warm-up sentence and adds the launch call:
+  "Warming up — day 11 of about 14 · launch call Tue 20 Oct, 8:30 pm (your
+  time)" · "… · waiting for them to pick a launch-call time" · "… · they asked
+  for Tue 20 Oct, 8:30 pm (your time) — say yes in the Calendar" (`needsYou`)
+  · "… · they approved on the page (launch call optional)" · "… · launch call
+  still not booked (overdue)" (`needsYou`) · "… · launch call was … (your
+  time)" (`needsYou`, next "Hold the launch call, then press Approved on the
+  call"); after the OK "Launch call done — first emails on Wednesday 21
+  October" (also in `ready`).
+- To-dos (all urgent, `action: {type:'view', view:'detail', clientId,
+  section:'launchCall'}`): `launch-reply:{id}`, `launch-overdue:{id}`,
+  `launch-mark:{id}` ("Hold the launch call with {who}, then press Approved on
+  the call" when booked and past; "Press Approved on the call for {who} — the
+  launch call is done" when held without the OK). A time they asked for:
+  `meeting-request:{id}` with `action: { type:'view', view:'calendar',
+  clientId, meetingId, kind:'launch' }`.
+- Calendar: meetings and `requests[]` carry `kind: 'launch'`, title "Launch
+  call — {company}", `source` `launch_card` when booked from the launch card.
+- System card `copy`: "Launch invite sent … · {launchCall.label}", then
+  "Approved by the launch call …".
+- Alerts (phone + email, info): `launch_ready` ("{company} is ready for the
+  launch call — invite sent"), `launch_booked`, `launch_overdue`,
+  `launch_cancelled`; replies and requests as today (`onboard_reply`,
+  `meeting_requested`, `bot_replied`).
+- The booking page of a launch link says "Aviance · launch call";
+  `GET /api/c/book/slots` answers `kind` too.
+- Settings › Advanced: `LAUNCH` (`callMinutes`, `earliestWarmupDay`,
+  `bookWithinDays`, `fallbackDay`).

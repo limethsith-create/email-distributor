@@ -114,3 +114,128 @@ LAUNCH: {
 - Calendar: launch calls drawn like onboarding calls with the "Launch call"
   title; the panel's "Approved on the call" shortcut opens the trial.
 - Settings › Advanced already shows LAUNCH; nothing else new.
+
+---
+
+## 7. Machine — as built (2026-09-27)
+
+Everything above holds. Code: `src/lib/systems/launchcall.js` (the plan
+email, when the invite may go, the invite, the OK buttons, the hub's
+`launchCall`), `src/lib/systems/onboardcall.js` (the call machinery, now
+generalised by `kind`: `CALL_KINDS`, every function takes `kind`),
+`src/lib/systems/calendar.js` (kind `launch` meetings), `systems/replybot.js`
+(the launch thread), `systems/approval.js` (`approveAllOnCall`, the job),
+`systems/hubview.js` (`simple`, to-dos, detail), route
+`src/app/api/mc/clients/[id]/launch-call/route.js`; templates `next_steps`
+(templates/client/stage-a.js), `launch_invite`, `launch_invite_reminder`,
+`launch_call_tomorrow` (stage-b.js); tests `tests/launch-call.test.mjs` and the
+journey's steps 15–21 (`tests/fixtures/journey/15…21-*.json`). Where the
+contract left a choice, the machine decided as follows; **(+)** = beyond the
+text above.
+
+**Two calls, one machinery.** `client:{id}:launchcall` is the same hash shape
+as the onboarding call's plus `approvedOnCall`, `approvedOnPage`, `skipped`;
+the client hash carries `launchCallSentAt` and `launchCallOpen` ('1' while the
+inbox is watched for it), read by the tick like the onboarding flags. The
+`onboard-calls` job is due when either flag is '1'; the check
+(`checkOnboardCalls`, the hub's `POST /api/mc/onboard-calls/check`) watches
+both kinds — `checked` counts both. `activeCall(clientId)` = the launch call
+once its invite is out and it is still to happen, else the onboarding call:
+what the conversation, the owner's reply and the reply bot go by.
+
+**"What happens now" (`next_steps`).** Sent once per client (trial hash
+`nextStepsSentAt`, `nextStepsMoment`): on Call done for the onboarding call
+(the card or the Calendar) with the line "Good to talk with you today", or —
+when the agreement came first — at the Price Scout moment with "Your agreement
+is in and your market check passed"; then `setup_in_progress` does NOT go (it
+is folded in). Day 1 line: `trial.day1Date` when set, else the slowest inbox's
+first warm-up day + BUILD.warmupReadyMinDays moved to the next US business day,
+else "in about three weeks" — never anything else. Conversation entry kind
+`next_steps`. `welcome_two_dates` now names the launch call ({callMinutes})
+instead of an approval date.
+
+**When the invite goes.** The hourly `approval` job asks the launch step first.
+`readyForLaunch`: warm-up day (the slowest inbox, as the warm-up card counts
+it) ≥ `LAUNCH.earliestWarmupDay`, the list ≥ LIST.startMin sendable contacts
+(`listReady`), the sequence built and the Copy Checker green on both variants
+for a sample lead; the job builds the sequence once the list is in **(+)**.
+Once the invite went, the approval job does nothing more for this client: no
+page reminders, no silence rule — the call's own reminders and overdue carry
+it (the page keeps working). `approval.sentAt` is set with `status:
+'launch_invite'` (the copy card reads it; `links.approval` is filled).
+**Fallback (+)** `LAUNCH.fallbackDay` (default −3): still not ready by that
+trial day → the plain approval email goes and the old path continues
+(reminders, silence). A client none of whose inboxes has a warm-up start (from
+before this feature) keeps the old Day −7 path.
+
+**The invite.** From the ONBOARDCALL inbox (replies land where the machine
+reads them); the booking line is the owner's `ONBOARDCALL.bookingUrl` or the
+machine's booking page whose link carries `kind: 'launch'` (an older link
+books the call in play); the approval page link below; "the first emails go
+out about {day}" from the ramp; one open pixel (purpose `launch`); `dueBy` =
+`LAUNCH.bookWithinDays` US business days; their zone copied from the
+onboarding call; entry kind `launch_invite`; owner alert `launch_ready` (info).
+`resend` from the card: same thread, reminders and the booking clock restart,
+only while the call is still to happen.
+
+**Tracking.** States and reminders exactly as the onboarding call, with
+`launch_invite_reminder` (ONBOARDCALL.reminderHours, carries the approval
+page) and `launch_call_tomorrow` (the Meet link and the approval page).
+"Book it" reminders and overdue run while the client is `warming`; the inbox
+is read while `warming`, `ready` or `sending` until the call is held or
+skipped. Both also stop once they approved on the page or the call was
+skipped. Alerts **(+)**: `launch_booked`, `launch_overdue`, `launch_cancelled`
+(info, like the onboarding ones); replies raise `onboard_reply` and booking
+requests `meeting_requested` as today. The booking page reads "Aviance ·
+launch call" / "Book your launch call".
+
+**Meetings.** `kind: 'launch'`, title "Launch call — {company}",
+`LAUNCH.callMinutes` long (the slots offered are that long); one per client —
+a second pick moves it, `add` with `kind: 'launch'` refuses while one is open;
+`source` `booking_page` / `reply_bot` / `inbox` / `launch_card` (the card's
+Mark call booked, Call done, They didn't show). The Calendar's `meetings[]`
+and `requests[]` carry `kind`; request, confirm, held, no-show, decline and
+cancel sync to the launch hash. Google Calendar event: "Launch call with …".
+
+**Reply bot on the launch thread.** Only `reschedule`, `proposes_time` (→ a
+launch meeting request, the owner still says yes), `wants_time` (the launch
+booking page + the next open times) and `thanks` answer; `not_interested`,
+`price` and `what_needed` go to the owner (`onboard_reply`) — mid-trial those
+are his. Eligible while the launch call is in play.
+
+**The OK.** `approvedOnCall`: every section `{ status: 'approved', by: 'call' }`,
+the sequence `approvedAt` / `approvedBy` (the owner's name) / `approvalMode:
+'call'` — what the readiness gate reads (Day 1 unchanged in shape) — the call
+held (its meeting too), `launchCallOpen` '0'; pressing it again changes
+nothing; refused after a skip. `approvedOnPage` is set by the approval page
+when the third section is approved while the invite is out; the label says
+"They approved on the page — the call is optional" and the reminders stop.
+`skip`: only once they approved on the page, never while a time waits for the
+owner or a call is booked ahead (answer or cancel it in the Calendar first —
+they get a note there; skipping is silent); sets `skipped` (ISO),
+`launchCallOpen` '0'. Call done in the Calendar without the OK: label "Call
+done — press Approved on the call if they gave the OK" and the `launch-mark`
+to-do.
+
+**Hub (docs/HUB-API.md "The launch call").** `launchCall` = the `onboardCall`
+shape plus `kind`, `approvedOnCall`, `approvedOnPage`, `skipped`,
+`approvalUrl`. To-dos: `meeting-request:{id}` with `action.kind: 'launch'`,
+`launch-reply:{id}`, `launch-overdue:{id}`, `launch-mark:{id}` (booked and
+past: "Hold the launch call with {who}, then press Approved on the call";
+held without the OK: "Press Approved on the call for {who} — the launch call
+is done"), all with `section: 'launchCall'`. `simple` while warming: the
+warm-up card's sentence, then " · launch call Tue 20 Oct, 8:30 pm (your time)"
+/ " · waiting for them to pick a launch-call time" / " · they asked for … —
+say yes in the Calendar" / " · they approved on the page (launch call
+optional)" / " · launch call still not booked (overdue)"; after the OK
+"Launch call done — first emails on Wednesday 21 October". Copy card: "Launch
+invite sent … · {label}", "Approved by the launch call …".
+
+**Config.** `LAUNCH.callMinutes`, `earliestWarmupDay`, `bookWithinDays`, and
+**(+)** `fallbackDay` (null = never fall back).
+
+**Fixtures.** The full-run milestone list changed in two places: `client
+setup_in_progress` → `client next_steps` (the agreement came first there), and
+`client approval_link` + `approval link_sent` → `client launch_invite` +
+`owner launch_ready` (that client approves on the page). The journey now has
+34 steps; 15–21 are the launch call.

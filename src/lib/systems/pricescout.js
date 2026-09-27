@@ -400,7 +400,12 @@ export async function runPriceScout(clientId, { deadline = Date.now() + 15000, n
   await logEvent(clientId, SYSTEM, 'shopping_list_sent', { chosenDomain: list.chosenDomain, total: list.total, unconfirmed: list.unconfirmed.length });
 
   try {
-    await sendClient(clientId, 'setup_in_progress', { firstName: firstNameOf(client.contactName), ownerName: await ownerName(clientId) }, { dedupe: 'setup_in_progress' });
+    // The client's "what happens now" (docs/LAUNCH-CALL.md §1): when the agreement came before the
+    // onboarding call was held, the plan goes now and carries the setup news — never two of them.
+    // When the call came first the plan already went, and the short setup note goes as before.
+    const { sendNextSteps } = await import('@/lib/systems/launchcall');
+    const plan = await sendNextSteps(clientId, { now, moment: 'agreement' });
+    if (!plan.sent) await sendClient(clientId, 'setup_in_progress', { firstName: firstNameOf(client.contactName), ownerName: await ownerName(clientId) }, { dedupe: 'setup_in_progress' });
   } catch (err) {
     await logEvent(clientId, SYSTEM, 'setup_in_progress_failed', { error: String(err.message).slice(0, 200) });
   }

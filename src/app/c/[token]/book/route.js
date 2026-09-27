@@ -9,7 +9,7 @@
  */
 
 import { readToken } from '@/lib/pagetokens';
-import { bookingPageData } from '@/lib/systems/calendar';
+import { bookingPageData, kindOfLink } from '@/lib/systems/calendar';
 import { bookingPage, messagePage, HTML_HEADERS } from '@/lib/templates/bookpage';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +20,8 @@ export async function GET(request, { params }) {
   const t = await readToken(token, { purpose: 'book' }).catch(() => null);
   if (!t) return new Response(messagePage('This link has expired', "Reply to my email and I'll send you a new one."), { status: 404, headers: HTML_HEADERS });
   try {
-    const data = await bookingPageData(t.clientId, { tz: url.searchParams.get('tz') });
+    // The link says which call it books (the launch call's links carry it, docs/LAUNCH-CALL.md); older links book the call in play.
+    const data = await bookingPageData(t.clientId, { tz: url.searchParams.get('tz'), kind: await kindOfLink(t, t.clientId) });
     const html = bookingPage(data, { token, flash: url.searchParams.get('flash'), change: url.searchParams.get('change') === '1' });
     return new Response(html, { headers: HTML_HEADERS });
   } catch (err) {

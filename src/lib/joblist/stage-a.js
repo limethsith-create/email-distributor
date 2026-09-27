@@ -8,8 +8,8 @@
  *
  *  onboarding-nudge  daily 10:00 ET      onboarding            Day +2/+4 reminders, +7 close
  *  queue-promote     daily 10:05 ET      (global)              pop queue:trial into free slots
- *  onboard-calls     every ONBOARDCALL.checkEveryMinutes (global) while an onboarding call is open:
- *                    inbox (replies, bookings), reminders, overdue (docs/ONBOARD-CALL.md)
+ *  onboard-calls     every ONBOARDCALL.checkEveryMinutes (global) while an onboarding call or a launch
+ *                    call is open: inbox (replies, bookings), reminders, overdue (docs/ONBOARD-CALL.md, docs/LAUNCH-CALL.md)
  *  market            every minute        onboarding + 'market' continue the count; hourly when waiting
  *  pricescout        every minute        awaiting_purchase + 'pricescout'
  *  purchase-nudge    hourly              awaiting_purchase     12 h reminder, 48 h escalation
@@ -295,7 +295,9 @@ const onboardCalls = {
   minBudgetMs: 15_000,
   claimTtl: 600,
   async due({ now, clients }) {
-    if (!(clients || []).some((c) => c.onboardCallOpen === '1' || c.onboardCallOpen === 1)) return null;
+    // An onboarding call or a launch call (docs/LAUNCH-CALL.md) open for some client.
+    const open = (v) => v === '1' || v === 1;
+    if (!(clients || []).some((c) => open(c.onboardCallOpen) || open(c.launchCallOpen))) return null;
     const every = Math.max(1, Number(await cfg(null, 'ONBOARDCALL.checkEveryMinutes')) || 2);
     return bucketKey(et(now), every);
   },

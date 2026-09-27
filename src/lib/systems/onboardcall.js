@@ -40,6 +40,13 @@
  * the inbox for every other client (`talksWith`), so their messages during
  * the trial land in it too, and each new message goes past the reply bot
  * (systems/replybot.js) before the owner is alerted.
+ *
+ * Two calls, one machinery (docs/LAUNCH-CALL.md): every function here takes a
+ * `kind` — 'onboarding' (the default, everything above) or 'launch' (the second
+ * call, near the end of warm-up, where the client OKs the list and the emails;
+ * systems/launchcall.js sends its invite and owns its extra buttons). CALL_KINDS
+ * says where each is stored (client:{id}:onboardcall / :launchcall), which
+ * client states keep it open, and its words; the conversation is shared.
  */
 
 import { kv } from '@vercel/kv';
@@ -61,6 +68,8 @@ import * as conv from '@/lib/systems/conversation';
 const SYSTEM = 'onboardcall';
 /** Client states in which the inbox is still watched for this applicant. */
 export const WATCH_STATES = new Set(['onboarding', 'awaiting_purchase', 'setup_check']);
+/** Client states in which the launch call is still in play (docs/LAUNCH-CALL.md): from the invite in warm-up until it is held or skipped. */
+export const LAUNCH_WATCH_STATES = new Set(['warming', 'ready', 'sending']);
 /**
  * Clients whose mail in the ONBOARDCALL inbox goes into their conversation
  * (docs/REPLYBOT-MEET.md §1): any state but deleted, with a contact address.
@@ -72,6 +81,34 @@ const EMAIL_RE = /\b([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})\b/gi;
 /** The acceptance email's subject (templates/client/stage-a.js accepted_call): follow-ups answer it. */
 const FIRST_SUBJECT = "You're in — let's book your onboarding call";
 
+/**
+ * The two calls this machinery serves (docs/LAUNCH-CALL.md "two calls, one
+ * machinery"): the hash each lives in, the flags on the client hash the tick
+ * reads (`sentFlag` set once, `openFlag` '1' while the inbox is watched for
+ * it), the client states that keep it open (`watch`) and in which the "book
+ * it" reminders and the overdue alert still go (`remind`), its templates,
+ * its alerts and its words. Everything else is shared.
+ */
+export const CALL_KINDS = {
+  onboarding: {
+    key: K.onboardCall, sentFlag: 'onboardCallSentAt', openFlag: 'onboardCallOpen',
+    watch: WATCH_STATES, remind: new Set(['onboarding']),
+    name: 'onboarding call', firstSubject: FIRST_SUBJECT, firstStep: 'Acceptance email sent',
+    reminder: 'accepted_call_reminder', tomorrow: 'onboard_call_tomorrow', pixel: 'onboard',
+    alerts: { booked: 'onboard_booked', overdue: 'onboard_overdue', cancelled: 'onboard_cancelled' },
+  },
+  launch: {
+    key: K.launchCall, sentFlag: 'launchCallSentAt', openFlag: 'launchCallOpen',
+    watch: LAUNCH_WATCH_STATES, remind: new Set(['warming']),
+    name: 'launch call', firstSubject: "Your list and your emails are ready — let's go through them together", firstStep: 'Launch invite sent',
+    reminder: 'launch_invite_reminder', tomorrow: 'launch_call_tomorrow', pixel: 'launch',
+    alerts: { booked: 'launch_booked', overdue: 'launch_overdue', cancelled: 'launch_cancelled' },
+  },
+};
+/** 'launch' or 'onboarding' (anything else is the onboarding call). */
+export const kindOf = (kind) => (kind === 'launch' ? 'launch' : 'onboarding');
+const specOf = (kind) => CALL_KINDS[kindOf(kind)];
+
 /** A mistake in what the owner asked for (the route answers 400 with the message). */
 export class OnboardCallError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -82,24 +119,32 @@ export class OnboardCallError extends Error {
 /**
  * ONBOARDCALL in one Redis read (it is one machine-wide block). A leaf
  * override (/mc/config writes the block and every leaf) wins over a
- * whole-block one. Also carries OWNER.usHours: the US hours reminders keep to.
+ * whole-block one. Also carries OWNER.usHours (the US hours reminders keep
+ * to) and LAUNCH (docs/LAUNCH-CALL.md: the launch call's own length, booking
+ * deadline and timing) under `launch`, from the same read.
  */
 export async function onboardSettings() {
   let o = {};
   try { o = await globalOverrides(); } catch {}
-  const whole = o.ONBOARDCALL && typeof o.ONBOARDCALL === 'object' ? o.ONBOARDCALL : {};
-  const pick = (k) => (o[`ONBOARDCALL.${k}`] !== undefined ? o[`ONBOARDCALL.${k}`] : whole[k] !== undefined ? whole[k] : DEFAULTS.ONBOARDCALL[k]);
-  const s = Object.fromEntries(Object.keys(DEFAULTS.ONBOARDCALL).map((k) => [k, pick(k)]));
+  const block = (name) => {
+    const whole = o[name] && typeof o[name] === 'object' ? o[name] : {};
+    const pick = (k) => (o[`${name}.${k}`] !== undefined ? o[`${name}.${k}`] : whole[k] !== undefined ? whole[k] : DEFAULTS[name][k]);
+    return Object.fromEntries(Object.keys(DEFAULTS[name]).map((k) => [k, pick(k)]));
+  };
+  const s = block('ONBOARDCALL');
   s.usHours = o['OWNER.usHours'] || o.OWNER?.usHours || DEFAULTS.OWNER.usHours;
+  s.launch = block('LAUNCH');
   return normaliseSettings(s);
 }
 
 /** Settings → safe values (a bad booking link counts as none: the email then asks for times). */
 export function normaliseSettings(s = {}) {
   const d = DEFAULTS.ONBOARDCALL;
+  const l = DEFAULTS.LAUNCH;
   const pos = (v, def) => (Number(v) > 0 ? Number(v) : def);
   const url = String(s.bookingUrl || '').trim();
   const hours = Array.isArray(s.usHours) && s.usHours.length === 2 ? s.usHours.map(String) : DEFAULTS.OWNER.usHours;
+  const launch = s.launch && typeof s.launch === 'object' ? s.launch : {};
   return {
     inbox: String(s.inbox || '').trim().toLowerCase() || null,
     bookingUrl: url && isPublicUrl(url) ? url : null,
@@ -109,7 +154,21 @@ export function normaliseSettings(s = {}) {
     dayBeforeReminder: s.dayBeforeReminder !== false && s.dayBeforeReminder !== 'false',
     checkEveryMinutes: pos(s.checkEveryMinutes, d.checkEveryMinutes),
     usHours: hours,
+    // The launch call (docs/LAUNCH-CALL.md): its own length and booking deadline; the rest is shared.
+    launch: {
+      callMinutes: pos(launch.callMinutes, l.callMinutes),
+      earliestWarmupDay: pos(launch.earliestWarmupDay, l.earliestWarmupDay),
+      bookWithinDays: pos(launch.bookWithinDays, l.bookWithinDays),
+      // null / '' / 'null' = never fall back to the plain approval email.
+      fallbackDay: launch.fallbackDay === undefined ? l.fallbackDay : launch.fallbackDay === null || launch.fallbackDay === '' || launch.fallbackDay === 'null' || !Number.isFinite(Number(launch.fallbackDay)) ? null : Number(launch.fallbackDay),
+    },
   };
+}
+
+/** The settings one call runs on: the launch call takes LAUNCH.callMinutes and LAUNCH.bookWithinDays, everything else is ONBOARDCALL's. */
+export function settingsFor(s, kind = 'onboarding') {
+  if (kindOf(kind) !== 'launch') return s;
+  return { ...s, callMinutes: s.launch.callMinutes, bookWithinDays: s.launch.bookWithinDays };
 }
 
 /**
@@ -125,12 +184,12 @@ export function bookingLine(s, pageLink = null) {
     : "Reply with two or three times that suit you and I'll confirm one.";
 }
 
-/** A fresh link to the machine's booking page for this email, or null when it cannot be made (never throws). */
-async function ownBookingLink(clientId, s, tag) {
+/** A fresh link to the machine's booking page for this email (for the call of `kind`), or null when it cannot be made (never throws). */
+export async function ownBookingLink(clientId, s, tag, kind = 'onboarding') {
   if (s.bookingUrl) return null;
   try {
     const { bookingLink } = await import('@/lib/systems/calendar');
-    return await bookingLink(clientId, tag);
+    return await bookingLink(clientId, tag, kindOf(kind));
   } catch (err) {
     await logEvent(clientId, SYSTEM, 'booking_page_link_failed', { error: String(err?.message || err).slice(0, 200) }).catch(() => {});
     return null;
@@ -233,22 +292,30 @@ const flag = (v) => v !== undefined && v !== null && v !== '' && v !== 0 && v !=
 export const requestPending = (raw) => flag(raw.requestedAt) && flag(raw.requestedFor) && !flag(raw.bookedAt) && !flag(raw.heldAt);
 
 /**
- * Overdue: still onboarding, past dueBy, and no booking, call, no-show or
- * stop — and no time they asked for waiting on the owner (they did their part).
+ * The launch call no longer needs booking (docs/LAUNCH-CALL.md §3): they
+ * approved on the page (the call is optional) or the owner skipped it.
  */
-export function isOverdue(raw, now, clientState = 'onboarding') {
+export const launchSettled = (raw) => flag(raw.approvedOnPage) || flag(raw.skipped);
+
+/**
+ * Overdue: the client is still where the call belongs (onboarding; warming
+ * for the launch call), past dueBy, and no booking, call, no-show or stop —
+ * and no time they asked for waiting on the owner (they did their part), and
+ * for the launch call no approval on the page.
+ */
+export function isOverdue(raw, now, clientState = 'onboarding', kind = 'onboarding') {
   const due = ms(raw.dueBy);
-  return clientState === 'onboarding' && due != null && now.getTime() > due
-    && !flag(raw.bookedAt) && !flag(raw.heldAt) && !flag(raw.noShowAt) && !flag(raw.stoppedAt) && !requestPending(raw);
+  return specOf(kind).remind.has(clientState) && due != null && now.getTime() > due
+    && !flag(raw.bookedAt) && !flag(raw.heldAt) && !flag(raw.noShowAt) && !flag(raw.stoppedAt) && !requestPending(raw) && !launchSettled(raw);
 }
 
 /** One current state, worked out from the times: held > no_show > booked > stopped > overdue > replied > opened > sent. */
-export function statusOf(raw, { now = new Date(), clientState = 'onboarding' } = {}) {
+export function statusOf(raw, { now = new Date(), clientState = 'onboarding', kind = 'onboarding' } = {}) {
   if (flag(raw.heldAt)) return 'held';
   if (flag(raw.noShowAt)) return 'no_show';
   if (flag(raw.bookedAt)) return 'booked';
   if (flag(raw.stoppedAt)) return 'stopped';
-  if (isOverdue(raw, now, clientState)) return 'overdue';
+  if (isOverdue(raw, now, clientState, kind)) return 'overdue';
   if (flag(raw.lastReplyAt)) return 'replied';
   if (flag(raw.openedAt)) return 'opened';
   return 'sent';
@@ -267,10 +334,11 @@ export function needsReply(raw) {
 
 /**
  * Reminders stop for good once they book, reply, ask for a time on the
- * booking page, or the owner stops them (or the call happened / was missed).
+ * booking page, or the owner stops them (or the call happened / was missed);
+ * for the launch call also once they approved on the page or it was skipped.
  */
-const remindersOver = (raw, clientState) => clientState !== 'onboarding'
-  || flag(raw.bookedAt) || flag(raw.stoppedAt) || flag(raw.lastReplyAt) || flag(raw.heldAt) || flag(raw.noShowAt) || flag(raw.firstRequestAt);
+const remindersOver = (raw, clientState, kind = 'onboarding') => !specOf(kind).remind.has(clientState)
+  || flag(raw.bookedAt) || flag(raw.stoppedAt) || flag(raw.lastReplyAt) || flag(raw.heldAt) || flag(raw.noShowAt) || flag(raw.firstRequestAt) || launchSettled(raw);
 
 /**
  * Two emails to them are never closer than the first reminder's wait
@@ -283,8 +351,8 @@ const earliestNext = (raw, s) => {
 };
 
 /** Which reminder (0-based) is due at `now`, or null. The latest one due wins; earlier ones are then skipped, never sent late. */
-export function dueReminder(raw, s, now, clientState = 'onboarding') {
-  if (remindersOver(raw, clientState)) return null;
+export function dueReminder(raw, s, now, clientState = 'onboarding', kind = 'onboarding') {
+  if (remindersOver(raw, clientState, kind)) return null;
   const base = ms(raw.lastSentAt || raw.sentAt);
   if (base == null || now.getTime() < earliestNext(raw, s)) return null;
   const done = Number(raw.remindersSent) || 0;
@@ -294,8 +362,8 @@ export function dueReminder(raw, s, now, clientState = 'onboarding') {
 }
 
 /** When the next reminder will go (moved into US hours), or null when none is left. */
-export function nextReminderAt(raw, s, clientState = 'onboarding') {
-  if (remindersOver(raw, clientState)) return null;
+export function nextReminderAt(raw, s, clientState = 'onboarding', kind = 'onboarding') {
+  if (remindersOver(raw, clientState, kind)) return null;
   const base = ms(raw.lastSentAt || raw.sentAt);
   const h = s.reminderHours[Number(raw.remindersSent) || 0];
   if (base == null || h == null) return null;
@@ -319,7 +387,13 @@ const callPassed = (raw, s, now) => flag(raw.bookedFor) && now.getTime() > ms(ra
 /** The last answer to them was the reply bot's email (not the owner's own reply). */
 export const botAnsweredLast = (raw) => flag(raw.lastBotAt) && ms(raw.lastBotAt) >= (ms(raw.lastOwnerReplyAt) || 0);
 
-function labelFor(status, raw, s, now) {
+function labelFor(status, raw, s, now, kind = 'onboarding') {
+  const launch = kindOf(kind) === 'launch';
+  // The launch call (docs/LAUNCH-CALL.md §3): approved on the call, skipped, or approved on the page (the call is optional).
+  if (launch && flag(raw.approvedOnCall)) return 'Approved on the call — sending can start';
+  if (launch && flag(raw.skipped)) return 'Call skipped — they approved on the page';
+  if (launch && status === 'held' && !flag(raw.approvedOnCall)) return 'Call done — press Approved on the call if they gave the OK';
+  if (launch && flag(raw.approvedOnPage) && status !== 'booked' && status !== 'no_show') return 'They approved on the page — the call is optional';
   // A time from the booking page waiting on the owner comes first (docs/CALENDAR.md).
   if (status !== 'held' && status !== 'booked' && requestPending(raw)) {
     return flag(raw.proposedFor)
@@ -331,14 +405,15 @@ function labelFor(status, raw, s, now) {
     case 'no_show': return "They didn't show for the call";
     case 'booked':
       if (!flag(raw.bookedFor)) return 'Call booked — the time was not in the confirmation, check your calendar';
-      return callPassed(raw, s, now) ? `Call was ${ownerWhen(raw.bookedFor)} (your time) — mark it done or no-show` : `Call booked for ${ownerWhen(raw.bookedFor)} (your time)`;
+      if (callPassed(raw, s, now)) return launch ? `Call was ${ownerWhen(raw.bookedFor)} (your time) — press Approved on the call, or no-show` : `Call was ${ownerWhen(raw.bookedFor)} (your time) — mark it done or no-show`;
+      return `Call booked for ${ownerWhen(raw.bookedFor)} (your time)${launch && flag(raw.approvedOnPage) ? ' — they already approved on the page' : ''}`;
     case 'stopped': return 'Reminders stopped — nothing more is sent to them';
     case 'overdue': return `Not booked yet — it should have been booked by ${ownerWhen(raw.dueBy)} (your time)`;
     case 'replied':
       if (needsReply(raw)) return 'They replied — answer them below';
       return botAnsweredLast(raw) ? 'The reply bot answered — waiting for them to book' : 'You answered — waiting for them to book';
-    case 'opened': return 'They opened the email — waiting for them to book';
-    default: return 'Email sent — waiting for them to book';
+    case 'opened': return `They opened the ${launch ? 'invite' : 'email'} — waiting for them to book`;
+    default: return `${launch ? 'Invite' : 'Email'} sent — waiting for them to book`;
   }
 }
 
@@ -347,17 +422,22 @@ const threadEntry = conv.entryView;
 
 /**
  * The hub's `onboardCall` (docs/ONBOARD-CALL.md §5), or null when no
- * acceptance email was sent. Pure: stored times + settings + now.
+ * acceptance email was sent. Pure: stored times + settings + now. With
+ * `kind: 'launch'` it is the hub's `launchCall` (docs/LAUNCH-CALL.md §5):
+ * the same shape plus approvedOnCall, approvedOnPage, skipped and the
+ * approval page link the caller looked up (`approvalUrl`).
  */
-export function onboardCallView(raw, thread = [], { now = new Date(), settings, clientState = 'onboarding', meeting = null } = {}) {
+export function onboardCallView(raw, thread = [], { now = new Date(), settings, clientState = 'onboarding', meeting = null, kind = 'onboarding', approvalUrl = null } = {}) {
   if (!raw || !flag(raw.sentAt)) return null;
-  const s = settings || normaliseSettings();
-  const status = statusOf(raw, { now, clientState });
+  const k = kindOf(kind);
+  const s = settingsFor(settings || normaliseSettings(), k);
+  const status = statusOf(raw, { now, clientState, kind: k });
   const firstReplyAt = isoOrNull(raw.firstReplyAt || raw.lastReplyAt);
   const booked = flag(raw.bookedAt) || flag(raw.heldAt);
   return {
+    kind: k,
     status,
-    label: labelFor(status, raw, s, now),
+    label: labelFor(status, raw, s, now, k),
     sentAt: isoOrNull(raw.sentAt),
     openedAt: isoOrNull(raw.openedAt),
     lastReplyAt: isoOrNull(raw.lastReplyAt),
@@ -368,7 +448,7 @@ export function onboardCallView(raw, thread = [], { now = new Date(), settings, 
     dueBy: isoOrNull(raw.dueBy),
     overdue: status === 'overdue',
     remindersSent: Number(raw.remindersSent) || 0,
-    nextReminderAt: nextReminderAt(raw, s, clientState),
+    nextReminderAt: nextReminderAt(raw, s, clientState, k),
     stopped: flag(raw.stoppedAt),
     bookingUrl: s.bookingUrl,
     fromInbox: raw.fromInbox || null,
@@ -386,8 +466,10 @@ export function onboardCallView(raw, thread = [], { now = new Date(), settings, 
     meetingId: raw.meetingId || null,
     // The confirmed call's Google Meet link (from its meeting), so "Join Google Meet" works without the Calendar loaded.
     meetLink: (meeting && meeting.id === raw.meetingId && meeting.meetLink) || null,
+    // The launch call (docs/LAUNCH-CALL.md §4–5): how the OK came, or that the call was skipped.
+    ...(k === 'launch' ? { approvedOnCall: isoOrNull(raw.approvedOnCall), approvedOnPage: isoOrNull(raw.approvedOnPage), skipped: isoOrNull(raw.skipped), approvalUrl: approvalUrl || null } : {}),
     steps: [
-      { key: 'sent', label: 'Acceptance email sent', done: true, at: isoOrNull(raw.sentAt) },
+      { key: 'sent', label: specOf(k).firstStep, done: true, at: isoOrNull(raw.sentAt) },
       // A reply or a booking means they read it, even when the pixel was blocked.
       { key: 'opened', label: 'They opened it', done: flag(raw.openedAt) || Boolean(firstReplyAt) || booked, at: isoOrNull(raw.openedAt) },
       { key: 'replied', label: 'They replied', done: Boolean(firstReplyAt), at: firstReplyAt },
@@ -400,8 +482,9 @@ export function onboardCallView(raw, thread = [], { now = new Date(), settings, 
 
 // ─── storage ─────────────────────────────────────────────────────────────────
 
-export async function readCall(clientId) {
-  return (await kv.hgetall(K.onboardCall(clientId))) || {};
+/** The stored times of one call (the onboarding call unless `kind` is 'launch'). */
+export async function readCall(clientId, kind = 'onboarding') {
+  return (await kv.hgetall(K.callHash(clientId, kindOf(kind)))) || {};
 }
 
 /** The client's one conversation (systems/conversation.js — this list, the key kept). */
@@ -409,12 +492,43 @@ export async function readThread(clientId) {
   return conv.readThread(clientId);
 }
 
-/** hset the values, hdel the nulls. */
-async function patch(clientId, fields) {
+/** hset the values, hdel the nulls — on the hash of the call of `kind`. */
+async function patch(clientId, fields, kind = 'onboarding') {
+  const key = K.callHash(clientId, kindOf(kind));
   const set = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== null && v !== undefined));
   const del = Object.entries(fields).filter(([, v]) => v === null).map(([k]) => k);
-  if (Object.keys(set).length) await kv.hset(K.onboardCall(clientId), set);
-  if (del.length) await kv.hdel(K.onboardCall(clientId), ...del);
+  if (Object.keys(set).length) await kv.hset(key, set);
+  if (del.length) await kv.hdel(key, ...del);
+}
+/** systems/launchcall.js writes the launch call's own fields through this (one writer of the hash's shape). */
+export const patchCall = patch;
+
+/**
+ * The launch call is still in play for this client (docs/LAUNCH-CALL.md):
+ * the invite went, the client is in warm-up (or just past it) and the call
+ * is neither done nor skipped.
+ */
+export const launchOpen = (raw, clientState) => flag(raw?.sentAt) && LAUNCH_WATCH_STATES.has(clientState) && !flag(raw.heldAt) && !flag(raw.skipped);
+
+/** Is the call of `kind` still to happen for this client (the booking page takes a time, the reply bot may book)? */
+export function callOpen(raw, clientState, kind = 'onboarding') {
+  if (kindOf(kind) === 'launch') return launchOpen(raw, clientState);
+  return flag(raw?.sentAt) && WATCH_STATES.has(clientState) && !flag(raw.heldAt);
+}
+
+/**
+ * The call a client's mail belongs to right now: the launch call once its
+ * invite is out and it is still to happen, else the onboarding call. What
+ * the conversation, the reply bot and the booking page read.
+ * → { kind, raw }
+ */
+export async function activeCall(clientId, client = null) {
+  const c = client || await getClient(clientId);
+  if (c && flag(c.launchCallSentAt)) {
+    const raw = await readCall(clientId, 'launch');
+    if (launchOpen(raw, c.state)) return { kind: 'launch', raw };
+  }
+  return { kind: 'onboarding', raw: await readCall(clientId) };
 }
 
 const pushThread = conv.pushEntry;
@@ -503,28 +617,42 @@ export async function sendAcceptance(clientId, { onboardingLink, now = io.now(),
 
 // ─── reminders + overdue ─────────────────────────────────────────────────────
 
-async function sendReminder(client, raw, s, idx, now) {
+/** The launch call's emails also carry the approval page link (docs/LAUNCH-CALL.md §2); never throws. */
+async function launchVars(clientId, kind) {
+  if (kindOf(kind) !== 'launch') return {};
+  try {
+    const { approvalUrl } = await import('@/lib/systems/approval');
+    return { approvalUrl: await approvalUrl(clientId) };
+  } catch (err) {
+    await logEvent(clientId, SYSTEM, 'approval_link_failed', { error: String(err?.message || err).slice(0, 200) }).catch(() => {});
+    return {};
+  }
+}
+
+async function sendReminder(client, raw, s, idx, now, kind = 'onboarding') {
   const id = client.id;
-  const vars = { firstName: firstNameOf(client.contactName), ownerName: await ownerName(id), callMinutes: s.callMinutes, bookingLine: bookingLine(s, await ownBookingLink(id, s, `r${Number(raw.sends) || 1}-${idx}`)), threadSubject: raw.subject || FIRST_SUBJECT };
-  const res = await sendClient(id, 'accepted_call_reminder', vars, {
-    dedupe: `accepted_call_reminder:${Number(raw.sends) || 1}:${idx}`,
+  const sp = specOf(kind);
+  const vars = { firstName: firstNameOf(client.contactName), ownerName: await ownerName(id), callMinutes: s.callMinutes, bookingLine: bookingLine(s, await ownBookingLink(id, s, `r${Number(raw.sends) || 1}-${idx}`, kind)), threadSubject: raw.subject || sp.firstSubject, ...(await launchVars(id, kind)) };
+  const res = await sendClient(id, sp.reminder, vars, {
+    dedupe: `${sp.reminder}:${Number(raw.sends) || 1}:${idx}`,
     thread: false,
-    pixelUrl: onboardPixelUrl(client.contactEmail, id, now.getTime()),
+    pixelUrl: onboardPixelUrl(client.contactEmail, id, now.getTime(), sp.pixel),
     linkify: true,
     ...threadHeaders(raw),
   });
   const at = now.toISOString();
-  await patch(id, { remindersSent: idx + 1, lastReminderAt: at, ...(res.messageId ? { messageIds: JSON.stringify(withId(raw, res.messageId)) } : {}) });
+  await patch(id, { remindersSent: idx + 1, lastReminderAt: at, ...(res.messageId ? { messageIds: JSON.stringify(withId(raw, res.messageId)) } : {}) }, kind);
   if (!res.deduped) {
-    const copy = sentCopy(res, 'accepted_call_reminder', vars, client);
+    const copy = sentCopy(res, sp.reminder, vars, client);
     await pushThread(id, { id: `out-${shortHash(res.messageId || `${at}|reminder${idx}`)}`, dir: 'out', at, from: await fromInboxOf(res), to: lower(client.contactEmail), subject: copy.subject, text: copy.text, kind: 'reminder' });
   }
-  await logEvent(id, SYSTEM, 'reminder_sent', { reminder: idx + 1, deduped: Boolean(res.deduped) || undefined });
+  await logEvent(id, SYSTEM, 'reminder_sent', { reminder: idx + 1, call: kindOf(kind), deduped: Boolean(res.deduped) || undefined });
   return !res.deduped;
 }
 
-async function sendDayBefore(client, raw, s, now) {
+async function sendDayBefore(client, raw, s, now, kind = 'onboarding') {
   const id = client.id;
+  const sp = specOf(kind);
   // Their own zone when the Calendar knows it (the state they applied from), else US Eastern.
   const tz = raw.theirZone || ET;
   // The Google Meet link (or the owner's own link) goes in the reminder too.
@@ -533,41 +661,44 @@ async function sendDayBefore(client, raw, s, now) {
     if (raw.meetingId) { const { getMeeting } = await import('@/lib/systems/calendar'); link = (await getMeeting(raw.meetingId))?.meetLink || null; }
     link = link || (await cfg(id, 'CALENDAR.meetingLink')) || null;
   } catch { link = null; }
-  const vars = { firstName: firstNameOf(client.contactName), ownerName: await ownerName(id), callMinutes: s.callMinutes, when: await whenForThem(raw.bookedFor, tz), callDay: callDayWord(raw.bookedFor, now, tz), joinLine: link ? `Join here: ${link}` : "I'll send the video link before the call." };
-  const res = await sendClient(id, 'onboard_call_tomorrow', vars, { dedupe: `onboard_call_tomorrow:${raw.bookedFor}`, thread: false, ...threadHeaders(raw) });
+  const vars = { firstName: firstNameOf(client.contactName), ownerName: await ownerName(id), callMinutes: s.callMinutes, when: await whenForThem(raw.bookedFor, tz), callDay: callDayWord(raw.bookedFor, now, tz), joinLine: link ? `Join here: ${link}` : "I'll send the video link before the call.", ...(await launchVars(id, kind)) };
+  const res = await sendClient(id, sp.tomorrow, vars, { dedupe: `${sp.tomorrow}:${raw.bookedFor}`, thread: false, ...threadHeaders(raw) });
   const at = now.toISOString();
-  await patch(id, { tomorrowSentFor: raw.bookedFor, lastReminderAt: at, ...(res.messageId ? { messageIds: JSON.stringify(withId(raw, res.messageId)) } : {}) });
+  await patch(id, { tomorrowSentFor: raw.bookedFor, lastReminderAt: at, ...(res.messageId ? { messageIds: JSON.stringify(withId(raw, res.messageId)) } : {}) }, kind);
   if (!res.deduped) {
-    const copy = sentCopy(res, 'onboard_call_tomorrow', vars, client);
+    const copy = sentCopy(res, sp.tomorrow, vars, client);
     await pushThread(id, { id: `out-${shortHash(res.messageId || `${at}|tomorrow`)}`, dir: 'out', at, from: await fromInboxOf(res), to: lower(client.contactEmail), subject: copy.subject, text: copy.text, kind: 'reminder' });
   }
-  await logEvent(id, SYSTEM, 'day_before_sent', { bookedFor: raw.bookedFor });
+  await logEvent(id, SYSTEM, 'day_before_sent', { bookedFor: raw.bookedFor, call: kindOf(kind) });
   return !res.deduped;
 }
 
 /** Reminders due for one applicant — US business hours only, at most one email per check. */
-async function runReminders(client, raw, s, now) {
+async function runReminders(client, raw, s, now, kind = 'onboarding') {
   if (!inUsBusinessHours(now, s.usHours)) return 0;
-  const idx = dueReminder(raw, s, now, client.state);
-  if (idx != null) return (await sendReminder(client, raw, s, idx, now)) ? 1 : 0;
-  if (dayBeforeDue(raw, s, now)) return (await sendDayBefore(client, raw, s, now)) ? 1 : 0;
+  const idx = dueReminder(raw, s, now, client.state, kind);
+  if (idx != null) return (await sendReminder(client, raw, s, idx, now, kind)) ? 1 : 0;
+  if (dayBeforeDue(raw, s, now)) return (await sendDayBefore(client, raw, s, now, kind)) ? 1 : 0;
   return 0;
 }
 
-/** Past dueBy and still not booked → onboard_overdue, once per acceptance email. */
-async function runOverdue(client, raw, s, now) {
-  if (flag(raw.overdueAt) || !isOverdue(raw, now, client.state)) return false;
-  await patch(client.id, { overdueAt: now.toISOString() });
+/** Past dueBy and still not booked → onboard_overdue / launch_overdue, once per acceptance email / invite. */
+async function runOverdue(client, raw, s, now, kind = 'onboarding') {
+  if (flag(raw.overdueAt) || !isOverdue(raw, now, client.state, kind)) return false;
+  const sp = specOf(kind);
+  await patch(client.id, { overdueAt: now.toISOString() }, kind);
   const n = Number(raw.remindersSent) || 0;
-  await alert('onboard_overdue', {
+  await alert(sp.alerts.overdue, {
     clientId: client.id,
-    scope: `${client.id}:overdue:${raw.lastSentAt || raw.sentAt}`,
+    scope: `${client.id}:overdue:${kindOf(kind)}:${raw.lastSentAt || raw.sentAt}`,
     vars: { person: person(client) },
-    body: `${person(client)} (${client.contactEmail}) from ${client.name || client.id} has not booked the onboarding call ${s.bookWithinDays} business days after the acceptance email (sent ${ownerWhen(raw.lastSentAt || raw.sentAt)}, your time).${n ? ` ${n} reminder${n === 1 ? '' : 's'} went out.` : ''}`,
-    did: 'Nothing more goes to them by itself. From their trial in the hub you can write to them in the same thread, send the email again, or stop the reminders.',
+    body: `${person(client)} (${client.contactEmail}) from ${client.name || client.id} has not booked the ${sp.name} ${s.bookWithinDays} business days after the ${kindOf(kind) === 'launch' ? 'launch invite' : 'acceptance email'} (sent ${ownerWhen(raw.lastSentAt || raw.sentAt)}, your time).${n ? ` ${n} reminder${n === 1 ? '' : 's'} went out.` : ''}`,
+    did: kindOf(kind) === 'launch'
+      ? 'Nothing more goes to them by itself. From their trial in the hub you can write to them in the same thread, send the invite again, or stop the reminders — they can also approve on the page without a call.'
+      : 'Nothing more goes to them by itself. From their trial in the hub you can write to them in the same thread, send the email again, or stop the reminders.',
     url: `/#trial/${client.id}`,
   });
-  await logEvent(client.id, SYSTEM, 'overdue', { dueBy: raw.dueBy });
+  await logEvent(client.id, SYSTEM, 'overdue', { dueBy: raw.dueBy, call: kindOf(kind) });
   return true;
 }
 
@@ -596,10 +727,11 @@ async function recordReply(w, meta, now) {
   if ((await readThread(id)).some((t) => t.id === entryId)) return false;
   const at = isoOrNull(meta.date) || now.toISOString();
   const text = (stripQuotedReply(meta.text || '') || snippet(meta.text || '', 600) || '(no text)').slice(0, TEXT_MAX);
-  const raw = await readCall(id);
-  const inCall = flag(raw.sentAt) && WATCH_STATES.has(w.client.state);
+  // The call this message belongs to: the one being watched for them (`w.kind`), else the client's active call.
+  const { kind, raw } = w.talk ? await activeCall(id, w.client) : { kind: kindOf(w.kind), raw: await readCall(id, kindOf(w.kind)) };
+  const inCall = flag(raw.sentAt) && specOf(kind).watch.has(w.client.state);
   const { onInbound } = await import('@/lib/systems/replybot');
-  const bot = await onInbound(w.client, raw, { entryId, at, text, subject: meta.subject || '', messageId: meta.messageId || null, from: lower(meta.from), now });
+  const bot = await onInbound(w.client, raw, { entryId, at, text, subject: meta.subject || '', messageId: meta.messageId || null, from: lower(meta.from), now, kind });
   const thanks = bot.rule === 'thanks';
   await pushThread(id, { id: entryId, dir: 'in', at, from: lower(meta.from), to: meta.inbox || null, subject: meta.subject || '', text, kind: 'reply', ...(bot.rule ? { rule: bot.rule } : {}) });
   if (inCall) {
@@ -611,16 +743,16 @@ async function recordReply(w, meta, now) {
       ...(meta.messageId ? { lastInMessageId: bracket(meta.messageId), messageIds: JSON.stringify(withId(raw, meta.messageId)) } : {}),
       // A thank-you needs no answer — unless an earlier message of theirs still does.
       ...(thanks && !needsReply(raw) ? { lastAnsweredAt: at } : {}),
-    });
+    }, kind);
   }
   await conv.noteInbound(id, { at, messageId: meta.messageId || null, subject: meta.subject || '', needsAnswer: !thanks });
-  await logEvent(id, SYSTEM, 'reply_received', { from: lower(meta.from), subject: meta.subject || '', ...(bot.rule ? { rule: bot.rule } : {}), ...(bot.queued ? { bot: 'queued' } : {}) });
+  await logEvent(id, SYSTEM, 'reply_received', { from: lower(meta.from), subject: meta.subject || '', ...(inCall ? { call: kind } : {}), ...(bot.rule ? { rule: bot.rule } : {}), ...(bot.queued ? { bot: 'queued' } : {}) });
   if (bot.alert) {
     await alert('onboard_reply', {
       clientId: id,
       scope: `${id}:${entryId}`,
       vars: { person: person(w.client) },
-      body: `${person(w.client)} (${lower(meta.from)}) from ${w.client.name || id} ${inCall ? 'replied to the onboarding-call email' : 'wrote to you'}:\n\n“${text.slice(0, 1500)}”${bot.rule && bot.why ? `\n\nThe reply bot left this one to you: ${bot.why}.` : ''}`,
+      body: `${person(w.client)} (${lower(meta.from)}) from ${w.client.name || id} ${inCall ? `replied to the ${specOf(kind).name} email` : 'wrote to you'}:\n\n“${text.slice(0, 1500)}”${bot.rule && bot.why ? `\n\nThe reply bot left this one to you: ${bot.why}.` : ''}`,
       did: 'Added it to the conversation on their trial in the hub. Answer them there — it goes from the same inbox, in the same thread.',
       url: `/#trial/${id}`,
     });
@@ -630,22 +762,24 @@ async function recordReply(w, meta, now) {
 
 async function recordBooking(w, { start, uid, meta, now }) {
   const id = w.client.id;
-  const raw = await readCall(id);
+  const kind = kindOf(w.kind);
+  const sp = specOf(kind);
+  const raw = await readCall(id, kind);
   const startIso = isoOrNull(start);
   if (flag(raw.heldAt)) return { skipped: 'call already done' };
   if (flag(raw.bookedAt) && (raw.bookedFor || null) === startIso) return { duplicate: true };
   const moved = flag(raw.bookedAt) && flag(raw.bookedFor) && Boolean(startIso);
   const at = isoOrNull(meta.date) || now.toISOString();
-  await patch(id, { bookedFor: startIso, bookedAt: at, bookedBy: 'calendar', bookingUid: uid || null, noShowAt: null, cancelledAt: null, tomorrowSentFor: null });
+  await patch(id, { bookedFor: startIso, bookedAt: at, bookedBy: 'calendar', bookingUid: uid || null, noShowAt: null, cancelledAt: null, tomorrowSentFor: null }, kind);
   const whenLine = startIso ? await whenForThem(startIso, ET) : 'a time that was not in the email';
   await pushThread(id, { id: `in-${shortHash(`${normId(meta.messageId) || meta.uid}|${startIso}`)}`, dir: 'in', at, from: lower(meta.from), to: meta.inbox || null, subject: meta.subject || '', text: `Calendar: ${moved ? 'the call moved to' : 'call booked for'} ${whenLine}.`, kind: 'booking' });
-  await logEvent(id, SYSTEM, moved ? 'call_rescheduled' : 'call_booked', { bookedFor: startIso, by: 'calendar', from: lower(meta.from) });
-  await toCalendar(id, 'booked', { start: startIso, source: 'inbox', by: 'them', now });
-  await alert('onboard_booked', {
+  await logEvent(id, SYSTEM, moved ? 'call_rescheduled' : 'call_booked', { bookedFor: startIso, by: 'calendar', from: lower(meta.from), call: kind });
+  await toCalendar(id, 'booked', { start: startIso, source: 'inbox', by: 'them', now, kind });
+  await alert(sp.alerts.booked, {
     clientId: id,
-    scope: `${id}:booked:${startIso || normId(meta.messageId) || meta.uid}`,
+    scope: `${id}:booked:${kind}:${startIso || normId(meta.messageId) || meta.uid}`,
     vars: { person: person(w.client), when: startIso ? `${ownerWhen(startIso)} your time` : 'time not in the email' },
-    body: `${person(w.client)} from ${w.client.name || id} ${moved ? 'moved' : 'booked'} the onboarding call: ${startIso ? `${ownerWhen(startIso)} your time (${whenLine} for them)` : 'the confirmation did not show the time — check your calendar'}.`,
+    body: `${person(w.client)} from ${w.client.name || id} ${moved ? 'moved' : 'booked'} the ${sp.name}: ${startIso ? `${ownerWhen(startIso)} your time (${whenLine} for them)` : 'the confirmation did not show the time — check your calendar'}.`,
     did: 'Marked the call booked on their trial; the reminders to book have stopped.',
     url: `/#trial/${id}`,
   });
@@ -654,20 +788,22 @@ async function recordBooking(w, { start, uid, meta, now }) {
 
 async function recordCancel(w, { uid, meta, now }) {
   const id = w.client.id;
-  const raw = await readCall(id);
+  const kind = kindOf(w.kind);
+  const sp = specOf(kind);
+  const raw = await readCall(id, kind);
   if (!flag(raw.bookedAt) || flag(raw.heldAt)) return { skipped: 'no booked call' };
   if (uid && raw.bookingUid && uid !== raw.bookingUid) return { skipped: 'another booking' };
   const at = isoOrNull(meta.date) || now.toISOString();
-  await patch(id, { bookedFor: null, bookedAt: null, bookedBy: null, bookingUid: null, tomorrowSentFor: null, cancelledAt: at });
+  await patch(id, { bookedFor: null, bookedAt: null, bookedBy: null, bookingUid: null, tomorrowSentFor: null, cancelledAt: at }, kind);
   const was = raw.bookedFor ? await whenForThem(raw.bookedFor, ET) : 'the booked time';
   await pushThread(id, { id: `in-${shortHash(`${normId(meta.messageId) || meta.uid}|cancel`)}`, dir: 'in', at, from: lower(meta.from), to: meta.inbox || null, subject: meta.subject || '', text: `Calendar: the call on ${was} was cancelled.`, kind: 'booking' });
-  await logEvent(id, SYSTEM, 'call_cancelled', { was: raw.bookedFor || null });
-  await toCalendar(id, 'cancelled', { source: 'inbox', by: 'them', now });
-  await alert('onboard_cancelled', {
+  await logEvent(id, SYSTEM, 'call_cancelled', { was: raw.bookedFor || null, call: kind });
+  await toCalendar(id, 'cancelled', { source: 'inbox', by: 'them', now, kind });
+  await alert(sp.alerts.cancelled, {
     clientId: id,
-    scope: `${id}:cancel:${raw.bookedFor || at}`,
+    scope: `${id}:cancel:${kind}:${raw.bookedFor || at}`,
     vars: { person: person(w.client) },
-    body: `${person(w.client)} from ${w.client.name || id} cancelled the onboarding call${raw.bookedFor ? ` (${ownerWhen(raw.bookedFor)} your time)` : ''}.`,
+    body: `${person(w.client)} from ${w.client.name || id} cancelled the ${sp.name}${raw.bookedFor ? ` (${ownerWhen(raw.bookedFor)} your time)` : ''}.`,
     did: 'Their trial shows the call as not booked again.',
     url: `/#trial/${id}`,
   });
@@ -684,7 +820,7 @@ async function recordCancel(w, { uid, meta, now }) {
  */
 export async function handleMessage(meta, watched, now, talk = []) {
   const out = { replies: 0, booked: 0 };
-  // An onboarding applicant wins over another client with the same address.
+  // A watched call (onboarding, then launch) wins over another client with the same address.
   const byEmail = new Map([...talk, ...watched].map((w) => [w.email, w]));
   const events = (meta.ics || []).flatMap(parseIcs).filter((e) => e.start || e.method === 'CANCEL' || e.status === 'CANCELLED');
   let handled = false;
@@ -773,29 +909,31 @@ async function claimCheck(now, minutes) {
 }
 
 /**
- * The check: the inbox (the onboarding calls that are open, and every other
- * client's messages into their conversation), then reminders and overdue for
- * the open calls, then the reply bot's answers that are due
+ * The check: the inbox (the onboarding and launch calls that are open, and
+ * every other client's messages into their conversation), then reminders and
+ * overdue for the open calls, then the reply bot's answers that are due
  * (systems/replybot.js). → { ok, checked, newReplies, booked, remindersSent,
  * botReplies? (only when > 0), skipped?, error? } — `checked` counts the
- * onboarding calls.
+ * open calls (both kinds).
  */
 export async function checkOnboardCalls({ now = io.now(), force = false, clients = null } = {}) {
   const s = await onboardSettings();
   const out = { ok: true, checked: 0, newReplies: 0, booked: 0, remindersSent: 0 };
   if (!force && !(await claimCheck(now, s.checkEveryMinutes))) return { ...out, skipped: 'too soon' };
   const all = (clients || await getAllClients()).filter((c) => c && c.id !== 'aviance');
-  const open = all.filter((c) => flag(c.onboardCallOpen));
   const watched = [];
-  for (const c of open) {
-    const raw = await readCall(c.id);
-    if (!flag(raw.sentAt) || !WATCH_STATES.has(c.state)) {
-      // Moved on (or never sent): stop reading the inbox for them.
-      await updateClient(c.id, { onboardCallOpen: '0' });
-      await logEvent(c.id, SYSTEM, 'watch_ended', { state: c.state });
-      continue;
+  for (const kind of Object.keys(CALL_KINDS)) {
+    const sp = CALL_KINDS[kind];
+    for (const c of all.filter((x) => flag(x[sp.openFlag]))) {
+      const raw = await readCall(c.id, kind);
+      if (!flag(raw.sentAt) || !sp.watch.has(c.state) || (kind === 'launch' && !launchOpen(raw, c.state))) {
+        // Moved on (or never sent): stop reading the inbox for them.
+        await updateClient(c.id, { [sp.openFlag]: '0' });
+        await logEvent(c.id, SYSTEM, 'watch_ended', { state: c.state, call: kind });
+        continue;
+      }
+      watched.push({ client: c, raw, kind, email: lower(raw.contactEmail || c.contactEmail), ids: new Set(asArray(raw.messageIds).map(normId)) });
     }
-    watched.push({ client: c, raw, email: lower(raw.contactEmail || c.contactEmail), ids: new Set(asArray(raw.messageIds).map(normId)) });
   }
   out.checked = watched.length;
   const inWatch = new Set(watched.map((w) => w.client.id));
@@ -809,9 +947,10 @@ export async function checkOnboardCalls({ now = io.now(), force = false, clients
   for (const w of watched) {
     try {
       // Fresh times: a reply or booking found a moment ago stops a reminder.
-      const raw = await readCall(w.client.id);
-      out.remindersSent += await runReminders(w.client, raw, s, now);
-      await runOverdue(w.client, raw, s, now);
+      const raw = await readCall(w.client.id, w.kind);
+      const sk = settingsFor(s, w.kind);
+      out.remindersSent += await runReminders(w.client, raw, sk, now, w.kind);
+      await runOverdue(w.client, raw, sk, now, w.kind);
     } catch (err) {
       out.ok = false;
       out.error = out.error || String(err?.message || err);
@@ -839,21 +978,22 @@ export async function checkOnboardCallsQuietly(opts = {}) {
 
 // ─── the pixel ───────────────────────────────────────────────────────────────
 
-/** A human open of the onboarding email (the route has already set scanners and prefetches aside). */
-export async function markOpened(clientId, email, { now = new Date() } = {}) {
+/** A human open of the onboarding email or the launch invite (the route has already set scanners and prefetches aside). */
+export async function markOpened(clientId, email, { now = new Date(), kind = 'onboarding' } = {}) {
   try { assertClientId(clientId); } catch { return false; }
-  const raw = await readCall(clientId);
+  const key = K.callHash(clientId, kindOf(kind));
+  const raw = await readCall(clientId, kind);
   if (!flag(raw.sentAt) || lower(raw.contactEmail) !== lower(email)) return false;
-  await kv.hincrby(K.onboardCall(clientId), 'opens', 1);
+  await kv.hincrby(key, 'opens', 1);
   if (flag(raw.openedAt)) return false;
-  const first = await kv.hsetnx(K.onboardCall(clientId), 'openedAt', now.toISOString());
-  if (first === 1 || first === true) await logEvent(clientId, SYSTEM, 'opened', {});
+  const first = await kv.hsetnx(key, 'openedAt', now.toISOString());
+  if (first === 1 || first === true) await logEvent(clientId, SYSTEM, 'opened', { call: kindOf(kind) });
   return true;
 }
 
 // ─── the Calendar (docs/CALENDAR.md) ─────────────────────────────────────────
 
-/** The onboarding call → the Calendar (the card's buttons, the inbox). Never throws: the call is already recorded. */
+/** The call → the Calendar (the card's buttons, the inbox). Never throws: the call is already recorded. `opts.kind` says which call. */
 async function toCalendar(clientId, what, opts) {
   try {
     const { syncFromOnboardCall } = await import('@/lib/systems/calendar');
@@ -864,21 +1004,37 @@ async function toCalendar(clientId, what, opts) {
   }
 }
 
-/** Remember which calendar meeting is this client's onboarding call (one per call, no duplicates). */
-export async function linkMeeting(clientId, meetingId) {
-  const raw = await readCall(clientId);
-  if (flag(raw.sentAt) && raw.meetingId !== meetingId) await patch(clientId, { meetingId });
+/** Remember which calendar meeting is this client's call of `kind` (one per call, no duplicates). */
+export async function linkMeeting(clientId, meetingId, kind = 'onboarding') {
+  const raw = await readCall(clientId, kind);
+  if (flag(raw.sentAt) && raw.meetingId !== meetingId) await patch(clientId, { meetingId }, kind);
 }
 
 /**
- * The Calendar → this onboarding call, after every change to the client's
- * onboarding meeting. requested → "they asked for … — say yes in the
+ * The onboarding call was held (the card's "Call done" or the Calendar's):
+ * the "what happens now" email goes once (docs/LAUNCH-CALL.md §1). Never
+ * throws — the call is already marked.
+ */
+async function afterOnboardingHeld(clientId, now) {
+  try {
+    const { sendNextSteps } = await import('@/lib/systems/launchcall');
+    await sendNextSteps(clientId, { now, moment: 'call' });
+  } catch (err) {
+    await logEvent(clientId, SYSTEM, 'next_steps_failed', { error: String(err?.message || err).slice(0, 200) }).catch(() => {});
+  }
+}
+
+/**
+ * The Calendar → the call the meeting is (`m.kind`: onboarding or launch),
+ * after every change to it. requested → "they asked for … — say yes in the
  * Calendar" (and a booking they asked to move is open again); confirmed →
  * booked (bookedBy 'calendar'); held / no_show → the same here; declined /
  * cancelled → the request (and its booking) is gone. Never calls back.
  */
 export async function syncCallFromMeeting(clientId, m, { now = io.now() } = {}) {
-  const raw = await readCall(clientId);
+  const kind = kindOf(m?.kind);
+  const sp = specOf(kind);
+  const raw = await readCall(clientId, kind);
   if (!m || !flag(raw.sentAt)) return false;
   const at = now.toISOString();
   const same = raw.meetingId === m.id || raw.bookingUid === m.id;
@@ -896,12 +1052,12 @@ export async function syncCallFromMeeting(clientId, m, { now = io.now() } = {}) 
         bookedFor: m.start, bookedAt: kept ? raw.bookedAt : at, bookedBy: kept && raw.bookedBy ? raw.bookedBy : 'calendar', bookingUid: m.id,
         noShowAt: null, heldAt: null, cancelledAt: null, tomorrowSentFor: kept ? raw.tomorrowSentFor || null : null,
       });
-      await updateClient(clientId, { onboardCallOpen: '1' });
+      await updateClient(clientId, { [sp.openFlag]: '1' });
       break;
     }
     case 'held':
       Object.assign(fields, clearRequest, { heldAt: flag(raw.heldAt) ? raw.heldAt : at, noShowAt: null });
-      await updateClient(clientId, { onboardCallOpen: '0' });
+      await updateClient(clientId, { [sp.openFlag]: '0' });
       break;
     case 'no_show':
       Object.assign(fields, clearRequest, { noShowAt: flag(raw.noShowAt) ? raw.noShowAt : at, heldAt: null });
@@ -915,27 +1071,29 @@ export async function syncCallFromMeeting(clientId, m, { now = io.now() } = {}) 
     default:
       return false;
   }
-  await patch(clientId, fields);
-  await logEvent(clientId, SYSTEM, `calendar_${m.status}`, { meetingId: m.id, start: m.start });
+  await patch(clientId, fields, kind);
+  await logEvent(clientId, SYSTEM, `calendar_${m.status}`, { meetingId: m.id, start: m.start, call: kind });
+  if (m.status === 'held' && kind === 'onboarding' && !flag(raw.heldAt)) await afterOnboardingHeld(clientId, now);
   return true;
 }
 
 /**
- * A Calendar email to the applicant from the onboarding-call inbox. With an
- * onboarding conversation it is threaded (In-Reply-To / References, its
- * Message-ID kept, shown in the hub's thread as an outgoing `booking`).
+ * A Calendar email to the applicant from the onboarding-call inbox. With a
+ * conversation for the call of `kind` it is threaded (In-Reply-To /
+ * References, its Message-ID kept, shown in the hub's thread as an outgoing
+ * `booking`).
  */
-export async function sendCallEmail(clientId, key, vars, { icalEvent = null, dedupe = null, now = io.now() } = {}) {
+export async function sendCallEmail(clientId, key, vars, { icalEvent = null, dedupe = null, now = io.now(), kind = 'onboarding' } = {}) {
   const client = await getClient(clientId);
   if (!client) throw new Error(`no client ${clientId}`);
-  const raw = await readCall(clientId);
+  const raw = await readCall(clientId, kind);
   const threaded = flag(raw.sentAt);
-  const all = { threadSubject: raw.subject || FIRST_SUBJECT, ...vars };
+  const all = { threadSubject: raw.subject || specOf(kind).firstSubject, ...vars };
   const res = await sendClient(clientId, key, all, { dedupe, linkify: true, thread: false, ...(icalEvent ? { icalEvent } : {}), ...(threaded ? threadHeaders(raw) : {}) });
   if (threaded && !res.deduped) {
     const at = now.toISOString();
     const copy = sentCopy(res, key, all, client);
-    if (res.messageId) await patch(clientId, { messageIds: JSON.stringify(withId(raw, res.messageId)) });
+    if (res.messageId) await patch(clientId, { messageIds: JSON.stringify(withId(raw, res.messageId)) }, kind);
     await pushThread(clientId, { id: `out-${shortHash(res.messageId || `${at}|${key}`)}`, dir: 'out', at, from: await fromInboxOf(res), to: lower(client.contactEmail), subject: copy.subject, text: copy.text, kind: 'booking' });
   } else if (!res.deduped && res.sent) {
     // No onboarding conversation (a meeting the owner added): still one entry in their conversation.
@@ -970,14 +1128,17 @@ export function onboardPageClock(raw, sentAt, now = new Date()) {
 
 // ─── the owner's buttons ─────────────────────────────────────────────────────
 
-async function requireCall(clientId) {
+async function requireCall(clientId, kind = 'onboarding') {
   assertClientId(clientId);
   const client = await getClient(clientId);
   if (!client) throw new OnboardCallError('not found', 404);
-  const raw = await readCall(clientId);
+  const raw = await readCall(clientId, kind);
   return { client, raw };
 }
-const requireSent = (raw) => { if (!flag(raw.sentAt)) throw new OnboardCallError('No acceptance email went to this applicant yet — use resend to send it.', 409); };
+const requireSent = (raw, kind = 'onboarding') => {
+  if (flag(raw.sentAt)) return;
+  throw new OnboardCallError(kindOf(kind) === 'launch' ? 'No launch invite went to them yet — it goes by itself once the list and the emails are ready.' : 'No acceptance email went to this applicant yet — use resend to send it.', 409);
+};
 
 /** Add the owner's sign-off unless the last line already carries his name. */
 export function withSignOff(text, signer) {
@@ -993,12 +1154,12 @@ export function withSignOff(text, signer) {
  * else the acceptance email's). It answers everything of theirs so far: an
  * answer the reply bot was waiting to send is dropped.
  */
-export async function ownerReply(clientId, text, { now = io.now() } = {}) {
+export async function ownerReply(clientId, text, { now = io.now(), kind = 'onboarding' } = {}) {
   const body = String(text || '').replace(/\r\n/g, '\n').trim();
   if (!body) throw new OnboardCallError('Write the reply first.');
   if (body.length > REPLY_MAX) throw new OnboardCallError(`Keep the reply under ${REPLY_MAX.toLocaleString('en-US')} characters (it has ${body.length.toLocaleString('en-US')}).`);
-  const { client, raw } = await requireCall(clientId);
-  requireSent(raw);
+  const { client, raw } = await requireCall(clientId, kind);
+  requireSent(raw, kind);
   // A double click sends once.
   const claim = await kv.set(K.onceClaim('onboard_reply', clientId, shortHash(body)), now.toISOString(), { nx: true, ex: 120 });
   if (claim !== 'OK') return { duplicate: true };
@@ -1007,7 +1168,7 @@ export async function ownerReply(clientId, text, { now = io.now() } = {}) {
   const convo = await conv.readConvo(clientId);
   const later = convo.lastInMessageId && (ms(convo.lastInAt) || 0) > (ms(raw.lastReplyAt) || 0);
   const threadRaw = later ? { ...raw, lastInMessageId: convo.lastInMessageId, lastInSubject: convo.lastInSubject || raw.lastInSubject, messageIds: JSON.stringify(withId(raw, convo.lastInMessageId)) } : raw;
-  const vars = { threadSubject: conv.stripRe(threadRaw.lastInSubject) || raw.subject || FIRST_SUBJECT, text: withSignOff(body, await ownerName(clientId)) };
+  const vars = { threadSubject: conv.stripRe(threadRaw.lastInSubject) || raw.subject || specOf(kind).firstSubject, text: withSignOff(body, await ownerName(clientId)) };
   let res;
   try {
     res = await sendClient(clientId, 'onboard_owner_reply', vars, { dedupe: null, thread: false, ...threadHeaders(threadRaw) });
@@ -1018,7 +1179,7 @@ export async function ownerReply(clientId, text, { now = io.now() } = {}) {
   const at = now.toISOString();
   const copy = sentCopy(res, 'onboard_owner_reply', vars, client);
   const from = await fromInboxOf(res);
-  await patch(clientId, { lastOwnerReplyAt: at, ...(res.messageId ? { messageIds: JSON.stringify(withId(threadRaw, res.messageId)) } : {}) });
+  await patch(clientId, { lastOwnerReplyAt: at, ...(res.messageId ? { messageIds: JSON.stringify(withId(threadRaw, res.messageId)) } : {}) }, kind);
   await pushThread(clientId, { id: `out-${shortHash(res.messageId || `${at}|owner`)}`, dir: 'out', at, from, to: lower(client.contactEmail), subject: copy.subject, text: copy.text, kind: 'owner_reply' });
   await conv.noteAnswered(clientId, at, { messageId: res.messageId || null });
   const { dropPending } = await import('@/lib/systems/replybot');
@@ -1032,53 +1193,55 @@ export async function ownerReply(clientId, text, { now = io.now() } = {}) {
  * messages so far are answered, and its email joins the thread's Message-IDs.
  * Only for a client with an onboarding conversation.
  */
-export async function markAnswered(clientId, at, messageId = null, { bot = false } = {}) {
-  const raw = await readCall(clientId);
+export async function markAnswered(clientId, at, messageId = null, { bot = false, kind = 'onboarding' } = {}) {
+  const raw = await readCall(clientId, kind);
   if (!flag(raw.sentAt)) return;
   // lastBotAt: the reply bot's own email (the labels say who answered: the bot, not "you").
-  await patch(clientId, { lastAnsweredAt: at, ...(bot && messageId ? { lastBotAt: at } : {}), ...(messageId ? { messageIds: JSON.stringify(withId(raw, messageId)) } : {}) });
+  await patch(clientId, { lastAnsweredAt: at, ...(bot && messageId ? { lastBotAt: at } : {}), ...(messageId ? { messageIds: JSON.stringify(withId(raw, messageId)) } : {}) }, kind);
 }
 
 /** "Mark call booked" with the date and time the owner agreed with them. */
-export async function markBooked(clientId, when, { now = io.now() } = {}) {
+export async function markBooked(clientId, when, { now = io.now(), kind = 'onboarding' } = {}) {
   const t = ms(when);
   if (t == null) throw new OnboardCallError('Give the date and time of the call (for example 2026-10-06T15:00:00Z).');
   if (t < now.getTime() - 30 * 864e5 || t > now.getTime() + 180 * 864e5) throw new OnboardCallError('That date is too far from today — check it.');
-  const { raw } = await requireCall(clientId);
-  requireSent(raw);
+  const { raw } = await requireCall(clientId, kind);
+  requireSent(raw, kind);
   const bookedFor = new Date(t).toISOString();
-  await patch(clientId, { bookedFor, bookedAt: now.toISOString(), bookedBy: 'owner', bookingUid: null, noShowAt: null, heldAt: null, cancelledAt: null, tomorrowSentFor: raw.bookedFor === bookedFor ? raw.tomorrowSentFor || null : null, requestedFor: null, requestedAt: null, proposedFor: null });
-  await updateClient(clientId, { onboardCallOpen: '1' });
-  await logEvent(clientId, SYSTEM, 'call_booked', { bookedFor, by: 'owner' });
-  await toCalendar(clientId, 'booked', { start: bookedFor, source: 'onboard_card', by: 'owner', now });
+  await patch(clientId, { bookedFor, bookedAt: now.toISOString(), bookedBy: 'owner', bookingUid: null, noShowAt: null, heldAt: null, cancelledAt: null, tomorrowSentFor: raw.bookedFor === bookedFor ? raw.tomorrowSentFor || null : null, requestedFor: null, requestedAt: null, proposedFor: null }, kind);
+  await updateClient(clientId, { [specOf(kind).openFlag]: '1' });
+  await logEvent(clientId, SYSTEM, 'call_booked', { bookedFor, by: 'owner', call: kindOf(kind) });
+  // The meeting says which card booked it (the hub reads `source`): onboard_card or launch_card.
+  await toCalendar(clientId, 'booked', { start: bookedFor, source: kindOf(kind) === 'launch' ? 'launch_card' : 'onboard_card', by: 'owner', now, kind: kindOf(kind) });
 }
 
-/** "Call done". */
-export async function markHeld(clientId, { now = io.now() } = {}) {
-  const { raw } = await requireCall(clientId);
-  requireSent(raw);
-  await patch(clientId, { heldAt: now.toISOString(), noShowAt: null });
-  await updateClient(clientId, { onboardCallOpen: '0' });
-  await logEvent(clientId, SYSTEM, 'call_held', {});
-  await toCalendar(clientId, 'held', { source: 'onboard_card', by: 'owner', now });
+/** "Call done". For the onboarding call the "what happens now" email follows (docs/LAUNCH-CALL.md §1). */
+export async function markHeld(clientId, { now = io.now(), kind = 'onboarding' } = {}) {
+  const { raw } = await requireCall(clientId, kind);
+  requireSent(raw, kind);
+  await patch(clientId, { heldAt: now.toISOString(), noShowAt: null }, kind);
+  await updateClient(clientId, { [specOf(kind).openFlag]: '0' });
+  await logEvent(clientId, SYSTEM, 'call_held', { call: kindOf(kind) });
+  await toCalendar(clientId, 'held', { source: kindOf(kind) === 'launch' ? 'launch_card' : 'onboard_card', by: 'owner', now, kind: kindOf(kind) });
+  if (kindOf(kind) === 'onboarding' && !flag(raw.heldAt)) await afterOnboardingHeld(clientId, now);
 }
 
 /** "They didn't show" — the inbox stays watched, so a new booking from their link is still seen. */
-export async function markNoShow(clientId, { now = io.now() } = {}) {
-  const { raw } = await requireCall(clientId);
-  requireSent(raw);
+export async function markNoShow(clientId, { now = io.now(), kind = 'onboarding' } = {}) {
+  const { raw } = await requireCall(clientId, kind);
+  requireSent(raw, kind);
   if (!flag(raw.bookedAt) && !flag(raw.heldAt)) throw new OnboardCallError('No call is booked for them.', 409);
-  await patch(clientId, { noShowAt: now.toISOString(), heldAt: null });
-  await logEvent(clientId, SYSTEM, 'call_no_show', { bookedFor: raw.bookedFor || null });
-  await toCalendar(clientId, 'no_show', { source: 'onboard_card', by: 'owner', now });
+  await patch(clientId, { noShowAt: now.toISOString(), heldAt: null }, kind);
+  await logEvent(clientId, SYSTEM, 'call_no_show', { bookedFor: raw.bookedFor || null, call: kindOf(kind) });
+  await toCalendar(clientId, 'no_show', { source: kindOf(kind) === 'launch' ? 'launch_card' : 'onboard_card', by: 'owner', now, kind: kindOf(kind) });
 }
 
 /** "Stop reminders": nothing more goes to them by itself (their replies are still collected). */
-export async function stopReminders(clientId, { now = io.now() } = {}) {
-  const { raw } = await requireCall(clientId);
-  requireSent(raw);
-  if (!flag(raw.stoppedAt)) await patch(clientId, { stoppedAt: now.toISOString() });
-  await logEvent(clientId, SYSTEM, 'reminders_stopped', {});
+export async function stopReminders(clientId, { now = io.now(), kind = 'onboarding' } = {}) {
+  const { raw } = await requireCall(clientId, kind);
+  requireSent(raw, kind);
+  if (!flag(raw.stoppedAt)) await patch(clientId, { stoppedAt: now.toISOString() }, kind);
+  await logEvent(clientId, SYSTEM, 'reminders_stopped', { call: kindOf(kind) });
 }
 
 /** "Send it again": a fresh onboarding link (the first one keeps working), same thread. */
@@ -1092,17 +1255,17 @@ export async function resendAcceptance(clientId, { now = io.now() } = {}) {
   return sendAcceptance(clientId, { onboardingLink: pageUrl(token, 'onboard'), now, resend: flag(raw.sentAt) });
 }
 
-/** The hub's onboardCall for one client (null when no acceptance email went). */
-export async function onboardCallFor(clientId, { now = io.now(), settings = null, client = null } = {}) {
+/** The hub's onboardCall for one client (null when no acceptance email went); with `kind: 'launch'` the launchCall (null before the invite). */
+export async function onboardCallFor(clientId, { now = io.now(), settings = null, client = null, kind = 'onboarding', approvalUrl = null } = {}) {
   const c = client || await getClient(clientId);
   if (!c) return null;
-  const raw = await readCall(clientId);
+  const raw = await readCall(clientId, kind);
   if (!flag(raw.sentAt)) return null;
   let meeting = null;
   if (raw.meetingId) {
     try { meeting = await (await import('@/lib/systems/calendar')).getMeeting(raw.meetingId); } catch { meeting = null; }
   }
-  return onboardCallView(raw, await readThread(clientId), { now, settings: settings || await onboardSettings(), clientState: c.state, meeting });
+  return onboardCallView(raw, await readThread(clientId), { now, settings: settings || await onboardSettings(), clientState: c.state, meeting, kind, approvalUrl });
 }
 
 /** POST /api/mc/clients/{id}/onboard-call → { ok, onboardCall }. */
