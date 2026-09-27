@@ -47,7 +47,7 @@ beforeEach(async () => {
 
 const ID = 'ecreek';
 const SAM = 'sam@ecreek.com';
-const SUBJECT = "You're in — let's book your onboarding call";
+const SUBJECT = "Let's book your onboarding call";
 const MON = new Date('2026-10-05T14:00:00Z'); // Mon 10:00 ET (EDT) = 7:30 pm Colombo
 const TUE_2PM = '2026-10-06T18:00:00.000Z';   // Tue 2:00 pm EDT = 11:30 pm Colombo
 const WED_10AM = '2026-10-07T14:00:00.000Z';  // Wed 10:00 am EDT = 7:30 pm Colombo
@@ -366,7 +366,7 @@ test('Suggest another time: they get it with a one-click "Yes, that works"; thei
   assert.deepEqual([r.body.meeting.status, r.body.meeting.proposed, r.body.meeting.start], ['requested', WED_10AM, TUE_2PM]);
   const mail = toSam().at(-1);
   assert.equal(mail.subject, `Re: ${SUBJECT}`);
-  assert.match(mail.text, /Thanks for picking a time\. Tuesday at 2:00 pm doesn't work for me, I'm afraid — how about Wednesday 7 October at 10:00 am Eastern Time\?/);
+  assert.match(mail.text, /Thanks for picking a time\. I'm sorry, Tuesday at 2:00 pm doesn't work for me\. How about Wednesday 7 October at 10:00 am Eastern Time\?/);
   const link = mail.text.match(/Yes, that works: https:\/\/app\.test\/c\/([^/\s]+)\/book\/accept\?m=(m[a-z0-9]+)/);
   assert.ok(link, 'the one-click link');
   assert.equal(link[2], meeting.id);
@@ -464,7 +464,7 @@ test('Move a confirmed call: the new time and the updated invite (same UID, next
   const r = await hub({ action: 'move', id: meeting.id, start: '2026-10-08T15:00:00Z' });
   assert.equal(r.status, 200);
   const mail = toSam().at(-1);
-  assert.equal(mail.subject, 'New time for our call: Thu 8 Oct at 11:00 am ET');
+  assert.equal(mail.subject, 'Our call moves to Thu 8 Oct at 11:00 am ET');
   assert.match(mail.text, /I've had to move our call\. The new time is Thursday 8 October at 11:00 am Eastern Time\./);
   const { raw, ev } = icsOf(mail);
   assert.match(raw, /\r\nSEQUENCE:1\r\n/);
@@ -716,7 +716,7 @@ test('one reminder track: while the onboarding call is to happen only its own re
   await approved();
   const day = (d) => new Date(MON.getTime() + d * 864e5);
   for (const d of [1, 2, 3, 4, 5, 6]) await runOnboardingNudge({ clientId: ID, now: day(d) });
-  assert.equal(toSam().filter((m) => m.subject === 'Your trial page is still open').length, 0, 'no Day +2 / +4 page reminders');
+  assert.equal(toSam().filter((m) => m.subject === 'Your trial page is waiting').length, 0, 'no Day +2 / +4 page reminders');
   // Silence still closes on Day +7 (the call's reminders went, then the overdue alert).
   const r = await runOnboardingNudge({ clientId: ID, now: day(7) });
   assert.equal(r.closed, true);
@@ -733,7 +733,7 @@ test('one reminder track: while the onboarding call is to happen only its own re
   const res = [];
   for (const d of [3, 4, 5, 6, 7, 8]) res.push((await runOnboardingNudge({ clientId: ID, now: day(d) })).sent ?? null);
   assert.deepEqual(res, [null, 2, null, 4, null, null], 'Day +2 and +4 after the call');
-  assert.equal(toSam().filter((m) => m.subject === 'Your trial page is still open').length, 2);
+  assert.equal(toSam().filter((m) => m.subject === 'Your trial page is waiting').length, 2);
   assert.equal((await runOnboardingNudge({ clientId: ID, now: day(9) })).closed, true, 'Day +7 after the call');
 });
 

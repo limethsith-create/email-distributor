@@ -5,6 +5,14 @@
  * No AI: fixed rules on the words they typed (quoted history already cut), in
  * this order, the FIRST match answers and nothing else:
  *   not_interested  a polite close; the reminders stop; the owner is told
+ *   who_are_you     "who is this / how did you get my email" → one honest line
+ *                   (how their email reached us, from the client's source)
+ *                   + the website; a source it can't name → the owner's
+ *   later           "not now / after the holidays" (and no time in it, nothing
+ *                   booked) → "no problem, I'll check back {when}" (in
+ *                   REPLYBOT.laterWeeks); the reminders stop, the follow-up
+ *                   date is kept on the call record (laterUntil), a promise in
+ *                   the Promise Register, and `bot_later_due` when it comes due
  *   reschedule      the booking page ("pick any other time")
  *   proposes_time   a day + a time the rules can read → free by the calendar
  *                   rules: a meeting request at it (source reply_bot, the owner
@@ -44,7 +52,8 @@ import { logEvent } from '@/lib/db/events';
 import { mintToken, pageUrl, rememberLink, TTL } from '@/lib/pagetokens';
 import { isJunkReply } from '@/lib/junk-filter';
 import { zonedToUtc, shortHash, lower } from '@/lib/systems/stagec-common';
-import { io, sendClient, firstNameOf, ownerName, asObject } from '@/lib/systems/intake-io';
+import { io, sendClient, firstNameOf, ownerName, asObject, formatDay, nextUsBusinessDay } from '@/lib/systems/intake-io';
+import { addPromise } from '@/lib/db/promises';
 import { partsIn, addDays, ET } from '@/lib/time';
 import * as call from '@/lib/systems/onboardcall';
 import * as conv from '@/lib/systems/conversation';
@@ -54,7 +63,7 @@ const SYSTEM = 'replybot';
 const DAY_MS = 864e5;
 /** A message older than this when the inbox first shows it gets no automatic answer. */
 export const MAX_AGE_MS = 3 * DAY_MS;
-export const RULES = ['not_interested', 'reschedule', 'proposes_time', 'wants_time', 'price', 'what_needed', 'thanks'];
+export const RULES = ['not_interested', 'who_are_you', 'later', 'reschedule', 'proposes_time', 'wants_time', 'price', 'what_needed', 'thanks'];
 /** Rules that need the booking page open (the client is onboarding and the call is not done). */
 const BOOKING_RULES = new Set(['reschedule', 'proposes_time', 'wants_time']);
 /**
@@ -65,7 +74,17 @@ const BOOKING_RULES = new Set(['reschedule', 'proposes_time', 'wants_time']);
  */
 const LAUNCH_RULES = new Set(['reschedule', 'proposes_time', 'wants_time', 'thanks']);
 /** The placeholders an answer may use. Anything else in {braces} stops the answer (the owner gets the message). */
-const SLOTS = ['bookingLink', 'times', 'firstName', 'onboardingLink', 'ownerName', 'when', 'callMinutes'];
+const SLOTS = ['bookingLink', 'times', 'firstName', 'onboardingLink', 'ownerName', 'when', 'callMinutes', 'howLine'];
+
+/**
+ * who_are_you: how their email reached us, by the client's `source` — only the
+ * ones the machine knows for a fact. Any other source (an owner-added client)
+ * leaves the question to the owner.
+ */
+export const HOW_LINES = {
+  website: "You applied for our free 30-day trial on our website, and that's where your email came from.",
+  inquiry: "You sent us a note through the form on our website, and that's where your email came from.",
+};
 
 const ms = (v) => {
   if (v == null || v === '') return null;
@@ -107,6 +126,7 @@ export function normaliseBot(s = {}) {
     maxPerDay: int(s.maxPerDay, d.maxPerDay, 0, 50),
     delayMinutes: int(s.delayMinutes, d.delayMinutes, 0, 24 * 60),
     hours: s.hours === 'any' ? 'any' : 'us',
+    laterWeeks: int(s.laterWeeks, d.laterWeeks, 1, 26),
     answers,
   };
 }
@@ -161,7 +181,35 @@ const WHAT_NEEDED = [
   /\bdo (?:i|we) need to (?:prepare|bring|send|do) anything\b/,
 ];
 
+// "Who is this / how did you get my email" — not "who are you sending the emails as?" (a question about the trial).
+const WHO_ARE_YOU = [
+  /\bwho(?: is|'s) (?:this|that|writing|emailing)\b/,
+  /\bwho are you\b(?!\s+(?:sending|emailing|writing|targeting|going|planning|contacting|reaching|looking|aiming|using|picking|choosing|mailing))/,
+  /\b(?:how|where) did you (?:get|find|obtain|come across) (?:my|our|this) (?:email|e-mail|address|details|contact|info|information|name|number)\b/,
+  /\bdo (?:i|we) know you\b/,
+  /\b(?:what|who) is aviance\b/, /\b(?:what|who)'s aviance\b/,
+  /\bwhy (?:am i|are you) (?:getting|receiving|emailing|sending|contacting|writing)\b/,
+  /\bi (?:don't|do not|can't|cannot) (?:remember|recall) (?:applying|signing up|asking|contacting|writing)\b/,
+];
+// "Not now / after the holidays" — a wait, not a no (a no is not_interested, above it). Named far-off
+// dates ("next year", "in March") are the owner's: the bot only says "in N weeks".
+const LATER = [
+  /\bnot (?:right )?now\b/,
+  /\bnot at (?:the|this) (?:moment|time|point)\b/,
+  /\bnot (?:a )?(?:good|great|the right|the best) time (?:for (?:us|me) )?(?:right now|at the moment|at this time|now|this (?:week|month|quarter))\b/,
+  /\bbad timing\b/, /\btiming (?:isn't|is not|isnt) (?:right|great|good|ideal)\b/,
+  /\b(?:after|past|once) the (?:holidays?|holiday season|busy season|tax season|summer|season)\b/,
+  /\b(?:in|after) (?:a few|a couple(?: of)?|couple of|few|two|three|four) weeks\b/,
+  /\bin a month\b/,
+  /\bmaybe later\b/, /\blater (?:this|in the) (?:month|quarter)\b/,
+  /\btoo busy\b/, /\bswamped\b/, /\bslammed\b/,
+  /\b(?:check|circle|come|get) back (?:to me |with me |in touch )?(?:later|in a|after)\b/,
+  /\b(?:contact|email|ping|try) (?:me|us) (?:again )?(?:later|in a|after)\b/,
+];
+
 export const isNotInterested = (t) => /^\W*stop\W*$/.test(t) || NOT_INTERESTED.some((re) => re.test(t));
+export const isWhoAreYou = (t) => WHO_ARE_YOU.some((re) => re.test(t));
+export const isLater = (t) => LATER.some((re) => re.test(t));
 export const isReschedule = (t) => RESCHEDULE.some((re) => re.test(t));
 export const isWantsTime = (t) => WANTS_TIME.some((re) => re.test(t));
 export const isPrice = (t) => PRICE.some((re) => re.test(t));
@@ -322,7 +370,8 @@ export function readTimes(text, { now = new Date(), zone = ET } = {}) {
  * Which rule answers (pure), in the contract's order; the first match wins.
  * ctx: { now, zone, canBook (booking page open), ownPage (the machine's own
  * booking page, not an outside link), openMeeting {status, start} | null,
- * booked, names, kind ('launch': only LAUNCH_RULES may answer) }.
+ * booked, names, source (the client's: how their email reached us), kind
+ * ('launch': only LAUNCH_RULES may answer) }.
  * → { rule: string|null, times?: [ISO], zone? }
  */
 export function classify(text, ctx = {}) {
@@ -330,8 +379,12 @@ export function classify(text, ctx = {}) {
   if (!t) return { rule: null };
   const may = (rule) => ctx.kind !== 'launch' || LAUNCH_RULES.has(rule);
   if (may('not_interested') && isNotInterested(t)) return { rule: 'not_interested' };
-  if (ctx.canBook && isReschedule(t)) return { rule: 'reschedule' };
+  // "Who is this?" is answered only when the machine knows how their email reached us; else it's the owner's.
+  if (may('who_are_you') && isWhoAreYou(t)) return HOW_LINES[ctx.source] ? { rule: 'who_are_you' } : { rule: null };
   const times = ctx.canBook ? readTimes(text, { now: ctx.now || new Date(), zone: ctx.zone || ET }) : [];
+  // "Not now": only while the call is still to book (nothing asked for or booked) and they name no time.
+  if (may('later') && ctx.canBook && !times.length && !ctx.openMeeting && !ctx.booked && isLater(t)) return { rule: 'later' };
+  if (ctx.canBook && isReschedule(t)) return { rule: 'reschedule' };
   if (ctx.canBook && ctx.ownPage) {
     // The time already confirmed is no proposal ("see you Tuesday at 2pm").
     const fresh = times.filter((x) => !(ctx.openMeeting?.status === 'confirmed' && x.start === ctx.openMeeting.start));
@@ -365,6 +418,17 @@ export function fillAnswer(template, vars = {}) {
 export const whenLabel = (t, tz) => `${cal.longDay(ms(t), tz)} at ${cal.clockIn(ms(t), tz)}`;
 /** '• Tue 6 Oct at 2:00 pm CT' lines. */
 export const timesList = (starts, tz) => starts.map((s) => `• ${cal.theirShort(ms(s), tz)}`).join('\n');
+
+/**
+ * `later`: when the owner checks back — `weeks` weeks from today (US Eastern),
+ * moved to the next US business day, 9:00 am Eastern.
+ * → { dayKey: 'YYYY-MM-DD', at: ISO, when: 'in 4 weeks, around Monday 2 November' }
+ */
+export function laterDate(now, weeks = DEFAULTS.REPLYBOT.laterWeeks) {
+  const dayKey = nextUsBusinessDay(addDays(partsIn(ET, now).dayKey, weeks * 7));
+  const [y, m, d] = dayKey.split('-').map(Number);
+  return { dayKey, at: zonedToUtc(y, m, d, 9, 0, 0, ET).toISOString(), when: `in ${weeks} week${weeks === 1 ? '' : 's'}, around ${formatDay(dayKey)}` };
+}
 
 /** The `n` open times nearest to `t` (either side), in time order. */
 export function nearestTimes(open, t, n = 3) {
@@ -436,6 +500,7 @@ async function botContext(client, raw, { now, settings, convo, onboard = null, k
     booked: flag(raw.bookedAt) || meeting?.status === 'confirmed',
     zone: meeting?.theirZone || raw.theirZone || (why ? ET : await cal.zoneOfClient(client.id)),
     names: [client.contactName, owner.split(/\s+/)[0]],
+    source: client.source || null,
   };
 }
 
@@ -569,6 +634,15 @@ async function answerFor(client, raw, p, s, onboard, now) {
   switch (p.rule) {
     case 'not_interested':
       return { text: fillAnswer(s.answers.not_interested, base), did: "said they're not interested — sent a polite close and stopped the reminders", stop: true };
+    case 'who_are_you': {
+      const howLine = HOW_LINES[client.source];
+      if (!howLine) return { handOver: "they asked who we are, and it can't tell how their email reached us — only you know" };
+      return { text: fillAnswer(s.answers.who_are_you, { ...base, howLine }), did: 'they asked who we are — sent one honest line on how their email reached us, and the website' };
+    }
+    case 'later': {
+      const due = laterDate(now, s.laterWeeks);
+      return { text: fillAnswer(s.answers.later, { ...base, when: due.when }), did: `said not now — told them you'll check back around ${formatDay(due.dayKey)} and stopped the reminders`, stop: true, later: due };
+    }
     case 'reschedule':
       return { text: fillAnswer(s.answers.reschedule, { ...base, bookingLink: await bookingLinkFor(client.id, onboard, p) }), did: 'sent the booking link to pick another time' };
     case 'proposes_time':
@@ -631,6 +705,7 @@ async function answerPending(clientId, s, onboard, now) {
       });
     }
     if (a.stop) await call.stopReminders(clientId, { now, kind }).catch(() => {});
+    if (a.later) await noteLater(client, p, a.later, { now, kind });
   }
   await call.markAnswered(clientId, at, messageId, { bot: true, kind });
   await conv.noteAnswered(clientId, at, { messageId });
@@ -642,22 +717,94 @@ async function answerPending(clientId, s, onboard, now) {
     scope: `${clientId}:bot:${p.id}`,
     vars: { who: who(client), did: a.did },
     body: `Auto-replied to ${who(client)} <${client.contactEmail}>: ${a.did}.\n\nThey wrote:\n“${String(p.text || '').slice(0, 1200)}”${text ? `\n\nThe reply:\n“${text.slice(0, 1500)}”` : ''}`,
-    did: a.stop
-      ? 'Stopped the reminders to book. If you want to close their application, do it from their trial in the hub.'
-      : 'Nothing for you unless you want to add something — the conversation is on their trial in the hub, where you can also turn the bot off for them.',
+    did: a.later
+      ? `Stopped the reminders to book. On ${formatDay(a.later.dayKey)} you get a reminder to check back (it's in their Promise Register too), and their slot isn't closed before then.`
+      : a.stop
+        ? 'Stopped the reminders to book. If you want to close their application, do it from their trial in the hub.'
+        : 'Nothing for you unless you want to add something — the conversation is on their trial in the hub, where you can also turn the bot off for them.',
     url: a.calendarAsk ? '/#calendar' : `/#trial/${clientId}`,
   });
   return 'sent';
 }
 
+// ─── "not now": check back later ─────────────────────────────────────────────
+
+/**
+ * After the `later` answer went: the follow-up date on the call record
+ * (laterAt, laterUntil, their words), the client in `replybot:later` until it
+ * comes due, and a promise in the Promise Register ("check back with …"),
+ * which the morning digest and the trial's to-dos carry. Never throws: the
+ * answer already went.
+ */
+async function noteLater(client, p, due, { now, kind }) {
+  try {
+    await call.patchCall(client.id, { laterAt: now.toISOString(), laterUntil: due.at, laterText: String(p.text || '').slice(0, 300), laterDueAlertedAt: null }, kind);
+    await kv.sadd(K.replyBotLater(), client.id);
+    const name = firstNameOf(client.contactName) || client.contactName || client.contactEmail || client.id;
+    await addPromise(client.id, `Check back with ${name}${client.name ? ` at ${client.name}` : ''} about the trial — they said not now, and the reply bot told them you would`, due.dayKey);
+    await logEvent(client.id, SYSTEM, 'later_set', { until: due.at, call: kind });
+  } catch (err) {
+    await logEvent(client.id, SYSTEM, 'later_failed', { error: String(err?.message || err).slice(0, 200) }).catch(() => {});
+  }
+}
+
+/**
+ * The "not now" follow-ups that came due → `bot_later_due` to the owner, once.
+ * Dropped without an alert when the client moved on or wrote again since.
+ * Runs at the start of every reply bot run. → how many came due.
+ */
+export async function runLaterFollowUps({ now = io.now() } = {}) {
+  let ids = [];
+  try { ids = (await kv.smembers(K.replyBotLater())) || []; } catch { return 0; }
+  let n = 0;
+  for (const id of ids) {
+    try {
+      const client = await getClient(id);
+      let found = null;
+      if (client) {
+        for (const kind of Object.keys(call.CALL_KINDS)) {
+          const raw = await call.readCall(id, kind);
+          if (flag(raw.laterUntil) && !flag(raw.laterDueAlertedAt)) { found = { kind, raw }; break; }
+        }
+      }
+      if (!found) { await kv.srem(K.replyBotLater(), id); continue; }
+      const { kind, raw } = found;
+      if (now.getTime() < (ms(raw.laterUntil) ?? 0)) continue;
+      await call.patchCall(id, { laterDueAlertedAt: now.toISOString() }, kind);
+      await kv.srem(K.replyBotLater(), id);
+      const wroteSince = (ms(raw.lastReplyAt) || 0) > (ms(raw.laterAt) || 0);
+      if (client.state !== 'onboarding' || wroteSince) {
+        await logEvent(id, SYSTEM, 'later_dropped', { why: wroteSince ? 'they wrote again' : `state ${client.state}` });
+        continue;
+      }
+      const said = raw.laterAt ? formatDay(partsIn(ET, new Date(ms(raw.laterAt))).dayKey) : 'earlier';
+      await alert('bot_later_due', {
+        clientId: id,
+        scope: `${id}:later:${raw.laterUntil}`,
+        vars: { who: who(client), when: said },
+        body: `${client.contactName || client.contactEmail} (${client.contactEmail}) from ${client.name || id} said not now on ${said}:\n\n“${String(raw.laterText || '').slice(0, 600)}”\n\nThe reply bot told them you'd check back around now.`,
+        did: 'Nothing was sent to them since, and the reminders stayed off. Write to them from their trial in the hub (Messages) — it goes in the same thread — and tick the promise done.',
+        url: `/#trial/${id}`,
+      });
+      await logEvent(id, SYSTEM, 'later_due', { until: raw.laterUntil, call: kind });
+      n++;
+    } catch (err) {
+      await logEvent(id, SYSTEM, 'later_check_failed', { error: String(err?.message || err).slice(0, 200) }).catch(() => {});
+    }
+  }
+  return n;
+}
+
 /**
  * Send the answers that are due (end of every onboarding check). One client
  * failing never stops the others; a failed send leaves the message to the
- * owner (onboard_reply), never a retry loop.
- * → { sent, waiting, dropped, handedOver }
+ * owner (onboard_reply), never a retry loop. First, the "not now" follow-ups
+ * that came due (runLaterFollowUps).
+ * → { sent, waiting, dropped, handedOver, laterDue }
  */
 export async function runReplyBot({ now = io.now() } = {}) {
-  const out = { sent: 0, waiting: 0, dropped: 0, handedOver: 0 };
+  const out = { sent: 0, waiting: 0, dropped: 0, handedOver: 0, laterDue: 0 };
+  out.laterDue = await runLaterFollowUps({ now });
   let ids = [];
   try { ids = (await kv.smembers(K.replyBotPending())) || []; } catch { return out; }
   if (!ids.length) return out;

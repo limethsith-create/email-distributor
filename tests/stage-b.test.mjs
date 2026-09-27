@@ -382,7 +382,7 @@ test('copy engine builds A/B in the default.json shape, fills client slots, pass
     // only lead-level slots are left for the Sender
     const left = new Set(JSON.stringify(v).match(/\{[A-Za-z]+\}/g));
     assert.ok([...left].every((x) => ['{FirstName}', '{Company}', '{City}', '{FirstLine}'].includes(x)), [...left].join());
-    assert.match(v.footer, /Sam Carter\nAcme IT\n100 Main St, Dallas, TX 75201\n\nNot the right fit\? Just reply STOP/);
+    assert.match(v.footer, /Sam Carter\nAcme IT\n100 Main St, Dallas, TX 75201\n\nIf this isn't for you, reply STOP and I won't email you again\.$/);
   }
   // A and B differ only in the Day 0 subject and the first-line set.
   assert.notEqual(s.variantA.touches[0].subject, s.variantB.touches[0].subject);
@@ -446,7 +446,7 @@ test('copy checker: every rule fails when it should', async () => {
   assert.deepEqual(capsWords('IT and MSP work for the CEO, in TX'), []);
   assert.deepEqual(rules({ ...good, text: good.text.replace('100 Main St, Dallas, TX 75201', '') }), ['postal_address']);
   assert.deepEqual(rules(good, { ...PROFILE, postalAddress: '' }), ['postal_address']);
-  assert.deepEqual(rules({ ...good, text: good.text.replace('Just reply STOP and I will not email you again.', '') }), ['stop_line']);
+  assert.deepEqual(rules({ ...good, text: good.text.replace("reply STOP and I won't email you again.", '') }), ['stop_line']);
   assert.deepEqual(rules({ ...good, text: good.text.replaceAll('Sam Carter', 'Someone') }), ['sender_name']);
   assert.deepEqual(rules({ ...good, fromName: 'Other Person' }), ['sender_name']);
 });

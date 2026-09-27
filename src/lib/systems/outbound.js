@@ -30,7 +30,7 @@ export function renderTemplate(key, vars = {}) {
   return { subject: t.subject ? fill(key, t.subject, vars) : '', text: fill(key, t.body, vars), from: t.from || 'owner' };
 }
 
-export const DEFAULT_FOOTER = '{SenderName}\n{postalAddress}\n\nNot the right fit? Just reply STOP and I will not email you again.';
+export const DEFAULT_FOOTER = "{SenderName}\n{postalAddress}\n\nIf this isn't for you, reply STOP and I won't email you again.";
 
 /** Footer used on every prospect email: the client's sequence footer if stored, else the default. */
 export async function footerFor(clientId, profile) {

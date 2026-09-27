@@ -11,16 +11,17 @@ import { __reset, kv } from '@vercel/kv';
 import { io } from '@/lib/systems/intake-io';
 import { K } from '@/lib/db/keys';
 import { DEFAULTS } from '@/lib/config';
-import { createClient, getClient } from '@/lib/db/client';
+import { createClient, getClient, updateClient } from '@/lib/db/client';
+import { getPromises } from '@/lib/db/promises';
 import { readToken } from '@/lib/pagetokens';
 import { notifyClient } from '@/lib/notify';
 import { stripQuotedReply } from '@/lib/mail-utils';
-import { approveApplication } from '@/lib/systems/gatekeeper';
+import { approveApplication, runOnboardingNudge } from '@/lib/systems/gatekeeper';
 import { checkOnboardCalls, readCall, readThread, onboardCallFor } from '@/lib/systems/onboardcall';
 import { getMeeting, calendarAction } from '@/lib/systems/calendar';
 import { hubClient, hubBoard } from '@/lib/systems/hubview';
 import { conversationFor, needsReplyFor } from '@/lib/systems/conversation';
-import { classify, readTimes, fillAnswer, nearestTimes, nextDayTimes, isThanks, plain } from '@/lib/systems/replybot';
+import { classify, readTimes, fillAnswer, nearestTimes, nextDayTimes, isThanks, plain, laterDate, normaliseBot, HOW_LINES } from '@/lib/systems/replybot';
 import { ALERTS } from '@/lib/templates/owner';
 import { fill } from '@/lib/templates/render';
 
@@ -50,7 +51,7 @@ beforeEach(async () => {
 
 const ID = 'ecreek';
 const SAM = 'sam@ecreek.com';
-const SUBJECT = "You're in — let's book your onboarding call";
+const SUBJECT = "Let's book your onboarding call";
 const MON = new Date('2026-10-05T14:00:00Z');   // Mon 10:00 ET (EDT) — the acceptance email
 const AT = '2026-10-05T15:00:00.000Z';          // Mon 11:00 ET — their message
 const AFTER = '2026-10-05T15:05:00.000Z';       // the next check, past the 3-minute delay
@@ -173,9 +174,9 @@ test('reading a day and a time: the NEXT such weekday in their zone, dates, toda
 test('answers: slots filled, an empty {times} drops its paragraph, an unknown {slot} stops the answer; the defaults name no price', () => {
   const vars = { firstName: 'Sam', ownerName: 'Limeth Sith', bookingLink: 'https://app.test/c/t/book', times: '• Tue 6 Oct at 9:00 am ET' };
   const full = fillAnswer(DEFAULTS.REPLYBOT.answers.wants_time, vars);
-  assert.match(full, /^Hi Sam,\n\nHappy to\. Pick any time that suits you here: https:\/\/app\.test\/c\/t\/book\n\nThe next open times \(your time\):\n• Tue 6 Oct at 9:00 am ET\nOr just reply with the one that suits you\.\n\nLimeth Sith$/);
+  assert.match(full, /^Hi Sam,\n\nHappy to\. Pick any time that suits you here: https:\/\/app\.test\/c\/t\/book\n\nThe next open times \(your time\):\n• Tue 6 Oct at 9:00 am ET\nOr reply with the one that suits you\.\n\nLimeth Sith$/);
   const none = fillAnswer(DEFAULTS.REPLYBOT.answers.wants_time, { ...vars, times: '' });
-  assert.doesNotMatch(none, /open times|Or just reply/, 'no free times: that paragraph is left out');
+  assert.doesNotMatch(none, /open times|Or reply/, 'no free times: that paragraph is left out');
   assert.match(none, /book\n\nLimeth Sith$/);
   assert.equal(fillAnswer('Hi {firstName}, the price is {price}.', vars), null, 'a slot the bot does not know: nothing is sent');
   for (const [rule, text] of Object.entries(DEFAULTS.REPLYBOT.answers)) {
@@ -205,7 +206,7 @@ test('proposes_time, free: a meeting request (source reply_bot) + "works on my s
   assert.match(m.from, /<onboard@aviance\.test>$/);
   assert.equal(m.inReplyTo, inbox[0].messageId, 'In-Reply-To their message (case kept)');
   assert.equal(m.references, `${acceptId} ${inbox[0].messageId}`, 'References the whole conversation');
-  assert.equal(m.text, "Hi Sam,\n\nTuesday 6 October at 2:00 pm your time works on my side — I'll confirm it shortly.\n\nLimeth Sith");
+  assert.equal(m.text, "Hi Sam,\n\nTuesday 6 October at 2:00 pm your time works on my side. I'll confirm it shortly.\n\nLimeth Sith");
   // The request waits for the owner's yes.
   const raw = await readCall(ID);
   const meeting = await getMeeting(raw.meetingId);
@@ -241,7 +242,7 @@ test('proposes_time, taken: the three nearest free times in their zone + the boo
   inbox = [mail('Could we do Tuesday at 2pm?', { acceptId })];
   await check(AFTER);
   const m = toSam()[1];
-  assert.match(m.text, /^Hi Sam,\n\nThanks — I'm afraid Tuesday 6 October at 2:00 pm your time isn't free on my side\. The nearest times I have \(your time\):\n• Tue 6 Oct at 12:30 pm ET\n• Tue 6 Oct at 1:00 pm ET\n• Tue 6 Oct at 3:30 pm ET\n\nOr pick any time that suits you here: https:\/\/app\.test\/c\/([^/\s]+)\/book\n\nLimeth Sith$/);
+  assert.match(m.text, /^Hi Sam,\n\nSorry, Tuesday 6 October at 2:00 pm your time is taken on my side\. The nearest times I have \(your time\):\n• Tue 6 Oct at 12:30 pm ET\n• Tue 6 Oct at 1:00 pm ET\n• Tue 6 Oct at 3:30 pm ET\n\nOr pick any time that suits you here: https:\/\/app\.test\/c\/([^/\s]+)\/book\n\nLimeth Sith$/);
   const token = m.text.match(/\/c\/([^/\s]+)\/book/)[1];
   assert.equal((await readToken(token, { purpose: 'book' })).clientId, ID);
   assert.equal((await readCall(ID)).meetingId, undefined, 'nothing asked for in the Calendar');
@@ -263,7 +264,7 @@ test('zones: a Central client writing "Tuesday 2pm" gets 2 pm Central; "what tim
   inbox = [mail('Sounds good — what times work for you?', { acceptId: id2 })];
   await check(AFTER);
   const w = toSam()[1];
-  assert.match(w.text, /^Hi Sam,\n\nHappy to\. Pick any time that suits you here: https:\/\/app\.test\/c\/[^/\s]+\/book\n\nThe next open times \(your time\):\n• Tue 6 Oct at 8:00 am CT\n• Wed 7 Oct at 8:00 am CT\n• Thu 8 Oct at 8:00 am CT\nOr just reply with the one that suits you\.\n\nLimeth Sith$/);
+  assert.match(w.text, /^Hi Sam,\n\nHappy to\. Pick any time that suits you here: https:\/\/app\.test\/c\/[^/\s]+\/book\n\nThe next open times \(your time\):\n• Tue 6 Oct at 8:00 am CT\n• Wed 7 Oct at 8:00 am CT\n• Thu 8 Oct at 8:00 am CT\nOr reply with the one that suits you\.\n\nLimeth Sith$/);
   assert.equal(alerts.at(-1).vars.did, 'sent the booking link and the next open times');
 });
 
@@ -301,7 +302,7 @@ test('reschedule: the booking page, the booked call stays; price, what_needed: f
   const booked = (await readCall(ID)).meetingId;
   inbox = [mail("Hi Limeth, something came up and I can't make it on Wednesday. Can we reschedule?", { acceptId })];
   await check(AFTER);
-  assert.match(toSam()[1].text, /^Hi Sam,\n\nNo problem at all — pick any other time that suits you here:\nhttps:\/\/app\.test\/c\/[^/\s]+\/book\n\nI'll confirm the new time by email\.\n\nLimeth Sith$/);
+  assert.match(toSam()[1].text, /^Hi Sam,\n\nNo problem\. Pick any other time that suits you here:\nhttps:\/\/app\.test\/c\/[^/\s]+\/book\n\nI'll confirm the new time by email\.\n\nLimeth Sith$/);
   assert.equal((await getMeeting(booked)).status, 'confirmed', 'the booking stays until they pick');
   assert.equal(alerts.at(-1).vars.did, 'sent the booking link to pick another time');
 
@@ -311,13 +312,13 @@ test('reschedule: the booking page, the booked call stays; price, what_needed: f
   const p = toSam()[2];
   assert.equal(p.subject, 'Re: Question about the trial');
   assert.equal(p.inReplyTo, inbox[1].messageId);
-  assert.equal(p.text, "Hi Sam,\n\nGood question — the 30-day trial is free: no card, nothing to pay. The one thing I ask in return is an honest review at the end.\n\nIf you'd like to keep going after the trial, we'll go through the plans together on the call.\n\nLimeth Sith");
+  assert.equal(p.text, "Hi Sam,\n\nGood question. The 30-day trial is free: no card, nothing to pay. The one thing I ask in return is an honest review at the end.\n\nIf you'd like to keep going after the trial, we'll go through the plans together on the call.\n\nLimeth Sith");
 
   // what_needed: the onboarding page link (a fresh, valid token).
   inbox.push(mail('What do you need from me before the call?', { at: '2026-10-05T17:00:00Z', acceptId }));
   await check('2026-10-05T17:05:00Z');
   const w = toSam()[3];
-  assert.match(w.text, /^Hi Sam,\n\nNothing to prepare — the call is 30 minutes and we go through who you sell to and who you'd like to reach\.\n\nIf you have a moment before it, this is the one page with your details and the agreement: https:\/\/app\.test\/c\/([^/\s]+)\/onboard\n\nLimeth Sith$/);
+  assert.match(w.text, /^Hi Sam,\n\nNothing to prepare\. The call is 30 minutes, and we go through who you sell to and who you'd like to reach\.\n\nIf you have a moment before it, here's the one page with your details and the agreement: https:\/\/app\.test\/c\/([^/\s]+)\/onboard\n\nLimeth Sith$/);
   assert.equal((await readToken(w.text.match(/\/c\/([^/\s]+)\/onboard/)[1], { purpose: 'onboarding' })).clientId, ID);
   const c = await conversationFor(ID, { now: new Date('2026-10-05T17:05:00Z') });
   assert.deepEqual(c.thread.filter((t) => t.auto).map((t) => t.rule), ['reschedule', 'price', 'what_needed']);
@@ -328,7 +329,7 @@ test('not_interested: a polite close, the reminders stop (call stopped), the own
   const acceptId = await approved();
   inbox = [mail(`Hi Limeth, thanks but we're no longer interested.\n\nSam${Q}`, { acceptId })];
   await check(AFTER);
-  assert.equal(toSam()[1].text, "Hi Sam,\n\nNo problem at all — I've closed it on my side and stopped the reminders. If anything changes, just reply to this email.\n\nThanks for letting me know.\n\nLimeth Sith");
+  assert.equal(toSam()[1].text, "Hi Sam,\n\nNo problem at all. I've closed it on my side and stopped the reminders. If anything changes, reply to this email.\n\nThanks for letting me know.\n\nLimeth Sith");
   const oc = await onboardCallFor(ID, { now: new Date(AFTER) });
   assert.equal(oc.status, 'stopped');
   assert.deepEqual(alertKeys(), ['bot_replied']);
@@ -383,6 +384,115 @@ test('no rule: no reply, onboard_reply as before; needsReply true in the convers
   assert.equal(detail.row.simple.needsReply, false);
   assert.equal((await hubBoard({ now: new Date('2026-10-05T15:30:00Z') })).stages.find((s) => s.key === 'onboard').clients[0].simple.needsReply, false);
   assert.equal(needsReplyFor(await getClient(ID), await readCall(ID)), false);
+});
+
+// ── who_are_you and later (docs/IMPROVE-PASS.md §B) ──────────────────────────
+
+test('who_are_you and later: the rules on real emails, in order; "who" only with a source it can name; "later" only while nothing is booked and no time is named', () => {
+  const ctx = { now: MON, zone: 'America/New_York', canBook: true, ownPage: true, openMeeting: null, booked: false, names: ['Sam Test', 'Limeth'], source: 'website' };
+  const rule = (text, over = {}) => classify(stripQuotedReply(text), { ...ctx, ...over }).rule;
+  // who_are_you
+  assert.equal(rule(`Sorry, who is this?${Q}`), 'who_are_you');
+  assert.equal(rule("Who's this? How did you get my email?"), 'who_are_you');
+  assert.equal(rule('Where did you get my address from'), 'who_are_you');
+  assert.equal(rule("I don't remember applying for anything. What is Aviance?"), 'who_are_you');
+  assert.equal(rule('Who is this?', { source: 'owner' }), null, 'an owner-added client: it cannot say how their email reached us — the owner answers');
+  assert.equal(rule('Who is this?', { source: 'inquiry' }), 'who_are_you');
+  assert.equal(rule('Who are you sending the emails as?'), null, 'a question about the trial, not "who are you"');
+  assert.equal(rule('Who is this? Please remove me.'), 'not_interested', 'a no comes first');
+  assert.equal(rule('Who is this?', { kind: 'launch' }), null, 'mid-trial it is the owner\'s');
+  // later
+  assert.equal(rule(`Not right now — maybe after the holidays.${Q}`), 'later');
+  assert.equal(rule("We're swamped this month. Check back in a few weeks?"), 'later');
+  assert.equal(rule('Bad timing for us, sorry. Too busy with the season.'), 'later');
+  assert.equal(rule('Not at the moment, thanks'), 'later', 'before thanks');
+  assert.equal(rule('Not now — Tuesday at 2pm would be better.'), 'proposes_time', 'a time they name is a proposal, not a wait');
+  assert.equal(rule("Tuesday isn't a good time, can we do Wednesday at 10am?"), 'proposes_time');
+  assert.equal(rule('Not interested right now.'), 'not_interested', 'a no is a no');
+  assert.equal(rule('Not right now, sorry.', { openMeeting: { status: 'confirmed', start: TUE_2PM_ET }, booked: true }), null, 'a booked call and "not now": the owner decides');
+  assert.equal(rule('Not right now, sorry.', { canBook: false }), null, 'the call is done: the owner\'s');
+  assert.equal(rule('Not right now, sorry.', { kind: 'launch' }), null, 'mid-trial "not now" is the owner\'s');
+  assert.equal(rule('Can we talk later today?'), null, '"later today" is no wait');
+  // The check-back date: N weeks on, the next US business day, 9:00 am Eastern.
+  assert.deepEqual(laterDate(new Date(AFTER), 4), { dayKey: '2026-11-02', at: '2026-11-02T14:00:00.000Z', when: 'in 4 weeks, around Monday 2 November' });
+  assert.deepEqual(laterDate(new Date('2026-10-22T15:00:00Z'), 5).dayKey, '2026-11-27', 'Thanksgiving (26 Nov) moves to the next business day');
+  assert.equal(laterDate(new Date(AFTER), 1).when, 'in 1 week, around Tuesday 13 October', 'Monday 12 October is a US holiday');
+  assert.equal(normaliseBot({ laterWeeks: 0 }).laterWeeks, 4, 'a broken number falls back to the default');
+  assert.equal(normaliseBot({ laterWeeks: 6 }).laterWeeks, 6);
+  assert.equal(DEFAULTS.REPLYBOT.laterWeeks, 4);
+  assert.ok(HOW_LINES.website && !HOW_LINES.owner);
+});
+
+test('who_are_you: one honest line on how their email reached us + the website; an owner-added client\'s question goes to the owner', async () => {
+  const acceptId = await approved();
+  inbox = [mail(`Hi, sorry — who is this? How did you get my email?${Q}`, { acceptId })];
+  await check(AFTER);
+  assert.equal(toSam()[1].text, "Hi Sam,\n\nFair question. I'm Limeth Sith from Aviance. You applied for our free 30-day trial on our website, and that's where your email came from.\n\nMore about us: https://www.aviance.online\n\nLimeth Sith");
+  assert.deepEqual(alertKeys(), ['bot_replied']);
+  assert.equal(alerts[0].vars.did, 'they asked who we are — sent one honest line on how their email reached us, and the website');
+  assert.equal((await onboardCallFor(ID, { now: new Date(AFTER) })).status, 'replied', 'nothing stopped');
+
+  __reset(); sent = []; alerts = [];
+  await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith'), 'ONBOARDCALL.inbox': JSON.stringify('onboard@aviance.test') });
+  const id2 = await approved();
+  await updateClient(ID, { source: 'owner' });
+  inbox = [mail('Who is this?', { acceptId: id2 })];
+  await check(AFTER);
+  assert.equal(toSam().length, 1, 'no bot answer');
+  assert.deepEqual(alertKeys(), ['onboard_reply']);
+});
+
+test('later: "no problem, I\'ll check back in 4 weeks", the reminders stop, the slot is held, a promise; on the day the owner gets bot_later_due once', async () => {
+  const acceptId = await approved();
+  inbox = [mail(`Hi Limeth, not right now — we're swamped until after the holidays.\n\nSam${Q}`, { acceptId })];
+  await check(AFTER);
+  assert.equal(toSam()[1].text, "Hi Sam,\n\nNo problem. I'll check back in 4 weeks, around Monday 2 November, and you won't get any more reminders from me before then.\n\nIf it suits you sooner, reply to this email any time.\n\nLimeth Sith");
+  assert.deepEqual(alertKeys(), ['bot_replied']);
+  assert.equal(alerts[0].vars.did, "said not now — told them you'll check back around Monday 2 November and stopped the reminders");
+  assert.match(alerts[0].did, /^Stopped the reminders to book\. On Monday 2 November you get a reminder to check back/);
+  // The call record carries the date; the reminders are off; a promise is in the register.
+  const raw = await readCall(ID);
+  assert.deepEqual([raw.laterAt, raw.laterUntil], [AFTER, '2026-11-02T14:00:00.000Z']);
+  assert.match(raw.laterText, /not right now/);
+  assert.ok(raw.stoppedAt);
+  assert.equal((await onboardCallFor(ID, { now: new Date(AFTER) })).status, 'stopped');
+  const promise = (await getPromises(ID)).find((p) => /Check back with Sam at eCreek IT/.test(p.text));
+  assert.equal(promise?.dueAt, '2026-11-02');
+  assert.equal(await kv.sismember(K.replyBotLater(), ID), 1);
+  const c = await conversationFor(ID, { now: new Date(AFTER) });
+  assert.deepEqual(c.thread.filter((t) => t.auto).map((t) => t.rule), ['later']);
+  // No reminder the next day; the Day +7 close is held (no "closed your slot" email after "I'll check back").
+  assert.equal((await check('2026-10-06T15:00:00Z')).remindersSent, 0);
+  const held = await runOnboardingNudge({ clientId: ID, now: new Date('2026-10-13T15:00:00Z') });
+  assert.match(held.hold, /they asked to wait — you check back on Monday 2 November/);
+  assert.equal((await getClient(ID)).state, 'onboarding');
+  // The day comes: once, with their words.
+  await check('2026-11-02T13:59:00Z');
+  assert.ok(!alertKeys().includes('bot_later_due'), 'not before 9:00 ET');
+  await check('2026-11-02T14:00:00Z');
+  await check('2026-11-02T15:00:00Z');
+  const due = alerts.filter((a) => a.key === 'bot_later_due');
+  assert.equal(due.length, 1);
+  assert.deepEqual(due[0].vars, { who: 'Sam (eCreek IT)', when: 'Monday 5 October' });
+  assert.equal(title(due[0]), 'Check back with Sam (eCreek IT) — they said not now on Monday 5 October');
+  assert.match(due[0].body, /said not now on Monday 5 October:\n\n“Hi Limeth, not right now/);
+  assert.equal(due[0].url, `/#trial/${ID}`);
+  assert.equal(await kv.sismember(K.replyBotLater(), ID), 0);
+  assert.equal(toSam().length, 2, 'nothing more was sent to them');
+  // After the date the close counts from it: Day +7 after 2 November.
+  assert.equal((await runOnboardingNudge({ clientId: ID, now: new Date('2026-11-06T15:00:00Z') })).closed, undefined);
+  assert.equal((await runOnboardingNudge({ clientId: ID, now: new Date('2026-11-09T15:00:00Z') })).closed, true);
+});
+
+test('later: dropped without an alert when they wrote again before the date', async () => {
+  const acceptId = await approved();
+  inbox = [mail('Not right now, sorry.', { acceptId })];
+  await check(AFTER);
+  inbox.push(mail('Actually, what times work next week?', { at: '2026-10-07T15:00:00Z', acceptId }));
+  await check('2026-10-07T15:05:00Z');
+  await check('2026-11-02T15:00:00Z');
+  assert.ok(!alertKeys().includes('bot_later_due'));
+  assert.equal(await kv.sismember(K.replyBotLater(), ID), 0);
 });
 
 // ── never answer ─────────────────────────────────────────────────────────────
@@ -525,7 +635,7 @@ test('every email to their contact is in the conversation (system templates too)
   assert.deepEqual(t.map((e) => [e.dir, e.kind, e.template || null]), [['out', 'acceptance', null], ['out', 'system', 'setup_in_progress']]);
   const c = await conversationFor(ID);
   assert.deepEqual(c.thread.map((e) => e.template), [null, 'setup_in_progress']);
-  assert.equal(c.thread[1].subject, 'Your trial — setup has started');
+  assert.equal(c.thread[1].subject, 'Your trial setup has started');
   assert.equal(c.thread[1].from, 'owner@aviance.test');
   assert.equal(c.thread[1].at, '2026-10-05T15:00:00.000Z');
 });
@@ -535,7 +645,7 @@ test('a client past onboarding: their reply lands in the conversation (no bot), 
   io.now = () => new Date('2026-10-02T14:00:00Z');
   await notifyClient('acme', 'setup_in_progress', { firstName: 'Pat', ownerName: 'Limeth Sith' });
   io.now = realNow;
-  inbox = [mail('How much does it cost to keep going after the trial?', { from: 'pat@acme.com', subject: 'Re: Your trial — setup has started' })];
+  inbox = [mail('How much does it cost to keep going after the trial?', { from: 'pat@acme.com', subject: 'Re: Your trial setup has started' })];
   const r = await check(AFTER);
   assert.equal(r.checked, 0, 'no onboarding call');
   assert.equal(r.newReplies, 1);
@@ -566,7 +676,7 @@ test('a client past onboarding: their reply lands in the conversation (no bot), 
   assert.equal(res.status, 200);
   const m = sent.filter((x) => x.to === 'pat@acme.com').at(-1);
   assert.match(m.from, /<onboard@aviance\.test>$/);
-  assert.equal(m.subject, 'Re: Your trial — setup has started');
+  assert.equal(m.subject, 'Re: Your trial setup has started');
   assert.equal(m.inReplyTo, inbox[0].messageId);
   assert.match(m.references, new RegExp(`${inbox[0].messageId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
   assert.match(m.text, /no surprises\.\n\nLimeth Sith$/);

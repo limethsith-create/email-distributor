@@ -232,6 +232,8 @@ export const K = {
   convo: (id) => `${c(id)}:convo`,
   /** Clients with a reply-bot answer waiting to go (set of client ids): each check reads only these. */
   replyBotPending: () => 'replybot:pending',
+  /** Clients who said "not now" to the reply bot (set of client ids) until their check-back date comes (laterUntil on the call hash). */
+  replyBotLater: () => 'replybot:later',
   // ── end messages ──
 
   // ── Calendar (docs/CALENDAR.md) ──

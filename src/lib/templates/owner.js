@@ -131,6 +131,9 @@ export const ALERTS = {
   // ── Reply bot (docs/REPLYBOT-MEET.md §2) ── quiet: phone push at low urgency + email, one per
   // bot email. {who} = "Sam (eCreek IT)", {did} = "sent the booking link".
   bot_replied: { urgent: false, info: true, quiet: true, title: 'Auto-replied to {who}: {did}' },
+  // The "not now" follow-up date came (the `later` rule): once. Not urgent — the promise it
+  // added ("check back with …") carries the to-do and the morning digest line. {when} = the day they said it.
+  bot_later_due: { urgent: false, info: true, title: 'Check back with {who} — they said not now on {when}' },
   // ── end reply bot ──
   // ── Calendar (docs/CALENDAR.md) ── phone + email, not urgent for the same reason: the
   // Calendar's "waiting for your yes" list and the trial's to-do carry it until answered.

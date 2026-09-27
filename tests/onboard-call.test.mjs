@@ -49,7 +49,7 @@ beforeEach(async () => {
 
 const ID = 'ecreek';
 const SAM = 'sam@ecreek.com';
-const SUBJECT = "You're in — let's book your onboarding call";
+const SUBJECT = "Let's book your onboarding call";
 const MON = new Date('2026-10-05T14:00:00Z'); // Mon 10:00 ET
 const at = (base, hours) => new Date(base.getTime() + hours * 3600e3);
 const setting = (k, v) => kv.hset('system:config', { [`ONBOARDCALL.${k}`]: JSON.stringify(v) });
@@ -109,7 +109,7 @@ test('Approve sends exactly one accepted_call email from the ONBOARDCALL inbox, 
   assert.match(m.text, /free 30-day trial for eCreek IT/);
   assert.match(m.text, /30-minute onboarding call/);
   assert.match(m.text, /Book a time that suits you: https:\/\/cal\.com\/limeth\/onboarding/);
-  assert.match(m.text, /https:\/\/app\.test\/c\/[^/\s]+\/onboard — one page, your details and the agreement\./);
+  assert.match(m.text, /one page with your details and the agreement\. Fill it in before we talk if you like, or we'll do it together on the call: https:\/\/app\.test\/c\/[^/\s]+\/onboard\n/);
   assert.match(m.text, /Limeth Sith$/);
   // One open pixel (own purpose), clickable links, no unsubscribe headers (a 1:1 email).
   assert.equal((m.html.match(/<img /g) || []).length, 1);
@@ -292,7 +292,7 @@ test('reminders at 24 h and 72 h while not booked, in the same thread, never twi
   const r1 = toSam()[1];
   assert.equal(r1.subject, `Re: ${SUBJECT}`);
   assert.equal(r1.inReplyTo, toSam()[0].messageId, 'threads under the acceptance email');
-  assert.match(r1.text, /Just checking you saw my email about your trial/);
+  assert.match(r1.text, /starts with a 30-minute onboarding call, and we haven't booked it yet\./);
   assert.equal((await check(48)).remindersSent, 0);
   // Thu 10:00 ET: the 72 h reminder and, past dueBy, the overdue alert.
   assert.equal((await check(72.1)).remindersSent, 1);

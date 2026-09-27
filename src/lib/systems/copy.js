@@ -41,7 +41,7 @@ import { getLeadsByStatus } from '@/lib/db/leads';
 import { logEvent } from '@/lib/db/events';
 import { alertOwner } from '@/lib/notify';
 import { fill, TemplateError } from '@/lib/templates/render';
-import { checkEmail, ticks, capsWords } from '@/lib/systems/copycheck';
+import { checkEmail, ticks, capsWords, readingGrade } from '@/lib/systems/copycheck';
 import msp from '@/lib/templates/sequence/msp.json';
 import trades from '@/lib/templates/sequence/trades.json';
 import agency from '@/lib/templates/sequence/agency.json';
@@ -169,11 +169,20 @@ export function cleanCompany(name) {
   return s.replace(/\s+/g, ' ').trim();
 }
 
-/** A fact-based opener is used only when it is short, calm and link-free. */
-function safeLine(line) {
+/** Reading grade a first line may have on its own (the company's name read as one word) — the whole email must stay ≤ 8. */
+export const FIRST_LINE_MAX_GRADE = 9;
+
+/**
+ * A fact-based opener is used only when it is short, calm, link-free and
+ * plain to read (a service named in long words — "commercial refrigeration"
+ * — falls back to the next fact, so the email keeps its reading grade).
+ */
+function safeLine(line, company = '') {
   if (!line || line.length > 140 || /[!?]/.test(line) || /https?:|www\.|\.(com|net|org)\b/i.test(line)) return false;
   if (capsWords(line).length) return false;
-  return line.split(/\s+/).length <= 20;
+  if (line.split(/\s+/).length > 20) return false;
+  const plain = company && company.includes(' ') ? line.split(company).join('Company') : line;
+  return readingGrade(plain) <= FIRST_LINE_MAX_GRADE;
 }
 
 function factValues(lead, now = new Date()) {
@@ -205,7 +214,7 @@ export function firstLineFor(lead, set = 'A', { now = new Date() } = {}) {
     const tpl = typeof p === 'string' ? p : (city ? p.city : p.noCity);
     try {
       const line = fill('firstLine', tpl, { Company: company, City: city, ...facts[kind] });
-      if (safeLine(line)) return line;
+      if (safeLine(line, company)) return line;
     } catch { /* fall through to the next fact */ }
   }
   const rule = firstLineRule(lead.types);

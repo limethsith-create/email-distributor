@@ -499,19 +499,27 @@ export const DEFAULTS = {
     // 'us' = only inside OWNER.usHours (US Eastern) on US business days — outside them the
     // answer waits for the first check inside them. 'any' = any time of day.
     hours: 'us',
+    // "Not now / after the holidays" (the `later` rule): the bot says it will check back in
+    // this many weeks, stops the reminders, and you get a reminder to check back then.
+    laterWeeks: 4,
     // What each rule sends. Filled in: {firstName} {ownerName} {bookingLink} {times} (open times
-    // in their zone, one per line) {when} (the time they wrote, in their zone) {onboardingLink}
-    // {callMinutes}. A paragraph whose slot has nothing in it (no free times) is left out; any
-    // other {word} stops that answer and the message comes to you. Never write a price here
-    // that is not decided: the price answer only says the trial is free.
+    // in their zone, one per line) {when} (the time they wrote, in their zone; for `later`, when
+    // you'll check back: "in 4 weeks, around Monday 2 November") {onboardingLink} {callMinutes}
+    // {howLine} (who_are_you: how their email reached us — from the website form; with no known
+    // source the message comes to you). A paragraph whose slot has nothing in it (no free times)
+    // is left out; any other {word} stops that answer and the message comes to you. Never write
+    // a price here that is not decided: the price answer only says the trial is free. The voice
+    // (docs/IMPROVE-PASS.md §B, tests/voice.test.mjs): first name, one ask, contractions, no "!".
     answers: {
-      not_interested: "Hi {firstName},\n\nNo problem at all — I've closed it on my side and stopped the reminders. If anything changes, just reply to this email.\n\nThanks for letting me know.\n\n{ownerName}",
-      reschedule: "Hi {firstName},\n\nNo problem at all — pick any other time that suits you here:\n{bookingLink}\n\nI'll confirm the new time by email.\n\n{ownerName}",
-      proposes_time_ok: "Hi {firstName},\n\n{when} your time works on my side — I'll confirm it shortly.\n\n{ownerName}",
-      proposes_time_busy: "Hi {firstName},\n\nThanks — I'm afraid {when} your time isn't free on my side. The nearest times I have (your time):\n{times}\n\nOr pick any time that suits you here: {bookingLink}\n\n{ownerName}",
-      wants_time: "Hi {firstName},\n\nHappy to. Pick any time that suits you here: {bookingLink}\n\nThe next open times (your time):\n{times}\nOr just reply with the one that suits you.\n\n{ownerName}",
-      price: "Hi {firstName},\n\nGood question — the 30-day trial is free: no card, nothing to pay. The one thing I ask in return is an honest review at the end.\n\nIf you'd like to keep going after the trial, we'll go through the plans together on the call.\n\n{ownerName}",
-      what_needed: "Hi {firstName},\n\nNothing to prepare — the call is {callMinutes} minutes and we go through who you sell to and who you'd like to reach.\n\nIf you have a moment before it, this is the one page with your details and the agreement: {onboardingLink}\n\n{ownerName}",
+      not_interested: "Hi {firstName},\n\nNo problem at all. I've closed it on my side and stopped the reminders. If anything changes, reply to this email.\n\nThanks for letting me know.\n\n{ownerName}",
+      reschedule: "Hi {firstName},\n\nNo problem. Pick any other time that suits you here:\n{bookingLink}\n\nI'll confirm the new time by email.\n\n{ownerName}",
+      proposes_time_ok: "Hi {firstName},\n\n{when} your time works on my side. I'll confirm it shortly.\n\n{ownerName}",
+      proposes_time_busy: "Hi {firstName},\n\nSorry, {when} your time is taken on my side. The nearest times I have (your time):\n{times}\n\nOr pick any time that suits you here: {bookingLink}\n\n{ownerName}",
+      wants_time: "Hi {firstName},\n\nHappy to. Pick any time that suits you here: {bookingLink}\n\nThe next open times (your time):\n{times}\nOr reply with the one that suits you.\n\n{ownerName}",
+      price: "Hi {firstName},\n\nGood question. The 30-day trial is free: no card, nothing to pay. The one thing I ask in return is an honest review at the end.\n\nIf you'd like to keep going after the trial, we'll go through the plans together on the call.\n\n{ownerName}",
+      what_needed: "Hi {firstName},\n\nNothing to prepare. The call is {callMinutes} minutes, and we go through who you sell to and who you'd like to reach.\n\nIf you have a moment before it, here's the one page with your details and the agreement: {onboardingLink}\n\n{ownerName}",
+      who_are_you: "Hi {firstName},\n\nFair question. I'm {ownerName} from Aviance. {howLine}\n\nMore about us: https://www.aviance.online\n\n{ownerName}",
+      later: "Hi {firstName},\n\nNo problem. I'll check back {when}, and you won't get any more reminders from me before then.\n\nIf it suits you sooner, reply to this email any time.\n\n{ownerName}",
     },
   },
   // ── end reply bot ──

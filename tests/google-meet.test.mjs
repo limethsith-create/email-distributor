@@ -440,7 +440,7 @@ test('a Meet still being made is looked at again; move → the event is patched 
   assert.deepEqual(Object.fromEntries(pu.searchParams), { conferenceDataVersion: '1', sendUpdates: 'none' });
   const pb = JSON.parse(patch.body);
   assert.deepEqual([pb.start, pb.end], [{ dateTime: '2026-10-07T14:00:00Z' }, { dateTime: '2026-10-07T14:30:00Z' }]);
-  assert.deepEqual(order, ['mail:New time for our call: Wed 7 Oct at 10:00 am ET', 'google:PATCH'], 'the email first: a failed send changes nothing');
+  assert.deepEqual(order, ['mail:Our call moves to Wed 7 Oct at 10:00 am ET', 'google:PATCH'], 'the email first: a failed send changes nothing');
   const moved = toSam().at(-1);
   assert.match(moved.text, /Join here: https:\/\/meet\.google\.com\/abc-defg-001/);
   assert.equal(icsLine(moved, 'LOCATION'), LINK);
