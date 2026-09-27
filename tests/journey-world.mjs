@@ -96,8 +96,8 @@ const PAGES = {
   '/case-studies/law-firm-office-move': page('Case Study: A 40-person law firm moves offices | Ridgeline IT', '<h1>How Hollis &amp; Grant Law moved 40 people over one weekend</h1><p>Zero downtime on Monday morning.</p>'),
   '/case-studies/cpa-ransomware-recovery': page('Case Study: CPA firm back online in 6 hours | Ridgeline IT', '<h1>Carolina Tax Partners recovered from ransomware in six hours</h1><p>Backups restored, no ransom paid.</p>'),
   '/blog': page('Blog | Ridgeline IT', '<h1>Blog</h1><a href="/blog/phishing-season">Phishing season</a> <a href="/blog/m365-backup">Microsoft 365 backup</a>'),
-  '/blog/phishing-season': post('Tax season is phishing season', '2026-02-10', 'Five scams CPA firms saw this year.'),
-  '/blog/m365-backup': post('Why Microsoft 365 is not a backup', '2026-04-22', 'Retention is not recovery.'),
+  '/blog/phishing-season': post('Tax season is phishing season', '2026-02-10', 'Five scams CPA firms saw this year. Phishing emails pretend to be the IRS; other phishing emails pretend to be a client with a new bank account.'),
+  '/blog/m365-backup': post('Why Microsoft 365 is not a backup', '2026-04-22', 'Retention is not recovery. Microsoft 365 keeps deleted mail for 30 days; a law firm needs years.'),
   '/blog/clio-security': post('Locking down Clio for small firms', '2026-06-03', 'MFA, conditional access and more.'),
   '/blog/office-move-checklist': post('The office move checklist', '2025-11-18', 'Twelve weeks out, start here.'),
   '/blog/wisp-template': post('A WISP your CPA firm can use', '2026-08-04', 'IRS 4557 made practical.'),
@@ -114,6 +114,11 @@ const WAYBACK_HOMES = {
   2022: '<title>Ridgeline IT | Managed IT for Law Firms</h1><h1>IT that law firms trust</h1>',
   2025: '<title>Ridgeline IT | Managed IT for Law &amp; Accounting Firms in Charlotte</title><h1>Managed IT that law firms and accounting firms trust</h1>',
 };
+
+const NEWS_RSS = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>"Ridgeline IT" Charlotte - Google News</title>
+<item><title>Charlotte law firms turn to managed IT after a ransomware summer - WSOC-TV</title><link>https://news.google.com/rss/articles/CBMi-ridgeline-wsoc</link><pubDate>Thu, 10 Sep 2026 13:05:00 GMT</pubDate><source url="https://www.wsoctv.com">WSOC-TV</source></item>
+<item><title><![CDATA[Ridgeline IT opens a Raleigh office &amp; adds six staff - Charlotte Business Journal]]></title><link>https://news.google.com/rss/articles/CBMi-ridgeline-cbj</link><pubDate>Mon, 15 Jun 2026 11:00:00 GMT</pubDate><source url="https://www.bizjournals.com/charlotte">Charlotte Business Journal</source></item>
+</channel></rss>`;
 
 // ── Response-shaped answers ──────────────────────────────────────────────────
 
@@ -169,6 +174,11 @@ async function fetchExt(url, opts = {}) {
     latency(300);
     if (ciDomain.forwarding_url && follow) return fetchExt(ciDomain.forwarding_url, opts);
     return answer(200, '<html><title>Parked</title></html>', { url: u.href });
+  }
+  // Google News RSS: the research's one keyless request for "Ridgeline IT" in Charlotte.
+  if (u.hostname === 'news.google.com' && u.pathname === '/rss/search') {
+    latency(600);
+    return answer(200, NEWS_RSS, { url: u.href, type: 'application/rss+xml; charset=utf-8' });
   }
   // Cloudflare's .com price (the monthly promo check).
   if (u.hostname === 'tld-list.com') { latency(500); return answer(200, '<table><tr><td>.com</td><td>$10.44</td></tr></table>', { url: u.href }); }
@@ -386,6 +396,19 @@ function installFetch() {
       latency(300);
       const mask = String(init.headers?.['X-Goog-FieldMask'] || '');
       const body = JSON.parse(init.body || '{}');
+      if (mask.includes('formattedAddress') && /^Computer support and services in /.test(body.textQuery || '')) {
+        // The research's competitors search (their Google category in their city) — Ridgeline itself comes back too.
+        const place = (name, rating, reviews, web, cid) => ({ displayName: { text: name }, formattedAddress: `${cid} Tryon St, Charlotte, NC 28202, USA`, primaryTypeDisplayName: { text: 'Computer support and services' }, rating, userRatingCount: reviews, googleMapsUri: `https://maps.google.com/?cid=${cid}`, websiteUri: web });
+        return new Response(JSON.stringify({ places: [
+          place('Queen City Tech Partners', 4.9, 212, 'https://www.qctechpartners.com/', 5101),
+          { id: 'ChIJridgeline', displayName: { text: 'Ridgeline IT' }, formattedAddress: '2100 South Blvd Suite 300, Charlotte, NC 28203, USA', primaryTypeDisplayName: { text: 'Computer support and services' }, rating: 4.8, userRatingCount: 61, googleMapsUri: 'https://maps.google.com/?cid=4411', websiteUri: 'https://www.ridgelineit.com/' },
+          place('Carolina Network Solutions', 4.6, 88, 'https://www.carolinanetworks.com/', 5102),
+          place('Piedmont Managed IT', 4.7, 45, 'https://www.piedmontmanagedit.com/', 5103),
+          place('Uptown Computer Help', 4.2, 19, null, 5104),
+          place('Crown Cyber', 5, 9, 'https://www.crowncyber.io/', 5105),
+          place('Southend Tech Support', 4.4, 130, 'https://www.southendtech.com/', 5106),
+        ] }), { status: 200 });
+      }
       if (mask.includes('formattedAddress')) {
         // The research's one business lookup.
         return new Response(JSON.stringify({ places: [{ id: 'ChIJridgeline', displayName: { text: 'Ridgeline IT' }, formattedAddress: '2100 South Blvd Suite 300, Charlotte, NC 28203, USA', primaryTypeDisplayName: { text: 'Computer support and services' }, rating: 4.8, userRatingCount: 61, googleMapsUri: 'https://maps.google.com/?cid=4411', nationalPhoneNumber: '(704) 555-0142', websiteUri: 'https://www.ridgelineit.com/' }] }), { status: 200 });

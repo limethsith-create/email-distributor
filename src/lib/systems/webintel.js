@@ -126,6 +126,100 @@ export async function lookalikes(domain, { max = 10 } = {}) {
   return found.sort((a, b) => Number(b.mail && b.pointsHome) - Number(a.mail && a.pointsHome));
 }
 
+// ── news (Google News RSS, keyless) ─────────────────────────────────────────
+
+const NEWS_ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ndash: '–', mdash: '—', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', hellip: '…' };
+const decodeOnce = (s) => String(s || '')
+  .replace(/&#(\d+);/g, (_, n) => { const c = Number(n); return c > 0 && c < 0x110000 ? String.fromCodePoint(c) : ' '; })
+  .replace(/&#x([0-9a-f]+);/gi, (_, n) => { const c = parseInt(n, 16); return c > 0 && c < 0x110000 ? String.fromCodePoint(c) : ' '; })
+  .replace(/&([a-z]+);/gi, (m, n) => NEWS_ENT[n.toLowerCase()] ?? m);
+/** Feed text → plain text: CDATA opened, entities decoded (twice: feeds often escape "&amp;#39;"), tags out. */
+const feedText = (s) => {
+  let t = String(s || '').replace(/^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$/, '$1');
+  for (let i = 0; i < 2 && /&(#\d+|#x[0-9a-f]+|[a-z]+);/i.test(t); i++) t = decodeOnce(t);
+  return t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+};
+const tagIn = (xml, tag) => { const m = String(xml).match(new RegExp(`<${tag}\\b([^>]*)>([\\s\\S]*?)<\\/${tag}>`, 'i')); return m ? { attrs: m[1], text: feedText(m[2]) } : null; };
+
+/** The Google News RSS search for "{name}" in {city} (the city without its state). */
+export function newsUrl(name, city = '') {
+  const town = String(city || '').split(',')[0].trim();
+  const q = encodeURIComponent(`"${String(name || '').replace(/"/g, '').trim()}"${town ? ` ${town}` : ''}`).replace(/%20/g, '+');
+  return `https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`;
+}
+
+/**
+ * RSS items → [{ title, source, date, link }], newest first, at most `max`.
+ * Plain regex, no XML library. Google writes "Headline - Source" in the
+ * title: the source is taken off. null when the text is not a feed at all (an
+ * HTML error page, nothing); [] for a feed with no stories.
+ */
+export function parseNewsRss(xml, { max = 5 } = {}) {
+  const s = String(xml || '');
+  if (!/<rss\b|<channel\b|<feed\b/i.test(s)) return null;
+  const items = [];
+  for (const m of s.matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/gi)) {
+    const body = m[1];
+    const source = tagIn(body, 'source');
+    let title = tagIn(body, 'title')?.text || '';
+    const src = source?.text || null;
+    if (src && title.endsWith(` - ${src}`)) title = title.slice(0, -(src.length + 3)).trim();
+    if (!title) continue;
+    const link = tagIn(body, 'link')?.text || '';
+    const when = Date.parse(tagIn(body, 'pubDate')?.text || '');
+    items.push({ title: title.length > 200 ? `${title.slice(0, 199)}…` : title, source: src, date: Number.isFinite(when) ? new Date(when).toISOString().slice(0, 10) : null, link: /^https?:\/\//i.test(link) ? link : null });
+  }
+  return items.sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, max);
+}
+
+/** Rules on the headlines: [kind, level, rule]. layoffs and lawsuit are warnings; the rest is context. */
+export const NEWS_RULES = [
+  ['layoffs', 'warn', /\b(lay ?offs?|laid off|lays off|job cuts|cuts? \d+ jobs|furlough\w*|downsiz\w*)\b/i],
+  ['lawsuit', 'warn', /\b(lawsuits?|sued|sues|suing|class[- ]action|litigation|indicted)\b/i],
+  ['acquisition', 'info', /\b(acquir\w+|acquisitions?|merg(?:er|ers|es|ed|ing)|buys|bought|sold to|to be sold)\b/i],
+  ['funding', 'info', /\b(raises? \$|raised \$|funding round|funding|series [a-d]\b|seed round|venture capital)\b/i],
+  ['new office', 'info', /\b(new (?:office|headquarters|hq|location|branch)|open(?:s|ed|ing)? (?:an? |its )?(?:new )?(?:\w+ )?(?:office|location|branch|headquarters)|expands? (?:to|into)|relocat\w+)\b/i],
+  ['award', 'info', /\b(awards?|awarded|honou?red|recogni[sz]ed|named (?:to|one of|among)|best places? to work|inc\.? ?5000|fastest[- ]growing|top \d+)\b/i],
+];
+
+/** The stories whose headline matches a rule: [{ kind, level, title, source, date, link }]. */
+export function newsFlags(items = []) {
+  const out = [];
+  for (const it of items || []) for (const [kind, level, re] of NEWS_RULES) if (re.test(it.title || '')) out.push({ kind, level, title: it.title, source: it.source || null, date: it.date || null, link: it.link || null });
+  return out;
+}
+
+/** The research `flags` line for the news (warn when a story mentions layoffs or a lawsuit), else null. */
+export function newsFlagLine(news) {
+  const f = news?.flags || [];
+  if (!f.length) return null;
+  const parts = f.slice(0, 3).map((x) => `${x.kind} — “${x.title}”${x.source || x.date ? ` (${[x.source, x.date].filter(Boolean).join(', ')})` : ''}`);
+  return { level: f.some((x) => x.level === 'warn') ? 'warn' : 'info', text: `In the news for “${news.query}”: ${parts.join('; ')}` };
+}
+
+/**
+ * One Google News RSS request for an applicant (keyless; one per applicant,
+ * no retry — the service is shared and rate-limits bots). Never throws:
+ * { query, url, items, flags, error }.
+ */
+export async function newsFor({ name, city = '', max = 5, timeoutMs = 8000, userAgent = 'AvianceBot/1.0 (+aviance.online/bot)' } = {}) {
+  const query = String(name || '').trim();
+  if (!query) return null;
+  const url = newsUrl(query, city);
+  const out = { query, url, items: [], flags: [], error: null };
+  try {
+    const res = await io.fetchExt(url, { service: 'news', usageField: 'rss', timeoutMs, retry: false, headers: { 'user-agent': userAgent, accept: 'application/rss+xml,application/xml;q=0.9,*/*;q=0.5' } });
+    if (Number(res?.status) !== 200) { out.error = `HTTP ${res?.status ?? 'no answer'}`; return out; }
+    const items = parseNewsRss(await res.text(), { max });
+    if (!items) { out.error = 'not a news feed'; return out; }
+    out.items = items;
+    out.flags = newsFlags(items);
+  } catch (err) {
+    out.error = String(err?.name === 'TimeoutError' ? 'timed out' : err?.message || err).slice(0, 120);
+  }
+  return out;
+}
+
 /** The one-line reading of the look-alikes for the owner. */
 export function outboundSignal(list = []) {
   const sending = list.filter((l) => l.mail && l.pointsHome);
