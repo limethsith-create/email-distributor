@@ -9,12 +9,15 @@
  *  onboarding-nudge  daily 10:00 ET      onboarding            Day +2/+4 reminders, +7 close
  *  queue-promote     daily 10:05 ET      (global)              pop queue:trial into free slots
  *  onboard-calls     every ONBOARDCALL.checkEveryMinutes (global) while an onboarding call or a launch
- *                    call is open: inbox (replies, bookings), reminders, overdue (docs/ONBOARD-CALL.md, docs/LAUNCH-CALL.md)
+ *                    call is open, or a client's delivery watch is due (mailWatchDueAt): inbox (replies,
+ *                    bookings, bounces), reminders, overdue, the milestone-email watch (docs/ONBOARD-CALL.md,
+ *                    docs/LAUNCH-CALL.md, docs/IMPROVE-PASS.md C)
  *  market            every minute        onboarding + 'market' continue the count; hourly when waiting
  *  pricescout        every minute        awaiting_purchase + 'pricescout'
  *  purchase-nudge    hourly              awaiting_purchase     12 h reminder, 48 h escalation
  *  setup-check       every minute while running, else hourly   setup_check
- *  welcome           hourly 08–20 ET     warming + 'welcome'   welcome_two_dates (waits for the morning when setup passed at night)
+ *  welcome           hourly 08–20 ET     ready/sending + 'welcome'  the "we start on …" email (welcome_two_dates) once Day 1
+ *                                                           is fixed — waits for their morning when the gate turned green at night
  *  auth              daily 06:00 ET      warming..extension    SPF/DKIM/DMARC/MX
  *  blacklist         daily 06:10 ET      warming..extension    DNSBL
  *  dmarc             daily 06:20 ET      (global)              DMARC reports; every 10 min while a backlog remains
@@ -144,15 +147,17 @@ const welcome = {
   cost: 2,
   claimTtl: 7200,
   async due({ client, now }) {
-    if (skip(client) || client.state !== 'warming' || client.intakeStep !== 'welcome') return null;
-    // An email to the client: in the daytime (08:00–20:00 ET) — the setup may pass at night.
+    // The "we start on …" email waiting for the daytime (docs/IMPROVE-PASS.md C.3); `warming` = a flag
+    // left by an older setup pass (the run clears it: Day 1 is not fixed yet).
+    if (skip(client) || !['warming', 'ready', 'sending'].includes(client.state) || client.intakeStep !== 'welcome') return null;
+    // An email to the client: in the daytime (08:00–20:00 ET; the run also waits for THEIR morning).
     const p = et(now);
     if (p.hhmm < '08:00' || p.hhmm >= '20:00') return null;
     return hourKey(p);
   },
   async run({ clientId, now }) {
-    const { sendWelcome } = await import('@/lib/systems/setupcheck');
-    return sendWelcome(clientId, { now });
+    const { sendStartEmail } = await import('@/lib/systems/startemail');
+    return sendStartEmail(clientId, { now });
   },
 };
 
@@ -295,9 +300,11 @@ const onboardCalls = {
   minBudgetMs: 15_000,
   claimTtl: 600,
   async due({ now, clients }) {
-    // An onboarding call or a launch call (docs/LAUNCH-CALL.md) open for some client.
+    // An onboarding call or a launch call (docs/LAUNCH-CALL.md) open for some client, or a client's
+    // delivery watch due (docs/IMPROVE-PASS.md C.2: a retry, a bounce look, the 48 h "not opened" mark).
     const open = (v) => v === '1' || v === 1;
-    if (!(clients || []).some((c) => open(c.onboardCallOpen) || open(c.launchCallOpen))) return null;
+    const watchDue = (c) => { const t = Date.parse(c.mailWatchDueAt || ''); return Number.isFinite(t) && t <= now.getTime(); };
+    if (!(clients || []).some((c) => open(c.onboardCallOpen) || open(c.launchCallOpen) || watchDue(c))) return null;
     const every = Math.max(1, Number(await cfg(null, 'ONBOARDCALL.checkEveryMinutes')) || 2);
     return bucketKey(et(now), every);
   },

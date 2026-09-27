@@ -30,10 +30,13 @@
  * It ALWAYS returns the transparent pixel, even on error, so a mail client
  * never sees a broken image. Three KV round trips at most per recorded hit.
  *
- * Onboarding-call pixels (token purpose `onboard`, docs/ONBOARD-CALL.md) are
- * not cold-email opens: they never touch the stores above. A human hit (same
- * classification) marks openedAt on client:{id}:onboardcall; scanner hits,
- * Apple prefetches and too-soon hits are ignored.
+ * Client-email pixels are not cold-email opens: they never touch the stores
+ * above. A human hit (same classification) marks the email opened in the
+ * client's delivery tracking (purpose `mail`, docs/IMPROVE-PASS.md C.1: the
+ * token's touch is the email's key) and, for the onboarding-call email and
+ * the launch invite (purposes `onboard` / `launch`, docs/ONBOARD-CALL.md),
+ * openedAt on the call too; scanner hits, Apple prefetches and too-soon hits
+ * are ignored.
  */
 
 import crypto from 'crypto';
@@ -239,9 +242,16 @@ async function recordOnboardOpen(token, meta) {
   if (!token.clientId) return;
   const sinceSend = token.sentAt ? Math.max(0, Date.now() - token.sentAt) : null;
   if (suspectReasons(classify(meta.ua), sinceSend, meta).length) return;
-  const { markOpened } = await import('@/lib/systems/onboardcall');
-  // Purpose `launch` = the launch invite (docs/LAUNCH-CALL.md): the same open, on the launch call.
-  await markOpened(token.clientId, token.email, { now: new Date(), kind: token.purpose === 'launch' ? 'launch' : 'onboarding' });
+  const now = new Date();
+  if (token.purpose === 'onboard' || token.purpose === 'launch') {
+    const { markOpened } = await import('@/lib/systems/onboardcall');
+    // Purpose `launch` = the launch invite (docs/LAUNCH-CALL.md): the same open, on the launch call.
+    await markOpened(token.clientId, token.email, { now, kind: token.purpose === 'launch' ? 'launch' : 'onboarding' });
+  }
+  // The email itself in the conversation (docs/IMPROVE-PASS.md C.1): the touch is its tracking key
+  // (older onboarding pixels carry 'onboard' / 'launch' there, which names no email).
+  const { markMailOpened } = await import('@/lib/systems/mailwatch');
+  await markMailOpened(token.clientId, token.touch, token.email, { now });
 }
 
 function requestMeta(request) {
@@ -264,7 +274,7 @@ export async function GET(request) {
     if (token) {
       // Awaited (not fire-and-forget) so the serverless runtime never kills the
       // write; the pixel still goes out the moment recording finishes.
-      if (token.purpose === 'onboard' || token.purpose === 'launch') await recordOnboardOpen(token, requestMeta(request));
+      if (token.purpose === 'onboard' || token.purpose === 'launch' || token.purpose === 'mail') await recordOnboardOpen(token, requestMeta(request));
       else if (!token.purpose) await recordOpen(token, requestMeta(request));
     }
   } catch {

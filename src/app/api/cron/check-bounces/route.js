@@ -16,6 +16,10 @@
  *    actually emailed and have not replied / unsubscribed are marked.
  *  - Accounts run 3 at a time, each under a 30s deadline; every outcome is
  *    written to `inbox_health` and the handler never throws.
+ *  - A hard bounce whose address is a trial client's contact is matched to
+ *    the email it is about (the returned headers' Message-ID, else the
+ *    address and the time) in that client's delivery tracking
+ *    (systems/mailwatch.js, docs/IMPROVE-PASS.md C.1): `clientEmails` counts them.
  *
  * Trigger:
  * - GET /api/cron/check-bounces with Authorization: Bearer CRON_SECRET (header only)
@@ -30,7 +34,7 @@ import { getLeadsByEmail, markLeadBounced } from '@/lib/leads-db';
 import { recordImapResult, updateInboxHealth } from '@/lib/inbox-health';
 import {
   parseHeaders, classifyKind, dsnSeverity, extractBouncedAddress, bounceReason,
-  htmlToText, findTextPart, readStream,
+  htmlToText, findTextPart, readStream, originalMessageId, findReturnedHeadersPart,
 } from '@/lib/mail-utils';
 import { getTodayKey } from '@/lib/metrics';
 
@@ -198,6 +202,15 @@ async function fetchDsnText(client, meta) {
       if (status) text = `${text}\n${status}`;
     } catch {}
   }
+  // The returned email's headers (bounded): its Message-ID says which email bounced.
+  const returnedPart = findReturnedHeadersPart(meta.bodyStructure);
+  if (returnedPart) {
+    try {
+      const { content } = await client.download(meta.uid, returnedPart, { uid: true, maxBytes: MAX_STATUS_BYTES });
+      const returned = await readStream(content, MAX_STATUS_BYTES);
+      if (returned) text = `${text}\n${returned}`;
+    } catch {}
+  }
   if (meta.failedRecipients) text = `X-Failed-Recipients: ${meta.failedRecipients}\n${text}`;
   return text;
 }
@@ -314,6 +327,7 @@ async function scanAccount(client, account, ctx, started) {
           folder,
           uid: meta.uid,
           messageId: meta.messageId,
+          originalMessageId: originalMessageId(text, meta.messageId),
           account: account.email,
         });
       }
@@ -507,6 +521,14 @@ async function checkAllBounces() {
         summary.errors.push({ email, error: `mark: ${errText(err)}` });
       }
     }
+  }
+
+  // ── Trial clients' own emails (delivery monitoring): a bounce of an email to a client's contact ──
+  try {
+    const { noteClientBounces } = await import('@/lib/systems/mailwatch');
+    summary.clientEmails = await noteClientBounces([...byEmail.values()]);
+  } catch (err) {
+    summary.errors.push({ error: `client emails: ${errText(err)}` });
   }
 
   // ── Per-inbox bounce counters + alert (never auto-disables; the sender reads the flag) ──

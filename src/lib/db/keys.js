@@ -236,6 +236,21 @@ export const K = {
   replyBotLater: () => 'replybot:later',
   // ── end messages ──
 
+  // ── Delivery monitoring (docs/IMPROVE-PASS.md C, systems/mailwatch.js) ──
+  /**
+   * Every email that went to the client's contact (hash): the pixel key (16 hex of its Message-ID) →
+   * JSON { key, id (the conversation entry's id), messageId, template, to, from, at, accepted, pixel,
+   * openedAt, opens, bouncedAt, bounceReason, repliedAt, milestone?, watch? { bounceLookAt,
+   * unopenedDueAt, unopenedAt, doneAt, done } }.
+   */
+  mailTrack: (id) => `${c(id)}:mailtrack`,
+  /**
+   * Milestone emails that could not be sent (hash): template key → JSON { key, vars, opts, error,
+   * failedAt, retryAt, retrying?, failedAgainAt? } — retried once after 10 minutes, then an alert.
+   */
+  mailRetry: (id) => `${c(id)}:mailretry`,
+  // ── end delivery monitoring ──
+
   // ── Calendar (docs/CALENDAR.md) ──
   /** Every meeting (hash): id → meeting JSON (times in UTC ISO). */
   meetings: () => 'meetings',

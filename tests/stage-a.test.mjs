@@ -7,7 +7,8 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { __reset, kv } from '@vercel/kv';
 import { io } from '@/lib/systems/intake-io';
-import { createClient, getClient, getTrial, getProfile } from '@/lib/db/client';
+import { createClient, getClient, getTrial, getProfile, setState } from '@/lib/db/client';
+import { sendStartEmail } from '@/lib/systems/startemail';
 import { saveInbox, getInboxRecords } from '@/lib/db/inboxes';
 import { readToken } from '@/lib/pagetokens';
 import { TEMPLATES as STAGE_A_TEMPLATES } from '@/lib/templates/client/stage-a';
@@ -498,7 +499,7 @@ async function setupClient({ spf = 'v=spf1 include:_spf.google.com ~all' } = {})
   io.imapFindMessage = async (acct, token) => ({ found: true, folder: 'INBOX', headers: `Subject: Setup check ${token}\r\nAuthentication-Results: mx.google.com; dkim=pass header.i=@getacme.com; spf=pass smtp.mailfrom=john@getacme.com` });
 }
 
-test('setup checker: all pass → warming, dates, inboxes on, welcome email', async () => {
+test('setup checker: all pass → warming, dates, inboxes on; the "we start on" email waits for Day 1 to be fixed', async () => {
   await setupClient();
   const now = new Date('2026-10-03T15:00:00Z'); // Saturday → Day 1 lands on Monday 19 Oct
   await startSetupCheck('acme', { all: true, now });
@@ -516,13 +517,19 @@ test('setup checker: all pass → warming, dates, inboxes on, welcome email', as
   const trial = await getTrial('acme');
   assert.equal(trial.signedDay, '2026-10-03');
   assert.equal(trial.day30Date, '2026-11-17');
-  assert.ok(trial.welcomeSentAt);
+  // Day 1 is only the ramp's estimate at the setup check: no "we start on" email yet (docs/IMPROVE-PASS.md C.3).
+  assert.equal(trial.welcomeSentAt, undefined);
+  assert.ok(!emails.some((e) => e.key === 'welcome_two_dates'));
   const inboxes = await getInboxRecords('acme');
   assert.ok(inboxes.every((i) => i.enabled === '1' && i.warmupStartedAt && i.twoStepVerified === '1'));
   assert.equal(Number((await kv.hgetall('client:acme:counters:total')).sent), 0);
+  // The readiness gate turns green → Day 1 is fixed: the one "we start on" email, with both dates and the launch call.
+  await setState('acme', 'ready', 'test: gate green', { force: true });
+  assert.equal((await sendStartEmail('acme', { now })).sent, true);
   const welcome = emails.find((e) => e.key === 'welcome_two_dates');
   assert.equal(welcome.vars.day1Date, 'Monday 19 October');
   assert.equal(welcome.vars.callMinutes, 30, 'the two-dates email names the launch call, not an approval date (docs/LAUNCH-CALL.md)');
+  assert.equal(welcome.opts.dedupe, 'welcome_two_dates:2026-10-19', 'once per Day 1');
   const dom = await kv.hgetall('client:acme:domain');
   assert.equal(dom.spf, 'pass');
   assert.equal(dom.blacklist, 'clean');

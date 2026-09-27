@@ -7,6 +7,8 @@
  *                                    threaded (In-Reply-To / References) — any client, not only onboarding
  *        { action: 'botOff' }        the reply bot stops answering THIS client
  *        { action: 'botOn' }         … and starts again
+ *        { action: 'unopenedDone' }  the "hasn't opened the … email — call or text them?" to-do is done
+ *                                    (docs/IMPROVE-PASS.md C.2)
  *   → { ok, conversation } · 400/404/409 { error } in plain words
  * The onboarding card's `reply` (/api/mc/clients/{id}/onboard-call) stays as an alias.
  */

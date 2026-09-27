@@ -37,7 +37,6 @@ import { cfg } from '@/lib/config';
 import { getClient, getTrial, getProfile, updateClient } from '@/lib/db/client';
 import { getInboxRecords } from '@/lib/db/inboxes';
 import { logEvent } from '@/lib/db/events';
-import { onboardPixelUrl } from '@/lib/tokens';
 import { renderTemplate } from '@/lib/templates/client';
 import { dayKeyIn, ET, addDays } from '@/lib/time';
 import { warmupDays } from '@/lib/systems/warmup';
@@ -103,7 +102,7 @@ export async function sendNextSteps(clientId, { now = io.now(), moment = 'call' 
     callMinutes,
     day1Line: day1Line(day1),
   };
-  const res = await sendClient(clientId, 'next_steps', vars, { dedupe: 'next_steps', thread: false });
+  const res = await sendClient(clientId, 'next_steps', vars, { dedupe: 'next_steps', thread: false, now, moment });
   const at = now.toISOString();
   await kv.hset(K.trial(clientId), { nextStepsSentAt: at, nextStepsMoment: moment });
   if (!res.deduped) {
@@ -188,7 +187,9 @@ export async function sendLaunchInvite(clientId, { now = io.now(), resend = fals
   const res = await sendClient(clientId, 'launch_invite', vars, {
     dedupe: n === 1 ? 'launch_invite' : `launch_invite:${n}`,
     thread: false, // its own entry below (kind 'launch_invite')
-    pixelUrl: onboardPixelUrl(client.contactEmail, clientId, now.getTime(), 'launch'),
+    pixel: 'launch', // the call's own pixel, also naming this email (delivery monitoring)
+    now,
+    resend: flag(raw.sentAt), // for the delivery watch's retry
     linkify: true,
     ...(flag(raw.sentAt) ? call.threadHeaders(raw) : {}),
   });

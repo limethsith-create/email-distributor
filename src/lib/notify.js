@@ -14,13 +14,14 @@
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { logEvent } from '@/lib/db/events';
-import { sendEmail } from '@/lib/mailer';
+import { sendEmail, newMessageId } from '@/lib/mailer';
 import { parseAccount, getSmtpAccounts, loadAccounts, findSmtpAccount } from '@/lib/smtp-accounts';
 import { ALERTS } from '@/lib/templates/owner';
 import { fill } from '@/lib/templates/render';
 import { dayKeyIn, partsIn, OWNER_TZ } from '@/lib/time';
 import { pushToOwner } from '@/lib/push';
 import { cfg } from '@/lib/config';
+import { onboardPixelUrl, mailPixelUrl } from '@/lib/tokens';
 
 const DEFAULT_OWNER_EMAIL = 'limethsith@gmail.com';
 const LOG_CAP = 1000;
@@ -212,18 +213,28 @@ export async function ackAlerts(clientId, keys, { reason = 'handled', now = new 
  * blank. Deduped per (key, dedupe) forever via a claim unless `dedupe` null.
  *
  * `from: 'onboard'` (or a template marked so) sends from the onboarding-call
- * inbox. The onboarding-call emails also pass `pixelUrl` (their one open
- * pixel), `linkify` (clickable links in the HTML part) and `inReplyTo` /
- * `references` so the conversation threads. The result carries the
- * Message-ID and the sending address so replies can be matched. The
- * Calendar's emails pass `icalEvent` (an .ics invite or cancellation).
+ * inbox. The onboarding-call emails also pass `linkify` (clickable links in
+ * the HTML part) and `inReplyTo` / `references` so the conversation threads.
+ * The result carries the Message-ID and the sending address so replies can
+ * be matched. The Calendar's emails pass `icalEvent` (an .ics invite or
+ * cancellation).
  *
  * Every email that goes to the client's contact is also an `out` entry in
  * their one conversation (docs/REPLYBOT-MEET.md §1, kind 'system' + the
  * template key). `thread: false` = the caller adds its own entry (the
  * onboarding-call, calendar and reply-bot emails, which carry their kind).
+ *
+ * Delivery monitoring (docs/IMPROVE-PASS.md C, systems/mailwatch.js): every
+ * email to the client's contact carries one open pixel — `pixel: 'onboard'`
+ * / `'launch'` for the two call emails (their call's pixel), else `'mail'`
+ * (never on the owner's own replies or the reply bot's answers; `pixel:
+ * false` or OPEN_TRACKING=off for none; a legacy `pixelUrl` is used as
+ * given) — and is tracked (accepted, Message-ID, opened, bounced, replied).
+ * A milestone email that cannot be sent is kept for one retry 10 minutes
+ * later before this throws. `now` = the send's time (the caller's clock).
  */
-export async function notifyClient(clientId, key, vars = {}, { to = null, from = null, dedupe = key, attachments = null, pixelUrl = null, linkify = false, inReplyTo = null, references = null, icalEvent = null, thread = true } = {}) {
+export async function notifyClient(clientId, key, vars = {}, opts = {}) {
+  const { to = null, from = null, dedupe = key, attachments = null, pixelUrl = null, pixel = 'mail', linkify = false, inReplyTo = null, references = null, icalEvent = null, thread = true, now = null } = opts || {};
   const { renderTemplate } = await import('@/lib/templates/client');
   const { getClient } = await import('@/lib/db/client');
   const client = await getClient(clientId);
@@ -243,6 +254,14 @@ export async function notifyClient(clientId, key, vars = {}, { to = null, from =
     await alertOwner('report_blocked', { clientId, scope: `${clientId}:${key}`, vars: { report: key, clientId }, body: `Could not render "${key}" for ${clientId}: ${err.message}`, did: 'Nothing was sent to the client.' });
     return { sent: false, error: err.message };
   }
+  // An email to the client's contact is tracked (and gets the open pixel); prospects' emails are not.
+  const toContact = Boolean(client?.contactEmail) && String(recipient).trim().toLowerCase() === String(client.contactEmail).trim().toLowerCase();
+  const watch = toContact ? await import('@/lib/systems/mailwatch') : null;
+  const at = now ? new Date(now) : (await import('@/lib/systems/intake-io')).io.now();
+  const failed = async (error) => {
+    if (dedupe) await kv.del(`notified:${clientId}:${dedupe}`);
+    if (watch) await watch.noteFailed(clientId, key, { vars, opts, error, at });
+  };
   const via = from || msg.from;
   let account;
   try {
@@ -255,21 +274,30 @@ export async function notifyClient(clientId, key, vars = {}, { to = null, from =
       account = await ownerSender();
     }
   } catch (err) {
-    if (dedupe) await kv.del(`notified:${clientId}:${dedupe}`);
+    await failed(err?.message || String(err));
     throw err;
   }
   if (!account) {
-    if (dedupe) await kv.del(`notified:${clientId}:${dedupe}`);
+    await failed(`no ${via} inbox`);
     throw new Error(`no ${via} inbox to send ${key} for ${clientId}`);
   }
   const body = linkify ? linkUrls(esc(msg.text)) : esc(msg.text);
-  // The only tracking on a client email is an explicit pixel (onboarding call); OPEN_TRACKING=off drops it too.
-  const pixel = pixelUrl && String(process.env.OPEN_TRACKING || '').toLowerCase() !== 'off'
-    ? `<img src="${esc(pixelUrl)}" alt="" width="1" height="1" border="0" style="display:block;width:1px;height:1px;border:0;opacity:0" />` : '';
+  // The Message-ID is made first, so the open pixel can name this email (its tracking key).
+  const messageId = newMessageId(account.email);
+  const trackKey = watch ? watch.trackKeyOf(messageId) : null;
+  let src = pixelUrl;
+  if (!src && watch && pixel && !watch.NO_PIXEL.has(key)) {
+    src = pixel === 'onboard' || pixel === 'launch'
+      ? onboardPixelUrl(recipient, clientId, at.getTime(), pixel, trackKey)
+      : mailPixelUrl(recipient, clientId, trackKey, at.getTime());
+  }
+  // OPEN_TRACKING=off drops every pixel.
+  const img = src && String(process.env.OPEN_TRACKING || '').toLowerCase() !== 'off'
+    ? `<img src="${esc(src)}" alt="" width="1" height="1" border="0" style="display:block;width:1px;height:1px;border:0;opacity:0" />` : '';
   const res = await sendEmail(account, {
     to: recipient, subject: msg.subject, text: msg.text,
-    html: `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;white-space:pre-wrap">${body}</div>${pixel}`,
-    transactional: true, noTrack: true,
+    html: `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;white-space:pre-wrap">${body}</div>${img}`,
+    transactional: true, noTrack: true, messageId,
     ...(attachments ? { attachments } : {}),
     ...(icalEvent ? { icalEvent } : {}),
     ...(inReplyTo ? { inReplyTo } : {}),
@@ -277,11 +305,14 @@ export async function notifyClient(clientId, key, vars = {}, { to = null, from =
   });
   await logEvent(clientId, 'notify', res.success ? 'client_email_sent' : 'client_email_failed', { key, to: recipient, error: res.success ? undefined : res.error });
   if (!res.success) {
-    if (dedupe) await kv.del(`notified:${clientId}:${dedupe}`);
+    await failed(res.error);
     throw new Error(`send ${key} failed: ${res.error}`);
   }
-  const out = { sent: true, messageId: res.messageId, from: account.email, to: recipient, subject: msg.subject, text: msg.text };
-  if (thread !== false && client?.contactEmail && String(recipient).trim().toLowerCase() === String(client.contactEmail).trim().toLowerCase()) {
+  // Accepted: the SMTP server took it for this address (a success always did unless it listed the address as rejected).
+  const rejected = (res.rejected || []).map((x) => String(x?.address || x).toLowerCase());
+  const out = { sent: true, messageId: res.messageId, from: account.email, to: recipient, subject: msg.subject, text: msg.text, accepted: !rejected.includes(String(recipient).trim().toLowerCase()) };
+  if (watch) await watch.noteSent(clientId, key, { ...out, rejected }, { key: trackKey, at, pixel: Boolean(img) });
+  if (thread !== false && toContact) {
     try { await (await import('@/lib/systems/conversation')).logClientEmail(clientId, key, out); } catch {}
   }
   return out;

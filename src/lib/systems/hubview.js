@@ -321,6 +321,8 @@ export function systemsFor(ctx) {
 // ─── the owner's to-do list ───────────────────────────────────────────────────
 
 const api = (path, body, confirm = null) => ({ type: 'api', method: 'POST', path, body, ...(confirm ? { confirm } : {}) });
+/** States in which a "hasn't opened" to-do no longer matters (the trial is over). */
+const UNOPENED_OFF = new Set(['declined', 'closed_silent', 'deleted', 'retired', 'not_now', 'converted']);
 const view = (v, clientId, section = null) => ({ type: 'view', view: v, clientId, ...(section ? { section } : {}) });
 const mc = (path) => ({ type: 'mc', path });
 
@@ -367,6 +369,16 @@ export function todosFor(ctx) {
   if (needsReplyFor(client, ctx.callRaw) && !t.some((x) => x.id === `onboard-reply:${id}` || x.id === `launch-reply:${id}`)) {
     const since = client.msgWaitingAt || oc?.lastReplyAt || null;
     push('message-reply', `Answer ${firstOf(client.contactName) || client.contactName || client.name || id}'s message`, `They wrote ${ago(since, now)} · it goes from the onboarding inbox, in the same thread`, true, since, view('detail', id, 'conversation'));
+  }
+  // A milestone email they have not opened in 48 business hours (docs/IMPROVE-PASS.md C.2, systems/mailwatch.js):
+  // the owner calls or texts them, then presses the to-do. It clears itself when they open it or write.
+  const unopened = parseJ(client.mailUnopened, null);
+  if (unopened && unopened.key && !UNOPENED_OFF.has(st)) {
+    const who = firstOf(client.contactName) || client.contactName || client.name || id;
+    push('unopened', `${who} hasn't opened the ${unopened.what || 'last'} email — call or text them?`,
+      `Sent ${unopened.sentAt ? `${ownerWhen(unopened.sentAt)} (your time)` : 'two business days ago'} · not opened since · press this once you have reached them`,
+      true, unopened.since || unopened.sentAt || null,
+      api(`/api/mc/clients/${id}/messages`, { action: 'unopenedDone' }, `Did you reach ${who}? This clears the reminder.`));
   }
   const ab = ctx.autobuy || null;
   if (st === 'awaiting_purchase' && ab?.status === 'ready_to_buy') {
@@ -486,6 +498,8 @@ const ALERT_NEXT = {
   hot_lead_failed: 'Send the hot lead to {person} by hand, then mark the alert as seen',
   paused_quiet: 'Write to {person} — the trial is paused until they answer',
   trial_ended_quiet: 'Write to {person} — the trial ended because they went quiet',
+  client_email_failed: 'Reach {person} another way — an email to them could not be sent — then mark the alert as seen',
+  client_email_bounced: "Check {person}'s email address — an email to them bounced — then mark the alert as seen",
 };
 function todoNext(todo, ctx) {
   if (!String(todo.id).startsWith('alert-')) return todo.text;

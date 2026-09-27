@@ -12,7 +12,9 @@
  *             PLACEMENT.gate = false (systems/placement.js)
  *   booking   the client tapped "It worked" on the Booking Link Tester
  *             (profile.bookingTested, SPEC §6.7 step 4: Day 1 waits for it)
- * Green → state `ready` (Stage C's Sender starts on day1Date).
+ * Green → state `ready` (Stage C's Sender starts on day1Date) and Day 1 is
+ * fixed: the "we start on …" email goes (welcome_two_dates, once per Day 1,
+ * in their daytime — systems/startemail.js, docs/IMPROVE-PASS.md C.3).
  * Not green on the morning of Day 1 → Day 1 slides one US sending day at a time (and
  * Day 30 with it), client email day1_moved, owner day1_slid; after
  * WARMUP.maxSlideDays slides Day 1 is held and the owner gets warmup_stalled
@@ -33,6 +35,7 @@ import { latestCanary } from '@/lib/systems/canary';
 import { spamTestGate } from '@/lib/systems/placement';
 import { isSendingDay } from '@/lib/systems/ramp';
 import { approvalUrl, fmtDay } from '@/lib/systems/approval';
+import { sendStartEmail, startVars } from '@/lib/systems/startemail';
 
 export function nextSendingDay(dayKey) {
   let d = addDays(dayKey, 1);
@@ -81,8 +84,13 @@ async function announceMove(clientId, trial, newDay1, gate, { held = false, deps
   if (gate.checks.booking && !gate.checks.booking.ok) asks.push('do the 60-second booking link test from our earlier email and tap "It worked"');
   const waitingLine = !asks.length ? 'Nothing is needed from you.' : asks.length === 1 ? `One thing from you: ${asks[0]}` : `Two things from you: ${asks.join('; and ')}`;
   const ownerName = (await cfg(clientId, 'OWNER.signerName')) || 'The Aviance team';
+  // The same facts as the "we start on …" email (docs/IMPROVE-PASS.md C.3): the start in their zone, the window, the inbox.
+  let facts = {};
+  try { facts = await startVars(clientId, newDay1, { day30Date: newDay30 }); } catch { facts = {}; }
   try {
-    await (deps.notify || notifyClient)(clientId, 'day1_moved', { day1Date: fmtDay(newDay1), day30Date: fmtDay(newDay30), reason: held ? 'everything is now ready' : reason, waitingLine, ownerName }, { dedupe: `day1_moved:${newDay1}` });
+    await (deps.notify || notifyClient)(clientId, 'day1_moved', { ...facts, day1Date: fmtDay(newDay1), day30Date: fmtDay(newDay30), reason: held ? 'everything is now ready' : reason, waitingLine, ownerName }, { dedupe: `day1_moved:${newDay1}` });
+    // Moved as the gate turned green: this email is the "we start on …" email for the new Day 1.
+    if (held) await setTrial(clientId, { startEmailFor: newDay1 });
   } catch (err) {
     await logEvent(clientId, 'readiness', 'day1_moved_email_failed', { error: err.message });
   }
@@ -104,9 +112,16 @@ export async function runReadiness({ client, now = new Date(), deps = {} }) {
   if (gate.ok) {
     // Green on Day 1 itself: the Sender starts today (its window opens 09:00
     // ET). Only a Day 1 already in the past (held / slid) is reset.
-    if (!trial.day1Date || trial.day1Date < today) await announceMove(id, trial, nextSendingDay(today), gate, { held: true, deps });
+    const reset = !trial.day1Date || trial.day1Date < today;
+    if (reset) await announceMove(id, trial, nextSendingDay(today), gate, { held: true, deps });
     const moved = await setState(id, 'ready', 'readiness gate green (approval, list, warm-up, seed + spam tests, booking link)');
     await setTrial(id, { day1Held: '', readyAt: now.toISOString() });
+    // Day 1 is fixed: "we start on …" (after a reset, day1_moved above already said it).
+    if (moved && !reset) {
+      try { await (deps.startEmail || sendStartEmail)(id, { now, notify: deps.notify || null }); } catch (err) {
+        await logEvent(id, 'readiness', 'start_email_failed', { error: String(err?.message || err).slice(0, 200) });
+      }
+    }
     return { ready: moved, checks: gate.checks };
   }
 
