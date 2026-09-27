@@ -294,17 +294,20 @@ test('reminders at 24 h and 72 h while not booked, in the same thread, never twi
   assert.equal(r1.inReplyTo, toSam()[0].messageId, 'threads under the acceptance email');
   assert.match(r1.text, /Just checking you saw my email about your trial/);
   assert.equal((await check(48)).remindersSent, 0);
+  // Wed 10:00 ET, 48 business hours: the acceptance email is still unopened (delivery monitoring,
+  // docs/IMPROVE-PASS.md C.2) — a quiet alert and a to-do; the call's own rules below are unchanged.
+  assert.deepEqual(alertKeys(), ['client_email_unopened']);
   // Thu 10:00 ET: the 72 h reminder and, past dueBy, the overdue alert.
   assert.equal((await check(72.1)).remindersSent, 1);
-  assert.deepEqual(alertKeys(), ['onboard_overdue']);
-  assert.equal(alerts[0].vars.person, 'Sam Test');
+  assert.deepEqual(alertKeys(), ['client_email_unopened', 'onboard_overdue']);
+  assert.equal(alerts[1].vars.person, 'Sam Test');
   let oc = await onboardCallFor(ID, { now: at(MON, 73) });
   assert.equal(oc.status, 'overdue');
   assert.equal(oc.overdue, true);
   assert.equal(oc.remindersSent, 2);
   assert.equal(oc.nextReminderAt, null);
   assert.equal((await check(120)).remindersSent, 0, 'no third reminder');
-  assert.deepEqual(alertKeys(), ['onboard_overdue'], 'overdue alerts once');
+  assert.deepEqual(alertKeys(), ['client_email_unopened', 'onboard_overdue'], 'overdue alerts once');
   assert.equal(toSam().length, 3);
   const row = (await hubBoard({ now: at(MON, 120) })).stages.find((s) => s.key === 'onboard').clients[0];
   assert.equal(row.simple.label, 'Accepted — the call is still not booked (overdue)');

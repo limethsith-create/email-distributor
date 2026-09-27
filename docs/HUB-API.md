@@ -1255,3 +1255,111 @@ call is booked ahead: answer it in the Calendar first) → `{ ok, launchCall }`
   `GET /api/c/book/slots` answers `kind` too.
 - Settings › Advanced: `LAUNCH` (`callMinutes`, `earliestWarmupDay`,
   `bookWithinDays`, `fallbackDay`).
+
+---
+
+# Delivery monitoring (2026-09-27)
+
+Contract: docs/IMPROVE-PASS.md section C. Code: `src/lib/systems/mailwatch.js`
+(tracking, the watch), `src/lib/systems/startemail.js` (the "we start on …"
+email), `notifyClient` (lib/notify.js: the pixel, the tracking record, a failed
+send kept for its retry). Every field is additive.
+
+Every email the machine sends to a client's contact carries one open pixel
+(the two call emails keep their call's pixel; the owner's own replies and the
+reply bot's answers carry none; `OPEN_TRACKING=off` drops them all) and is
+tracked: the SMTP server took it (`accepted`), its Message-ID, the first human
+open (scanners and Apple prefetches set aside), a bounce (a DSN matched by the
+returned Message-ID, else by the address and the time — from the daily bounce
+checker and from the onboarding inbox's own scan), and a reply that threads to
+it (In-Reply-To / References).
+
+## Conversation entries
+
+`conversation.thread[]` (and `onboardCall.thread[]` / `launchCall.thread[]`,
+the same list) — every entry gains:
+```jsonc
+{
+  "status": "sent|delivered|opened|bounced|replied",  // null on their messages (dir 'in')
+  "statusAt": "ISO|null",          // when that status came (delivered/sent: when it was sent)
+  "statusText": "delivered · opened Tue 8:10 pm",     // plain words, the owner's clock; null on dir 'in'
+                                   // "delivered · not opened yet" · "delivered" (no pixel: a personal reply)
+                                   // · "bounced Tue 8:10 pm" · "replied Tue 8:10 pm" · "sent Tue 8:10 pm"
+                                   // (an email from before tracking); older than 6 days: "Tue 29 Sep, 8:10 pm"
+  "accepted": true,                // the SMTP server took it (null: not tracked / their message)
+  "messageId": "<…@aviance.online>|null",
+  "openedAt": "ISO|null",
+  "bouncedAt": "ISO|null", "bounceReason": "550 5.1.1 … does not exist|null",
+  "repliedAt": "ISO|null",         // a message from them threads to this one
+  "milestone": false,              // one of the watched emails (below)
+  "unopenedAt": "ISO|null"         // a milestone not opened in 48 business hours → the to-do was raised then
+}
+```
+Status order: replied > bounced > opened > delivered > sent. Suggested UI: a
+small grey line under each of our emails with `statusText`; `bounced` in red
+with `bounceReason` beside it; a milestone with `unopenedAt` and no `openedAt`
+in amber ("not opened yet").
+
+## The milestone emails (the delivery watch)
+
+`accepted_call` (acceptance), `next_steps` ("what happens now"),
+`launch_invite` (launch-call invite), `welcome_two_dates` ("we start on"),
+`day1_moved` (new start date), `trial_report` / `trial_report_zero` (Day 29
+report), `decision_link` / `decision_link_zero` (decision):
+- **Not sent** (the SMTP send failed) → tried once more 10 minutes later by the
+  email's own sender (its records kept: the call's times, the trial's flags);
+  still not sent → alert `client_email_failed`.
+- **Bounced** → alert `client_email_bounced`.
+- **Not opened in 48 hours of US business days** (weekends and US holidays do
+  not count; Fri 10:00 ET → Tue 10:00 ET), no message from them since, and for
+  the two call emails no booking / time asked for / approval / Stop reminders
+  since → the to-do below and the quiet alert `client_email_unopened`. Never for
+  Test Mode, never once the trial is over.
+
+The watch runs inside `POST /api/mc/onboard-calls/check`, the `onboard-calls`
+job and Approve's after(): the job is also due whenever a client's
+`mailWatchDueAt` (client hash) has come. The check's answer may carry
+`bounces: n` (bounces found in the onboarding inbox) and `mailWatch: {
+retried, failed, unopened }` — only when something happened.
+
+## To-do and `simple`
+
+- `unopened:{id}` (urgent): "Sam hasn't opened the “we start on” email — call or
+  text them?", detail "Sent Tue 20 Oct, 7:30 pm (your time) · not opened since
+  · press this once you have reached them", `action: { type: 'api', method:
+  'POST', path: '/api/mc/clients/{id}/messages', body: { action:
+  'unopenedDone' }, confirm: 'Did you reach Sam? This clears the reminder.' }`.
+  It clears itself when they open that email or write to us. One at a time
+  (the newest). The client hash carries it as `mailUnopened` (JSON: key,
+  template, what, sentAt, since).
+- `simple.needsYou` turns on with it, and while `next` would say "Nothing …",
+  `next` is its text — the trial's big button.
+- `client_email_failed` / `client_email_bounced` are urgent alerts: their
+  to-do is the usual alert one, `next` "Reach Sam another way — an email to
+  them could not be sent — then mark the alert as seen" / "Check Sam's email
+  address — an email to them bounced — then mark the alert as seen".
+
+## `POST /api/mc/clients/{id}/messages`
+
+Gains `{ action: 'unopenedDone' }` → the "hasn't opened" to-do goes and its
+quiet alert is acknowledged → `{ ok, conversation }`.
+
+## Alerts (phone + email)
+
+- `client_email_failed` (urgent): "Could not send Sam the “we start on” email".
+- `client_email_bounced` (urgent): "The launch-call invite email to Sam bounced".
+- `client_email_unopened` (quiet, info — the to-do carries it): "Sam hasn't
+  opened the decision email"; acknowledged when the to-do clears.
+
+## The "we start on …" email (`welcome_two_dates`)
+
+No longer at the setup check (Day 1 was only the ramp's estimate then). It goes
+ONCE per Day 1, when Day 1 is fixed — the readiness gate turns green (state
+`ready`) — in their daytime (08:00–20:00 in their zone; a gate that turns green
+at night leaves it to the `welcome` job in their morning). It names the start
+in their zone ("Wednesday 21 October at 8:00 am Central Time (9:00 am
+Eastern)"), the sending window, the name and inbox the prospects will see, and
+invites a reply any time. When Day 1 moves, `day1_moved` goes with the same
+facts; a move made as the gate turns green IS the start email for that date.
+The trial hash gains `startEmailFor` (the Day 1 it went for); `welcomeSentAt`
+is when it went.

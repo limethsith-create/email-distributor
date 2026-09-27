@@ -44,9 +44,10 @@ function safeEqual(a, b) {
  * Legacy v1 tokens (plain base64url of the email) stay accepted by the route.
  *
  * `extra.purpose` + `extra.clientId` mark a pixel that is not a cold email
- * (`onboard`: the onboarding-call email, docs/ONBOARD-CALL.md) so the route
- * records it on that client instead of the cold-email open store. Cold
- * tokens carry neither field and verify exactly as before.
+ * (`onboard`: the onboarding-call email, docs/ONBOARD-CALL.md; `launch`: the
+ * launch invite; `mail`: any other client email) so the route records it on
+ * that client instead of the cold-email open store. Cold tokens carry
+ * neither field and verify exactly as before.
  */
 export function buildTrackingToken(toEmail, touch = 'd0', sentAt = Date.now(), extra = null) {
   const data = {
@@ -113,9 +114,20 @@ export function trackingPixelUrl(toEmail, touch = 'd0', sentAt = Date.now()) {
 /**
  * Pixel for the onboarding-call email (purpose `onboard`): an open marks
  * openedAt on client:{id}:onboardcall. Purpose `launch` = the launch invite
- * (docs/LAUNCH-CALL.md): the same, on client:{id}:launchcall.
+ * (docs/LAUNCH-CALL.md): the same, on client:{id}:launchcall. With `key`
+ * (the email's delivery-tracking key, systems/mailwatch.js) the token's touch
+ * is that key, so the same open also marks the email in the conversation.
  */
-export function onboardPixelUrl(toEmail, clientId, sentAt = Date.now(), purpose = 'onboard') {
+export function onboardPixelUrl(toEmail, clientId, sentAt = Date.now(), purpose = 'onboard', key = null) {
   const p = purpose === 'launch' ? 'launch' : 'onboard';
-  return `${TRACKING_BASE_URL}/api/track/open?t=${buildTrackingToken(toEmail, p, sentAt, { purpose: p, clientId })}`;
+  return `${TRACKING_BASE_URL}/api/track/open?t=${buildTrackingToken(toEmail, key || p, sentAt, { purpose: p, clientId })}`;
+}
+
+/**
+ * Pixel for any other email to a client's contact (purpose `mail`,
+ * docs/IMPROVE-PASS.md C.1): the touch is the email's delivery-tracking key
+ * (16 hex of its Message-ID); a human open marks openedAt on that email.
+ */
+export function mailPixelUrl(toEmail, clientId, key, sentAt = Date.now()) {
+  return `${TRACKING_BASE_URL}/api/track/open?t=${buildTrackingToken(toEmail, key, sentAt, { purpose: 'mail', clientId })}`;
 }

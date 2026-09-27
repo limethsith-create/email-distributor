@@ -31,6 +31,7 @@ import { normId } from '@/lib/mail-utils';
 import { ackAlerts } from '@/lib/notify';
 import { io, asArray, asObject } from '@/lib/systems/intake-io';
 import { shortHash, lower } from '@/lib/systems/stagec-common';
+import { deliveryView, recordsById, readTrack } from '@/lib/systems/mailwatch';
 
 export const THREAD_CAP = 200;
 export const TEXT_MAX = 4000;
@@ -82,8 +83,15 @@ export async function pushEntry(clientId, entry) {
  * An entry as the hub gets it (old entries have no auto / rule / template).
  * `rule` on an `in` entry is what the reply bot read in it; on an `out` entry
  * with `auto` it is the rule the bot answered.
+ *
+ * Delivery (docs/IMPROVE-PASS.md C.4, systems/mailwatch.js): `rec` is the
+ * email's tracking record (null before tracking, or for their messages) →
+ * accepted, messageId, openedAt, bouncedAt, bounceReason, repliedAt,
+ * milestone, unopenedAt, status ('sent'|'delivered'|'opened'|'bounced'|
+ * 'replied'; null on an `in` entry), statusAt and statusText ("delivered ·
+ * opened Tue 8:10 pm") in the owner's time.
  */
-export function entryView(t) {
+export function entryView(t, rec = null, now = new Date()) {
   const e = asObject(t);
   if (!e) return null;
   const dir = e.dir === 'in' ? 'in' : 'out';
@@ -94,7 +102,14 @@ export function entryView(t) {
     auto: e.auto === true || e.auto === 'true',
     rule: e.rule || null,
     template: kind === 'system' ? e.template || null : null,
+    ...deliveryView(asObject(rec), { dir, at: e.at }, now instanceof Date ? now : new Date()),
   };
+}
+
+/** The thread as the hub gets it: each entry with its email's delivery (`track`: client:{id}:mailtrack as read). */
+export function threadView(thread = [], track = {}, now = new Date()) {
+  const byId = recordsById(track);
+  return (thread || []).map((t) => entryView(t, byId.get(String(asObject(t)?.id || '')) || null, now)).filter(Boolean);
 }
 
 // ─── the convo hash ──────────────────────────────────────────────────────────
@@ -211,9 +226,10 @@ function lastTimes(thread) {
  *  call      the onboarding-call hash (its bookings and answers count as answers)
  *  bot       { enabled (everyone), maxPerDay, answersNow, why } from systems/replybot.js
  *  sender    { email } of the inbox replies go from, or null
+ *  track     client:{id}:mailtrack (each email's delivery, systems/mailwatch.js)
  */
-export function conversationView({ thread = [], client = {}, convo = {}, call = {}, bot = {}, sender = null, dayKey = null } = {}) {
-  const entries = (thread || []).map(entryView).filter(Boolean);
+export function conversationView({ thread = [], client = {}, convo = {}, call = {}, bot = {}, sender = null, dayKey = null, track = {}, now = new Date() } = {}) {
+  const entries = threadView(thread, track, now);
   const clientOff = flag(convo.botOff);
   const pending = asObject(convo.botPending);
   const sentToday = dayKey && convo.botDay === dayKey ? Number(convo.botCount) || 0 : 0;
@@ -298,17 +314,18 @@ export async function conversationFor(clientId, { now = io.now(), client = null 
   const { activeCall } = await import('@/lib/systems/onboardcall');
   const { onboardSender } = await import('@/lib/notify');
   // The call in play decides the bot's view and what counts as answered (the launch call during warm-up).
-  const [thread, convo, active] = await Promise.all([readThread(clientId), readConvo(clientId), activeCall(clientId, c)]);
+  const [thread, convo, active, track] = await Promise.all([readThread(clientId), readConvo(clientId), activeCall(clientId, c), readTrack(clientId).catch(() => ({}))]);
   let sender = null;
   try { sender = await onboardSender(); } catch { sender = null; }
   const bot = await botViewFor(c, active.raw, { now, kind: active.kind });
-  return conversationView({ thread, client: c, convo, call: active.raw, bot, sender, dayKey: bot.dayKey });
+  return conversationView({ thread, client: c, convo, call: active.raw, bot, sender, dayKey: bot.dayKey, track, now });
 }
 
 /**
  * POST /api/mc/clients/{id}/messages:
  *   { action: 'reply', text }  → the owner's reply (any client)
  *   { action: 'botOff' } / { action: 'botOn' }  → the reply bot for THIS client
+ *   { action: 'unopenedDone' }  → the "hasn't opened the … email" to-do is done
  * → { ok, conversation }
  */
 export async function messagesAction(clientId, body = {}, { now = io.now() } = {}) {
@@ -330,7 +347,13 @@ export async function messagesAction(clientId, body = {}, { now = io.now() } = {
       await patchConvo(clientId, { botOff: null });
       await logEvent(clientId, 'conversation', 'bot_on', {});
       break;
-    default: throw new MessagesError('Unknown action — use reply, botOn or botOff.');
+    case 'unopenedDone': {
+      // The owner reached them about the email they had not opened (docs/IMPROVE-PASS.md C.2): the to-do goes.
+      const { unopenedDone } = await import('@/lib/systems/mailwatch');
+      await unopenedDone(clientId, { now });
+      break;
+    }
+    default: throw new MessagesError('Unknown action — use reply, botOn, botOff or unopenedDone.');
   }
   return { ok: true, conversation: await conversationFor(clientId, { now }) };
 }

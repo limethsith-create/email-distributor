@@ -531,7 +531,23 @@ test('the journey: website form → Day 30 → converted, through the real route
     assert.equal(r.status, 200, JSON.stringify(r.json));
     bookingTestedAt = clock.iso();
   };
-  hooks = [leadFinder, danaTestsBooking];
+  // Dana reads her email the next day, in her waking hours (Gmail loads the pixel through its proxy): the
+  // delivery watch (docs/IMPROVE-PASS.md C.2) sees every email to her opened before its 48 business hours.
+  const readByDana = new Set();
+  const danaReadsMail = async (now) => {
+    const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }).format(now)) % 24;
+    if (h < 7 || h >= 22) return;
+    for (const m of sim.sent) {
+      if (m.to !== APPLICANT.email || readByDana.has(m.messageId) || now.getTime() - Date.parse(m.at) < 20 * 3600e3) continue;
+      readByDana.add(m.messageId);
+      const src = /src="([^"]+\/api\/track\/open\?t=[^"]+)"/.exec(m.html || '')?.[1]?.replace(/&amp;/g, '&');
+      if (!src) continue;
+      const u = new URL(src);
+      const r = await call('api/track/open/route', 'GET', { path: u.pathname + u.search, headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 5.1; rv:11.0) Gecko Firefox/11.0 (via ggpht.com GoogleImageProxy)' } });
+      assert.equal(r.status, 200);
+    }
+  };
+  hooks = [leadFinder, danaTestsBooking, danaReadsMail];
 
   clock.set(et('2026-10-07', '09:40'));
   await goTo(et('2026-10-09', '12:00'));
@@ -666,6 +682,12 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(sL21.detail.trial.day1Date, '2026-10-21');
   assert.equal(sL21.row.simple.label, 'Sending — day 1 of 30, 0 calls booked');
   assert.equal(sL21.detail.launchCall.status, 'held', 'the launch call stays on the trial');
+  // Delivery monitoring (docs/IMPROVE-PASS.md C.3): the "we start on" email went once, when Day 1 was fixed (the gate
+  // green after the OK on the launch call) — not at the setup check — and it is tracked in the conversation.
+  const startMail = sL21.detail.conversation.thread.filter((e) => e.template === 'welcome_two_dates');
+  assert.equal(startMail.length, 1, 'one "we start on" email');
+  assert.ok(Date.parse(startMail[0].at) >= et('2026-10-20', '11:40').getTime(), `sent ${startMail[0].at}, after the launch call`);
+  assert.ok(['delivered', 'opened'].includes(startMail[0].status), startMail[0].status);
   // Journey fix: the booking test went on a business day (Day −4 was a Saturday → the Friday before), inside US hours.
   const testMail = sim.sent.find((m) => m.to === APPLICANT.email && linkIn(m.text, 'booking-ok'));
   assert.equal(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(new Date(testMail.at)), 'Fri');
@@ -704,7 +726,7 @@ test('the journey: website form → Day 30 → converted, through the real route
       deliver(lead.account_used, { from: lead.email, subject: `Re: ${lead.original_subject}`, text: r.text, threadIds: [lead.original_message_id.replace(/[<>]/g, '')] });
     }
   };
-  hooks = [danaAnswersHotLeads, prospectsReply];
+  hooks = [danaAnswersHotLeads, prospectsReply, danaReadsMail];
 
   await goTo(et('2026-10-23', '11:45'));
   // Replies of every kind land in the trial inboxes.

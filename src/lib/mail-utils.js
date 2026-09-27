@@ -186,6 +186,23 @@ export function extractBouncedAddress(text, own = new Set()) {
   return candidates[0] || null;
 }
 
+/**
+ * The Message-ID of the email that bounced, from a DSN's text (the returned
+ * headers / text/rfc822-headers part many servers attach): the first
+ * `Message-ID:` / `Original-Message-ID:` line that is not the DSN's own
+ * (`ownId`). Normalized (no brackets, lower case), or null.
+ */
+export function originalMessageId(text, ownId = null) {
+  const own = normId(ownId);
+  const re = /^[ \t>]*(?:original-)?message-id\s*:\s*<?([^\s<>]+@[^\s<>]+)>?/gim;
+  let m;
+  while ((m = re.exec(String(text || '')))) {
+    const id = normId(m[1]);
+    if (id && id !== own) return id;
+  }
+  return null;
+}
+
 /** Short human-readable reason from a DSN body. */
 export function bounceReason(text) {
   const t = String(text || '');
@@ -286,6 +303,24 @@ export function findTextPart(node) {
     return null;
   };
   return walk(node, 'text/plain') || walk(node, 'text/html');
+}
+
+/**
+ * The part of a DSN that carries the returned email's headers
+ * (text/rfc822-headers, else message/rfc822 or message/global) → its part
+ * number, or null.
+ */
+export function findReturnedHeadersPart(node) {
+  if (!node) return null;
+  const leaves = [];
+  const walk = (n) => {
+    if (!n) return;
+    const type = String(n.type || '').toLowerCase();
+    if (type === 'text/rfc822-headers' || type === 'message/rfc822' || type === 'message/global') { if (n.part) leaves.push({ part: n.part, type }); return; }
+    for (const c of n.childNodes || []) walk(c);
+  };
+  walk(node);
+  return (leaves.find((l) => l.type === 'text/rfc822-headers') || leaves[0] || null)?.part || null;
 }
 
 /** Read an imapflow download stream into a string (bounded by maxBytes). */

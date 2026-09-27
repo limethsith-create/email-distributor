@@ -368,7 +368,9 @@ test('launch reminders at 24 h / 72 h in the same thread with the approval page,
   assert.match(r1.text, /Or read and approve them on one page: https:\/\/app\.test\/c\/[^/\s]+\/approve/);
   assert.equal((await check(at(TUE, 24.5))).remindersSent, 0, 'never twice');
   assert.equal((await check(at(TUE, 72.1))).remindersSent, 1, 'Fri 10:06 ET: the 72 h reminder');
-  assert.deepEqual(alertKeys(), ['launch_overdue']);
+  // … and, after the call's own overdue, the delivery watch (docs/IMPROVE-PASS.md C.2): the invite is still
+  // unopened 48 business hours on (Thu 10:00 ET) — a quiet alert and a to-do.
+  assert.deepEqual(alertKeys(), ['launch_overdue', 'client_email_unopened']);
   assert.match(alerts[0].body, /has not booked the launch call 3 business days after the launch invite/);
   let lc = await launchCallFor(ID, { now: at(TUE, 73) });
   assert.deepEqual([lc.status, lc.overdue, lc.remindersSent, lc.nextReminderAt], ['overdue', true, 2, null]);
@@ -378,7 +380,7 @@ test('launch reminders at 24 h / 72 h in the same thread with the approval page,
   assert.deepEqual(od.action, { type: 'view', view: 'detail', clientId: ID, section: 'launchCall' });
   assert.match(detail.row.simple.label, /· launch call still not booked \(overdue\)$/);
   assert.equal((await check(at(TUE, 120))).remindersSent, 0, 'no third reminder');
-  assert.deepEqual(alertKeys(), ['launch_overdue'], 'overdue alerts once');
+  assert.deepEqual(alertKeys(), ['launch_overdue', 'client_email_unopened'], 'overdue alerts once');
   // The job runs for a launch call alone.
   const { JOBS } = await import('@/lib/jobs');
   const j = JOBS.find((x) => x.name === 'onboard-calls');

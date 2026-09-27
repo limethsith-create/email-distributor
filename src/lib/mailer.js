@@ -19,6 +19,12 @@ function buildTrackingPixel(toEmail, touch) {
   }
 }
 
+/** A fresh Message-ID on the sender's own domain: '<uuid@domain>'. */
+export function newMessageId(fromEmail) {
+  const domain = String(fromEmail || '').split('@')[1] || 'aviance.online';
+  return `<${crypto.randomUUID()}@${domain}>`;
+}
+
 /** Resolve the SMTP endpoint for an account (per-account provider config). */
 function smtpConfigFor(account) {
   if (account && account.smtp && account.smtp.host) return account.smtp;
@@ -160,6 +166,8 @@ export function classifySmtpError(error) {
  *   icalEvent: { method, filename, content } — a calendar invite (the Calendar's
  *   confirmations): nodemailer adds it as a text/calendar part (mail apps show
  *   "Add to calendar") and as an .ics attachment.
+ *   messageId: a Message-ID made beforehand (newMessageId) — client emails do,
+ *   so their open pixel can name the email before it is sent.
  * @returns {Promise<object>} { success, messageId, accepted, rejected, response,
  *   envelopeTime, messageTime, messageSize, ms, attempts } or on failure
  *   { success: false, error, kind, code, responseCode, command, response, ms, attempts }
@@ -168,7 +176,6 @@ export async function sendEmail(account, mailOptions) {
   const started = Date.now();
   const password = account.appPassword || account.password;
   const senderName = account.displayName || account.email.split('@')[0];
-  const domain = account.email.split('@')[1] || 'aviance.online';
   const to = String(mailOptions.to || '').trim();
   const transactional = Boolean(mailOptions.transactional);
 
@@ -180,8 +187,9 @@ export async function sendEmail(account, mailOptions) {
     : '';
   const wrappedHtml = wrapInHtmlTemplate(mailOptions.html || '', trackingPixel);
 
-  // Generate a proper Message-ID using the sender's domain (DKIM/SPF alignment).
-  const messageId = `<${crypto.randomUUID()}@${domain}>`;
+  // Generate a proper Message-ID using the sender's domain (DKIM/SPF alignment) — or the one the
+  // caller made beforehand (a client email's open pixel carries a key derived from it).
+  const messageId = mailOptions.messageId ? `<${String(mailOptions.messageId).replace(/^<|>$/g, '')}>` : newMessageId(account.email);
   const references = normalizeReferences(mailOptions.references || mailOptions.inReplyTo);
   const inReplyTo = mailOptions.inReplyTo ? normalizeReferences(mailOptions.inReplyTo)[0] : null;
 

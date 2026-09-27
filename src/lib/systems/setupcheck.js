@@ -14,8 +14,9 @@
  * blacklist + *CheckedAt). Work is split across ticks: a run does the checks
  * that fit in its budget; the loopback sends on one run and looks for the
  * message on later runs. All blocking checks pass → `warming` with the trial
- * dates set and welcome_two_dates sent. Any fail → stays `setup_check`,
- * owner alert with the exact fix, hourly re-run.
+ * dates set (Day 1 is then the ramp's estimate: the "we start on …" email,
+ * welcome_two_dates, goes once Day 1 is fixed — systems/startemail.js). Any
+ * fail → stays `setup_check`, owner alert with the exact fix, hourly re-run.
  */
 
 import { kv } from '@vercel/kv';
@@ -28,7 +29,7 @@ import { getInboxRecords, toAccount, patchInbox } from '@/lib/db/inboxes';
 import { initCounters } from '@/lib/db/counters';
 import { parseAccount } from '@/lib/smtp-accounts';
 import { dayKeyIn, addDays, partsIn, ET } from '@/lib/time';
-import { io, asObject, firstNameOf, ownerName, sendClient, formatDay, nextUsBusinessDay } from '@/lib/systems/intake-io';
+import { io, asObject, nextUsBusinessDay } from '@/lib/systems/intake-io';
 import { ackAlerts } from '@/lib/notify';
 
 const SYSTEM = 'setupcheck';
@@ -400,17 +401,12 @@ export async function finishSetup(clientId, { now = io.now() } = {}) {
   await kv.hset(K.trial(clientId), dates);
   await kv.hset(K.domain(clientId), { setupPhase: 'passed', setupPassedAt: now.toISOString() });
   await setState(clientId, 'warming', 'all setup checks passed');
-  await updateClient(clientId, { intakeStep: 'welcome' });
+  await updateClient(clientId, { intakeStep: '' });
   await logEvent(clientId, SYSTEM, 'passed', dates);
   // Every check passes now: the setup alerts of an earlier failed round (and the buy reminders) are handled.
   await ackAlerts(clientId, ['dns_fail', 'inbox_auth_fail', 'loopback_fail', 'blacklisted', 'shopping_list', 'purchase_reminder'], { reason: 'setup checks passed', now });
-  // The two dates go in the daytime (08:00–20:00 US Eastern): a setup that passes at night (a CheapInboxes
-  // webhook can come any time) leaves welcome_two_dates to the `welcome` job / the hub's check in the morning.
-  if (inDaytime(now)) {
-    await sendWelcome(clientId, { now }).catch(async (err) => {
-      await logEvent(clientId, SYSTEM, 'welcome_failed', { error: String(err.message).slice(0, 200) });
-    });
-  } else await logEvent(clientId, SYSTEM, 'welcome_waits', { until: '08:00 US Eastern' });
+  // No email here: Day 1 is only the ramp's estimate now. The "we start on …" email (welcome_two_dates)
+  // goes once Day 1 is fixed — the readiness gate green (docs/IMPROVE-PASS.md C.3, systems/startemail.js).
   return { phase: 'passed', ...dates };
 }
 
@@ -421,20 +417,13 @@ export function inDaytime(now) {
   return p.hhmm >= DAYTIME[0] && p.hhmm < DAYTIME[1];
 }
 
-/** welcome_two_dates; retried hourly by the `welcome` job until sent. */
+/**
+ * welcome_two_dates — now the "we start on …" email, sent once Day 1 is fixed
+ * (systems/startemail.js; the hub's "resend welcome" lands here).
+ */
 export async function sendWelcome(clientId, { now = io.now() } = {}) {
-  const client = await getClient(clientId);
-  const trial = await kv.hgetall(K.trial(clientId));
-  if (!trial?.day1Date) throw new Error('no day1Date');
-  if (trial.welcomeSentAt) { await updateClient(clientId, { intakeStep: '' }); return { skipped: 'sent' }; }
-  // The OK on the list and the emails comes on the launch call near the end of warm-up (docs/LAUNCH-CALL.md).
-  await sendClient(clientId, 'welcome_two_dates', {
-    firstName: firstNameOf(client.contactName), ownerName: await ownerName(clientId),
-    day1Date: formatDay(trial.day1Date), day30Date: formatDay(trial.day30Date), callMinutes: await cfg(clientId, 'LAUNCH.callMinutes'),
-  }, { dedupe: 'welcome_two_dates' });
-  await kv.hset(K.trial(clientId), { welcomeSentAt: now.toISOString() });
-  await updateClient(clientId, { intakeStep: '' });
-  return { sent: true };
+  const { sendStartEmail } = await import('@/lib/systems/startemail');
+  return sendStartEmail(clientId, { now });
 }
 
 /** Profile + domain summary for the Mission Control purchase page. */

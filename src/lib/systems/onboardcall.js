@@ -54,7 +54,6 @@ import { K, assertClientId } from '@/lib/db/keys';
 import { DEFAULTS, globalOverrides, cfg } from '@/lib/config';
 import { getClient, getAllClients, updateClient } from '@/lib/db/client';
 import { logEvent } from '@/lib/db/events';
-import { onboardPixelUrl } from '@/lib/tokens';
 import { onboardSender } from '@/lib/notify';
 import { renderTemplate } from '@/lib/templates/client';
 import { mintToken, pageUrl, rememberLink, TTL } from '@/lib/pagetokens';
@@ -417,9 +416,6 @@ function labelFor(status, raw, s, now, kind = 'onboarding') {
   }
 }
 
-/** One entry of the conversation as the hub gets it (systems/conversation.js; + auto / rule / template). */
-const threadEntry = conv.entryView;
-
 /**
  * The hub's `onboardCall` (docs/ONBOARD-CALL.md §5), or null when no
  * acceptance email was sent. Pure: stored times + settings + now. With
@@ -427,7 +423,7 @@ const threadEntry = conv.entryView;
  * the same shape plus approvedOnCall, approvedOnPage, skipped and the
  * approval page link the caller looked up (`approvalUrl`).
  */
-export function onboardCallView(raw, thread = [], { now = new Date(), settings, clientState = 'onboarding', meeting = null, kind = 'onboarding', approvalUrl = null } = {}) {
+export function onboardCallView(raw, thread = [], { now = new Date(), settings, clientState = 'onboarding', meeting = null, kind = 'onboarding', approvalUrl = null, track = {} } = {}) {
   if (!raw || !flag(raw.sentAt)) return null;
   const k = kindOf(kind);
   const s = settingsFor(settings || normaliseSettings(), k);
@@ -476,7 +472,8 @@ export function onboardCallView(raw, thread = [], { now = new Date(), settings, 
       { key: 'booked', label: 'Call booked', done: booked, at: isoOrNull(raw.bookedAt) },
       { key: 'held', label: 'Call done', done: flag(raw.heldAt), at: isoOrNull(raw.heldAt) },
     ],
-    thread: (thread || []).map(threadEntry).filter(Boolean),
+    // The conversation, each email with its delivery (docs/IMPROVE-PASS.md C.4).
+    thread: conv.threadView(thread, track, now),
   };
 }
 
@@ -589,7 +586,9 @@ export async function sendAcceptance(clientId, { onboardingLink, now = io.now(),
   const res = await sendClient(clientId, 'accepted_call', vars, {
     dedupe: n === 1 ? 'accepted_call' : `accepted_call:${n}`,
     thread: false, // its own entry below (kind 'acceptance')
-    pixelUrl: onboardPixelUrl(client.contactEmail, clientId, now.getTime()),
+    pixel: 'onboard', // the call's own pixel, also naming this email (delivery monitoring)
+    now,
+    resend: flag(raw.sentAt), // for the delivery watch's retry
     linkify: true,
     ...(flag(raw.sentAt) ? threadHeaders(raw) : {}),
   });
@@ -636,7 +635,8 @@ async function sendReminder(client, raw, s, idx, now, kind = 'onboarding') {
   const res = await sendClient(id, sp.reminder, vars, {
     dedupe: `${sp.reminder}:${Number(raw.sends) || 1}:${idx}`,
     thread: false,
-    pixelUrl: onboardPixelUrl(client.contactEmail, id, now.getTime(), sp.pixel),
+    pixel: sp.pixel,
+    now,
     linkify: true,
     ...threadHeaders(raw),
   });
@@ -662,7 +662,7 @@ async function sendDayBefore(client, raw, s, now, kind = 'onboarding') {
     link = link || (await cfg(id, 'CALENDAR.meetingLink')) || null;
   } catch { link = null; }
   const vars = { firstName: firstNameOf(client.contactName), ownerName: await ownerName(id), callMinutes: s.callMinutes, when: await whenForThem(raw.bookedFor, tz), callDay: callDayWord(raw.bookedFor, now, tz), joinLine: link ? `Join here: ${link}` : "I'll send the video link before the call.", ...(await launchVars(id, kind)) };
-  const res = await sendClient(id, sp.tomorrow, vars, { dedupe: `${sp.tomorrow}:${raw.bookedFor}`, thread: false, ...threadHeaders(raw) });
+  const res = await sendClient(id, sp.tomorrow, vars, { dedupe: `${sp.tomorrow}:${raw.bookedFor}`, thread: false, now, ...threadHeaders(raw) });
   const at = now.toISOString();
   await patch(id, { tomorrowSentFor: raw.bookedFor, lastReminderAt: at, ...(res.messageId ? { messageIds: JSON.stringify(withId(raw, res.messageId)) } : {}) }, kind);
   if (!res.deduped) {
@@ -746,6 +746,9 @@ async function recordReply(w, meta, now) {
     }, kind);
   }
   await conv.noteInbound(id, { at, messageId: meta.messageId || null, subject: meta.subject || '', needsAnswer: !thanks });
+  // Delivery monitoring (docs/IMPROVE-PASS.md C.1): the email it threads to is replied; they are in touch.
+  const { noteReply } = await import('@/lib/systems/mailwatch');
+  await noteReply(id, { threadIds: meta.threadIds || [], at, now });
   await logEvent(id, SYSTEM, 'reply_received', { from: lower(meta.from), subject: meta.subject || '', ...(inCall ? { call: kind } : {}), ...(bot.rule ? { rule: bot.rule } : {}), ...(bot.queued ? { bot: 'queued' } : {}) });
   if (bot.alert) {
     await alert('onboard_reply', {
@@ -862,7 +865,8 @@ async function scanInbox(watched, now, talk = []) {
   const own = lower(account.email);
   const emails = new Set([...watched, ...talk].map((w) => w.email));
   const ids = new Set(watched.flatMap((w) => [...w.ids]));
-  const matters = (m) => lower(m.from) !== own && (emails.has(lower(m.from)) || (m.threadIds || []).some((i) => ids.has(normId(i))) || m.hasIcs || subjectIsBooking(m.subject));
+  // A bounce (DSN) is read too: it may be about an email to a client (delivery monitoring, docs/IMPROVE-PASS.md C.1).
+  const matters = (m) => lower(m.from) !== own && (emails.has(lower(m.from)) || (m.threadIds || []).some((i) => ids.has(normId(i))) || m.hasIcs || subjectIsBooking(m.subject) || m.kind === 'dsn');
   const res = await io.scanMailbox(account, {
     folders: ['INBOX'], includeSpam: true, uidState, maxMessages: 60, firstScanDays: 3, timeoutMs: 15_000,
     wantBody: matters, wantIcs: (m) => m.hasIcs && lower(m.from) !== own,
@@ -874,9 +878,15 @@ async function scanInbox(watched, now, talk = []) {
   }
   const out = { replies: 0, booked: 0 };
   const msgs = [...(res.messages || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const clientsSeen = [...watched, ...talk].map((w) => w.client);
   for (const meta of msgs) {
     if (!matters(meta)) continue;
     try {
+      if (meta.kind === 'dsn') {
+        const { noteDsn } = await import('@/lib/systems/mailwatch');
+        if (await noteDsn(meta, clientsSeen, { now, own: [own] })) out.bounces = (out.bounces || 0) + 1;
+        continue;
+      }
       const r = await handleMessage(meta, watched, now, talk);
       out.replies += r.replies;
       out.booked += r.booked;
@@ -910,10 +920,12 @@ async function claimCheck(now, minutes) {
 
 /**
  * The check: the inbox (the onboarding and launch calls that are open, and
- * every other client's messages into their conversation), then reminders and
- * overdue for the open calls, then the reply bot's answers that are due
- * (systems/replybot.js). → { ok, checked, newReplies, booked, remindersSent,
- * botReplies? (only when > 0), skipped?, error? } — `checked` counts the
+ * every other client's messages into their conversation, and bounces of
+ * client emails), then reminders and overdue for the open calls, then the
+ * reply bot's answers that are due (systems/replybot.js), then the delivery
+ * watch of the milestone emails (systems/mailwatch.js). → { ok, checked,
+ * newReplies, booked, remindersSent, botReplies? / bounces? / mailWatch?
+ * (only when something happened), skipped?, error? } — `checked` counts the
  * open calls (both kinds).
  */
 export async function checkOnboardCalls({ now = io.now(), force = false, clients = null } = {}) {
@@ -942,6 +954,7 @@ export async function checkOnboardCalls({ now = io.now(), force = false, clients
     const scan = await scanInbox(watched, now, talk);
     out.newReplies = scan.replies;
     out.booked = scan.booked;
+    if (scan.bounces) out.bounces = scan.bounces;
     if (scan.error) { out.ok = false; out.error = scan.error; }
   }
   for (const w of watched) {
@@ -964,6 +977,14 @@ export async function checkOnboardCalls({ now = io.now(), force = false, clients
     if (bot.sent) out.botReplies = bot.sent;
   } catch (err) {
     await logEvent(null, SYSTEM, 'replybot_failed', { error: String(err?.message || err).slice(0, 200) });
+  }
+  // The delivery watch (docs/IMPROVE-PASS.md C.2): retries, "not opened" to-dos — only clients whose look is due.
+  try {
+    const { runMailWatch } = await import('@/lib/systems/mailwatch');
+    const w = await runMailWatch({ now, clients: all });
+    if (w.retried || w.failed || w.unopened) out.mailWatch = { retried: w.retried, failed: w.failed, unopened: w.unopened };
+  } catch (err) {
+    await logEvent(null, SYSTEM, 'mailwatch_failed', { error: String(err?.message || err).slice(0, 200) });
   }
   return out;
 }
@@ -1089,7 +1110,7 @@ export async function sendCallEmail(clientId, key, vars, { icalEvent = null, ded
   const raw = await readCall(clientId, kind);
   const threaded = flag(raw.sentAt);
   const all = { threadSubject: raw.subject || specOf(kind).firstSubject, ...vars };
-  const res = await sendClient(clientId, key, all, { dedupe, linkify: true, thread: false, ...(icalEvent ? { icalEvent } : {}), ...(threaded ? threadHeaders(raw) : {}) });
+  const res = await sendClient(clientId, key, all, { dedupe, linkify: true, thread: false, now, ...(icalEvent ? { icalEvent } : {}), ...(threaded ? threadHeaders(raw) : {}) });
   if (threaded && !res.deduped) {
     const at = now.toISOString();
     const copy = sentCopy(res, key, all, client);
@@ -1171,7 +1192,7 @@ export async function ownerReply(clientId, text, { now = io.now(), kind = 'onboa
   const vars = { threadSubject: conv.stripRe(threadRaw.lastInSubject) || raw.subject || specOf(kind).firstSubject, text: withSignOff(body, await ownerName(clientId)) };
   let res;
   try {
-    res = await sendClient(clientId, 'onboard_owner_reply', vars, { dedupe: null, thread: false, ...threadHeaders(threadRaw) });
+    res = await sendClient(clientId, 'onboard_owner_reply', vars, { dedupe: null, thread: false, now, ...threadHeaders(threadRaw) });
   } catch (err) {
     await kv.del(K.onceClaim('onboard_reply', clientId, shortHash(body)));
     throw err;
@@ -1265,7 +1286,9 @@ export async function onboardCallFor(clientId, { now = io.now(), settings = null
   if (raw.meetingId) {
     try { meeting = await (await import('@/lib/systems/calendar')).getMeeting(raw.meetingId); } catch { meeting = null; }
   }
-  return onboardCallView(raw, await readThread(clientId), { now, settings: settings || await onboardSettings(), clientState: c.state, meeting, kind, approvalUrl });
+  const { readTrack } = await import('@/lib/systems/mailwatch');
+  const track = await readTrack(clientId).catch(() => ({}));
+  return onboardCallView(raw, await readThread(clientId), { now, settings: settings || await onboardSettings(), clientState: c.state, meeting, kind, approvalUrl, track });
 }
 
 /** POST /api/mc/clients/{id}/onboard-call → { ok, onboardCall }. */

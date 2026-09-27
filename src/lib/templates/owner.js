@@ -128,6 +128,14 @@ export const ALERTS = {
   launch_overdue: { urgent: false, info: true, title: 'Launch call not booked yet: {person}' },
   launch_cancelled: { urgent: false, info: true, title: 'Launch call cancelled: {person}' },
   // ── end onboarding call ──
+  // ── Delivery monitoring (docs/IMPROVE-PASS.md C.2) ── the milestone emails to a client.
+  // {person} = their first name, {what} = "“we start on”" / "launch-call invite" / … (systems/mailwatch.js).
+  // Not sent after a retry 10 minutes later, or bounced: urgent (they did not get it — only he can fix it).
+  client_email_failed: { urgent: true, title: 'Could not send {person} the {what} email' },
+  client_email_bounced: { urgent: true, title: 'The {what} email to {person} bounced' },
+  // Not opened in 48 business hours: quiet — the trial's own to-do ("call or text them?") carries it.
+  client_email_unopened: { urgent: false, info: true, quiet: true, title: "{person} hasn't opened the {what} email" },
+  // ── end delivery monitoring ──
   // ── Reply bot (docs/REPLYBOT-MEET.md §2) ── quiet: phone push at low urgency + email, one per
   // bot email. {who} = "Sam (eCreek IT)", {did} = "sent the booking link".
   bot_replied: { urgent: false, info: true, quiet: true, title: 'Auto-replied to {who}: {did}' },
