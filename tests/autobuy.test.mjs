@@ -626,6 +626,75 @@ test('the job runs only while a trial waits to buy or is being set up; the hub c
   assert.equal(ran.ok, true);
 });
 
+// Warm-up audit (docs/IMPROVE-PASS.md D): no tick runs before warm-up, so a failed setup round of a
+// CheapInboxes purchase (the setup-check job's hourly re-run) waited for a heartbeat that never came.
+test('setup check without the heartbeat: a failed round is run again from the hub\'s check once per clock hour (the job\'s own claim); a fresh tick keeps it', async () => {
+  await connectKey();
+  await waitingClient();
+  await sync(0.1);
+  const { buy } = await readRec('acme');
+  const did = ownerBuys(buy.domain, { status: 'active', created: at(1).toISOString() });
+  for (const p of buy.mailboxes) activate(mailbox(did, p.email));
+  // CheapInboxes' DKIM record is not visible yet when the inboxes come in.
+  let dkimLive = false;
+  let dkimLooks = 0;
+  const txt = io.dns.resolveTxt;
+  io.dns.resolveTxt = async (n) => { if (n.startsWith('google._domainkey.')) { dkimLooks++; if (!dkimLive) throw DNS_FAIL(); } return txt(n); };
+  const domain = () => kv.hgetall(K.domain('acme'));
+  const loopbacks = () => emails.filter((e) => e.key === 'loopback').length;
+  await sync(1); // 11:00 ET: connected → setup_check → round 1 (DKIM fails; the loopback goes)
+  await sync(1.1); // the loopback is in → the round ends: failed
+  assert.equal((await domain()).setupPhase, 'failed');
+  assert.equal(JSON.parse((await domain())['check:dkim']).status, 'fail');
+  assert.equal((await getClient('acme')).state, 'setup_check');
+  assert.equal((await kv.hgetall(K.heartbeat()))?.lastTickAt ?? null, null, 'no tick has ever run');
+  assert.equal(loopbacks(), 1);
+
+  // The hub's check at 11:12: the failed round runs again (DKIM still missing), under the setup-check job's claim for 11:00.
+  const looks = dkimLooks;
+  await sync(1.2);
+  assert.equal(dkimLooks, looks + 1, 'run again without a tick');
+  assert.equal((await domain()).setupPhase, 'failed');
+  assert.ok(await kv.get(K.jobClaim('setup-check', 'acme', '2026-10-05T11')), 'the job\'s own claim: the tick will not re-run this hour');
+  assert.equal((await getClient('acme'))['jp:setup-check'], '2026-10-05T11');
+  await sync(1.3); // 11:18, the same clock hour: not again (hourly, as the job)
+  assert.equal(dkimLooks, looks + 1);
+
+  // 12:03 with a fresh heartbeat: the tick's setup-check job owns the round — the sync keeps out of its way.
+  dkimLive = true;
+  await kv.hset(K.heartbeat(), { lastTickAt: new Date().toISOString() });
+  await sync(2.05);
+  assert.equal(dkimLooks, looks + 1);
+  // 12:06, no fresh heartbeat: DKIM is there now → every check passes → warming, warm-up on; no second loopback email.
+  await kv.del(K.heartbeat());
+  await sync(2.1);
+  assert.equal(dkimLooks, looks + 2);
+  assert.equal((await domain()).setupPhase, 'passed');
+  assert.equal((await getClient('acme')).state, 'warming');
+  assert.equal(loopbacks(), 1, 'the loopback that passed is kept, not sent again');
+  assert.ok((await getInboxRecords('acme')).every((r) => r.enabled === '1' && r.warmupStartedAt));
+  assert.equal(alerts.filter((a) => a.key === 'inboxes_ready').length, 1);
+});
+
+test('carry: a CheapInboxes setup round is left to its own sync while a key is set; with the key gone the hub\'s check carries it', async () => {
+  const { carryIntake } = await import('@/lib/systems/carry');
+  const { saveInbox } = await import('@/lib/db/inboxes');
+  await createClient('acme', { state: 'setup_check', name: 'Acme Co', contactName: 'Ann Lee', contactEmail: 'ann@acme.com', mainDomain: 'acme.com', autobuyOpen: '1' });
+  await kv.hset(K.domain('acme'), { name: 'acmeoutreach.com', registrar: 'cheapinboxes', autoRenew: 'true', setupPhase: 'failed', setupFailedAt: at(0).toISOString() });
+  for (const e of ['jordan@acmeoutreach.com', 'jordan.test@acmeoutreach.com']) await saveInbox('acme', { email: e, password: 'abcdefghijklmnop', provider: 'google', enabled: false });
+  process.env.CHEAPINBOXES_API_KEY = KEY;
+  let r = await carryIntake({ now: at(1) });
+  assert.ok(!r.ran.some((x) => x.job === 'setup-check'), JSON.stringify(r));
+  assert.equal((await domain()).setupPhase, 'failed', 'left to the CheapInboxes sync');
+  // The key was forgotten while the purchase was being set up: no sync runs any more, so the check carries the round.
+  delete process.env.CHEAPINBOXES_API_KEY;
+  r = await carryIntake({ now: at(1) });
+  assert.deepEqual(r.ran.filter((x) => x.job === 'setup-check'), [{ job: 'setup-check', clientId: 'acme' }]);
+  assert.equal((await domain()).setupPhase, 'running', 'a new round: the loopback is on its way');
+  assert.ok(emails.some((e) => e.key === 'loopback'));
+  async function domain() { return kv.hgetall(K.domain('acme')); }
+});
+
 // ── 5. problems ──────────────────────────────────────────────────────────────
 
 test('problems: the order failed, stuck past stuckHours, a login missing → one autobuy_problem each; fixed → cleared', async () => {

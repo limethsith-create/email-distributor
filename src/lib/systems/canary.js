@@ -1,10 +1,18 @@
 /**
  * Canary Test (SPEC §7.7). Each trial inbox sends one plain, marked email to
- * each helper account (up to BUILD.canaryHelpers); at least
- * BUILD.canaryCheckAfterMin later every helper is read over IMAP and the
+ * each seed mailbox (up to BUILD.canaryHelpers); at least
+ * BUILD.canaryCheckAfterMin later every seed is read over IMAP and the
  * landings counted. placement = landed in Inbox / canary emails sent to the
- * helpers that could be read (a mail that never arrived is not an inbox
+ * seeds that could be read (a mail that never arrived is not an inbox
  * landing).
+ *
+ * Seeds (docs/IMPROVE-PASS.md D): the working helper accounts first, then —
+ * while there are fewer than BUILD.canaryHelpers — other members of the
+ * warm-up circle on another domain (the aviance inboxes, other trials'
+ * inboxes; never the client's own). Before, only helpers counted, so a circle
+ * made of other inboxes held Day 1 until the owner added helpers. With fewer
+ * seeds than usual, seeds that are not helpers, or one mail filter only, the
+ * result carries a plain `note` (first in the placement entry's detail).
  *
  * Runs daily from 07:30 ET, from Day −3 (the gate) onwards, as a small state
  * machine in client:{id}:canary:{day} so every tick does bounded work:
@@ -25,13 +33,81 @@ import { getInboxRecords, patchInbox } from '@/lib/db/inboxes';
 import { logEvent } from '@/lib/db/events';
 import { ackAlerts, alertOwner } from '@/lib/notify';
 import { ET, dayKeyIn, trialDay, partsIn, addDays } from '@/lib/time';
-import { getHelpers, HELPER, sendMarked, processMailbox, statsFor, statBump } from '@/lib/systems/warmup';
+import { getHelpers, getPool, HELPER, AVIANCE, sendMarked, processMailbox, statsFor, statBump } from '@/lib/systems/warmup';
 import { recordPlacement } from '@/lib/systems/placement';
+import { familyOf, PROVIDERS } from '@/lib/smtp-providers';
 
 const parse = (v, d) => { if (v == null || v === '') return d; if (typeof v !== 'string') return v; try { return JSON.parse(v); } catch { return d; } };
 
 function member(rec, clientId) {
   return { key: `${clientId}|${rec.email}`, clientId, email: rec.email, provider: rec.provider || 'google', isHelper: clientId === HELPER, record: rec };
+}
+
+const domainOf = (email) => String(email || '').split('@')[1]?.toLowerCase() || '';
+/** Under this many seeds the canary still runs (as before), but its note says the number is thin. */
+export const THIN_SEEDS = 4;
+
+/**
+ * Today's seed mailboxes for a client, from the warm-up circle as getPool
+ * reads it: the working helpers first, then the aviance inboxes, then other
+ * trials' inboxes — never the client's own or one on its domain, never one
+ * whose warm-up login failed — up to `want`.
+ * → [{ email, clientId, provider, isHelper }]
+ */
+export async function canarySeeds(clientId, { now = new Date(), want = 10, pool = null } = {}) {
+  const own = new Set((await getInboxRecords(clientId)).map((r) => domainOf(r.email)));
+  const members = pool || (await getPool({ now, sync: false }));
+  const rank = (m) => (m.isHelper ? 0 : m.isAviance || m.clientId === AVIANCE ? 1 : 2);
+  return members
+    .filter((m) => m.clientId !== clientId && !own.has(domainOf(m.email)) && m.record?.warmupHealth !== 'auth_failed')
+    .sort((a, b) => rank(a) - rank(b))
+    .slice(0, Math.max(0, Number(want) || 0))
+    .map((m) => ({ email: m.email, clientId: m.clientId, provider: m.provider || m.record?.provider || 'google', isHelper: Boolean(m.isHelper) }));
+}
+
+/**
+ * The plain note on a canary run (pure): fewer seeds than `want`, seeds that
+ * are not helpers, or one mail filter only. null for `want` helpers on more
+ * than one filter.
+ */
+export function canaryNote(seeds, want = 10) {
+  const n = (seeds || []).length;
+  if (!n) return null;
+  const helpers = seeds.filter((x) => x.isHelper !== false).length;
+  const others = n - helpers;
+  const families = new Set(seeds.map((x) => familyOf(x.provider || 'google')));
+  if (helpers >= want && families.size > 1) return null;
+  const who = !others ? ''
+    : !helpers ? ' (other inboxes in the warm-up circle — no warm-up helpers yet)'
+      : ` (${helpers} warm-up helper${helpers === 1 ? '' : 's'} and ${others} other inbox${others === 1 ? '' : 'es'} in the warm-up circle)`;
+  const parts = [`Tested with ${n} mailbox${n === 1 ? '' : 'es'}${who}${n < want ? ` — the usual is ${want}` : ''}.`];
+  if (n < THIN_SEEDS) parts.push(`With fewer than ${THIN_SEEDS}, one email in spam moves the rate a lot — add warm-up helpers for a steadier number.`);
+  if (families.size === 1 && n > 1) {
+    const p = seeds[0].provider || 'google';
+    const name = familyOf(p) === familyOf('google') ? 'Gmail / Google Workspace' : PROVIDERS[p]?.helperLabel || PROVIDERS[p]?.label || p;
+    parts.push(`All of them use the same mail filter (${name}), so other providers were not tested.`);
+  }
+  return parts.join(' ');
+}
+
+/**
+ * A run's seeds by address, ready for sendMarked / processMailbox: helpers
+ * from their records, circle inboxes from their client's records. A run
+ * started before seeds were stored used the helpers only.
+ */
+async function seedsOf(run) {
+  const seeds = parse(run.seeds, null);
+  const helpers = Object.fromEntries((await getHelpers()).map((h) => [h.email, h]));
+  if (!Array.isArray(seeds)) return Object.fromEntries(Object.entries(helpers).map(([e, rec]) => [e, member(rec, HELPER)]));
+  const out = {};
+  const byClient = {};
+  for (const x of seeds) {
+    if (x.isHelper || x.clientId === HELPER) { if (helpers[x.email]) out[x.email] = member(helpers[x.email], HELPER); continue; }
+    byClient[x.clientId] ||= Object.fromEntries((await getInboxRecords(x.clientId).catch(() => [])).map((r) => [r.email, r]));
+    const rec = byClient[x.clientId][x.email];
+    if (rec?.passwordEnc) out[x.email] = member(rec, x.clientId);
+  }
+  return out;
 }
 
 /** Pure: placement per inbox from sends + checks. */
@@ -101,26 +177,26 @@ export async function runCanary({ client, now = new Date(), deadline = Date.now(
       await updateClient(id, { canaryCheckedDay: day });
       return { skipped: `trial day ${tday} is before the canary gate (Day ${startDay})` };
     }
-    const nHelpers = await cfg(id, 'BUILD.canaryHelpers');
-    const helpers = (await getHelpers()).filter((h) => h.passwordEnc && h.enabled !== '0' && h.health !== 'auth_failed').slice(0, nHelpers);
+    const want = await cfg(id, 'BUILD.canaryHelpers');
+    const seeds = await canarySeeds(id, { now, want });
     const inboxes = (await getInboxRecords(id)).filter((r) => r.passwordEnc && r.warmupEnabled !== '0');
-    if (!helpers.length || !inboxes.length) {
-      await kv.hset(key, { phase: 'done', startedAt: now.toISOString(), doneAt: now.toISOString(), result: JSON.stringify({ overall: null, reason: !helpers.length ? 'no helper accounts' : 'no inboxes' }) });
+    if (!seeds.length || !inboxes.length) {
+      await kv.hset(key, { phase: 'done', startedAt: now.toISOString(), doneAt: now.toISOString(), result: JSON.stringify({ overall: null, reason: !seeds.length ? 'no helper accounts and no other inbox in the warm-up circle' : 'no inboxes' }) });
       await kv.expire(key, 40 * 86400);
       await updateClient(id, { canaryCheckedDay: day });
-      await alertOwner('canary_incomplete', { clientId: id, vars: { clientId: id }, body: `The canary could not run: ${!helpers.length ? 'there are no working helper accounts' : 'the client has no inboxes'}.`, did: 'No placement was recorded today; Day 1 cannot pass the canary gate without one.' });
+      await alertOwner('canary_incomplete', { clientId: id, vars: { clientId: id }, body: `The canary could not run: ${!seeds.length ? 'there are no working helper accounts and no other inbox in the warm-up circle to test with (add helpers in Settings › Warm-up)' : 'the client has no inboxes'}.`, did: 'No placement was recorded today; Day 1 cannot pass the canary gate without one.' });
       return { phase: 'done', placement: null };
     }
     const queue = [];
     for (const r of inboxes) {
       // The canary counts toward the inbox's warm-up ceiling (15/day, SPEC §14.8).
       const room = HARD_WARMUP_CAP - ((await statsFor(r.email, day)).sent || 0);
-      for (const h of helpers.slice(0, Math.max(0, room))) queue.push({ inbox: r.email, helper: h.email, provider: h.provider || 'google' });
+      for (const h of seeds.slice(0, Math.max(0, room))) queue.push({ inbox: r.email, helper: h.email, provider: h.provider || 'google' });
     }
-    run = { phase: 'sending', tag: `${id}.${day}`, queue: JSON.stringify(queue), sent: '[]', failed: '[]', checked: '[]', landed: '{}', startedAt: now.toISOString() };
+    run = { phase: 'sending', tag: `${id}.${day}`, queue: JSON.stringify(queue), seeds: JSON.stringify(seeds), want: String(want), sent: '[]', failed: '[]', checked: '[]', landed: '{}', startedAt: now.toISOString() };
     await kv.hset(key, run);
     await kv.expire(key, 40 * 86400);
-    await logEvent(id, 'canary', 'started', { inboxes: inboxes.length, helpers: helpers.length, emails: queue.length });
+    await logEvent(id, 'canary', 'started', { inboxes: inboxes.length, helpers: seeds.filter((x) => x.isHelper).length, seeds: seeds.length, emails: queue.length });
   }
 
   const giveUpMin = await cfg(id, 'BUILD.canaryGiveUpMin');
@@ -132,17 +208,17 @@ export async function runCanary({ client, now = new Date(), deadline = Date.now(
     const failed = parse(run.failed, []);
     const perRun = await cfg(id, 'BUILD.canarySendsPerRun');
     const inboxRecs = Object.fromEntries((await getInboxRecords(id)).map((r) => [r.email, r]));
-    const helperRecs = Object.fromEntries((await getHelpers()).map((h) => [h.email, h]));
+    const seedMembers = await seedsOf(run);
     let n = 0;
     while (queue.length && n < perRun && Date.now() < deadline - 4000) {
       const job = queue.shift();
       n++;
       const from = inboxRecs[job.inbox];
-      const to = helperRecs[job.helper];
+      const to = seedMembers[job.helper];
       if (!from || !to) { failed.push({ ...job, error: 'gone' }); continue; }
       let res;
       try {
-        res = await sendMarked(member(from, id), member(to, HELPER), { deps, kind: 'c', tag: run.tag });
+        res = await sendMarked(member(from, id), to, { deps, kind: 'c', tag: run.tag });
       } catch (err) {
         res = { success: false, error: err.message };
       }
@@ -172,16 +248,16 @@ export async function runCanary({ client, now = new Date(), deadline = Date.now(
     const landed = parse(run.landed, {});
     const helpersToRead = [...new Set(sent.map((s) => s.helper))].filter((h) => !checked.includes(h));
     const perRun = await cfg(id, 'BUILD.canaryChecksPerRun');
-    const helperRecs = Object.fromEntries((await getHelpers()).map((h) => [h.email, h]));
+    const seedMembers = await seedsOf(run);
     const errors = parse(run.errors, {});
     for (const h of helpersToRead.slice(0, perRun)) {
       if (Date.now() > deadline - 5000) break;
-      const rec = helperRecs[h];
-      if (!rec) { checked.push(h); continue; }
-      const r = await processMailbox(member(rec, HELPER), { mode: 'canary', tag: run.tag, now, deadline, deps });
+      const seed = seedMembers[h];
+      if (!seed) { checked.push(h); continue; }
+      const r = await processMailbox(seed, { mode: 'canary', tag: run.tag, now, deadline, deps });
       if (!r.ok) { errors[h] = r.error; continue; }
       checked.push(h);
-      const prov = rec.provider || 'google';
+      const prov = seed.record.provider || 'google';
       for (const [sender, c] of Object.entries(r.bySender)) {
         const k = `${sender}>${prov}`;
         const row = (landed[k] ||= { inbox: 0, spam: 0 });
@@ -202,6 +278,13 @@ export async function runCanary({ client, now = new Date(), deadline = Date.now(
 async function finalize({ client, run, key, now }) {
   const id = client.id;
   const res = computePlacement({ sent: parse(run.sent, []), checked: parse(run.checked, []), landed: parse(run.landed, {}) });
+  // How many mailboxes it tested with, and a plain note when that was thin (runs from before seeds were stored: none).
+  const seeds = parse(run.seeds, null);
+  if (Array.isArray(seeds)) {
+    res.seeds = seeds.length;
+    const note = canaryNote(seeds, Number(run.want) || seeds.length);
+    if (note) res.note = note;
+  }
   const warn = await cfg(id, 'CANARY.warn');
   const emergency = await cfg(id, 'CANARY.emergency');
   const day = dayKeyIn(ET, now);
@@ -221,6 +304,7 @@ async function finalize({ client, run, key, now }) {
     at: now.toISOString(), day, tool: 'seed', inbox: null, score: null,
     inboxRate: Math.round(res.overall * 1000) / 1000,
     detail: [
+      ...(res.note ? [res.note] : []),
       ...Object.entries(res.perProvider || {}).map(([p, r]) => `${p}: ${r.placement == null ? 'not read' : `${Math.round(r.placement * 100)}% inbox`} (${Math.min(r.inbox, r.sent)}/${r.sent})`),
       ...Object.entries(res.perInbox || {}).map(([e, r]) => `${e}: ${r.inbox}/${r.sent} in the inbox`),
     ],
@@ -239,7 +323,7 @@ async function finalize({ client, run, key, now }) {
   return { phase: 'done', placement: res.overall, min: res.min };
 }
 
-/** Latest finished canary (today or yesterday) → { day, overall, min, perInbox } or null. */
+/** Latest finished canary (today or yesterday) → { day, overall, min, perInbox, seeds?, note? } or null. */
 export async function latestCanary(clientId, now = new Date()) {
   const today = dayKeyIn(ET, now);
   for (const d of [today, addDays(today, -1)]) {

@@ -103,3 +103,57 @@ check waiting for the next tick, the readiness check only nightly, the
 canary needing 8 helpers). Fix what is safe: readiness checked at every
 warm-up run once past day 12 (not only nightly), the setup check re-run on
 the hub's check call, the canary at 4+ members with a note. Report the rest.
+
+### D — as built (2026-09-27, machine side)
+Tests: tests/warmup-audit.test.mjs, tests/autobuy.test.mjs (the two setup
+tests), tests/journey.test.mjs (Day 1 assertions).
+
+**Fixed (each only shortens a wait; no quota, gate or rule changed)**
+- Readiness at every warm-up run (warmup.js `readinessCheckpoint`, end of
+  each send / read run, inboxes past day 12): a nightly check the 23:45 run
+  missed (a tick-less 15 minutes broke the streak → Day 1 slid ≥ 1 day, 3
+  over a weekend) is made up with that day's own window; today's check is
+  made once the day's warm-up is over (23:30 ET, the inbox's own send hours
+  closed), not only at 23:45; the Day 1 gate runs right after the check that
+  makes a trial's last inbox ready (also from the nightly run) — a held Day 1
+  moves a day sooner; the journey's trial is `ready` the evening before Day 1.
+  `estimateReadyBy` keeps a passing streak alive across a made-up check;
+  `simple.next` gives the real first-emails day when a measured `readyBy` is
+  on or after Day 1 (hubview.js, one marked block).
+- Setup check without the heartbeat: a failed round of a CheapInboxes
+  purchase is re-run by the sync (the hub's check, a webhook) once per clock
+  hour under the setup-check job's own claim — before, it waited for a tick,
+  and none runs before warm-up. With the key forgotten mid-setup, carry.js
+  runs it.
+- The canary never needed 8 helpers (it ran with one); it needed *helpers*:
+  a circle of other inboxes (the owner's, other trials') held Day 1 with
+  `canary_incomplete`. Seeds are now helpers first, then circle members on
+  another domain (never the trial's own), up to `BUILD.canaryHelpers`; the
+  result (and the seed entry's `detail[0]`, the gate's `checks.canary.note`)
+  carries a plain note when fewer than usual, not all helpers, one filter
+  only, or under 4 ("one email in spam moves the rate a lot"). No new floor:
+  a 4-seed minimum would hold Day 1 where it passes today.
+
+**Left as they are**
+- Safety rules: 14 warm-up days; ≥ 90 % on 2 consecutive daily checks; the
+  quota ramp (3 / 8 / 15); the canary ≥ 85 % per inbox and the spam test from
+  Day −3, once a day each (a same-day retry would fish for a pass); Day 1
+  slides at its 00:30 run (the client is told then) and a held Day 1 never
+  restarts the same day (under 9 hours' notice).
+- Human hands by design: buying the domain + inboxes (the machine never
+  spends); making the warm-up helpers (the machine never creates accounts;
+  `waiting_for_helpers` under 8 members is the SPEC's minimum); starting the
+  heartbeat (cron-job.org) before warm-up; a DNS fix a failed check names
+  (manual path); the client's "It worked" booking test (from Day −4) and the
+  launch call / approval (docs/LAUNCH-CALL.md).
+- Vendor / tool waits: CheapInboxes 10 min–48 h to provision; mail-tester's
+  3 tests a day across all trials (dkimvalidator is the default).
+- A failed setup round is retried hourly (the owner-facing texts say "every
+  hour"; the owner's "re-run" button runs it at once).
+- **Safety gap found, not fixed (it lengthens a wait — needs a decision):**
+  warm-up day 1 is the setup-pass day, so the 14 days also count while the
+  circle is short (the trial's two inboxes share a domain and never pair) or
+  the heartbeat is not running yet; a trial whose helpers come late can
+  reach "day 14" with a few real warm-up days, and its first real day starts
+  at that day's quota (e.g. 15). Suggested: start `warmupStartedAt` at the
+  first warm-up email actually sent.

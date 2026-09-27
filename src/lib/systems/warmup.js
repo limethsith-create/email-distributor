@@ -28,6 +28,10 @@
  *    every 30 min: IMAP-search Inbox + Spam (48 h) for the marker header,
  *    rescue from spam, \Seen, 30 % \Flagged, 40 % reply in thread, archive.
  *  - `runWarmupDaily` end of day: inboxRate7d + readiness streak per inbox.
+ *  - `readinessCheckpoint` the end of every send / read run, once an inbox is
+ *    past day 12: a missed nightly check is made up, today's check is made as
+ *    soon as the day's warm-up is over, and a trial whose inboxes are all
+ *    ready has its Day 1 gate looked at at once (docs/IMPROVE-PASS.md D).
  *
  * Every warm-up mail carries `X-Aviance-Warm: {nonce}~{hmac}` and an
  * invisible `<span data-w>`. `isWarmupMessage(headers)` is what the reply
@@ -48,7 +52,7 @@ import crypto from 'crypto';
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { cfg, HARD_WARMUP_CAP } from '@/lib/config';
-import { getAllClients, WARMUP_STATES, SENDING_STATES } from '@/lib/db/client';
+import { getAllClients, getClient, WARMUP_STATES, SENDING_STATES } from '@/lib/db/client';
 import { getInboxRecords, patchInbox, toAccount } from '@/lib/db/inboxes';
 import { bump } from '@/lib/db/counters';
 import { logEvent } from '@/lib/db/events';
@@ -57,7 +61,7 @@ import { alertOwner } from '@/lib/notify';
 import { encrypt, hasEncKey } from '@/lib/crypto';
 import { io } from '@/lib/systems/intake-io';
 import { PROVIDERS, HELPER_PROVIDERS, providerForAddress, familyOf, providerLabel } from '@/lib/smtp-providers';
-import { ET, dayKeyIn, daysBetween, addDays, inWindow } from '@/lib/time';
+import { ET, dayKeyIn, daysBetween, addDays, inWindow, partsIn } from '@/lib/time';
 import { composeWarmup, composeReply, renderWarmup, renderReply, encodeWarmMeta, decodeWarmMeta } from '@/lib/templates/warmup';
 
 export const HELPER = '_helper';
@@ -585,7 +589,8 @@ export async function runWarmupSend({ now = new Date(), deadline = Date.now() + 
   }
   // Every entry in `done` claimed its pair (sent or failed).
   await writeSummary(pool, Object.keys(pairsRaw).length + done.length, now);
-  return { pool: pool.length, planned: plan.length, sent: done.filter((d) => d.ok).length, failed: done.filter((d) => !d.ok).length };
+  const readiness = Date.now() < deadline - 3000 ? await readinessCheckpoint(pool, { now, deps }) : null;
+  return { pool: pool.length, planned: plan.length, sent: done.filter((d) => d.ok).length, failed: done.filter((d) => !d.ok).length, ...(readiness?.checked.length ? { readiness } : {}) };
 }
 
 // ── IMAP read ────────────────────────────────────────────────────────────────
@@ -835,8 +840,10 @@ export async function runWarmupRead({ now = new Date(), deadline = Date.now() + 
     results.push({ email: m.email, ok: r.ok, found: r.found, replied: r.replied });
   }
   // inboxRate7d is refreshed by the daily readiness run (and computed live on
-  // /mc/warmup); recomputing it here cost 7 reads per sender per run.
-  return { read: results.length, results };
+  // /mc/warmup); recomputing it here cost 7 reads per sender per run. The
+  // checkpoint reads a rate only for a daily check that is due.
+  const readiness = Date.now() < deadline - 3000 ? await readinessCheckpoint(pool, { now, deps }) : null;
+  return { read: results.length, results, ...(readiness?.checked.length ? { readiness } : {}) };
 }
 
 // ── daily readiness ──────────────────────────────────────────────────────────
@@ -872,6 +879,7 @@ export async function runWarmupDaily({ now = new Date(), clients = null, scaled 
   const minDays = await cfg(null, 'BUILD.warmupReadyMinDays');
   const minPool = await cfg(null, 'WARMUP.minPool');
   const out = [];
+  const turned = new Set();
   for (const m of pool) {
     const { rate, inbox, spam } = await inboxRate7d(m.email, now);
     if (m.isHelper || m.isAviance) {
@@ -879,16 +887,123 @@ export async function runWarmupDaily({ now = new Date(), clients = null, scaled 
       if (rate != null) await patchMember(m, { inboxRate7d: rate.toFixed(3) });
       continue;
     }
+    const was = m.record.warmupReady === '1';
     const u = readinessUpdate(m.record, { rate, day: m.client ? dayKeyIn(ET, clientNow(m.client, now)) : day, days: m.days, readyRate, needStreak, minDays });
     if (u.fields) await patchMember(m, u.fields);
+    if (u.ready && !was && m.client?.state === 'warming') turned.add(m.clientId);
     out.push({ email: m.email, clientId: m.clientId, rate, inbox, spam, streak: u.streak, ready: u.ready });
   }
+  // The last inbox of a trial just passed: its Day 1 gate now, not at the next hourly readiness run.
+  const gates = turned.size ? await gateNow([...turned], { now }) : [];
   // A trial waiting for the circle gets the plainer warmup_needs_helpers (once a day) instead.
   if (!scaled && waitingClients(all, minPool).length) await helpersAlert(all, { now, min: minPool });
   else if (!scaled && pool.length < minPool) {
     await alertOwner('warmup_pool_small', { scope: 'pool', vars: { count: pool.length, min: minPool }, body: `The warm-up circle has ${pool.length} working members; the spec needs at least ${minPool} (helpers + trial inboxes).`, did: 'Warm-up keeps running with what exists; add helper accounts on /mc/warmup.' });
   }
-  return { pool: pool.length, inboxes: out };
+  return { pool: pool.length, inboxes: out, ...(gates.length ? { gates } : {}) };
+}
+
+// ── readiness at every warm-up run (docs/IMPROVE-PASS.md D) ──────────────────
+
+/** Daily checks the 23:45 run missed are made up by the next warm-up run, at most this many days back. */
+export const CATCHUP_DAYS = 7;
+
+/** A moment inside an ET day (12:30 EDT / 11:30 EST): the 7-day window of that day's check. */
+const middayOf = (dayKey) => new Date(`${dayKey}T16:30:00Z`);
+
+async function readinessRules() {
+  const [readyRate, need, minDays, readHours, sendHours] = await Promise.all([
+    cfg(null, 'WARMUP.readyRate'), cfg(null, 'WARMUP.readyConsecutiveDays'), cfg(null, 'BUILD.warmupReadyMinDays'), cfg(null, 'BUILD.warmupReadHours'), cfg(null, 'BUILD.warmupHours'),
+  ]);
+  return { readyRate: Number(readyRate), need: Math.max(1, Number(need) || 1), minDays: Number(minDays) || 14, readHours, sendHours };
+}
+
+/**
+ * Is the warm-up of `member` over for the ET day of `now` (pure)? The read
+ * hours (ET) have ended — no read, reply or landing is counted after them
+ * today — and its own warm-up hours (its time zone) stay closed until the ET
+ * day ends, so nothing it sends can land today any more. Its daily check made
+ * now is the same as the 23:45 one.
+ */
+export function warmupDayOver(member, now, { readHours, sendHours }) {
+  const p = partsIn(ET, now);
+  if (!readHours || p.hhmm < readHours[1]) return false;
+  const endOfDay = new Date(now.getTime() + (1439 - p.minuteOfDay) * 60e3);
+  const tz = member?.tz || ET;
+  return !inWindow(tz, sendHours, now) && !inWindow(tz, sendHours, endOfDay);
+}
+
+/**
+ * Readiness at the end of every warm-up run (send and read), for each trial
+ * inbox in `warming` past day minDays − need (12) — before that no check can
+ * make it ready. The rule is the nightly one, unchanged (readinessUpdate: one
+ * check per ET day, rate ≥ readyRate on `need` consecutive checks and
+ * ≥ minDays days); what changes is when a check is made:
+ *  - a check the 23:45 run missed (no tick in its 15 minutes) is made by the
+ *    next run for each missed day, oldest first, with that day's own 7-day
+ *    window — a missed tick no longer breaks the streak and moves Day 1;
+ *  - today's check is made as soon as the day's warm-up is over for the inbox
+ *    (warmupDayOver), not only at 23:45.
+ * A trial whose inboxes are now all ready has its Day 1 gate looked at at once
+ * (gateNow) instead of at the next hourly readiness run. Test Mode clients
+ * (scaled clock) keep their own daily job. A check that is not due costs no
+ * read. → { checked: [{ email, clientId, day, rate, streak, ready, late }], gates }
+ */
+export async function readinessCheckpoint(pool, { now = new Date(), deps = {} } = {}) {
+  const out = { checked: [], gates: [] };
+  const open = (pool || []).filter((m) => countsForClient(m) && m.client?.state === 'warming' && !hasScaledClock(m.client) && m.record?.warmupReady !== '1' && m.record?.warmupStartedAt);
+  if (!open.length) return out;
+  try {
+    const r = await readinessRules();
+    const from = Math.max(0, r.minDays - r.need);
+    const today = dayKeyIn(ET, now);
+    const turned = new Set();
+    for (const m of open) {
+      if (!(Number(m.days) > from)) continue;
+      const start = dayKeyIn(ET, new Date(m.record.warmupStartedAt));
+      const last = m.record.readyCheckedDay || '';
+      const due = [];
+      for (let d = addDays(today, -CATCHUP_DAYS); d < today; d = addDays(d, 1)) if (d > last && d >= start) due.push(d);
+      if (last < today && warmupDayOver(m, now, r)) due.push(today);
+      for (const d of due) {
+        const { rate } = await inboxRate7d(m.email, d === today ? now : middayOf(d));
+        const u = readinessUpdate(m.record, { rate, day: d, days: daysBetween(start, d) + 1, readyRate: r.readyRate, needStreak: r.need, minDays: r.minDays });
+        if (!u.fields) continue;
+        await patchMember(m, u.fields);
+        out.checked.push({ email: m.email, clientId: m.clientId, day: d, rate, streak: u.streak, ready: u.ready, late: d !== today });
+        if (u.ready) turned.add(m.clientId);
+      }
+    }
+    if (out.checked.length) await logEvent(null, 'warmup', 'readiness_checked', { checked: out.checked.map(({ email, day, streak, ready, late }) => ({ email, day, streak, ready, late })) });
+    if (turned.size) out.gates = await gateNow([...turned], { now, deps });
+  } catch (err) {
+    try { await logEvent(null, 'warmup', 'readiness_check_failed', { error: String(err?.message || err).slice(0, 200) }); } catch {}
+  }
+  return out;
+}
+
+/**
+ * The Day 1 gate (readiness.js runReadiness) of trials in `warming` whose
+ * inboxes are all ready now — right after the check that made them ready. A
+ * held Day 1 then moves to the next sending day before midnight, not a day
+ * later. The gate itself is unchanged (it may also slide Day 1, exactly as its
+ * hourly run would). → [{ clientId, ready, slid? }]
+ */
+async function gateNow(clientIds, { now = new Date(), deps = {} } = {}) {
+  const out = [];
+  const { runReadiness } = await import('@/lib/systems/readiness');
+  for (const id of clientIds) {
+    try {
+      if (!(await inboxesReady(id)).ok) continue;
+      const client = await getClient(id);
+      if (client?.state !== 'warming') continue;
+      const r = await runReadiness({ client, now: clientNow(client, now), deps });
+      out.push({ clientId: id, ready: Boolean(r.ready), ...(r.slid ? { slid: r.slid } : {}) });
+    } catch (err) {
+      await logEvent(id, 'warmup', 'gate_failed', { error: String(err?.message || err).slice(0, 200) });
+    }
+  }
+  return out;
 }
 
 /** Warm-up readiness of one client's inboxes (for the warming → ready gate). */
@@ -1266,6 +1381,10 @@ export async function hubWarmupData({ now = new Date(), clients = null, circle =
  * unknown: no start day, or an inbox under the line (or never measured)
  * whose earliest date is past the Day 1 slide window (`maxSlideDays` after
  * its day `minDays`). rows: [{ start, rate, streak, checkedDay, ready }].
+ * Past day minDays − need a check the nightly run missed is made up by the next
+ * warm-up run (readinessCheckpoint), so a passing streak stays alive across
+ * such a gap: its last needed check is `checkedDay + remaining` (a day already
+ * gone counts as today — it is made up now), not a fresh streak from tonight.
  */
 export function estimateReadyBy(rows, { today, readyRate = 0.9, need = 2, minDays = 14, maxSlideDays = 7 }) {
   let latest = null;
@@ -1274,9 +1393,12 @@ export function estimateReadyBy(rows, { today, readyRate = 0.9, need = 2, minDay
     if (!x.start) return null;
     const dayN = addDays(x.start, minDays - 1);
     const passing = x.rate != null && x.rate >= readyRate;
-    const alive = passing && x.checkedDay && daysBetween(x.checkedDay, today) <= 1;
+    const gap = x.checkedDay ? daysBetween(x.checkedDay, today) : null;
+    const madeUp = daysBetween(x.start, today) + 1 > minDays - need ? CATCHUP_DAYS + 1 : 1;
+    const alive = passing && gap != null && gap >= 0 && gap <= madeUp;
     const remaining = Math.max(0, need - (alive ? Number(x.streak) || 0 : 0));
-    const earliest = addDays(today, x.checkedDay === today ? remaining : Math.max(0, remaining - 1));
+    const byStreak = alive ? addDays(x.checkedDay, remaining) : addDays(today, x.checkedDay === today ? remaining : Math.max(0, remaining - 1));
+    const earliest = byStreak > today ? byStreak : today;
     const est = earliest > dayN ? earliest : dayN;
     if (!passing && est > addDays(dayN, maxSlideDays)) return null;
     if (!latest || est > latest) latest = est;
