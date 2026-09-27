@@ -139,7 +139,8 @@ export async function runPace(clientId, { now = new Date(), day: forced = null }
     const fix = 'remaining follow-ups tightened to 3-2-3 days and sends moved to early morning in each prospect’s time zone';
     const bounceMax = await ccfg(clientId, 'BOUNCE.max');
     const positiveMin = await ccfg(clientId, 'PACE.positiveMin');
-    const vars = { companies: t.companiesContacted, replies: t.replies, positive: t.positive, diagnosis: diagnose(t, { bounceMax, positiveMin }), fix };
+    // Signed by the owner (the voice pass: every client email ends with his name).
+    const vars = { companies: t.companiesContacted, replies: t.replies, positive: t.positive, diagnosis: diagnose(t, { bounceMax, positiveMin }), fix, ownerName: await ccfg(clientId, 'OWNER.signerName') };
     await notifyClientSafe(clientId, 'offpace_day15', vars, { dedupe: 'offpace_day15' });
     return { day, test: 'qualified = 0', fix: await logFix(clientId, { day, test: 'zero qualified calls at half-time', fix: `${fix}; offpace_day15 sent to the client` }) };
   }

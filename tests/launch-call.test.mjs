@@ -50,7 +50,7 @@ beforeEach(async () => {
 
 const ID = 'ecreek';
 const SAM = 'sam@ecreek.com';
-const INVITE_SUBJECT = "Your list and your emails are ready — let's go through them together";
+const INVITE_SUBJECT = 'Your list is ready';
 const SECRET_PW = 'Inbox-App-Pw-7731';
 const FRI = new Date('2026-10-16T14:00:00Z');   // Fri 10:00 ET (EDT) = 7:30 pm Colombo — warm-up day 10 when it started on Wed 7 Oct
 const TUE = new Date('2026-10-13T14:00:00Z');   // Tue 10:00 ET
@@ -364,7 +364,7 @@ test('launch reminders at 24 h / 72 h in the same thread with the approval page,
   const r1 = toSam()[1];
   assert.equal(r1.subject, `Re: ${INVITE_SUBJECT}`);
   assert.equal(r1.inReplyTo, invite.messageId);
-  assert.match(r1.text, /your list and your emails are ready for the 30-minute launch call/);
+  assert.match(r1.text, /Your list and your emails for eCreek IT are ready, and the 30-minute launch call isn't booked yet\./);
   assert.match(r1.text, /Or read and approve them on one page: https:\/\/app\.test\/c\/[^/\s]+\/approve/);
   assert.equal((await check(at(TUE, 24.5))).remindersSent, 0, 'never twice');
   assert.equal((await check(at(TUE, 72.1))).remindersSent, 1, 'Fri 10:06 ET: the 72 h reminder');

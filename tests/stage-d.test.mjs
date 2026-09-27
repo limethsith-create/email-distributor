@@ -185,7 +185,7 @@ test('day jobs: Day 29 report, Day 30 with a qualified call → deciding + hando
   await runDayJobs(CLIENT, { now: onDay(30) });
   assert.equal((await getClient(CLIENT)).state, 'deciding');
   assert.ok(subjects().includes('Everything from your trial — Acme IT'));
-  assert.ok(subjects().includes('Day 30 — your numbers and one recommendation'));
+  assert.ok(subjects().includes('Your Day 30 numbers'));
   const trial = await kv.hgetall(`client:${CLIENT}:trial`);
   assert.equal(Date.parse(trial.bonusExpiresAt) - Date.parse(trial.decisionSentAt), 24 * 3600_000);
 });
@@ -218,7 +218,7 @@ test('day jobs: extension cap → deciding with the zero-call report', async () 
   assert.equal((await getClient(CLIENT)).state, 'deciding');
   const zeroMail = toClient().find((m) => m.subject === 'Day 60 — the honest numbers');
   assert.ok(zeroMail, subjects().join(' | '));
-  assert.match(zeroMail.text, /we didn’t get you a call/);
+  assert.match(zeroMail.text, /^Hi Ann,\n\nWe didn’t get you a call/);
   assert.match(zeroMail.text, /change the offer or the market/); // extension used → no plan
 });
 
@@ -239,7 +239,7 @@ test('ladder: review request Day 31, ladder 33/37/44, exit interview, Day 45 ret
   // The exit interview goes from the trial inbox so the Reply Handler can store the answer.
   assert.match(String(toClient().find((m) => m.subject === 'Three questions, ten minutes').from), /sam@acme-team\.test/);
   await runDayJobs(CLIENT, { now: onDay(37) });
-  const d37 = toClient().find((m) => m.subject === 'Conversations still open from your trial');
+  const d37 = toClient().find((m) => m.subject === 'Your conversations still open');
   assert.match(d37.text, /bo@bolt\.test/);
   await runDayJobs(CLIENT, { now: onDay(44) });
   assert.ok(subjects().includes('The trial domain retires tomorrow'));

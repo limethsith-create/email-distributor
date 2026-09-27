@@ -438,7 +438,7 @@ test('booking: created, matched, handoff sent, booked counted once, reminders + 
   assert.equal((await getTotals(ID)).booked, 1);
   // 24 h reminder window (call is 2026-10-08 15:00 UTC)
   await runReminders(ID, { now: new Date('2026-10-07T16:00:00Z') });
-  assert.ok(sent.find((s) => s.to === 'ann@alpha.com' && /quick reminder/.test(s.text)));
+  assert.ok(sent.find((s) => s.to === 'ann@alpha.com' && /a reminder that you’re booked with/.test(s.text)));
   await runReminders(ID, { now: new Date('2026-10-08T14:30:00Z') });
   assert.ok(sent.find((s) => s.to === 'ann@alpha.com' && /talk in an hour/.test(s.text)));
   await runReminders(ID, { now: new Date('2026-10-08T16:05:00Z') });
@@ -708,6 +708,8 @@ test('every Stage C template renders with sample data and no blank slot', () => 
     hours: 5, when: 'Thursday 10:00 AM', whyYes: 'Tell me more', asked: 'nothing', thread: 'x', days: 6, showedUrl: 'u', noshowUrl: 'u', wrongfitUrl: 'u', disputeUrl: 'u', clientNoshowUrl: 'u',
     companies: 240, replies: 7, positive: 2, diagnosis: 'd', fix: 'f', pending: 2, FirstName: 'Ann', slot1: 's1', slot2: 's2', calendarUrl: 'c',
     month: 'January', Referrer: 'Bob', Greeting: 'Hi Ann,', oneLiner: 'We fix IT.', SenderName: 'Jane', missedWhen: 'Tuesday', ClientCompany: 'Acme IT',
+    // notifyClient fills firstName on every client email; the owner signs offpace_day15 and deliverability_notice.
+    firstName: 'Ann', ownerName: 'Limeth',
   };
   const keys = ['hot_lead', 'hot_lead_nudge', 'call_handoff', 'slot_far_warning', 'call_tap', 'call_tap_reminder', 'quote_request', 'offpace_day15', 'deliverability_notice', 'paused_quiet', 'reply_interested', 'reply_interested_soft', 'reply_notnow', 'reply_no', 'reply_wrongperson_thanks', 'referral_intro', 'holding_reply', 'notnow_followup', 'reminder_24h', 'reminder_1h', 'rebook_email', 'apology_reschedule', 'apology_customer'];
   for (const k of keys) {

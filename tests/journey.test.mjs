@@ -562,7 +562,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.ok(!sim.sent.some((m) => m.to === APPLICANT.email && linkIn(m.text, 'approve')), 'no approval email before the launch call');
   await goTo(et('2026-10-16', '12:00'));
   const s15 = await snap('15', 'launch-invite', 'Warm-up day 10 (Friday): the list has its contacts and the four emails pass the Copy Checker, so the launch invite goes to Dana at 9 am her time — the booking page for a launch call and, below it, the approval page. The owner hears that Ridgeline IT is ready for the launch call.');
-  const LAUNCH_SUBJECT = "Your list and your emails are ready — let's go through them together";
+  const LAUNCH_SUBJECT = 'Your list is ready';
   const invite = sim.sent.find((m) => m.to === APPLICANT.email && m.subject === LAUNCH_SUBJECT);
   assert.ok(invite, `the launch invite went: ${steps.at(-1).mail.map((m) => m.subject)}`);
   assert.equal(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(invite.at)), '2026-10-16', 'on warm-up day 10, not before');

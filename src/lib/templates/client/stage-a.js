@@ -10,32 +10,39 @@
  *  - onboarding_link opens with the Day −14 ask from Section 5.
  *  - decline_fit / decline_market reuse Section 2 wording.
  * Everything else is new, plain text, one ask, in the owner's voice.
+ *
+ * The voice (docs/IMPROVE-PASS.md §B, enforced by tests/voice.test.mjs): "Hi
+ * {firstName}," and the owner's name as the sign-off, no title block; under
+ * 120 words; one ask; contractions; no "!"; a subject under six words that
+ * says the thing; and the fact that makes it theirs — {clientName} (their
+ * company, filled by notifyClient on every client email), the exact date, the
+ * count.
  */
 export const TEMPLATES = {
   onboarding_link: {
     from: 'owner',
-    subject: 'Your trial — one page to fill in',
+    subject: 'One page for your trial',
     body: `Hi {firstName},
 
-Thanks for applying — you're in. One page, and everything I'll ever ask you for is on it: who we write as, who to target and who to leave alone, and the one-page agreement.
+Thanks for applying. You're in. Everything I'll ever need from {clientName} is on one page: who we write as, who to target, who to leave alone, and the one-page agreement.
 
 {link}
 
-It saves as you go, so you can stop and come back. Once it's signed I check the size of your market, then buy the domain and the clock starts.
+It saves as you go, so you can stop and come back. Once it's signed, I check the size of your market, buy the domain, and the clock starts.
 
 {ownerName}`,
   },
 
   onboarding_reminder: {
     from: 'owner',
-    subject: 'Your trial page is still open',
+    subject: 'Your trial page is waiting',
     body: `Hi {firstName},
 
-A reminder that your trial page is waiting — nothing starts until it's filled in and signed. It keeps what you've already typed.
+Your trial page is still open, and nothing starts until it's filled in and signed. It keeps what you've already typed.
 
 {link}
 
-The slot stays yours until {closeDate}; after that I pass it to the next company in line.
+I'm holding the slot for {clientName} until {closeDate}. After that, it goes to the next company in line.
 
 {ownerName}`,
   },
@@ -45,7 +52,7 @@ The slot stays yours until {closeDate}; after that I pass it to the next company
     subject: 'Closing your trial slot',
     body: `Hi {firstName},
 
-I didn't hear back on the trial page, so I've closed your slot and passed it to the next company waiting. Nothing was bought and nothing was sent in your name.
+I didn't hear back about the trial page, so I've closed the slot for {clientName} and passed it to the next company waiting. Nothing was bought, and nothing was sent in your name.
 
 If the timing changes, reply to this email and I'll tell you when the next slot opens.
 
@@ -54,12 +61,12 @@ If the timing changes, reply to this email and I'll tell you when the next slot 
 
   queued_position: {
     from: 'owner',
-    subject: "Your trial — you're number {position} in line",
+    subject: "You're number {position} in line",
     body: `Hi {firstName},
 
-You fit — thank you for applying. I run three trials at a time and every slot is taken right now, so you're number {position} in line. {expectedLine}
+Thanks for applying. {clientName} is a good fit. I run three trials at a time and every slot is taken right now, so you're number {position} in line. {expectedLine}
 
-There's nothing to do until then. When your slot opens you'll get one page to fill in and sign.
+There's nothing to do until then. When your slot opens, you'll get one page to fill in and sign.
 
 {ownerName}`,
   },
@@ -69,21 +76,21 @@ There's nothing to do until then. When your slot opens you'll get one page to fi
     subject: 'Your trial application',
     body: `Hi {firstName},
 
-Thank you for applying. I'm going to say no to the trial, and here is the honest reason: {reason}
+Thank you for applying. I'm going to say no to the trial for {clientName}, and here's the honest reason: {reason}
 
-Every part of the fit gate has to be true, because most trials that book nothing are decided at this step, not in the campaign. If that changes on your side, reply to this email.
+Every part of the fit check has to be true, because most trials that book nothing are decided at this step, not in the campaign. If that changes on your side, reply to this email.
 
 {ownerName}`,
   },
 
   decline_market: {
     from: 'owner',
-    subject: 'Your trial — the market count',
+    subject: 'Your market count',
     body: `Hi {firstName},
 
-Thank you for signing. Before I buy anything I count the companies that match your profile, and the trial needs at least {minMarket} of them. I found about {estimate}{widenedLine}.
+Thanks for signing. Before I buy anything, I count the companies that match your profile, and the trial needs at least {minMarket} of them. I found about {estimate}{widenedLine}.
 
-If your whole market is that size, the trial burns most of it in a month and there is no room for a paid plan behind it, so I'm not going to start it. Nothing was bought and nothing was sent in your name.
+If that's your whole market, the trial would use up most of it in a month, with no room left for a paid plan after it. So I'm not going to start it. Nothing was bought, and nothing was sent in your name.
 
 {ownerName}`,
   },
@@ -93,7 +100,7 @@ If your whole market is that size, the trial burns most of it in a month and the
     subject: 'Your trial application',
     body: `Hi {firstName},
 
-Thank you for applying. {mainDomain} has already had a trial with us, and it's one trial per company, ever, so I can't run another.
+Thanks for applying. {mainDomain} has already had a trial with us, and it's one trial per company, ever, so I can't run another.
 
 If you'd like to talk about a paid plan instead, reply to this email.
 
@@ -102,10 +109,10 @@ If you'd like to talk about a paid plan instead, reply to this email.
 
   agreement_copy: {
     from: 'owner',
-    subject: 'Your trial agreement — signed copy',
+    subject: 'Your signed trial agreement',
     body: `Hi {firstName},
 
-Here is a plain-text copy of the agreement you accepted. Keep it for your records; nothing else is needed from you.
+Here's a plain-text copy of the agreement you accepted for {companyName}. Keep it for your records. Nothing else is needed from you.
 
 {agreementText}
 
@@ -117,36 +124,38 @@ Accepted at: {acceptedAt} (UTC) from IP {agreementIp}
 
   setup_in_progress: {
     from: 'owner',
-    subject: 'Your trial — setup has started',
+    subject: 'Your trial setup has started',
     body: `Hi {firstName},
 
-Your market check passed, so we're going ahead. I'm buying the sending domain and two inboxes now.
+Your market check passed, so we're going ahead with {clientName}. I'm buying the sending domain and two inboxes now.
 
-Once they pass their checks you'll get an email with your two dates: the first send and Day 30. Nothing is needed from you in the meantime.
+Once they pass their checks, you'll get an email with your two dates: the first send and Day 30. Nothing's needed from you in the meantime.
 
 {ownerName}`,
   },
 
   welcome_two_dates: {
     from: 'owner',
-    subject: 'Your trial — two dates',
-    body: `Hi {firstName}, agreement's in — thank you. The domain is registered and both inboxes went into warm-up today.
+    subject: 'Your first send is {day1Date}',
+    body: `Hi {firstName},
 
-Two dates. First send: {day1Date} — that's day 1 of your 30. Day 30 is {day30Date}.
+The agreement's in, thank you. The domain is registered, and both inboxes went into warm-up today.
 
-Near the end of warm-up you'll get an invite to a {callMinutes}-minute launch call: we go through your list and your emails together, and you give the OK before anything is sent.
+Two dates for {clientName}. First send: {day1Date}. That's Day 1 of your 30. Day 30 is {day30Date}.
 
-Every Friday you'll get a short update from me, including the quiet weeks.
+Near the end of warm-up, you'll get an invite to a {callMinutes}-minute launch call. We go through your list and your emails together, and you give the OK before anything is sent.
+
+Every Friday you'll get a short update from me, quiet weeks included.
 
 {ownerName}`,
   },
 
   booking_test_request: {
     from: 'owner',
-    subject: '60-second test of your booking link',
+    subject: 'Test your booking link',
     body: `Hi {firstName},
 
-Before the first send I want to be sure a prospect who says yes can actually book. Please do this once:
+Before the first send, I want to be sure a prospect who says yes can book. It takes about 60 seconds. Please do this once:
 
 1. Open {calendarUrl} from a personal email address, not your work one.
 2. Book the first slot it offers.
@@ -162,12 +171,12 @@ If anything went wrong, reply and tell me what you saw.
 
   booking_fix: {
     from: 'owner',
-    subject: 'Your booking link needs a fix',
+    subject: 'Your booking link needs fixing',
     body: `Hi {firstName},
 
 I tested your booking link ({calendarUrl}) and found a problem: {problem}
 
-Please fix it on your booking tool, or reply with a different link. The first send waits until a prospect can book.
+Please fix it in your booking tool, or reply with a different link. The first send waits until a prospect can book.
 
 {ownerName}`,
   },
@@ -178,14 +187,14 @@ Please fix it on your booking tool, or reply with a different link. The first se
   // three times…". Follow-ups reuse the first subject ({threadSubject}) so they thread.
   accepted_call: {
     from: 'onboard',
-    subject: "You're in — let's book your onboarding call",
+    subject: "Let's book your onboarding call",
     body: `Hi {firstName},
 
 Good news: we'd like to run your free 30-day trial for {companyName}.
 
-The next step is a {callMinutes}-minute onboarding call, so I can hear how you sell and who you'd like to reach. {bookingLine}
+First, a {callMinutes}-minute onboarding call, so I can hear how you sell and who you'd like to reach. {bookingLine}
 
-Before the call (or on it, together): {onboardingLink} — one page, your details and the agreement.
+There's also one page with your details and the agreement. Fill it in before we talk if you like, or we'll do it together on the call: {onboardingLink}
 
 {ownerName}`,
   },
@@ -195,7 +204,7 @@ Before the call (or on it, together): {onboardingLink} — one page, your detail
     subject: 'Re: {threadSubject}',
     body: `Hi {firstName},
 
-Just checking you saw my email about your trial. The first step is a {callMinutes}-minute onboarding call. {bookingLine}
+The trial for {clientName} starts with a {callMinutes}-minute onboarding call, and we haven't booked it yet. {bookingLine}
 
 {ownerName}`,
   },
@@ -205,7 +214,7 @@ Just checking you saw my email about your trial. The first step is a {callMinute
     subject: 'Our onboarding call {callDay}',
     body: `Hi {firstName},
 
-A quick reminder: our {callMinutes}-minute onboarding call is {when}.
+A reminder that our {callMinutes}-minute onboarding call is {when}.
 
 {joinLine}
 
@@ -226,17 +235,17 @@ If that time no longer works, reply to this email and we'll find another.
 
 {opening}
 
-Here is what happens now, from my side:
+Here's what happens now:
 
-- Right now we are researching your business and your market, and building your offer.
-- This week we set up your sending address and its inboxes.
-- Then two weeks of warm-up, so your emails land in the inbox and not in spam.
-- Meanwhile we build your list of about {listSize} companies and write your emails in your words.
-- Every Friday you get a short note from me, even in the quiet weeks.
-- Near the end of warm-up you get an invite to a {callMinutes}-minute launch call: we go through the list and the emails together, and you give the OK.
+- Right now we're researching your business and market, and building your offer.
+- This week we set up your sending address and inboxes.
+- Then two weeks of warm-up, so your emails land in the inbox.
+- We build your list of about {listSize} companies and write your emails in your words.
+- Every Friday you get a short note from me, quiet weeks too.
+- Near the end of warm-up, you get an invite to a {callMinutes}-minute launch call to OK the list and the emails.
 - The first emails go out {day1Line}.
 
-Nothing is needed from you until the launch call.
+Nothing's needed from you until then.
 
 {ownerName}`,
   },
@@ -294,7 +303,7 @@ I've attached a calendar invite. {nextLine}
     subject: 'Re: {threadSubject}',
     body: `Hi {firstName},
 
-Thanks for picking a time. {asked} doesn't work for me, I'm afraid — how about {when}?
+Thanks for picking a time. I'm sorry, {asked} doesn't work for me. How about {when}?
 
 Yes, that works: {acceptLink}
 
@@ -317,7 +326,7 @@ Please pick another time here: {bookLink}
 
   meeting_moved: {
     from: 'onboard',
-    subject: 'New time for our call: {whenShort}',
+    subject: 'Our call moves to {whenShort}',
     body: `Hi {firstName},
 
 I've had to move our call. The new time is {when}.

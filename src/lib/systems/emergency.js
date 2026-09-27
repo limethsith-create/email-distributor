@@ -172,7 +172,8 @@ async function step2Diagnose(clientId, client, now) {
 
 async function step6Notice(clientId, em) {
   if (em.noticeSentAt) return;
-  const r = await notifyClientSafe(clientId, 'deliverability_notice', {}, { dedupe: `deliverability_notice:${em.startedAt}` });
+  // Signed by the owner (the voice pass: every client email ends with his name).
+  const r = await notifyClientSafe(clientId, 'deliverability_notice', { ownerName: await ccfg(clientId, 'OWNER.signerName') }, { dedupe: `deliverability_notice:${em.startedAt}` });
   await patchEmergency(clientId, { noticeSentAt: new Date().toISOString(), noticeSent: r.sent ? '1' : '0' });
   await logEvent(clientId, 'emergency', 'step6_notice', { sent: Boolean(r.sent) });
 }

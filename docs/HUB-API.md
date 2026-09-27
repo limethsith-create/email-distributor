@@ -697,7 +697,7 @@ in the ONBOARDCALL inbox — in any state, not only during onboarding.
     "text": "plain text, ≤ 4 000 chars (quoted history cut)",
     "kind": "acceptance|reminder|reply|owner_reply|booking|auto_reply|system",
     "auto": true,                   // sent by the reply bot → show "Auto-reply" + the rule in plain words
-    "rule": "not_interested|reschedule|proposes_time|wants_time|price|what_needed|thanks|null",
+    "rule": "not_interested|who_are_you|later|reschedule|proposes_time|wants_time|price|what_needed|thanks|null",
                                     // out + auto: the rule it answered; in: what the bot read in it (null when it may not answer them)
     "template": "setup_in_progress|null"   // kind 'system' only: collapse to one line with "show"
   } ],
@@ -720,7 +720,11 @@ Rule words for the hub (suggested): not_interested "they're not interested —
 sent a polite close", reschedule "sent the booking link to move the call",
 proposes_time "answered the time they asked for", wants_time "sent your
 booking link and times", price "answered the price question", what_needed
-"sent what the call needs", thanks "a thank-you — nothing to answer".
+"sent what the call needs", thanks "a thank-you — nothing to answer",
+who_are_you "they asked who we are — told them how their email reached us",
+later "they said not now — told them you'll check back". A `later` answer also
+adds a promise ("Check back with …", due on the check-back day) and, on that
+day, the alert `bot_later_due` ("Check back with {who} — they said not now on {when}").
 
 ## `POST /api/mc/clients/{id}/messages`
 
@@ -778,10 +782,10 @@ when > 0). Reload the trial when `newReplies` or `botReplies` > 0.
 
 Config `REPLYBOT` (machine-wide; `/mc/config`): `enabled`, `maxPerDay` (3),
 `delayMinutes` (3), `hours` (`'us'` = OWNER.usHours on US business days,
-`'any'`), `answers.{not_interested|reschedule|proposes_time_ok|
-proposes_time_busy|wants_time|price|what_needed}` (plain text with
+`'any'`), `laterWeeks` (4: the `later` answer's check-back), `answers.{not_interested|reschedule|proposes_time_ok|
+proposes_time_busy|wants_time|price|what_needed|who_are_you|later}` (plain text with
 `{firstName}` `{ownerName}` `{bookingLink}` `{times}` `{when}`
-`{onboardingLink}` `{callMinutes}`). The on/off switch for everyone is
+`{onboardingLink}` `{callMinutes}` `{howLine}`). The on/off switch for everyone is
 `REPLYBOT.enabled`; show each answer read-only.
 
 ---

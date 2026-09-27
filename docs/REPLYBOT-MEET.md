@@ -64,6 +64,8 @@ match answers, nothing else:
 | rule | when (plain rule, case-insensitive) | the bot does |
 |---|---|---|
 | `not_interested` | "not interested", "no longer", "changed my mind", "cancel the trial", "unsubscribe", "remove me", "stop" as the whole message | polite close ("No problem at all — I've closed it on my side…"), stops reminders, marks the onboarding call `stopped`, alerts the owner |
+| `who_are_you` **(voice pass)** | "who is this", "who are you" (not "who are you sending as"), "how/where did you get my email", "do I know you", "what is Aviance", "why am I getting this" | one honest line on how their email reached us — only for a known source (`website`: "You applied for our free 30-day trial on our website…", `inquiry`: "You sent us a note through the form on our website…") — and the website; any other source (an owner-added client) → the owner (`onboard_reply`). Not on the launch thread |
+| `later` **(voice pass)** | "not now", "not right now", "not at the moment", "bad timing", "too busy", "swamped", "after the holidays / the busy season", "in a few weeks", "in a month", "maybe later", "check back later" — with no readable time, nothing asked for or booked, the call still to happen | "No problem. I'll check back in {laterWeeks} weeks, around Monday 2 November…"; stops the reminders (call `stopped`), keeps `laterAt` / `laterUntil` (9:00 ET on the next US business day after `REPLYBOT.laterWeeks`, default 4) / `laterText` on the call hash, adds a Promise ("Check back with Sam at eCreek IT…", due that day), holds the onboarding page's Day +7 close until then (it counts from that date after), and on the day raises `bot_later_due` once (dropped if they wrote again or moved on). Not on the launch thread |
 | `reschedule` | "reschedule", "move the call", "different time", "can't make it", "cant make", "something came up" | the booking page link ("pick any other time here…") — the existing request/booking stays until they pick |
 | `proposes_time` | a day/date + a time that the calendar can read (reuse bookings.js `parseBodyDate` or a small parser: "Tuesday at 2pm", "Oct 7 3:30 pm ET", "tomorrow 11am CST"; their zone from the client) | if that time is free by the calendar rules → create the meeting **request** at it (source `reply_bot`) and answer "Tuesday 7 Oct at 2:00 pm your time works on my side — I'll confirm it shortly" (the owner still presses Yes in the Calendar); if not free → the three nearest free times in their zone + the booking page |
 | `wants_time` | "what times", "when are you free", "your availability", "happy to jump on a call", "let's book", "sounds good", "works for me" with no readable time | the booking page link + three nearest free times in their zone |
@@ -88,8 +90,9 @@ REPLYBOT: {
   maxPerDay: 3,             // bot emails to one client in a day
   delayMinutes: 3,          // wait this long before answering (the owner can still answer first)
   hours: 'us',              // 'us' = US business hours (OWNER.usHours ET), 'any' = any time
-  answers: {                // the text of each answer; {bookingLink}, {times}, {firstName}, {onboardingLink}, {ownerName} filled in
-    not_interested: '…', reschedule: '…', proposes_time_ok: '…', proposes_time_busy: '…', wants_time: '…', price: '…', what_needed: '…',
+  laterWeeks: 4,            // `later`: check back in this many weeks (voice pass)
+  answers: {                // the text of each answer; {bookingLink}, {times}, {firstName}, {onboardingLink}, {ownerName}, {when}, {howLine} filled in
+    not_interested: '…', reschedule: '…', proposes_time_ok: '…', proposes_time_busy: '…', wants_time: '…', price: '…', what_needed: '…', who_are_you: '…', later: '…',
   },
 }
 ```

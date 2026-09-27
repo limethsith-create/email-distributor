@@ -663,13 +663,13 @@ test('booking test sends the one-tap request; the tap sets bookingTested', async
 
 test('every Stage A template renders with sample data; the agreement fills all brackets', () => {
   const sample = {
-    firstName: 'Ann', ownerName: 'Limeth', link: 'https://x/c/t/onboard', closeDate: 'Monday 12 October', position: 2,
+    firstName: 'Ann', clientName: 'Acme', ownerName: 'Limeth', link: 'https://x/c/t/onboard', closeDate: 'Monday 12 October', position: 2,
     expectedLine: 'Soon.', reason: 'because.', minMarket: '1,000', estimate: '500', widenedLine: ' in the areas you gave me', mainDomain: 'acme.com',
     agreementText: 'TEXT', agreementName: 'Ann Lee', agreementTitle: 'CEO', companyName: 'Acme', acceptedAt: '2026-10-05 14:00', agreementIp: '1.2.3.4',
     day1Date: 'Monday 19 October', day30Date: 'Tuesday 17 November', calendarUrl: 'https://cal', problem: 'broken.',
     // Onboarding call (accepted_call, accepted_call_reminder, onboard_call_tomorrow, onboard_owner_reply)
     callMinutes: 30, bookingLine: 'Book a time that suits you: https://cal.com/limeth/onboarding', onboardingLink: 'https://x/c/t/onboard',
-    threadSubject: "You're in — let's book your onboarding call", when: 'Tuesday, October 13 at 11:00 AM EDT', callDay: 'tomorrow', text: 'Tuesday works.\n\nLimeth', joinLine: 'Join here: https://meet.google.com/abc-defg-hij',
+    threadSubject: "Let's book your onboarding call", when: 'Tuesday, October 13 at 11:00 AM EDT', callDay: 'tomorrow', text: 'Tuesday works.\n\nLimeth', joinLine: 'Join here: https://meet.google.com/abc-defg-hij',
     // Calendar (meeting_received, meeting_confirmed, meeting_suggested, meeting_declined, meeting_moved, meeting_cancelled)
     whenShort: 'Tue 13 Oct at 11:00 am ET', minutes: 30, linkLine: "I'll send the link before the call.", bookLink: 'https://x/c/t/book',
     nextLine: 'If the time stops working, pick another here: https://x/c/t/book', asked: 'Tuesday at 2:00 pm', acceptLink: 'https://x/c/t/book/accept?m=m1',

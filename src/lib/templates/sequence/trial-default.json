@@ -3,7 +3,7 @@
   "niche": "trial-default",
   "version": 2,
   "source": "Copy v2 (docs/research/v2-leads-copy.md): Sequence T structure (The 30-Day Trial, Section 10: plain text, no links in email 1, one reply CTA, four touches) with four frameworks. Wording is new and makes no claim about the client beyond {oneLiner} / {proof}; the client reviews it on the approval page.",
-  "footer": "{SenderName}\n{ClientCompany}\n{postalAddress}\n\nNot the right fit? Just reply STOP and I will not email you again.",
+  "footer": "{SenderName}\n{ClientCompany}\n{postalAddress}\n\nIf this isn't for you, reply STOP and I won't email you again.",
   "defaultFramework": "problem-first",
   "subjectBank": ["{Company} and {ClientCompany}", "{niche} at {Company}", "question for {Company}", "idea for {Company}", "one idea", "worth a look"],
   "frameworks": {
@@ -19,10 +19,10 @@
         { "id": "default-d2", "firstLineSet": "D", "subjects": { "d0": "worth a look" } }
       ],
       "touches": [
-        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\nFor a lot of {ICP}, {niche} is on the list for this year but keeps slipping behind the day-to-day work.\n\n{oneLiner}\n\nIs {niche} something you are looking at for {Company}?" },
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\nFor a lot of {ICP}, {niche} is on this year's list. Then the daily work keeps pushing it back.\n\n{oneLiner}\n\nIs {niche} something you're looking at for {Company}?" },
         { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, one more thought.\n\nThe cost of waiting is rarely obvious. It shows up as work that takes longer than it should.\n\nWorth a short call to see if {ClientCompany} could help {Company} with it?" },
-        { "touch": "d7", "day": 7, "thread": "new", "subject": "{niche} at {Company}", "body": "{FirstName}, a different angle.\n\nMost {ICP} only look at {niche} when something forces it. It is easier to sort out while things are calm.\n\nWould a 15-minute call next week be useful?" },
-        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "{niche} at {Company}", "body": "{FirstName}, a different angle.\n\nMost {ICP} only look at {niche} when something forces it. It's easier to sort out while things are calm.\n\nWould a 15-minute call next week be useful?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply is all it takes.\n\nShould I close the file for now?" }
       ]
     },
     "question-led": {
@@ -37,10 +37,10 @@
         { "id": "default-q-d2", "firstLineSet": "D", "subjects": { "d0": "worth a look" } }
       ],
       "touches": [
-        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\n{oneLiner}\n\nHow does {Company} handle {niche} today, in-house or with an outside firm?" },
-        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, asking because the answer tells me quickly whether this is worth your time.\n\nIf it is covered and working, no need to change. If it sits with a busy person on your team, {ClientCompany} can take it on.\n\nWhich is it at {Company}?" },
-        { "touch": "d7", "day": 7, "thread": "new", "subject": "question for {Company}", "body": "{FirstName}, one practical check.\n\nIt is worth knowing what {niche} costs {Company} today in time as well as money. Many {ICP} never add it up.\n\nWant {ClientCompany} to help you work it out?" },
-        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\n{oneLiner}\n\nSome teams keep {niche} in-house. Some hand it to a firm.\n\nHow does {Company} handle it now?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, I ask because your answer tells me if this is worth your time.\n\nIf it's covered and working, no need to change. If it sits with a busy person on your team, {ClientCompany} can take it on.\n\nWhich is it at {Company}?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "question for {Company}", "body": "{FirstName}, one practical check.\n\nIt's worth knowing what {niche} costs {Company} today in time as well as money. Many {ICP} never add it up.\n\nWant {ClientCompany} to help you work it out?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply is all it takes.\n\nShould I close the file for now?" }
       ]
     },
     "quick-idea": {
@@ -56,9 +56,9 @@
       ],
       "touches": [
         { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\nOne idea for {Company}: a short review of how {niche} works today, to find one or two quick wins.\n\n{oneLiner}\n\nWant me to send over what the review covers?" },
-        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, a review like that is quick to do and easy to put off.\n\n{ClientCompany} can run it with you at a time that suits.\n\nWould that be useful for {Company}?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, a review like this is quick to do and easy to put off.\n\n{ClientCompany} can run it with you at a time that suits.\n\nWould that be useful for {Company}?" },
         { "touch": "d7", "day": 7, "thread": "new", "subject": "idea for {Company}", "body": "{FirstName}, a second idea.\n\nMost quick wins in {niche} come from one or two changes, not a big project.\n\nOpen to a 15-minute call to see which apply to {Company}?" },
-        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply is all it takes.\n\nShould I close the file for now?" }
       ]
     },
     "local-proof": {
@@ -76,8 +76,8 @@
       "touches": [
         { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\n{proof}\n\n{oneLiner}\n\nWorth a short call to see if the same would help {Company}?" },
         { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, happy to share how that works for {ICP} like {Company}, in plain terms.\n\nWould a short call next week suit you?" },
-        { "touch": "d7", "day": 7, "thread": "new", "subject": "{niche} at {Company}", "body": "{FirstName}, a different angle.\n\nMost {ICP} only look at {niche} when something forces it. It is easier to sort out while things are calm.\n\nWould a 15-minute call next week be useful?" },
-        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "{niche} at {Company}", "body": "{FirstName}, a different angle.\n\nMost {ICP} only look at {niche} when something forces it. It's easier to sort out while things are calm.\n\nWould a 15-minute call next week be useful?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf {niche} comes up at {Company} later, a one-line reply is all it takes.\n\nShould I close the file for now?" }
       ]
     }
   }

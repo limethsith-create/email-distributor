@@ -86,100 +86,104 @@ export const DECISION_FAQ = [
   { q: 'We want the calls but not the retainer.', a: 'Then pay per show: $250 for every qualified call that actually attends, billed weekly, nothing else. After month two it moves to a minimum of five a month or a plan.' },
 ];
 
+// Every email here goes through notifyClient, which fills {firstName} (the
+// contact's first name) and {clientName} (their company) — the voice rules of
+// stage-a.js (docs/IMPROVE-PASS.md §B, tests/voice.test.mjs) apply.
 export const TEMPLATES = {
-  // Day 1 — verbatim ("Your trial started today", Section 10).
+  // Day 1 ("Your trial started today", Section 10) — the doc's words in the voice.
   day1_started: {
-    subject: 'Day 1',
-    body: '{contactName} — the first emails went out this morning from {senderAddress}. Day 30 is {day30Date}.\n\nI handle every reply. Anything hot lands in your inbox the same day with a note on what to do. Friday update as usual.\n\n{buttons}\n\n{ownerName}',
+    subject: 'Your first emails went out',
+    body: 'Hi {firstName},\n\nThe first emails for {clientName} went out this morning from {senderAddress}. Day 30 is {day30Date}.\n\nI handle every reply. Anything hot lands in your inbox the same day, with a note on what to do. Your Friday update comes as usual.\n\n{buttons}\n\n{ownerName}',
   },
 
-  friday_update: { subject: '{title}', body: '{body}\n\n{ownerName}' },
+  friday_update: { subject: '{title}', body: 'Hi {firstName},\n\n{body}\n\n{ownerName}' },
 
   disposition_sheet: {
     subject: 'Your meetings so far — {clientName}',
-    body: '{contactName} — every meeting from the trial so far, pre-filled: company, date, showed, right fit, outcome. Fill this in and I’ll fix the targeting for you.\n\n{rows}\n\nThe buttons under each meeting stay open until Day 25. Anything to add? Just reply to this email.\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nHere’s every meeting from the trial so far, pre-filled: company, date, showed, right fit, outcome. Fill it in and I’ll fix the targeting for you.\n\n{rows}\n\nThe buttons under each meeting stay open until Day 25. Anything to add? Reply to this email.\n\n{ownerName}',
   },
 
-  trial_report: { subject: '{clientName} — 30-Day Trial Report', body: '{body}\n\n{ownerName}' },
-  trial_report_zero: { subject: '{clientName} — Trial Report', body: '{body}\n\n{ownerName}' },
+  // The Day 29 report cover: the report itself is {body} (REPORT_LINES / REPORT_ZERO_LINES).
+  trial_report: { subject: '{clientName} — 30-Day Trial Report', body: 'Hi {firstName},\n\nHere’s the report on your 30 days.\n\n{body}\n\n{ownerName}' },
+  trial_report_zero: { subject: '{clientName} — Trial Report', body: 'Hi {firstName},\n\nHere’s the report on your trial.\n\n{body}\n\n{ownerName}' },
 
   decision_link: {
-    subject: 'Day 30 — your numbers and one recommendation',
-    body: '{contactName} — Day 30. Your five numbers, one recommendation and three buttons are on one page: {decisionUrl}\n\n{recommendationLine}\n\nMonth-one bonus: {bonusLine} if you start before {bonusExpires}. The domain’s already warm and the copy’s proven, so you skip the build. If you don’t continue, the trial domain retires on Day 45.\n\n{ownerName}',
+    subject: 'Your Day 30 numbers',
+    body: 'Hi {firstName},\n\nIt’s Day 30. Your five numbers, one recommendation and three buttons are on one page: {decisionUrl}\n\n{recommendationLine}\n\nMonth-one bonus: {bonusLine} if you start before {bonusExpires}. The domain’s already warm and the copy’s proven, so you skip the build. If you don’t continue, the trial domain retires on Day 45.\n\n{ownerName}',
   },
   decision_link_zero: {
     subject: 'Day {day} — the honest numbers',
-    body: '{contactName} — we didn’t get you a call. {companies} companies, {replies} replies, {positive} of them positive, no qualified meetings. I’m not going to dress that up.\n\nThe full report is attached to the last email and on your page: {decisionUrl}\n\nWhat I’d do next, honestly: {recommendationLine}\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nWe didn’t get you a call. {companies} companies, {replies} replies, {positive} of them positive, no qualified meetings. I’m not going to dress that up.\n\nThe full report is attached to the last email and on your page: {decisionUrl}\n\nWhat I’d do next, honestly: {recommendationLine}\n\n{ownerName}',
   },
 
   talk_ack: {
     subject: 'Let’s talk — pick a time',
-    body: '{contactName} — thanks. Times I can do (US Eastern):\n\n{slots}\n\nReply with the one that suits you and I’ll send the invite.\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nThanks. Here are the times I can do (US Eastern):\n\n{slots}\n\nReply with the one that suits you and I’ll send the invite.\n\n{ownerName}',
   },
 
   // Section 7 "The extension" wording, as an email.
   extension_notice: {
     subject: 'Day 30 — we keep going',
-    body: '{contactName} — no qualified call has been held by Day 30, so the promise kicks in: we keep sending at our cost until one is, up to Day {capDay}. You don’t pay for the extra time and you don’t have to ask for it.\n\nWe change the campaign, not the deal: new copy, a tighter list, better timing. The Day 30 decision moves to the day after the first qualified call. Hard stop at Day {capDay}; after that the trial ends whatever happened, and you get the full report.\n\nYour side still has to hold: calendar open, hot replies answered within one business day.\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nNo qualified call has been held by Day 30, so the promise kicks in: we keep sending at our cost until one is, up to Day {capDay}. You don’t pay for the extra time, and you don’t have to ask for it.\n\nWe change the campaign, not the deal: new copy, a tighter list, better timing. The Day 30 decision moves to the day after the first qualified call. Hard stop at Day {capDay}. After that the trial ends whatever happened, and you get the full report.\n\nYour side still has to hold: calendar open, hot replies answered within one business day.\n\n{ownerName}',
   },
 
-  // Review requests — verbatim (Section 10).
+  // Review requests (Section 10). The Clutch line is required word for word.
   review_request: {
     subject: 'The review — ten minutes',
-    body: '{contactName}, thank you for the last 30 days. Here’s the one thing I ask in return: a review on Clutch — {clutchUrl}.\n\nThree things, so it’s all above board: it can be positive or negative, it should be exactly what you actually think, and it needs to start with the line “I received this service for free for my review.” Clutch requires that when a service was free.\n\nSay what actually happened. If something was a three out of five, say so — that’s the version I can learn from and the version people believe. Clutch may email you to verify it.\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nThank you for the last 30 days. Here’s the one thing I ask in return: a review on Clutch: {clutchUrl}\n\nThree things, so it’s all above board. It can be positive or negative. It should be exactly what you think. And it needs to start with the line “I received this service for free for my review.” Clutch requires that when a service was free.\n\nSay what actually happened. If something was a three out of five, say so. That’s the version I learn from, and the version people believe. Clutch may email you to check it.\n\n{ownerName}',
   },
   review_request_zero: {
-    subject: 'The review — and thank you for the 30 days',
-    body: '{contactName}, we didn’t get you a call, and I’m not going to pretend otherwise. I’d still like the review, and I’d like it to say that.\n\nWhat’s useful to someone reading it: whether the work was run properly, whether the reporting was clear, whether I told you the truth when it wasn’t working, and whether the report on your market was worth having. Rate it however you actually rate it.\n\nSame three rules: positive or negative, your honest opinion, and it starts with “I received this service for free for my review.” Link: {clutchUrl}.\n\n{ownerName}',
+    subject: 'The review, and thank you',
+    body: 'Hi {firstName},\n\nWe didn’t get you a call, and I won’t pretend otherwise. I’d still like the review, and I’d like it to say that.\n\nWhat helps someone reading it: whether the work was run properly, whether the reporting was clear, whether I told you the truth when it wasn’t working, and whether the report on your market was worth having. Rate it however you rate it.\n\nSame three rules: positive or negative, your honest opinion, and it starts with “I received this service for free for my review.” Link: {clutchUrl}\n\n{ownerName}',
   },
 
-  // Testimonial approval — verbatim.
+  // Testimonial approval — the doc's words.
   testimonial_approval: {
     subject: 'Your words — edit freely',
-    body: '{contactName}, this is what you said on {quoteDate}, tidied: “{draft}”\n\nChange anything. Once you reply “approved”, it goes on our site with your name, title and the {clientName} logo. If you’d rather it were anonymous — “founder, 12-person MSP” — say so and that’s what we’ll use.\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nThis is what you said on {quoteDate}, tidied: “{draft}”\n\nChange anything. Once you reply “approved”, it goes on our site with your name, title and the {clientName} logo. If you’d rather it were anonymous, like “founder, 12-person MSP”, say so and that’s what we’ll use.\n\n{ownerName}',
   },
 
   // Not-now ladder (Section 10 table).
   ladder_33: {
     subject: 'The review link, once more',
-    body: '{contactName} — the review link again, in case it got buried: {clutchUrl}. The review is due regardless of the decision: positive or negative, your honest opinion, starting with “I received this service for free for my review.”\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nHere’s the review link again, in case it got buried: {clutchUrl}\n\nThe review is due whatever you decide. It can be positive or negative, as long as it’s your honest opinion, and it starts with “I received this service for free for my review.”\n\n{ownerName}',
   },
   ladder_33_quote: {
-    subject: 'Your words, and the review link',
-    body: '{contactName} — the quote draft from {quoteDate}, tidied: “{draft}” Reply “approved” or change anything.\n\nAnd the review link again: {clutchUrl}. The review is due regardless of the decision: positive or negative, your honest opinion, starting with “I received this service for free for my review.”\n\n{ownerName}',
+    subject: 'Your quote and the review',
+    body: 'Hi {firstName},\n\nHere’s the quote from {quoteDate}, tidied: “{draft}” Reply “approved” or change anything.\n\nAnd the review link again: {clutchUrl}. The review is due whatever you decide. It can be positive or negative, as long as it’s your honest opinion, and it starts with “I received this service for free for my review.”\n\n{ownerName}',
   },
   ladder_37: {
-    subject: 'Conversations still open from your trial',
-    body: '{contactName} — no ask in this one. These conversations from your trial are still open:\n\n{openList}\n\nThey’re yours whatever you decide.\n\n{ownerName}',
+    subject: 'Your conversations still open',
+    body: 'Hi {firstName},\n\nNo ask in this one. These conversations from your trial are still open:\n\n{openList}\n\nThey’re yours whatever you decide.\n\n{ownerName}',
   },
   ladder_44: {
     subject: 'The trial domain retires tomorrow',
-    body: '{contactName} — the domain retires tomorrow. Say the word and it stays live.\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nThe trial domain for {clientName} retires tomorrow. Say the word and it stays live.\n\n{ownerName}',
   },
 
-  // Exit interview — the three questions from Section 10.
+  // Exit interview — the three questions from Section 10, asked as one ask.
   exit_interview: {
     subject: 'Three questions, ten minutes',
-    body: '{contactName} — ten minutes, and tell me the real reason. It’s the only way I get better at this.\n\n1. What was the real reason?\n2. What would have made this a yes?\n3. Who else should be doing this?\n\nOne line each is plenty — just reply. The review is still welcome: {clutchUrl}\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nTen minutes, and tell me the real reason. It’s the only way I get better at this. One line each is plenty:\n\n1. The real reason you’re not going ahead.\n2. What would have made it a yes.\n3. Who else you think should be doing this.\n\nReply to this email. The review is still welcome: {clutchUrl}\n\n{ownerName}',
   },
 
   handover: {
     subject: 'Everything from your trial — {clientName}',
-    body: '{contactName} — your leads, replies and booked meetings are yours, whether or not you continue. Attached:\n\n• leads.csv — all {leadCount} contacts\n• replies.csv — every reply with its tag and a snippet\n• bookings.csv — every meeting and what happened\n• the Market Report (HTML and CSV)\n\nThe sending domain and inboxes are registered by us and are never used for anyone else.\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nYour leads, replies and booked meetings are yours, whether or not you continue. Attached:\n\n• leads.csv — all {leadCount} contacts\n• replies.csv — every reply with its tag and a snippet\n• bookings.csv — every meeting and what happened\n• the Market Report (HTML and CSV)\n\nWe registered the sending domain and inboxes, and they’re never used for anyone else.\n\n{ownerName}',
   },
 
   invoice_month1: {
     subject: 'Invoice {invoiceNo} — {planName}, month one',
-    body: '{contactName} — welcome to {planName}.\n\nInvoice {invoiceNo} · issued {issuedDate} · due today\n{planName}: {priceText} a month for {calls} guaranteed booked calls\n{bonusLine}\nTotal due: {priceText}\n\nPay by:\n{paymentLines}\n\nThe trial domain and inboxes stay live, so you’re at full volume inside two weeks. Month to month, 14 days’ notice, no setup fee.\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nWelcome to {planName}.\n\nInvoice {invoiceNo} · issued {issuedDate} · due today\n{planName}: {priceText} a month for {calls} guaranteed booked calls\n{bonusLine}\nTotal due: {priceText}\n\nPay by:\n{paymentLines}\n\nThe trial domain and inboxes stay live, so you’re at full volume inside two weeks. Month to month, 14 days’ notice, no setup fee.\n\n{ownerName}',
   },
   invoice_reminder: {
     subject: 'Reminder: invoice {invoiceNo}',
-    body: '{contactName} — a reminder that invoice {invoiceNo} ({priceText}, {planName}) is still open.\n\nPay by:\n{paymentLines}\n\nIf it’s already on its way, ignore this — thank you.\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nA reminder that invoice {invoiceNo} ({priceText}, {planName}) is still open.\n\nPay by:\n{paymentLines}\n\nIf it’s already on its way, ignore this, and thank you.\n\n{ownerName}',
   },
 
   // Offboarding SOP step 6 + the trial doc's win-back line.
   winback_90: {
     subject: 'Worth a 15-minute look?',
-    body: 'Hi {contactName} — we’ve added {whatsNew} since your trial ended, and it is working well for clients like you. The list has moved on and we’d rebuild. Same offer, same price. Worth a 15-minute look?\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nWe’ve added {whatsNew} since your trial ended, and it’s working well for clients like you. The list has moved on and we’d rebuild it. Same offer, same price. Worth a 15-minute look?\n\n{ownerName}',
   },
 };

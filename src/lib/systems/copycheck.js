@@ -29,6 +29,14 @@
  *   subject_length  subject (without "Re:") ≤ 6 words and ≤ 60 characters
  * and the spam-word list grows with EXTRA_SPAM_WORDS (built in, merged with
  * config/spamwords.txt).
+ *
+ * Sounding human (docs/IMPROVE-PASS.md §B):
+ *   sounds_template three or more template tells in the subject + body
+ *                   ("I hope", "I wanted to", "quick question", "just",
+ *                   "touching base", "!") — each time one appears counts
+ *   reading_grade   the body reads at US school grade ≤ 8 (Flesch-Kincaid,
+ *                   `readingGrade` below; no library). Like readability, a body
+ *                   already over the word limit is reported once, as word_count.
  */
 
 import { spamWords } from '@/lib/systems/listfiles';
@@ -46,6 +54,8 @@ export const RULES = {
   no_exclamation: 'No exclamation marks',
   readability: 'Short, easy sentences',
   you_focus: 'About them more than about us ("you" vs "I/we")',
+  sounds_template: 'Reads like one person wrote it, not a template',
+  reading_grade: 'Easy to read (school grade 8 or below)',
   subject_length: 'Short subject line',
   postal_address: 'Your postal address is in the footer',
   stop_line: 'The "reply STOP" opt-out line is present',
@@ -53,7 +63,65 @@ export const RULES = {
 };
 
 /** Thresholds of the v2 rules (constants so the approval page and the send gate always agree). */
-export const LIMITS = { maxAvgSentenceWords: 16, maxSentenceWords: 28, maxSelfWords: 3, subjectMaxWords: 6, subjectMaxChars: 60 };
+export const LIMITS = { maxAvgSentenceWords: 16, maxSentenceWords: 28, maxSelfWords: 3, subjectMaxWords: 6, subjectMaxChars: 60, maxTemplateTells: 2, maxGrade: 8 };
+
+/**
+ * What makes an email read like a mail-merge (IMPROVE-PASS §B): three or more
+ * of these, counting every time one appears, fails `sounds_template`.
+ */
+export const TEMPLATE_TELLS = ['i hope', 'i wanted to', 'quick question', 'just', 'touching base', '!'];
+
+/** How many template tells a text has (each appearance counts; "!" per mark). */
+export function templateTells(text) {
+  const t = ` ${String(text || '').replace(/[’]/g, "'").toLowerCase().replace(/\s+/g, ' ')} `;
+  let n = 0;
+  const found = [];
+  for (const tell of TEMPLATE_TELLS) {
+    const hits = tell === '!'
+      ? (t.match(/!/g) || []).length
+      : (t.match(new RegExp(`(^|[^a-z0-9'])${esc(tell)}(?=[^a-z0-9']|$)`, 'g')) || []).length;
+    if (hits) { n += hits; found.push(hits > 1 ? `"${tell}" ×${hits}` : `"${tell}"`); }
+  }
+  return { count: n, found };
+}
+
+/**
+ * Syllables in one word, by the usual rules of thumb (vowel groups, a silent
+ * final e / -es / -ed, a leading y is a consonant). Good enough to grade a
+ * short email; a word with no letters (a number) counts as one.
+ */
+export function syllables(word) {
+  let w = String(word || '').toLowerCase().replace(/[^a-z]/g, '');
+  if (!w) return 1;
+  if (w.length <= 3) return 1;
+  w = w.replace(/(?:[^laeiouy]es|[^laeiouy]ed|[^laeiouy]e)$/, '').replace(/^y/, '');
+  const groups = w.match(/[aeiouy]{1,2}/g);
+  return Math.max(1, groups ? groups.length : 1);
+}
+
+/**
+ * Flesch-Kincaid grade of a text (0.39 × words per sentence + 11.8 ×
+ * syllables per word − 15.59), one decimal. Links and email addresses count
+ * as one short word, a "Hi Ann," greeting line is left out, and each line is
+ * at least one sentence (lists, sign-offs). An empty text is grade 0.
+ */
+export function readingGrade(text) {
+  const plain = String(text || '')
+    .replace(/(https?:\/\/|www\.)\S+/gi, 'link')
+    .replace(/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g, 'address')
+    .replace(/[’]/g, "'");
+  const sentences = plain
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((s) => s.trim())
+    .filter((s) => /[A-Za-z0-9]/.test(s) && !/^(hi|hello|hey|dear)\b[^.!?]*,$/i.test(s));
+  let words = 0;
+  let syl = 0;
+  for (const s of sentences) {
+    for (const w of s.split(/\s+/).filter((x) => /[A-Za-z0-9]/.test(x))) { words++; syl += syllables(w); }
+  }
+  if (!words || !sentences.length) return 0;
+  return Math.round((0.39 * (words / sentences.length) + 11.8 * (syl / words) - 15.59) * 10) / 10;
+}
 
 /** Spam triggers added in v2 (HubSpot list, the owner's banned "AI words"); merged with config/spamwords.txt. */
 export const EXTRA_SPAM_WORDS = [
@@ -72,7 +140,40 @@ export const STALE_PHRASES = [
   'bump this', 'never heard back', "haven't heard back", 'have not heard back', 'sorry to bother', 'hope this email finds you',
   'hope this finds you', 'i wanted to reach out', 'i am reaching out', "i'm reaching out", 'thoughts?', 'quick question', 'feel free to',
   'let me know if you have any questions', 'per my last email', 'as per my last', 'i hope you are well', "i hope you're well",
+  // The owner's banned list for every email (IMPROVE-PASS §B).
+  "we're excited", 'we are excited', 'reach out', 'circle back',
 ];
+
+/**
+ * The words no email of ours uses — client emails, the reply bot and cold
+ * copy alike (IMPROVE-PASS §B). tests/voice.test.mjs holds every template to it.
+ */
+export const VOICE_BANNED = [
+  "we're excited", 'we are excited', 'reach out', 'reaching out', 'leverage', 'seamless', 'seamlessly',
+  'just checking in', 'circle back', 'circling back', 'touching base', 'hope this finds you well', 'hope this email finds you',
+];
+
+/** The banned phrases a text uses (lower case, curly quotes straightened). */
+export function bannedIn(text) {
+  const t = ` ${String(text || '').replace(/[’]/g, "'").toLowerCase().replace(/\s+/g, ' ')} `;
+  return VOICE_BANNED.filter((p) => new RegExp(`(^|[^a-z0-9'])${esc(p)}(?=[^a-z0-9']|$)`).test(t));
+}
+
+/**
+ * Two words a person would run together ("I am" → "I'm", "do not" → "don't").
+ * Not at the end of a clause, where English keeps them apart ("until there
+ * is.", "who you are,").
+ */
+const PAIRS = ['I am', 'I will', 'I would', 'I have not', 'we are', 'we will', 'we would', 'we have not', 'you are', 'you will', 'you would', 'they are',
+  'do not', 'does not', 'did not', 'is not', 'are not', 'was not', 'were not', 'has not', 'have not', 'had not', 'cannot', 'will not', 'would not',
+  'could not', 'should not', 'it is', 'that is', 'there is', 'here is', 'what is', 'let us'];
+// Case matters only for the first letter ("It is", not "Acme IT is").
+const UNCONTRACTED = new RegExp(`\\b(${PAIRS.map((p) => `[${p[0].toUpperCase()}${p[0].toLowerCase()}]${p.slice(1)}`).join('|')})\\b(?!\\s*(?:[.,;:!?)"”]|$))`, 'g');
+
+/** The uncontracted pairs in a text (see UNCONTRACTED). */
+export function uncontracted(text) {
+  return [...String(text || '').replace(/[’]/g, "'").matchAll(UNCONTRACTED)].map((m) => m[1]);
+}
 
 const SELF_WORDS = new Set(['i', "i'm", 'im', "i've", "i'll", "i'd", 'me', 'my', 'mine', 'we', "we're", "we've", "we'll", "we'd", 'our', 'ours']);
 const YOU_WORDS = new Set(['you', 'your', 'yours', 'yourself', "you're", "you've", "you'll", "you'd"]);
@@ -177,9 +278,13 @@ export function checkEmail(rendered = {}, profile = {}, opts = {}) {
     const avg = lens.length ? lens.reduce((a, b) => a + b, 0) / lens.length : 0;
     const longest = lens.length ? Math.max(...lens) : 0;
     if (avg > L.maxAvgSentenceWords || longest > L.maxSentenceWords) fail('readability', `average ${avg.toFixed(1)} words per sentence (limit ${L.maxAvgSentenceWords}), longest ${longest} (limit ${L.maxSentenceWords})`);
+    const grade = readingGrade(plain);
+    if (grade > L.maxGrade) fail('reading_grade', `reads at grade ${grade} (limit ${L.maxGrade}) — shorter words and sentences`);
   }
   const sy = selfYouCounts(body);
   if (sy.self > L.maxSelfWords && sy.self > sy.you) fail('you_focus', `${sy.self} I/we words vs ${sy.you} you/your`);
+  const tells = templateTells(`${subject}\n${body}`);
+  if (tells.count > L.maxTemplateTells) fail('sounds_template', `${tells.count} template tells: ${tells.found.join(', ')}`);
 
   if (subject) {
     // The company's name counts as one word (a long legal name is not a long subject).

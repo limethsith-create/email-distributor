@@ -533,7 +533,15 @@ export async function runOnboardingNudge({ clientId, now = io.now() }) {
   const trial = await getTrial(clientId);
   if (trial.agreementAcceptedAt) return { skipped: 'accepted' };
   const sentAt = trial.onboardingSentAt || client.stateChangedAt || client.createdAt;
-  const clock = onboardPageClock(await readCall(clientId), sentAt, now);
+  const callRaw = await readCall(clientId);
+  const clock = onboardPageClock(callRaw, sentAt, now);
+  // They told the reply bot "not now" (its `later` rule): the slot is held until the check-back
+  // date it gave them, and the close counts from that date after it.
+  const laterUntil = Date.parse(callRaw.laterUntil || '');
+  if (Number.isFinite(laterUntil)) {
+    if (laterUntil > now.getTime()) clock.hold = clock.hold || `they asked to wait — you check back on ${formatDay(dayKeyIn(ET, new Date(laterUntil)))}`;
+    else if (laterUntil > Date.parse(clock.from)) clock.from = new Date(laterUntil).toISOString();
+  }
   const since = clock.from;
   const moved = Date.parse(since) !== Date.parse(sentAt);
   const day = daysBetween(dayKeyIn(ET, new Date(since)), dayKeyIn(ET, now));

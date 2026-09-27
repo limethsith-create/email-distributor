@@ -3,7 +3,7 @@
   "niche": "msp",
   "version": 2,
   "source": "Copy v2 (docs/research/v2-leads-copy.md): Sequence T structure (plain text, no links in email 1, one reply CTA, four touches) with four proven frameworks. Wording is new and makes no claim about the client beyond {oneLiner} / {proof}; the client reviews it on the approval page.",
-  "footer": "{SenderName}\n{ClientCompany}\n{postalAddress}\n\nNot the right fit? Just reply STOP and I will not email you again.",
+  "footer": "{SenderName}\n{ClientCompany}\n{postalAddress}\n\nIf this isn't for you, reply STOP and I won't email you again.",
   "defaultFramework": "problem-first",
   "subjectBank": ["IT support for {Company}", "who handles IT", "IT at {Company}", "your IT setup", "computer headaches", "IT question", "backups at {Company}", "one IT idea", "{Company} IT"],
   "frameworks": {
@@ -19,10 +19,10 @@
         { "id": "msp-d2", "firstLineSet": "D", "subjects": { "d0": "computer headaches" } }
       ],
       "touches": [
-        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\nAt most {ICP}, IT lands on whoever sits nearest. Slow machines, email trouble, backups nobody has tested.\n\n{oneLiner}\n\nIs IT something you handle yourself at {Company}, or is someone on it?" },
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\nAt most {ICP}, IT lands on whoever sits nearest. Slow machines, email trouble, backups nobody has tested.\n\n{oneLiner}\n\nDo you handle IT yourself at {Company}, or is someone on it?" },
         { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, one more thought.\n\nWhen something breaks at a small office, the fix is rarely the real cost. The real cost is the half day your team loses waiting.\n\nWorth a short call to see if {ClientCompany} could take that off your plate?" },
-        { "touch": "d7", "day": 7, "thread": "new", "subject": "IT at {Company}", "body": "{FirstName}, a different angle.\n\nPicture your main computer or email going down tomorrow morning. Many {ICP} would not know who to call first.\n\nThat is the gap {ClientCompany} fills.\n\nWould a 15-minute call next week be useful?" },
-        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf IT support comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "IT at {Company}", "body": "{FirstName}, a different angle.\n\nPicture your main computer or email going down tomorrow morning. Many {ICP} wouldn't know who to call first.\n\nThat's the gap {ClientCompany} fills.\n\nWould a 15-minute call next week be useful?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf IT support comes up at {Company} later, a one-line reply is all it takes.\n\nShould I close the file for now?" }
       ]
     },
     "question-led": {
@@ -37,10 +37,10 @@
         { "id": "msp-q-d2", "firstLineSet": "D", "subjects": { "d0": "your IT setup" } }
       ],
       "touches": [
-        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\n{oneLiner} Many {ICP} lean on a staff member for IT until something big breaks.\n\nWho looks after IT at {Company} today, someone inside or an outside firm?" },
-        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, asking because the answer tells me quickly whether this is worth your time.\n\nIf it is someone inside, {ClientCompany} can take the routine work off their plate. If an outside firm is doing well by you, no need to change.\n\nWhich is it at {Company}?" },
-        { "touch": "d7", "day": 7, "thread": "new", "subject": "backups at {Company}", "body": "{FirstName}, one practical check.\n\nIt is worth knowing when someone last restored a file from your backups to prove they work. At many {ICP}, nobody ever has.\n\nWant {ClientCompany} to run that check with you?" },
-        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf IT comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+        { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\n{oneLiner}\n\nA lot of {ICP} lean on one person on staff for IT. It works until something big breaks.\n\nWho looks after IT at {Company} now, someone on your team or a firm?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, I ask because your answer tells me if this is worth your time.\n\nIf it's someone on staff, {ClientCompany} can take the routine work off their plate. If a firm serves you well, no need to change.\n\nWhich is it at {Company}?" },
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "backups at {Company}", "body": "{FirstName}, one practical check.\n\nIt's worth knowing when someone last restored a file from your backups to prove they work. At many {ICP}, nobody ever has.\n\nWant {ClientCompany} to run that check with you?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf IT comes up at {Company} later, a one-line reply is all it takes.\n\nShould I close the file for now?" }
       ]
     },
     "quick-idea": {
@@ -56,9 +56,9 @@
       ],
       "touches": [
         { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\nOne idea for {Company}: a one-page list of who to call when a computer, email or the internet goes down. Your team stops losing mornings to guesswork.\n\n{oneLiner}\n\nWant me to send over a short outline?" },
-        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, a list like that is quick to write and easy to put off.\n\n{ClientCompany} can draw it up with you and keep it current.\n\nWould that be useful for {Company}?" },
+        { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, a list like this is quick to write and easy to put off.\n\n{ClientCompany} can draw it up with you and keep it current.\n\nWould that be useful for {Company}?" },
         { "touch": "d7", "day": 7, "thread": "new", "subject": "IT at {Company}", "body": "{FirstName}, a second idea.\n\nThe machines everyone relies on each day are usually the ones nobody has checked in a while. A short review often finds two or three quick fixes.\n\nOpen to {ClientCompany} doing one for {Company}?" },
-        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf IT comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf IT comes up at {Company} later, a one-line reply is all it takes.\n\nShould I close the file for now?" }
       ]
     },
     "local-proof": {
@@ -76,8 +76,8 @@
       "touches": [
         { "touch": "d0", "day": 0, "thread": "new", "subject": "@variant", "body": "Hi {FirstName},\n\n{FirstLine}\n\n{proof}\n\n{oneLiner}\n\nWorth a short call to see if the same would help {Company}?" },
         { "touch": "d3", "day": 3, "thread": "d0", "body": "{FirstName}, happy to share how that works for {ICP} like {Company}, in plain terms.\n\nWould a short call next week suit you?" },
-        { "touch": "d7", "day": 7, "thread": "new", "subject": "IT at {Company}", "body": "{FirstName}, a different angle.\n\nPicture your main computer or email going down tomorrow morning. Many {ICP} would not know who to call first.\n\nThat is the gap {ClientCompany} fills.\n\nWould a 15-minute call next week be useful?" },
-        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf IT support comes up at {Company} later, a one-line reply here is all it takes.\n\nShould I close the file for now?" }
+        { "touch": "d7", "day": 7, "thread": "new", "subject": "IT at {Company}", "body": "{FirstName}, a different angle.\n\nPicture your main computer or email going down tomorrow morning. Many {ICP} wouldn't know who to call first.\n\nThat's the gap {ClientCompany} fills.\n\nWould a 15-minute call next week be useful?" },
+        { "touch": "d10", "day": 10, "thread": "d7", "body": "{FirstName}, this is my last note so your inbox stays clear.\n\nIf IT support comes up at {Company} later, a one-line reply is all it takes.\n\nShould I close the file for now?" }
       ]
     }
   }
