@@ -37,7 +37,7 @@ const SAMPLE_A = {
   whenShort: 'Tue 13 Oct at 11:00 am ET', minutes: 30, linkLine: "I'll send the link before the call.", bookLink: 'https://x/c/t/book',
   nextLine: 'If the time stops working, pick another here: https://x/c/t/book', asked: 'Tuesday at 2:00 pm', acceptLink: 'https://x/c/t/book/accept?m=m1',
   cancelText: "I'm sorry — I've had to cancel our call on Tuesday 13 October at 11:00 am Eastern Time.",
-  opening: 'Good to talk with you today — thank you for your time.', listSize: 400, day1Line: 'in about three weeks',
+  opening: 'Good to talk with you today, thank you.', listSize: 400, day1Line: 'in about three weeks',
 };
 // Stage B (approval.js mailVars, launchcall.js, readiness.js day1_moved).
 const SAMPLE_B = {
@@ -69,7 +69,8 @@ const stageOf = (key) => [A, B, C, D].find((s) => key in s);
 function varsFor1(key) {
   const t = TEMPLATES[key];
   const base = { ...AUTO, ...STAGE_SAMPLE.get(stageOf(key)) };
-  for (const s of [...slotsOf(t.subject || ''), ...slotsOf(t.body)]) if (base[s] === undefined) base[s] = 'Tuesday';
+  // inWhoseName is worked out by renderTemplate from senderName / contactName.
+  for (const s of [...slotsOf(t.subject || ''), ...slotsOf(t.body)]) if (base[s] === undefined && s !== 'inWhoseName') base[s] = 'Tuesday';
   return base;
 }
 
@@ -338,4 +339,14 @@ test('the banned list and the contraction check themselves', () => {
   assert.ok(VOICE_BANNED.includes('just checking in') && VOICE_BANNED.includes('leverage') && VOICE_BANNED.includes('seamless'));
   assert.deepEqual(uncontracted('I am sure it is fine and we do not mind.'), ['I am', 'it is', 'do not']);
   assert.deepEqual(uncontracted("Keep going until there is. That's who you are."), [], 'the end of a clause keeps them apart');
+});
+
+test('"in your name" when the emails go out as the contact; the sender\'s name when someone else sends', async () => {
+  const { inWhoseName } = await import('@/lib/templates/client');
+  assert.equal(inWhoseName({ senderName: 'Dana Whitfield', contactName: 'Dana  whitfield' }), 'in your name');
+  assert.equal(inWhoseName({ senderName: 'Dana', contactName: 'Dana Whitfield' }), 'in your name');
+  assert.equal(inWhoseName({ senderName: 'Sam Carter', contactName: 'Dana Whitfield' }), "in Sam Carter's name");
+  assert.equal(inWhoseName({ senderName: 'Sam Carter' }), "in Sam Carter's name");
+  assert.equal(inWhoseName({ contactName: 'Dana Whitfield' }), null);
+  assert.match(renderTemplate('launch_invite', { ...varsFor1('launch_invite'), senderName: 'Ann Lee', contactName: 'Ann Lee' }).text, /will go out in your name are ready/);
 });

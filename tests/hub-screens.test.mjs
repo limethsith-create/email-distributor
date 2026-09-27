@@ -250,7 +250,7 @@ test('client emails: the approval email greets by first name; the full name only
   const res = await notifyClient('acme', 'approval_link', { senderName: 'Dana Whitfield', approvalUrl: 'https://app.test/c/x/approve', day1Date: 'Wednesday, October 21', silenceDate: 'Monday, October 19', ownerName: 'Limeth Sith' }, { dedupe: null });
   assert.ok(res.sent);
   assert.match(res.text, /^Hi Dana,\n/);
-  assert.match(res.text, /in Dana Whitfield's name/);
+  assert.match(res.text, /will go out in your name\./, 'Dana is the sender: "your name", not her own full name');
   assert.doesNotMatch(res.text, /Hi Dana Whitfield/);
   // Every email of the approval round greets the same way.
   const vars = { firstName: 'Dana', contactName: 'Dana Whitfield', approvalUrl: 'u', day1Date: 'd', silenceDate: 's', day30Date: 'd30', reason: 'r', waitingLine: 'w', ownerName: 'L' };

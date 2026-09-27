@@ -374,14 +374,31 @@ test('reply job: every inbox per run, then the hot-lead chaser (4 h nudge, 24 h 
   await runHotChaser(ID, new Date(NOW.getTime() + 5 * 3600e3));
   assert.equal(notified.length, n0 + 1);
   assert.equal(notified[notified.length - 1].key, 'hot_lead_nudge');
+  assert.match(notified[notified.length - 1].vars.holdingLine, /^At 24 hours I send them/, 'before the holding note: what will happen');
   await runHotChaser(ID, new Date(NOW.getTime() + 25 * 3600e3));
   assert.ok(sent.find((s) => s.to === 'ann@alpha.com' && /will be in touch shortly/.test(s.text)));
   assert.equal(Number((await kv.hgetall(K.trial(ID))).unansweredHot), 1);
+  assert.equal(Object.values(await kv.hgetall(K.hot(ID)))[0].holdingSent, true);
   // the client answers in the hot-lead thread → answered, counter back down
   const hotRec = Object.values(await kv.hgetall(K.hot(ID)))[0];
   await processMessage(ID, msg('boss@acmeit.com', 'On it', { threadIds: [hotRec.hotMessageId.replace(/[<>]/g, '')] }), await ctxFor(), NOW);
   assert.ok(Object.values(await kv.hgetall(K.hot(ID)))[0].answeredAt);
   assert.equal(Number((await kv.hgetall(K.trial(ID))).unansweredHot), 0);
+});
+
+test('a hot-lead nudge that waited past the holding note (a weekend) says the note went — never "at 24 hours I send"', async () => {
+  await setup();
+  await emailedLead('ann@alpha.com');
+  mailbox.push(msg('ann@alpha.com', 'Who else have you worked with?'));
+  await runReplies(ID, { now: NOW });
+  // Nothing ran for 30 hours (the nudge waited for their working day): the holding note goes first, then the nudge.
+  const n0 = notified.length;
+  await runHotChaser(ID, new Date(NOW.getTime() + 30 * 3600e3));
+  const nudge = notified.slice(n0).find((n) => n.key === 'hot_lead_nudge');
+  assert.ok(nudge, 'Wednesday 5 pm ET: inside their working day');
+  assert.match(nudge.vars.holdingLine, /^They’ve had a short holding note from me in your name/);
+  const rec = Object.values(await kv.hgetall(K.hot(ID)))[0];
+  assert.ok(rec.holdingAt && rec.holdingSent === true, 'the holding note is kept when the nudge writes the record');
 });
 
 test('exit interview reply is stored verbatim', async () => {
@@ -705,7 +722,7 @@ test('learning library: rollup per niche + variant, best hour and city, no perso
 test('every Stage C template renders with sample data and no blank slot', () => {
   const sample = {
     Company: 'Acme', Name: 'Ann', Title: 'Owner', size: '10-50', city: 'Dover', verbatim: 'Tell me more', quote: '“Tell me more.”', who: 'Ann at Acme (10-50, Dover)', actionLine: 'x', context: 'Acme — Dover',
-    hours: 5, when: 'Thursday 10:00 AM', whyYes: 'Tell me more', asked: 'nothing', thread: 'x', days: 6, showedUrl: 'u', noshowUrl: 'u', wrongfitUrl: 'u', disputeUrl: 'u', clientNoshowUrl: 'u',
+    hours: 5, holdingLine: 'At 24 hours I send them a short holding note in your name.', when: 'Thursday 10:00 AM', whyYes: 'Tell me more', asked: 'nothing', thread: 'x', days: 6, showedUrl: 'u', noshowUrl: 'u', wrongfitUrl: 'u', disputeUrl: 'u', clientNoshowUrl: 'u',
     companies: 240, replies: 7, positive: 2, diagnosis: 'd', fix: 'f', pending: 2, FirstName: 'Ann', slot1: 's1', slot2: 's2', calendarUrl: 'c',
     month: 'January', Referrer: 'Bob', Greeting: 'Hi Ann,', oneLiner: 'We fix IT.', SenderName: 'Jane', missedWhen: 'Tuesday', ClientCompany: 'Acme IT',
     // notifyClient fills firstName on every client email; the owner signs offpace_day15 and deliverability_notice.

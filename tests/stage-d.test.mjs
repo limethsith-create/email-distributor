@@ -142,9 +142,26 @@ test('Friday update: build variant during the build weeks, under 120 words', asy
   assert.match(f.text, /build week/);
   assert.match(f.text, /Inboxes warming: day \d+ of 14/);
   assert.match(f.text, /List: 5 contacts found/);
-  assert.match(f.text, /Emails: awaiting your approval/);
-  assert.match(f.text, /Waiting on you: approving the emails/);
+  // The launch-call flow: before the invite the emails are shown on the call — nothing is asked of them.
+  assert.match(f.text, /Emails: written — we go through them together on a launch call near the end of warm-up/);
+  assert.match(f.text, /Waiting on you: nothing/);
   assert.ok(f.words < 120, `${f.words} words`);
+  // Invited, not booked: picking a time is the ask.
+  await kv.hset(`client:${CLIENT}:launchcall`, { sentAt: '2026-10-09T13:00:00Z' });
+  let g = await composeFriday(CLIENT, new Date('2026-10-09T14:00:00Z'));
+  assert.match(g.text, /Emails: ready — pick a time for our launch call, or approve them on the page/);
+  assert.match(g.text, /Waiting on you: picking a time for the launch call/);
+  // Booked: the day, and nothing asked.
+  await kv.hset(`client:${CLIENT}:launchcall`, { bookedAt: '2026-10-09T15:00:00Z', bookedFor: '2026-10-13T15:00:00Z' });
+  g = await composeFriday(CLIENT, new Date('2026-10-09T16:00:00Z'));
+  assert.match(g.text, /Emails: ready — we go through them on our launch call Tue 13 Oct/);
+  assert.match(g.text, /Waiting on you: nothing/);
+  // The old plain approval email (no launch call): approving is the ask.
+  await kv.del(`client:${CLIENT}:launchcall`);
+  await kv.hset(`client:${CLIENT}:approval`, { sentAt: '2026-10-08T13:00:00Z' });
+  g = await composeFriday(CLIENT, new Date('2026-10-09T16:00:00Z'));
+  assert.match(g.text, /Emails: awaiting your approval/);
+  assert.match(g.text, /Waiting on you: approving the emails/);
 });
 
 test('Friday update: trial variant with pace-log fix, watch line and personal line; sent once', async () => {

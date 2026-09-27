@@ -163,13 +163,23 @@ function subjectIsBooking(subject) {
   return configList('bookingSubjects').some((p) => s.includes(p));
 }
 
+/** The call's time for the CLIENT — their calendar, their zone: 'Tuesday 27 October at 11:00 am Eastern Time'. null without a time. */
+async function clientWhen(clientId, iso) {
+  if (!iso || !Number.isFinite(Date.parse(iso))) return null;
+  try {
+    const cal = await import('@/lib/systems/calendar');
+    return cal.theirWhen(new Date(iso), await cal.zoneOfClient(clientId), await cal.calendarSettings());
+  } catch { return formatWhen(iso, ET); }
+}
+const shortDate = (iso, zone = ET) => (Number.isFinite(Date.parse(iso)) ? new Intl.DateTimeFormat('en-GB', { timeZone: zone, weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(iso)) : '');
+
 /** Everything the client handoff needs from the reply history. */
 async function replyHistory(clientId, leadEmail) {
   const all = Object.values((await kv.hgetall(K.replies(clientId))) || {}).filter((r) => r && lower(r.leadEmail) === lower(leadEmail));
   all.sort((a, b) => String(a.receivedAt).localeCompare(String(b.receivedAt)));
   const yes = [...all].reverse().find((r) => r.kind === 'interested') || all[all.length - 1] || null;
   const questions = all.filter((r) => r.kind === 'question').map((r) => `“${String(r.text || r.snippet).slice(0, 300)}”`);
-  const thread = all.map((r) => `${String(r.receivedAt).slice(0, 10)} — ${r.kind}: “${String(r.text || r.snippet || '').slice(0, 300)}”`).join('\n');
+  const thread = all.map((r) => `${shortDate(r.receivedAt)} — ${r.kind}: “${String(r.text || r.snippet || '').slice(0, 300)}”`).join('\n');
   return { whyYes: yes ? String(yes.text || yes.snippet).slice(0, 800) : null, asked: questions.join(' / '), thread };
 }
 
@@ -181,7 +191,7 @@ export async function sendHandoff(clientId, booking, now = new Date()) {
     Name: lead?.name || lead?.first_name || booking.attendeeName || booking.attendeeEmail || 'Unknown attendee',
     Title: lead?.title || 'title not on file',
     Company: lead?.company || (booking.attendeeEmail ? hostOf(booking.attendeeEmail) : 'company not matched'),
-    when: formatWhen(booking.scheduledAt, lead?.tz || ET) || 'time not in the confirmation',
+    when: (await clientWhen(clientId, booking.scheduledAt)) || 'time not in the confirmation',
     whyYes: h.whyYes || (booking.manualMatch ? 'This booking did not match anyone we emailed — tell me who it was when you tap after the call.' : 'They booked straight from the link.'),
     asked: h.asked || 'nothing beyond the reply above',
     thread: h.thread || '(no reply thread — they booked from the email link)',
@@ -256,7 +266,7 @@ export async function recordBookingEvent(clientId, ev, { now = new Date(), sourc
   if (scheduledAt) {
     const bd = businessDaysBetween(now.getTime(), Date.parse(scheduledAt));
     if (bd > farDays) {
-      await notifyClientSafe(clientId, 'slot_far_warning', { Name: lead?.name || lead?.first_name || attendee || 'The prospect', Company: lead?.company || hostOf(attendee || '') || 'their company', when: formatWhen(scheduledAt, lead?.tz || ET), days: bd }, { from: 'trial', dedupe: `slot_far:${id}` });
+      await notifyClientSafe(clientId, 'slot_far_warning', { Name: lead?.name || lead?.first_name || attendee || 'The prospect', Company: lead?.company || hostOf(attendee || '') || 'their company', when: (await clientWhen(clientId, scheduledAt)) || formatWhen(scheduledAt, lead?.tz || ET), days: bd }, { from: 'trial', dedupe: `slot_far:${id}` });
     }
   }
   return { id, created: true, lead: lead?.email || null };
@@ -359,13 +369,13 @@ export async function runReminders(clientId, { now = new Date() } = {}) {
 
     // call_tap at +1 h.
     if (b.status === 'booked' && !b.tapSentAt && nowMs >= at + 3600e3) {
-      const vars = { Name: lead?.name || lead?.first_name || b.attendeeName || b.attendeeEmail || 'the prospect', Company: lead?.company || (b.attendeeEmail ? hostOf(b.attendeeEmail) : 'their company'), when: when || 'the booked time', ...(await tapLinks(clientId, b.id)) };
+      const vars = { Name: lead?.name || lead?.first_name || b.attendeeName || b.attendeeEmail || 'the prospect', Company: lead?.company || (b.attendeeEmail ? hostOf(b.attendeeEmail) : 'their company'), when: (await clientWhen(clientId, b.scheduledAt)) || 'the booked time', ...(await tapLinks(clientId, b.id)) };
       const r = await notifyClientSafe(clientId, 'call_tap', vars, { from: 'trial', dedupe: `call_tap:${b.id}:${b.scheduledAt}` });
       if (r.sent || r.deduped) { await saveBooking(clientId, b.id, { tapSentAt: now.toISOString() }); out.taps++; }
     }
     // Tap reminder at +24 h after the tap email.
     if (b.status === 'booked' && b.tapSentAt && !b.attendedTapAt && !b.tapReminderAt && nowMs >= Date.parse(b.tapSentAt) + tapHours * 3600e3) {
-      const vars = { Name: lead?.name || lead?.first_name || b.attendeeEmail || 'the prospect', Company: lead?.company || 'their company', when: when || 'the booked time', ...(await tapLinks(clientId, b.id)) };
+      const vars = { Name: lead?.name || lead?.first_name || b.attendeeEmail || 'the prospect', Company: lead?.company || 'their company', when: (await clientWhen(clientId, b.scheduledAt)) || 'the booked time', ...(await tapLinks(clientId, b.id)) };
       const r = await notifyClientSafe(clientId, 'call_tap_reminder', vars, { from: 'trial', dedupe: `call_tap_reminder:${b.id}` });
       if (r.sent || r.deduped) { await saveBooking(clientId, b.id, { tapReminderAt: now.toISOString() }); out.tapReminders++; }
     }

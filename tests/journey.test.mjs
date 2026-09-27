@@ -586,7 +586,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(invite.from, OWNER.inbox, 'from the onboarding inbox, where replies are read');
   assert.ok(!sim.sent.some((m) => m.to === APPLICANT.email && /for your OK/.test(m.subject || '')), 'the plain approval email never went');
   assert.match(invite.text, /^Hi Dana,\n/);
-  assert.match(invite.text, /in Dana Whitfield's name/);
+  assert.match(invite.text, /will go out in your name are ready/, 'Dana is the sender');
   assert.match(invite.text, /30-minute launch call/);
   assert.match(invite.text, /the first emails go out about Wednesday 21 October\./, 'the Day 1 from the ramp');
   assert.ok(linkIn(invite.text, 'book'), 'the booking page (kind launch)');
@@ -920,6 +920,26 @@ test('the journey: website form → Day 30 → converted, through the real route
   const etWeekday = (iso) => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(new Date(iso));
   assert.deepEqual(cold.filter((m) => hourOf(m.at) < 9 || hourOf(m.at) >= 17 || ['Sat', 'Sun'].includes(etWeekday(m.at)) || etDay(m.at) === '2026-11-11').map((m) => `${m.at} ${m.subject} → ${m.to}`), []);
   assert.ok(cold.some((m) => etDay(m.at) === '2026-11-02' && hourOf(m.at) === 9), 'after the clock change the first sends are still at 9 am Eastern');
+  // Every email to Dana reads like a person wrote it: no UTC, no raw 2026-10-23 dates, no "in Dana Whitfield's name" to
+  // Dana herself, and the Day 29 report says the volume numbers once.
+  const allToDana = sim.sent.filter((m) => m.to === APPLICANT.email);
+  // (The signed agreement's own record keeps its UTC time stamp — a legal record, not a sentence.)
+  assert.deepEqual(allToDana.filter((m) => !/agreement/i.test(m.subject || '') && /\bUTC\b|\bGMT\b/.test(`${m.subject}\n${m.text}`)).map((m) => m.subject), [], 'no UTC in a client email');
+  assert.deepEqual(allToDana.filter((m) => /\b20\d\d-\d\d-\d\d\b/.test(String(m.text).replace(/https?:\/\/\S+/g, '')) && !/agreement/i.test(m.subject || '')).map((m) => m.subject), [], 'no raw dates in a client email');
+  assert.deepEqual(allToDana.filter((m) => /Dana Whitfield's name/.test(m.text)).map((m) => m.subject), [], '"in your name" to Dana');
+  const d29Mail = allToDana.find((m) => /30-Day Trial Report/.test(m.subject || ''));
+  assert.ok(d29Mail, 'the Day 29 report went');
+  assert.equal((d29Mail.text.match(/Starter contacts at least/g) || []).length, 1, 'the volume numbers once');
+  assert.match(d29Mail.text, /of the companies it went to replied/, 'the per-version rate says what it counts');
+  const d30Mail = allToDana.find((m) => m.subject === 'Your Day 30 numbers');
+  assert.match(d30Mail.text, /if you start before \w+day \d+ November at \d+:\d\d [ap]m Eastern Time\./, 'the bonus deadline in her zone');
+  const handoffMail = allToDana.find((m) => /^Booked — /.test(m.subject || ''));
+  assert.match(handoffMail.text, /booked a call for Tuesday 27 October at 11:00 am Eastern Time\./);
+  const planMail2 = allToDana.find((m) => m.subject === 'Your trial — what happens now');
+  assert.ok(planMail2.text.split(/\s+/).length <= 122, `"what happens now" is short: ${planMail2.text.split(/\s+/).length} words`);
+  const friday1Mail = allToDana.find((m) => /build week 1 of 2/.test(m.subject || ''));
+  assert.match(friday1Mail.text, /Waiting on you: nothing/, 'nothing asked before the launch call');
+  assert.match(friday1Mail.text, /Emails: written — we go through them together on a launch call/);
   assert.deepEqual(world.unknown, [], 'the machine only talked to the world it knows');
   assert.equal(world.ci.forbidden.length, 0);
 });

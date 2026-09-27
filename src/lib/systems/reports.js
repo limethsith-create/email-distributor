@@ -61,33 +61,36 @@ export function recommendPlan({ qualified, positive, companies, capacityPerWeek,
     `Starter contacts at least ${plans.starter.reach.toLocaleString('en-US')} companies a month. At your rate that’s about ${projections.starter} calls; we guarantee ${plans.starter.calls}. Growth contacts ${plans.growth.reach.toLocaleString('en-US')} — about ${projections.growth} at your rate, and we guarantee ${plans.growth.calls}.`,
   ].join(' ');
 
+  // `advice`: the text without the arithmetic, for the report, whose own lines already show the rate and the volume.
+  const done = (o) => ({ ...o, advice: arithmetic && o.text.startsWith(arithmetic) ? o.text.slice(arithmetic.length).trim() : o.text });
+
   const line = (key) => `${PLAN_NAMES[key]} — ${money(plans[key].price)} a month for ${plans[key].calls} guaranteed calls, ${perCall(plans[key])} a call`;
 
   if (q >= 3) {
     const cap = Number(capacityPerWeek);
     if (!Number.isFinite(cap) || cap <= 0) {
-      return { plan: 'starter', kind: 'capacity_unknown', rate, rateText, projections, short: line('starter'),
-        text: `${arithmetic} You didn’t give us a capacity number, so the recommendation is the smallest plan that fits the rate: ${line('starter')}.` };
+      return done({ plan: 'starter', kind: 'capacity_unknown', rate, rateText, projections, short: line('starter'),
+        text: `${arithmetic} You didn’t give us a capacity number, so the recommendation is the smallest plan that fits the rate: ${line('starter')}.` });
     }
     const plan = cap <= capacity.starterMax ? 'starter' : cap <= capacity.growthMax ? 'growth' : 'scale';
     const when = kickoffDate ? `on ${kickoffDate}` : 'during onboarding';
-    return { plan, kind: 'capacity', rate, rateText, projections, short: line(plan),
-      text: `${arithmetic} You told us ${when} you can take ${cap} calls a week. That’s ${PLAN_NAMES[plan]} — ${money(plans[plan].price)}, and it works out at ${perCall(plans[plan])} a call.` };
+    return done({ plan, kind: 'capacity', rate, rateText, projections, short: line(plan),
+      text: `${arithmetic} You told us ${when} you can take ${cap} calls a week. That’s ${PLAN_NAMES[plan]} — ${money(plans[plan].price)}, and it works out at ${perCall(plans[plan])} a call.` });
   }
   if (q >= 1) {
-    return { plan: 'starter', kind: 'thin', rate, rateText, projections, short: line('starter'),
-      text: `${arithmetic} With ${q} qualified call${q === 1 ? '' : 's'} so far, the recommendation is Starter, and only Starter — ${money(plans.starter.price)} for ${plans.starter.calls} calls — to prove the rate holds at volume before going bigger.` };
+    return done({ plan: 'starter', kind: 'thin', rate, rateText, projections, short: line('starter'),
+      text: `${arithmetic} With ${q} qualified call${q === 1 ? '' : 's'} so far, the recommendation is Starter, and only Starter — ${money(plans.starter.price)} for ${plans.starter.calls} calls — to prove the rate holds at volume before going bigger.` });
   }
   if (pos > 0) {
-    return { plan: 'starter', kind: 'pay_per_show', rate, rateText, projections, short: line('starter'),
-      text: `${pos} positive repl${pos === 1 ? 'y' : 'ies'} from ${c.toLocaleString('en-US')} companies is ${pct(pos, c)} — demand exists; the booking step is the problem. Recommendation: Starter — ${money(plans.starter.price)} for ${plans.starter.calls} guaranteed calls. The other honest option: pay per show, ${money(plans.payPerShow)} for every qualified call that actually attends, billed weekly.` };
+    return done({ plan: 'starter', kind: 'pay_per_show', rate, rateText, projections, short: line('starter'),
+      text: `${pos} positive repl${pos === 1 ? 'y' : 'ies'} from ${c.toLocaleString('en-US')} companies is ${pct(pos, c)} — demand exists; the booking step is the problem. Recommendation: Starter — ${money(plans.starter.price)} for ${plans.starter.calls} guaranteed calls. The other honest option: pay per show, ${money(plans.payPerShow)} for every qualified call that actually attends, billed weekly.` });
   }
   if (!extensionUsed) {
-    return { plan: null, kind: 'extension', rate, rateText, projections, short: 'no plan yet — the free extension',
-      text: 'No positive replies, so no plan: the free extension is the recommendation. We keep sending at our cost and change the campaign, not the deal.' };
+    return done({ plan: null, kind: 'extension', rate, rateText, projections, short: 'no plan yet — the free extension',
+      text: 'No positive replies, so no plan: the free extension is the recommendation. We keep sending at our cost and change the campaign, not the deal.' });
   }
-  return { plan: null, kind: 'winback', rate, rateText, projections, short: 'no plan — change the offer or the market first',
-    text: `No positive replies from ${c.toLocaleString('en-US')} companies, so no plan. If nobody wanted it at this volume, more volume won’t change that. The honest next step is to change the offer or the market before outbound can work; we’ll check back in 90 days.` };
+  return done({ plan: null, kind: 'winback', rate, rateText, projections, short: 'no plan — change the offer or the market first',
+    text: `No positive replies from ${c.toLocaleString('en-US')} companies, so no plan. If nobody wanted it at this volume, more volume won’t change that. The honest next step is to change the offer or the market before outbound can work; we’ll check back in 90 days.` });
 }
 
 export async function plansConfig(clientId) {
@@ -237,7 +240,8 @@ function producedLine(data, learning) {
   if (vs.length) {
     const best = [...vs].sort((a, b) => b.rate - a.rate)[0];
     const others = vs.filter((v) => v !== best).map((v) => `${pct(v.replied, v.sent)} for ${v.variant}`);
-    parts.push(`email version ${best.variant} (${pct(best.replied, best.sent)} reply rate${others.length ? ` vs ${others.join(', ')}` : ''})`);
+    // Per company it went to (the headline reply rate is per email sent): said so, so the two numbers never look like they disagree.
+    parts.push(`email version ${best.variant} (${pct(best.replied, best.sent)} of the companies it went to replied${others.length ? `, vs ${others.join(', ')}` : ''})`);
   } else if (learning) {
     parts.push(`version ${learning.variant}, the best performer in this niche so far`);
   }
@@ -339,7 +343,7 @@ export async function renderReport(name, clientId, opts = {}) {
     rate: rec.rateText,
     starterReach: plans.starter.reach.toLocaleString('en-US'), starterCalls: rec.projections.starter ?? 'n/a', starterGuarantee: plans.starter.calls,
     growthReach: plans.growth.reach.toLocaleString('en-US'), growthCalls: rec.projections.growth ?? 'n/a', growthGuarantee: plans.growth.calls,
-    openCount: market.openCount, recommendation: rec.text,
+    openCount: market.openCount, recommendation: rec.advice || rec.text,
     decisionUrl: opts.decisionUrl || 'sent with tomorrow’s email',
     diagnosis: diagnose({ sent: totals.sent, bounces: totals.bounces, replies: totals.replies, positive: totals.positive, booked: totals.booked, placement }, d),
     leadCount: data.leads.length,

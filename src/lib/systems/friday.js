@@ -64,6 +64,31 @@ export function watchLine({ bounceRate, placement, inboxRate }, lines) {
   return 'all green';
 }
 
+const flag = (v) => v !== undefined && v !== null && v !== '' && v !== 0 && v !== '0';
+
+/**
+ * Where the emails stand in the build weeks, in the launch-call flow
+ * (docs/LAUNCH-CALL.md): before the invite nothing is asked of them (the
+ * emails are shown on the launch call); once invited, booking the call is the
+ * ask; a booked call names its day. Only the old plain approval email (sent
+ * before the launch call existed, or as its fallback) asks them to approve.
+ * → { copyStatus, ask: string|null }
+ */
+async function emailsStatus(clientId, seq, now) {
+  if (seq.approvedAt) return { copyStatus: `approved${seq.approvalMode === 'call' ? ' on our launch call' : ''} ${fmtDay(String(seq.approvedAt).slice(0, 10))}`, ask: null };
+  if (!seq.variantA) return { copyStatus: 'being written', ask: null };
+  let launch = {};
+  let approval = {};
+  try { [launch, approval] = await Promise.all([kv.hgetall(K.callHash(clientId, 'launch')).then((r) => r || {}), kv.hgetall(K.approval(clientId)).then((r) => r || {})]); } catch {}
+  if (!flag(launch.sentAt)) {
+    if (flag(approval.sentAt)) return { copyStatus: 'awaiting your approval', ask: 'approving the emails' };
+    return { copyStatus: 'written — we go through them together on a launch call near the end of warm-up', ask: null };
+  }
+  if (flag(launch.bookedAt) && Date.parse(launch.bookedFor || '') > now.getTime()) return { copyStatus: `ready — we go through them on our launch call ${fmtDay(dayKeyIn(ET, new Date(launch.bookedFor)))}`, ask: null };
+  if (flag(launch.heldAt) || flag(launch.skipped)) return { copyStatus: 'awaiting your approval', ask: 'approving the emails' };
+  return { copyStatus: 'ready — pick a time for our launch call, or approve them on the page', ask: 'picking a time for the launch call' };
+}
+
 async function waitingOn(clientId, client, trial, now) {
   const items = [];
   const bookings = await getBookings(clientId);
@@ -73,7 +98,7 @@ async function waitingOn(clientId, client, trial, now) {
   if (hot > 0) items.push(`${hot} hot lead${hot === 1 ? '' : 's'} to answer`);
   let seq = {};
   try { seq = (await kv.hgetall(K.sequence(clientId))) || {}; } catch {}
-  if (['warming', 'ready'].includes(client.state) && seq.variantA && !seq.approvedAt) items.push('approving the emails');
+  if (['warming', 'ready'].includes(client.state)) { const e = await emailsStatus(clientId, seq, now); if (e.ask) items.push(e.ask); }
   let profile = {};
   try { profile = (await kv.hgetall(K.profile(clientId))) || {}; } catch {}
   if (['warming', 'ready'].includes(client.state) && profile.bookingTested !== undefined && !(profile.bookingTested === true || profile.bookingTested === 'true' || profile.bookingTested === '1')) items.push('the booking-link test');
@@ -134,7 +159,7 @@ export async function composeFriday(clientId, now = new Date()) {
     const listCount = Object.values(counts).reduce((a, b) => a + b, 0);
     let seq = {};
     try { seq = (await kv.hgetall(K.sequence(clientId))) || {}; } catch {}
-    const copyStatus = seq.approvedAt ? `approved ${fmtDay(String(seq.approvedAt).slice(0, 10))}` : seq.variantA ? 'awaiting your approval' : 'being written';
+    const { copyStatus } = await emailsStatus(clientId, seq, now);
     const buildWeek = day == null ? 1 : Math.min(2, Math.max(1, Math.floor((day + 14) / 7) + 1));
     vars = {
       clientName: client.name || clientId, buildWeek,

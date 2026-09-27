@@ -29,7 +29,9 @@ import { DEFAULTS } from '@/lib/config';
 function renderTemplate(key, vars) {
   const t = STAGE_A_TEMPLATES[key];
   if (!t) throw new Error(`unknown template ${key}`);
-  return { subject: fill(key, t.subject, vars), text: fill(key, t.body, vars) };
+  // As templates/client renderTemplate: a trial sends in the client's own name unless another sender is named.
+  const v = vars.inWhoseName ? vars : { ...vars, inWhoseName: 'in your name' };
+  return { subject: fill(key, t.subject, v), text: fill(key, t.body, v) };
 }
 
 process.env.ENC_KEY = crypto.randomBytes(32).toString('base64');
@@ -683,7 +685,7 @@ test('every Stage A template renders with sample data; the agreement fills all b
     nextLine: 'If the time stops working, pick another here: https://x/c/t/book', asked: 'Tuesday at 2:00 pm', acceptLink: 'https://x/c/t/book/accept?m=m1',
     cancelText: "I'm sorry — I've had to cancel our call on Tuesday 13 October at 11:00 am Eastern Time.",
     // "What happens now" (next_steps, docs/LAUNCH-CALL.md)
-    opening: 'Good to talk with you today — thank you for your time.', listSize: 400, day1Line: 'in about three weeks',
+    opening: 'Good to talk with you today, thank you.', listSize: 400, day1Line: 'in about three weeks',
   };
   for (const key of Object.keys(STAGE_A_TEMPLATES)) {
     const m = renderTemplate(key, sample);

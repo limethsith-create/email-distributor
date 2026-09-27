@@ -643,20 +643,22 @@ export async function runHotChaser(clientId, now = new Date()) {
     const age = (now.getTime() - Date.parse(h.sentAt)) / 3600e3;
     const lead = await getLead(clientId, h.leadEmail);
     if (!lead) continue;
+    // The holding note first (the prospect's clock does not wait for the client's day), so a late nudge knows it went.
+    if (age >= holdH && !h.holdingAt) {
+      const r = await sendToProspect(clientId, 'holding_reply', { lead, thread: { subject: h.prospectSubject || lead.original_subject, messageId: h.prospectMessageId, references: h.prospectRefs || [] }, dedupe: `holding:${id}` });
+      await kv.hset(K.hot(clientId), { [id]: { ...h, holdingAt: now.toISOString(), holdingSent: Boolean(r.sent) } });
+      Object.assign(h, { holdingAt: now.toISOString(), holdingSent: Boolean(r.sent) }); // the nudge below writes the record from h
+      await kv.hincrby(K.trial(clientId), 'unansweredHot', 1);
+      out.holding++;
+    }
     // The 4-hour nudge to the CLIENT waits for their working day when it falls at night or on a weekend (their zone).
     if (age >= nudgeH && !h.nudgedAt && !zone) zone = await (await import('@/lib/systems/calendar')).zoneOfClient(clientId).catch(() => ET);
     if (age >= nudgeH && !h.nudgedAt && inClientDay(now, zone || ET)) {
       const verbatim = String((await kv.hget(K.replies(clientId), id))?.text || '').slice(0, 600) || '(see the earlier email)';
-      const r = await notifyClientSafe(clientId, 'hot_lead_nudge', { Company: lead.company || hostOf(lead.email), Name: lead.name || lead.first_name || lead.email, hours: Math.floor(age), verbatim, quote: quoteOf(verbatim) }, { from: 'trial', dedupe: `hot_nudge:${id}` });
+      const r = await notifyClientSafe(clientId, 'hot_lead_nudge', { Company: lead.company || hostOf(lead.email), Name: lead.name || lead.first_name || lead.email, hours: Math.floor(age), verbatim, quote: quoteOf(verbatim), holdingLine: h.holdingAt ? 'They’ve had a short holding note from me in your name, so they know you’ll be in touch.' : `At ${holdH} hours I send them a short holding note in your name.` }, { from: 'trial', dedupe: `hot_nudge:${id}` });
       await kv.hset(K.hot(clientId), { [id]: { ...h, nudgedAt: now.toISOString(), nudgeSent: Boolean(r.sent) } });
       h.nudgedAt = now.toISOString();
       out.nudged++;
-    }
-    if (age >= holdH && !h.holdingAt) {
-      const r = await sendToProspect(clientId, 'holding_reply', { lead, thread: { subject: h.prospectSubject || lead.original_subject, messageId: h.prospectMessageId, references: h.prospectRefs || [] }, dedupe: `holding:${id}` });
-      await kv.hset(K.hot(clientId), { [id]: { ...h, holdingAt: now.toISOString(), holdingSent: Boolean(r.sent) } });
-      await kv.hincrby(K.trial(clientId), 'unansweredHot', 1);
-      out.holding++;
     }
   }
   // Pace Day 20: soft "worth a look?" nudge at +2 days for interested leads not booked.

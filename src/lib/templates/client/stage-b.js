@@ -13,7 +13,7 @@ export const TEMPLATES = {
     subject: 'Your emails, for your OK',
     body: `Hi {firstName},
 
-Everything for your trial is ready for one look from you: the customer profile, 20 of the companies we found, and the four emails that will go out in {senderName}'s name.
+Everything for your trial is ready for one look from you: the customer profile, 20 of the companies we found, and the four emails that will go out {inWhoseName}.
 
 It takes about five minutes: {approvalUrl}
 
@@ -65,7 +65,7 @@ You can still see everything here: {approvalUrl}. If anything should change, rep
     subject: 'Your list is ready',
     body: `Hi {firstName},
 
-Your list of companies and the four emails that will go out in {senderName}'s name are ready. Warm-up is nearly done, so the next step is a {callMinutes}-minute launch call. We go through the list and the emails together, you give the OK, and the first emails go out {day1Line}.
+Your list of companies and the four emails that will go out {inWhoseName} are ready. Warm-up is nearly done, so the next step is a {callMinutes}-minute launch call. We go through the list and the emails together, you give the OK, and the first emails go out {day1Line}.
 
 {bookingLine}
 

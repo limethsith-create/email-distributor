@@ -89,9 +89,18 @@ export async function sendDecisionEmail(clientId, { now = new Date(), zero, sig,
   const rec = await recommendationFor(clientId, totals, trial, profile);
   const url = await decisionLink(clientId, 'mail', 30);
   const bonusCfg = rec.plan ? (await cfgTree(clientId, 'BONUS'))?.[rec.plan] : null;
+  // The bonus deadline in their own zone ("Friday 20 November at 9:00 am Eastern Time"), never UTC.
+  let bonusExpires = null;
+  if (!zero) {
+    const at = new Date(trial.bonusExpiresAt || now);
+    try {
+      const cal = await import('@/lib/systems/calendar');
+      bonusExpires = cal.theirWhen(at, await cal.zoneOfClient(clientId), await cal.calendarSettings());
+    } catch { bonusExpires = `${fmtDay(dayKeyIn(ET, at))} (Eastern Time)`; }
+  }
   const vars = zero
     ? { day: trialDay(trial, now) ?? 30, companies: totals.companiesContacted, replies: totals.replies, positive: totals.positive, decisionUrl: url, recommendationLine: rec.text, ownerName: sig }
-    : { decisionUrl: url, recommendationLine: `My one recommendation: ${rec.short}.`, bonusLine: bonusCfg ? `${bonusCfg[0]} calls for the price of ${bonusCfg[1]}` : 'none on this plan', bonusExpires: new Date(trial.bonusExpiresAt || now).toUTCString().replace(':00 GMT', ' UTC'), ownerName: sig };
+    : { decisionUrl: url, recommendationLine: `My one recommendation: ${rec.short}.`, bonusLine: bonusCfg ? `${bonusCfg[0]} calls for the price of ${bonusCfg[1]}` : 'none on this plan', bonusExpires, ownerName: sig };
   const res = await notifyClient(clientId, zero ? 'decision_link_zero' : 'decision_link', vars, { dedupe: 'decision_link' });
   if (res.sent || res.deduped) await patchTrial(clientId, { decisionEmailAt: new Date().toISOString() });
   await logEvent(clientId, 'decision', 'decision_sent', { zero, recommendation: rec.plan || rec.kind });

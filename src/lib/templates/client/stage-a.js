@@ -141,7 +141,7 @@ Once they pass their checks, they start warming up. When they're ready, I'll ema
 
 The inboxes are warmed up and ready, so we start on {startWhen}.
 
-The emails go out in {senderName}'s name from {inboxes}, {sendWindow}. That's Day 1 of your 30. Day 30 is {day30Date}.
+The emails go out {inWhoseName} from {inboxes}, {sendWindow}. That's Day 1 of your 30. Day 30 is {day30Date}.
 
 Every Friday you'll get a short update from me, quiet weeks included.
 
@@ -242,7 +242,7 @@ Here's what happens now:
 - Then two weeks of warm-up, so your emails land in the inbox.
 - We build your list of about {listSize} companies and write your emails in your words.
 - Every Friday you get a short note from me, quiet weeks too.
-- Near the end of warm-up, you get an invite to a {callMinutes}-minute launch call to OK the list and the emails.
+- Near the end of warm-up, we have a {callMinutes}-minute launch call, where you OK the list and the emails.
 - The first emails go out {day1Line}.
 
 Nothing's needed from you until then.

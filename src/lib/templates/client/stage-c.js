@@ -24,7 +24,7 @@ export const TEMPLATES = {
   hot_lead_nudge: {
     from: 'trial',
     subject: 'Still waiting — {Company}, {Name}',
-    body: '{Name} at {Company} replied {hours} hours ago and hasn’t heard from you yet: {quote}\n\nIf you can, reply today. Speed decides these. At 24 hours I send them a short holding note in your name.',
+    body: '{Name} at {Company} replied {hours} hours ago and hasn’t heard from you yet: {quote}\n\nIf you can, reply today. Speed decides these. {holdingLine}',
   },
   call_handoff: {
     from: 'trial',

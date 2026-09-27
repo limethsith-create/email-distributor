@@ -178,7 +178,7 @@ test('the invite once: booking page for a launch call + the approval page, track
   assert.ok(!sent.some((x) => /for your OK/.test(x.subject || '')), 'not the plain approval email');
   assert.match(m.from, /<onboard@aviance\.test>$/, 'from the onboarding-call inbox, so replies land where the machine reads them');
   assert.match(m.text, /^Hi Sam,/);
-  assert.match(m.text, /in Sam Test's name/);
+  assert.match(m.text, /will go out in your name are ready/, 'Sam is the sender');
   assert.match(m.text, /30-minute launch call/);
   assert.match(m.text, /the first emails go out about Wednesday 21 October\./);
   const book = m.text.match(/Book a time that suits you: https:\/\/app\.test\/c\/([^/\s]+)\/book\b/);
