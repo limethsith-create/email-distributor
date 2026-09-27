@@ -705,6 +705,17 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(new Date(testMail.at)), 'Fri');
   assert.ok(hourOf(testMail.at) >= 9 && hourOf(testMail.at) < 17, `booking test at ${testMail.at}`);
   assert.ok(bookingTestedAt);
+  // Warm-up audit (docs/IMPROVE-PASS.md D): the day-14 readiness check was made when that day's warm-up was over
+  // (a warm-up run at 23:30, not only the 23:45 one) and the Day 1 gate right after it — ready the evening before
+  // Day 1, not at the 00:30 run. The rule is unchanged: both inboxes had 14 days and two passing checks.
+  const readyTrial = await kv.hgetall(K.trial(clientId));
+  assert.equal(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(readyTrial.readyAt)), '2026-10-20', `ready at ${readyTrial.readyAt}`);
+  for (const inbox of await (await import('@/lib/db/inboxes')).getInboxRecords(clientId)) {
+    assert.deepEqual([inbox.warmupReady, inbox.readyCheckedDay >= '2026-10-20', Number(inbox.readyStreak) >= 2], ['1', true, true], inbox.email);
+  }
+  // The seed test says in plain words how many mailboxes it used (8 helpers; the usual is 10).
+  const seedTest = sL21.detail.deliverability.placement.find((p) => p.tool === 'seed');
+  assert.match(seedTest?.detail?.[0] || '', /^Tested with \d+ mailboxes.* the usual is 10\./, JSON.stringify(seedTest));
 
   // ── 9. Sending: Day 1 → Day 30 ────────────────────────────────────────────
   const sentLeads = async () => (await getLeads(clientId)).filter((l) => l.sent_at && l.status === 'in_sequence' && l.original_message_id).sort((a, b) => a.email.localeCompare(b.email));

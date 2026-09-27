@@ -136,7 +136,25 @@ tests/warmup-hub.test.mjs.
   inbox's. `null` when unknown: no start day; an inbox under the line (or
   never measured) whose earliest date is past `maxSlideDays` after its day 14
   (Day 1 is held then — no date is made up); `waiting_for_helpers`, `ready`,
-  `paused`.
+  `paused`. Past day 12 a nightly check that was missed is made up by the next
+  warm-up run, so a passing streak survives such a gap (its last check is
+  `checkedDay + remaining`, a day already gone counting as today).
+- **Readiness at every warm-up run** (2026-09-27 audit, docs/IMPROVE-PASS.md
+  D): `readinessCheckpoint` at the end of each send / read run, for trial
+  inboxes in `warming` past day `minDays − readyConsecutiveDays` (12). The
+  rule is unchanged (one check per ET day, ≥ `readyRate` on 2 consecutive
+  checks, ≥ 14 days); a check the 23:45 run missed is made for each missed
+  day with that day's own 7-day window (up to `CATCHUP_DAYS` = 7 back), and
+  today's check is made once the day's warm-up is over for the inbox (ET ≥ the
+  end of `BUILD.warmupReadHours`, 23:30, and its own `BUILD.warmupHours`
+  closed until the ET day ends — `warmupDayOver`). A check not due reads
+  nothing. When a trial's last inbox turns ready (here or in the nightly run)
+  its Day 1 gate (`runReadiness`) runs at once instead of at the next hourly
+  run — a held Day 1 moves to the next sending day a day sooner.
+- `simple.next` while `warming`, when an inbox rate is measured and `readyBy`
+  is on or after Day 1: "Nothing for you: warm-up needs a few more days — first
+  emails about Friday 23 October" (the next sending day after `readyBy`; also in
+  "Launch call done — first emails about …"). Never measured: Day 1 on file.
 - **To-do** `warmup-helpers:{id}` (urgent) "Add N warm-up helpers —
   Settings › Warm-up", `action: {type:'view', view:'settings', section:'warmup'}`;
   on the board several waiting trials become ONE to-do `warmup-helpers`

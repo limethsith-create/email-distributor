@@ -43,6 +43,7 @@ import { formatDay } from '@/lib/systems/intake-io';
 import { autobuyView, readRec as readAutobuy, autobuySettings, AUTOBUY_STATES } from '@/lib/systems/autobuy';
 import { isConnected as cheapInboxesConnected, readDomainIndex, unmatchedOf } from '@/lib/ext/cheapinboxes';
 import { warmupView, hubWarmupData, WARMUP_VIEW_STATES } from '@/lib/systems/warmup';
+import { nextSendingDay } from '@/lib/systems/readiness';
 
 export const STATE_LABELS = {
   applied: 'Applied', queued: 'In the queue', onboarding: 'Onboarding', awaiting_purchase: 'Waiting for you to buy',
@@ -583,9 +584,15 @@ function warmingSimple(ctx, r, on) {
   const lc = ctx.launchCall || null;
   if (w && w.status === 'waiting_for_helpers') return r('warming_up', w.label, `Add ${w.helpersNeeded} warm-up helper${w.helpersNeeded === 1 ? '' : 's'} — Settings › Warm-up`, true);
   const base = w && w.status !== 'paused' ? w.label : `Warming up their inboxes — first emails${on(trial.day1Date)}`;
-  const nothing = trial.day1Date ? `Nothing for you: first emails${on(trial.day1Date)}` : 'Nothing for you: the inboxes warm up for about 2 weeks';
+  // ── Warm-up audit (docs/IMPROVE-PASS.md D) ── an inbox whose measured rate lets it pass the readiness rule
+  // only on Day 1 or later moves Day 1: the row says the day the first emails will really go (the next sending
+  // day after readyBy). Never measured yet: the Day 1 on file (the card's problem line says why).
+  const late = w?.status === 'warming' && w.inboxRate != null && w.readyBy && trial.day1Date && w.readyBy >= trial.day1Date ? nextSendingDay(w.readyBy) : null;
+  const nothing = late ? `Nothing for you: warm-up needs a few more days — first emails about ${formatDay(late)}`
+    : trial.day1Date ? `Nothing for you: first emails${on(trial.day1Date)}` : 'Nothing for you: the inboxes warm up for about 2 weeks';
+  // ── end warm-up audit ──
   if (!lc) return r('warming_up', base, nothing);
-  if (launchDone(lc)) return r('warming_up', `Launch call done — first emails${on(trial.day1Date)}`, nothing, false, lc.approvedOnCall || lc.skipped || lc.heldAt);
+  if (launchDone(lc)) return r('warming_up', `Launch call done — first emails${late ? ` about ${formatDay(late)}` : on(trial.day1Date)}`, nothing, false, lc.approvedOnCall || lc.skipped || lc.heldAt);
   if (lc.status === 'held') return r('warming_up', `${base} · launch call done`, 'Press Approved on the call if they gave the OK', true, lc.heldAt);
   if (lc.status === 'booked' && lc.bookedFor) {
     if (now.getTime() > Date.parse(lc.bookedFor) + (lc.callMinutes || 30) * 60e3) return r('warming_up', `${base} · launch call was ${ownerWhen(lc.bookedFor)} (your time)`, 'Hold the launch call, then press Approved on the call', true, lc.bookedFor);

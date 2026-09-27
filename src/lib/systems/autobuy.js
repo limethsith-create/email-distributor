@@ -49,6 +49,7 @@ import { allowedTlds } from '@/lib/systems/pricescout';
 import { startSetupCheck, runSetupCheck } from '@/lib/systems/setupcheck';
 import * as ci from '@/lib/ext/cheapinboxes';
 import { ackAlerts } from '@/lib/notify';
+import { ET, partsIn } from '@/lib/time';
 
 const SYSTEM = 'autobuy';
 /** A webhook may start a sync this often: signed ones every 10 s, unsigned ones every 2 min (they only ever wake the sync). */
@@ -494,17 +495,31 @@ async function connect(client, rec, dom, ctx) {
 
 /**
  * The setup checks move on without the heartbeat too (the hub's check call,
- * the webhook): a round in progress runs as far as the time allows. With a
- * live heartbeat the setup-check job runs it every minute, so the sync keeps
- * out of its way (no second loopback email).
+ * the webhook): a round in progress runs as far as the time allows, and a
+ * failed round is run again once per clock hour — as the setup-check job does
+ * with the heartbeat, under that job's own claim (jobs:claim:setup-check:{id}:
+ * {hour} + `jp:setup-check`), so the tick and the sync never re-run the same
+ * hour twice. (Before, a failed round waited for a tick, and none runs before
+ * warm-up: a CheapInboxes trial whose first round failed — DNS still settling —
+ * stayed in setup_check.) With a live heartbeat the setup-check job runs it,
+ * so the sync keeps out of its way (no second loopback email).
  */
 async function continueSetup(client, rec, ctx) {
   const { now, deadline } = ctx;
   const d = await getDomain(client.id);
-  if (d.setupPhase !== 'running' || deadline - Date.now() < 6000) return null;
+  if ((d.setupPhase !== 'running' && d.setupPhase !== 'failed') || deadline - Date.now() < 6000) return null;
   let hb = {};
   try { hb = (await kv.hgetall(K.heartbeat())) || {}; } catch {}
   if (hb.lastTickAt && Date.now() - Date.parse(hb.lastTickAt) < HEARTBEAT_FRESH_MS) return null;
+  if (d.setupPhase === 'failed') {
+    const p = partsIn(ET, now);
+    const period = `${p.dayKey}T${String(p.hour).padStart(2, '0')}`;
+    if (client['jp:setup-check'] === period) return null;
+    const { claim } = await import('@/lib/scheduler');
+    if (!(await claim('setup-check', client.id, period, 7200))) return null;
+    await updateClient(client.id, { 'jp:setup-check': period });
+    await logEvent(client.id, SYSTEM, 'setup_retry', { period });
+  }
   const r = await runSetupCheck(client.id, { now, deadline });
   if (r.phase === 'passed') return finishReady({ ...client, state: 'warming' }, rec, ctx);
   return null;

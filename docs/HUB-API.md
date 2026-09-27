@@ -381,6 +381,12 @@ after the `new_application` alert, one `application_scored` alert follows.
   "gates": { "seedPlacement": 0.85, "mailTesterMin": 8, "spamAssassinMax": 2, "spamTestRequired": true }   // the Day 1 limits (from config)
 }
 ```
+(2026-09-27) The seed test (`tool: "seed"`, the canary) tests with the warm-up
+helpers first, then other inboxes of the warm-up circle (the owner's own, other
+trials' — never the trial's own). When it used fewer mailboxes than usual (10),
+any that are not helpers, or one mail filter only, its `detail[0]` is a plain
+note: "Tested with 6 mailboxes (4 warm-up helpers and 2 other inboxes in the
+warm-up circle) — the usual is 10."
 
 ## Lead quality — `leadQuality` (in `GET /api/mc/hub/{id}`)
 
@@ -1040,13 +1046,18 @@ could not log in to … — check its app password" · "…: 85% reach the inbox
 it needs 90% on 2 days in a row[, so Day 1 waits for it]".
 `readyBy` = day 14 from the first warm-up day, later when an inbox's rate
 lags; `null` when there is no honest date (not warming, waiting for helpers,
-or an inbox still under the line past the Day 1 slide window).
+or an inbox still under the line past the Day 1 slide window). (2026-09-27: a
+nightly check missed past day 12 is made up by the next warm-up run, so it no
+longer pushes `readyBy` out — docs/WARMUP-HUB.md.)
 
 ## Board rows and to-dos
 
 - `simple` in `warming`: `label` = `warmup.label`; `next` "Nothing for you:
   first emails on Monday 26 October". While `waiting_for_helpers`: `next`
-  "Add 2 warm-up helpers — Settings › Warm-up", `needsYou: true`.
+  "Add 2 warm-up helpers — Settings › Warm-up", `needsYou: true`. When
+  `inboxRate` is measured and `readyBy` is on or after Day 1: `next` "Nothing
+  for you: warm-up needs a few more days — first emails about Friday 23
+  October" (2026-09-27).
 - To-do `warmup-helpers:{id}` (urgent) "Add 2 warm-up helpers — Settings ›
   Warm-up", detail = the problem, `action: { type: 'view', view: 'settings',
   section: 'warmup' }` — a new section: open Settings › Warm-up. On the
@@ -1114,7 +1125,8 @@ intake on when no tick ran in the last 5 minutes — the research, the market
 count, the Price Scout (the shopping list + the client's "setup in progress"),
 a pasted purchase's setup round, the welcome email and the onboarding page's
 reminders (`carried: [{ job, clientId }]` in the answer). With CheapInboxes the
-webhook and the check carry the purchase to `warming`. **Still needs the
+webhook and the check carry the purchase to `warming` (a failed setup round is
+run again from the check once an hour, 2026-09-27). **Still needs the
 heartbeat**: warm-up itself, the Lead Finder, copy/approval, the canary and spam
 tests, sending, replies, bookings, reports, the decision and everything after —
 and, until it runs, the reply bot's answers and the onboarding call's reminders

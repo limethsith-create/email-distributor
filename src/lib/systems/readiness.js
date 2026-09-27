@@ -53,7 +53,8 @@ export async function readinessGate(clientId, now = new Date()) {
     approval: { ok: Boolean(seq.approvedAt), mode: seq.approvalMode || null },
     list: list,
     inboxes,
-    canary: { ok: canaryOk, day: canary?.day || null, min: canary?.min ?? null, gate },
+    // seeds / note: how many mailboxes the seed test used, and its plain note when that was thin (canary.js).
+    canary: { ok: canaryOk, day: canary?.day || null, min: canary?.min ?? null, gate, seeds: canary?.seeds ?? null, note: canary?.note || null },
     spamTest: spam,
     booking: { ok: ['1', 'true', 1, true].includes(profile.bookingTested), testedAt: profile.bookingTestedAt || null },
   };
@@ -125,10 +126,12 @@ export async function runReadiness({ client, now = new Date(), deps = {} }) {
     return { ready: moved, checks: gate.checks };
   }
 
-  // Warm-up readiness is decided by the 23:45 daily check, so the last chance
-  // for Day 1 is that check on Day −1: the slide decision waits for Day 1's
-  // first readiness run (00:30), instead of sliding on Day −1 while the
-  // final warm-up check is still to come (it made every Day 1 slide once).
+  // Warm-up readiness is decided by the daily check (23:45, or the warm-up
+  // run that sees the day's warm-up over — warmup.js readinessCheckpoint, which
+  // also calls this gate at once), so the last chance for Day 1 is that check
+  // on Day −1: the slide decision waits for Day 1's first readiness run
+  // (00:30), instead of sliding on Day −1 while the final warm-up check is
+  // still to come (it made every Day 1 slide once).
   const td = trialDay(trial, now);
   if (td == null || td < 1 || trial.slideCheckedDay === today) return { ready: false, checks: summarize(gate.checks) };
   await setTrial(id, { slideCheckedDay: today });

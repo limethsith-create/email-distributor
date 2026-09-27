@@ -212,7 +212,12 @@ API host or calls `ciCall`, (c) a path named in ext/cheapinboxes.js is outside
   (the existing cancel-inboxes to-do), not at a registrar.
 - Without the heartbeat the sync moves a running setup round on (the hub's
   check, a webhook); when a tick ran in the last 5 minutes it leaves the round
-  to the `setup-check` job (no second loopback email).
+  to the `setup-check` job (no second loopback email). A failed round is run
+  again once per clock hour, as that job does, under the job's own claim
+  (`jobs:claim:setup-check:{id}:{hour}` + `jp:setup-check`, so the tick never
+  repeats the hour) — before the 2026-09-27 warm-up audit it waited for a tick,
+  and none runs before warm-up. With the key forgotten mid-setup, the hub's
+  check (carry.js) runs the round instead.
 - Problems (`autobuy_problem`, urgent, each once per trial + kind + subject,
   cleared from the hub when the next look no longer finds it): the order
   failed; the domain is gone from the account; an inbox failed; an active

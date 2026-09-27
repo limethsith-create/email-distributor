@@ -10,7 +10,8 @@
  *   market            the market count, when the 20 s agreement request ran out
  *   pricescout        the shopping list alert and the client's "setup in progress"
  *   setup-check       a manual purchase's next setup round (a CheapInboxes one
- *                     is moved on by its own sync)
+ *                     is moved on by its own sync — a failed round hourly too —
+ *                     unless the CheapInboxes key is gone, when it is run here)
  *   welcome           welcome_two_dates, when it could not go the first time
  *   onboarding-nudge  the onboarding page's reminders and the Day +7 close
  * through the SAME job definitions and the SAME per-period claims the tick uses
@@ -28,6 +29,7 @@ import { getAllClients, getClient } from '@/lib/db/client';
 import { logEvent } from '@/lib/db/events';
 import { claim } from '@/lib/scheduler';
 import { JOBS } from '@/lib/jobs';
+import { isConnected as ciConnected } from '@/lib/ext/cheapinboxes';
 
 export const CARRY_JOBS = ['research', 'market', 'pricescout', 'setup-check', 'welcome', 'onboarding-nudge'];
 export const HEARTBEAT_FRESH_MS = 5 * 60e3;
@@ -49,12 +51,14 @@ export async function carryIntake({ now = new Date(), deadline = Date.now() + 20
     if (await heartbeatFresh(now)) return { ran: [], skipped: 'heartbeat' };
     const clients = (clientId ? [await getClient(clientId)] : await getAllClients()).filter((c) => c && c.id !== 'aviance' && c.id !== '_test');
     const ran = [];
+    let ciKey = null; // is a CheapInboxes key set (read once, only when a CheapInboxes setup is open)
     for (const name of CARRY_JOBS) {
       const job = JOBS.find((j) => j.name === name && j.scope === 'client');
       if (!job) continue;
       for (const client of clients) {
-        // A CheapInboxes purchase being set up: its own sync runs the setup rounds (docs/AUTO-BUY.md).
-        if (name === 'setup-check' && String(client.autobuyOpen) === '1') continue;
+        // A CheapInboxes purchase being set up: its own sync runs the setup rounds (docs/AUTO-BUY.md) —
+        // while it can: with the key forgotten the sync never runs, so the round is carried here.
+        if (name === 'setup-check' && String(client.autobuyOpen) === '1' && (ciKey ??= await ciConnected())) continue;
         if (Date.now() > deadline - (job.minBudgetMs || 4000)) return { ran, stopped: 'budget' };
         let period = null;
         try { period = await job.due({ client, clientId: client.id, now, clients }); } catch { period = null; }
