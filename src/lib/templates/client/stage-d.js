@@ -101,6 +101,12 @@ export const TEMPLATES = {
     body: 'Hi {firstName},\n\nThe first emails for {clientName} went out this morning from {senderAddress}.\n\nI handle every reply. Anything hot lands in your inbox the same day, with a note on what to do. Your Friday update comes every week.\n\n{dashboardLine}\n\n{buttons}\n\n{ownerName}',
   },
 
+  // The owner shares the client's dashboard with someone (POST /api/mc/clients/{id} {action:'shareDashboard', email}).
+  dashboard_access: {
+    subject: 'Your Aviance dashboard',
+    body: 'Hi {firstName},\n\nHere’s the dashboard for {clientName}: {dashboardLink}\n\nYou can see the sending as it happens: emails sent, replies and booked calls. It updates by itself, so keep the link.\n\n{ownerName}',
+  },
+
   friday_update: { subject: '{title}', body: 'Hi {firstName},\n\n{body}\n\n{ownerName}' },
 
   disposition_sheet: {

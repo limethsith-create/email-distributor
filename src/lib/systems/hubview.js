@@ -44,6 +44,7 @@ import { autobuyView, readRec as readAutobuy, autobuySettings, AUTOBUY_STATES } 
 import { isConnected as cheapInboxesConnected, readDomainIndex, unmatchedOf } from '@/lib/ext/cheapinboxes';
 import { warmupView, hubWarmupData, WARMUP_VIEW_STATES } from '@/lib/systems/warmup';
 import { nextSendingDay } from '@/lib/systems/readiness';
+import { sharedWith as dashboardSharedWith } from '@/lib/systems/clientdash';
 
 export const STATE_LABELS = {
   applied: 'Applied', queued: 'In the queue', onboarding: 'Onboarding', awaiting_purchase: 'Waiting for you to buy',
@@ -891,6 +892,8 @@ export async function hubClient(id, { now = new Date() } = {}) {
     leadQuality: await leadQualityView(id).catch(() => null),
     // The last onboarding / approval / decision link they were sent, while it still works (docs/HUB-API.md).
     links: await currentLinks(id, ctx.trial).catch(() => ({})),
+    // Who the owner emailed the dashboard link to (shareDashboard), oldest first.
+    dashboardAccess: { sharedWith: await dashboardSharedWith(id, ctx.trial).catch(() => []) },
     virtualNow: id === '_test' ? clientNow(client, now).toISOString() : null,
   };
 }

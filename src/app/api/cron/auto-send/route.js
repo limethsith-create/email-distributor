@@ -5,6 +5,11 @@
  * Each hit sends AT MOST ONE email (a due follow-up or a fresh day-0 touch),
  * so volume is a steady drip across the US workday, never a burst.
  *
+ * ONE EMAIL PER PERSON (2026-09-28): config OUTREACH_FOLLOWUPS (default false)
+ * turns the follow-ups off — only day-0 emails go out; leads whose day-3/7/10
+ * would be due are skipped (left as they are, never sent, never expired).
+ * Set it to true in /mc/config to bring the sequence back.
+ *
  * v3.1 — queue fairness + owner notifications:
  *  - FRESH MINIMUM per inbox (FRESH_MIN_SHARE of the cap is kept for day-0
  *    sends whenever fresh leads exist), so follow-ups can never starve new
@@ -63,9 +68,10 @@ import { getSmtpAccounts, loadAccounts } from '@/lib/smtp-accounts';
 import { isWithinSendingHours, minutesLeftInWindow } from '@/lib/warmup';
 import { getInboxHealth, recordSendSuccess, recordSendFailure, updateInboxHealth, shouldSkipInbox } from '@/lib/inbox-health';
 import { maybeSendDailyReport, maybeSendSwitchOffAlarm } from '@/lib/daily-report';
+import { partitionLeads, outreachFollowUpsOn, FOLLOWUP_GRACE_MS } from '@/lib/outreach-queue';
 import {
   getTodayKey, etParts, campaignOf, normalizeCampaign, normalizeCompanyName, isRoleEmail,
-  isSendable, leadScore, SEND_CAP, UNSENT_STATUSES,
+  SEND_CAP, UNSENT_STATUSES,
 } from '@/lib/metrics';
 
 export const maxDuration = 300;
@@ -90,11 +96,7 @@ const MAX_GAP_MIN = 60;
 const GLOBAL_SPACING_MS = 75 * 1000;
 const LAST_GLOBAL_SEND_KEY = 'last_global_send';
 
-// Sequence timing.
-const D3_AFTER_MS = 3 * 24 * 60 * 60 * 1000;   // day 3 = 3 days after day 0
-const D7_AFTER_MS = 4 * 24 * 60 * 60 * 1000;   // day 7 = 4 days after day 3
-const D10_AFTER_MS = 3 * 24 * 60 * 60 * 1000;  // day 10 = 3 days after day 7 (SPEC SEQUENCE.gaps)
-const STALE_CLAIM_MS = 30 * 60 * 1000;
+// Sequence timing and the leads scan live in lib/outreach-queue.js (partitionLeads).
 
 // ─── Queue fairness (v3.1) ────────────────────────────────────────────────────
 // Follow-ups still go first (a thread already opened is worth more than a cold
@@ -112,7 +114,6 @@ const STALE_CLAIM_MS = 30 * 60 * 1000;
 //     hurts the domain more than it helps. Expired leads stay in the CRM with
 //     their history; they are simply not touched again.
 const FRESH_MIN_SHARE = Math.min(0.9, Math.max(0, parseFloat(process.env.FRESH_MIN_SHARE || '0.4') || 0.4));
-const FOLLOWUP_GRACE_MS = (parseInt(process.env.FOLLOWUP_GRACE_DAYS || '7', 10) || 7) * 24 * 60 * 60 * 1000;
 const EXPIRE_PER_HEARTBEAT = 40;
 
 // Reply-scan piggyback cadence.
@@ -235,59 +236,6 @@ function computeNextSendAt(remainingAfter, now = new Date()) {
 }
 
 // ─── Lead selection ───────────────────────────────────────────────────────────
-
-/**
- * From one leads scan, derive both the fresh pool (per campaign, best score
- * first) and the due follow-ups (oldest due first), plus stuck claims.
- */
-function partitionLeads(leadsMap, now) {
-  const fresh = { 'free-leads': [], offer: [] };
-  const followUps = [];
-  const stuck = [];
-  const expired = [];
-  const nowMs = now.getTime();
-  const pushDue = (lead, day, due) => {
-    if (nowMs < due) return;
-    if (nowMs - due > FOLLOWUP_GRACE_MS) expired.push({ lead, day, dueAt: due });
-    else followUps.push({ lead, day, dueAt: due });
-  };
-  for (const lead of Object.values(leadsMap)) {
-    if (!lead || !lead.email) continue;
-    const status = lower(lead.status);
-
-    if (status === 'sending') {
-      const ts = lead.updatedAt ? new Date(lead.updatedAt).getTime() : 0;
-      if (!ts || nowMs - ts > STALE_CLAIM_MS) stuck.push(lead);
-      continue;
-    }
-
-    if (isSendable(lead)) {
-      fresh[campaignOf(lead)].push(lead);
-      continue;
-    }
-
-    if (!lead.sent_at) continue;
-    const hold = lead.followup_hold_until ? new Date(lead.followup_hold_until).getTime() : 0;
-    if (hold && hold > nowMs) continue;
-    if (status === 'sent-d0') {
-      pushDue(lead, 3, new Date(lead.sent_at).getTime() + D3_AFTER_MS);
-    } else if (status === 'sent-d3') {
-      const base = lead.d3_sent_at ? new Date(lead.d3_sent_at).getTime() : new Date(lead.sent_at).getTime() + D3_AFTER_MS;
-      pushDue(lead, 7, base + D7_AFTER_MS);
-    } else if (status === 'sent-d7') {
-      const d7At = lead.d7_sent_at || lead.d7_skipped_at;
-      const base = d7At ? new Date(d7At).getTime() : new Date(lead.sent_at).getTime() + D3_AFTER_MS + D7_AFTER_MS;
-      pushDue(lead, 10, base + D10_AFTER_MS);
-    }
-  }
-  for (const c of Object.keys(fresh)) {
-    for (const l of fresh[c]) l.__jitter = Math.random();
-    fresh[c].sort((a, b) => (leadScore(b) - leadScore(a)) || (a.__jitter - b.__jitter));
-    for (const l of fresh[c]) delete l.__jitter;
-  }
-  followUps.sort((a, b) => a.dueAt - b.dueAt);
-  return { fresh, followUps, stuck, expired };
-}
 
 /** Retire follow-ups that are too far past due (bounded per heartbeat). */
 async function expireFollowUps(expired) {
@@ -726,7 +674,10 @@ export async function GET(request) {
   let sentDetail = null;
   try {
     const leadsMap = await getLeadsMap();
-    const { fresh, followUps, stuck, expired } = partitionLeads(leadsMap, now);
+    // OUTREACH_FOLLOWUPS (config, default off): one email per person — due follow-ups are
+    // simply not in the pools (neither sent nor expired).
+    const followUpsOn = await outreachFollowUpsOn();
+    const { fresh, followUps, stuck, expired } = partitionLeads(leadsMap, now, { followUps: followUpsOn });
 
     // Reaper: claims that died mid-send go back to the pool.
     for (const lead of stuck.slice(0, 20)) {
@@ -834,7 +785,7 @@ export async function GET(request) {
     }
 
     results.blockedFollowUps = blockedFollowUps;
-    results.pools = { followUpsDue: followUps.length, followUpsExpired: expired.length, expiredNow, freshFreeLeads: fresh['free-leads'].length, freshOffer: fresh.offer.length, stuckReaped: Math.min(stuck.length, 20) };
+    results.pools = { followUpsOn, followUpsDue: followUps.length, followUpsExpired: expired.length, expiredNow, freshFreeLeads: fresh['free-leads'].length, freshOffer: fresh.offer.length, stuckReaped: Math.min(stuck.length, 20) };
   } catch (err) {
     await releaseLock(lockToken);
     return Response.json({ error: err.message, timestamp: new Date().toISOString() }, { status: 500 });

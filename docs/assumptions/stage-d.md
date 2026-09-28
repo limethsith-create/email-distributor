@@ -137,3 +137,7 @@ Written new, short, in the owner's voice (no source text exists):
 40. **Disposition sheet** is skipped (logged) when there are no bookings.
 41. **Owner alerts added** (templates/owner.js Stage D block): `build_behind`,
     `invoice_unpaid`, `decision_made` (Not now pressed).
+42. **`dashboard_access`** (2026-09-28, new wording): the owner emails a client's
+    dashboard link to any address from the hub (`shareDashboard`). Plain, first
+    person, signed by the owner; "Hi there," when the address is not the
+    client's contact (their first name would be someone else's).

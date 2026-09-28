@@ -9,7 +9,10 @@
  *
  * One long-lived link per client (token purpose `dashboard`, 400 days),
  * remembered on the trial hash as `dashboardLink` so it is the same link every
- * time; `fresh` replaces it (the old link stops working).
+ * time; `fresh` replaces it (the old link stops working). The owner can email
+ * it to anyone from the hub (`shareDashboard`); who it went to is kept on the
+ * trial hash as `dashboardSharedWith` ([{email, at}]) and `unshareDashboard`
+ * replaces the link and empties that list.
  */
 
 import { kv } from '@vercel/kv';
@@ -34,6 +37,14 @@ export async function dashboardLink(clientId, { fresh = false, now = new Date() 
   const url = pageUrl(token, 'dashboard');
   await kv.hset(K.trial(clientId), { dashboardLink: url, dashboardLinkAt: now.toISOString() });
   return url;
+}
+
+/** Who the owner emailed the dashboard to (trial.dashboardSharedWith): [{ email, at }], oldest first. */
+export async function sharedWith(clientId, trial = null) {
+  const raw = (trial || (await getTrial(clientId)) || {}).dashboardSharedWith;
+  let list = raw;
+  if (typeof raw === 'string') { try { list = JSON.parse(raw); } catch { list = []; } }
+  return Array.isArray(list) ? list.filter((x) => x && x.email).map((x) => ({ email: String(x.email), at: x.at || null })) : [];
 }
 
 const sum = (xs) => (xs || []).reduce((n, v) => n + (Number(v) || 0), 0);
