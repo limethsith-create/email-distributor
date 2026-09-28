@@ -44,8 +44,8 @@ export function pageUrl(token, path = '') {
 
 // ─── the hub's `links` (docs/HUB-API.md) ─────────────────────────────────────
 
-/** The client links the hub shows: the onboarding page, the approval page, the decision page. */
-export const LINK_PURPOSES = ['onboarding', 'approval', 'decision'];
+/** The client links the hub shows: the onboarding page, the approval page, the decision page, their dashboard. */
+export const LINK_PURPOSES = ['onboarding', 'approval', 'decision', 'dashboard'];  // dashboard: systems/clientdash.js
 
 /**
  * Remember the LAST link of a purpose the client was sent, on the trial hash

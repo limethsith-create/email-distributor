@@ -47,6 +47,21 @@ I'm holding the slot for {clientName} until {closeDate}. After that, it goes to 
 {ownerName}`,
   },
 
+  // Paying clients (Starter / Growth / Scale): the same emails without the trial wording (notify.js picks `<key>_paid`).
+  onboarding_reminder_paid: {
+    from: 'owner',
+    subject: 'Your onboarding page is waiting',
+    body: `Hi {firstName},
+
+Your onboarding page for the {planName} plan is still open, and nothing starts until it's filled in and signed. It keeps what you've already typed.
+
+{link}
+
+Once it's signed, we start setting everything up for {clientName}.
+
+{ownerName}`,
+  },
+
   closed_silent: {
     from: 'owner',
     subject: 'Closing your trial slot',
@@ -122,12 +137,39 @@ Accepted at: {acceptedAt} (UTC) from IP {agreementIp}
 {ownerName}`,
   },
 
+  agreement_copy_paid: {
+    from: 'owner',
+    subject: 'Your signed agreement',
+    body: `Hi {firstName},
+
+Here's a plain-text copy of the agreement you accepted for {companyName}. Keep it for your records. Nothing else is needed from you.
+
+{agreementText}
+
+Accepted by: {agreementName}, {agreementTitle}, {companyName}
+Accepted at: {acceptedAt} (UTC) from IP {agreementIp}
+
+{ownerName}`,
+  },
+
   setup_in_progress: {
     from: 'owner',
     subject: 'Your trial setup has started',
     body: `Hi {firstName},
 
 Your market check passed, so we're going ahead with {clientName}. I'm setting up the sending domain and two inboxes now.
+
+Once they pass their checks, they start warming up. When they're ready, I'll email you the exact day and time we start. Nothing's needed from you in the meantime.
+
+{ownerName}`,
+  },
+
+  setup_in_progress_paid: {
+    from: 'owner',
+    subject: 'Your setup has started',
+    body: `Hi {firstName},
+
+Your market check passed, so we're going ahead with {clientName}. I'm setting up the sending domain and inboxes now.
 
 Once they pass their checks, they start warming up. When they're ready, I'll email you the exact day and time we start. Nothing's needed from you in the meantime.
 
@@ -224,6 +266,16 @@ The trial for {clientName} starts with a {callMinutes}-minute onboarding call, a
 {ownerName}`,
   },
 
+  accepted_call_reminder_paid: {
+    from: 'onboard',
+    subject: 'Re: {threadSubject}',
+    body: `Hi {firstName},
+
+Getting {clientName} started on the {planName} plan begins with a {callMinutes}-minute onboarding call, and we haven't booked it yet. {bookingLine}
+
+{ownerName}`,
+  },
+
   onboard_call_tomorrow: {
     from: 'onboard',
     subject: 'Our onboarding call {callDay}',
@@ -246,6 +298,28 @@ If that time no longer works, reply to this email and we'll find another.
   next_steps: {
     from: 'owner',
     subject: 'Your trial — what happens now',
+    body: `Hi {firstName},
+
+{opening}
+
+Here's what happens now:
+
+- Right now we're researching your business and market, and building your offer.
+- This week we set up your sending address and inboxes.
+- Then two weeks of warm-up, so your emails land in the inbox.
+- We build your list of about {listSize} companies and write your emails in your words.
+- Every Friday you get a short note from me, quiet weeks too.
+- Near the end of warm-up, we have a {callMinutes}-minute launch call, where you OK the list and the emails.
+- The first emails go out {day1Line}.
+
+Nothing's needed from you until then.
+
+{ownerName}`,
+  },
+
+  next_steps_paid: {
+    from: 'owner',
+    subject: 'What happens now',
     body: `Hi {firstName},
 
 {opening}

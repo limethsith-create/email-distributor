@@ -179,6 +179,25 @@ plan it skips the one-trial-per-company rule and the trial cap, sends
 Day 20 check-in, Day 29 report or Day 30 decision, and no "of 30" in its
 labels.
 
+## The client's dashboard
+
+Every client (trial or paying) can have one read-only page with their own
+sending: `/c/{token}/dashboard` (token purpose `dashboard`, 400 days,
+`systems/clientdash.js`). It shows the five numbers, the last 30 days day by
+day, their inboxes (emails a day, inbox rate, health), the newest replies and
+their booked calls. It never shows owner-only data. The link is emailed in
+`day1_started` ("You can watch the sending as it happens"), remembered on the
+trial hash, and returned in `links.dashboard` of `GET /api/mc/hub/[id]`.
+`POST /api/mc/clients/{id} {action:'dashboardLink', fresh?}` makes or returns
+it (`fresh: true` replaces it and the old link stops working).
+
+A paying client (`plan` starter|growth|scale) also gets the `<key>_paid`
+version of any client email that has one (notify.js), the plan agreement
+(`templates/agreement.js` `PAID_AGREEMENT_TEXT`, a draft for the owner to
+review), the reply bot's `price_paid` answer, a plan-named onboarding page and
+"week N of sending" in the Friday update. `POST /api/mc/clients/new` takes
+`plan` for a paying client added by hand.
+
 ## `GET /api/mc/outreach` — your own sending so far (My stats)
 
 The pre-trial engine's sends (the lead records, `sent_log`), which the

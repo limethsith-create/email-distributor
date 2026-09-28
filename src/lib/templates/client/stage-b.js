@@ -23,12 +23,40 @@ If I don't hear back by {silenceDate}, I'll take it as approved and keep to that
 
 {ownerName}`,
   },
+
+  approval_link_paid: {
+    from: 'owner',
+    subject: 'Your emails, for your OK',
+    body: `Hi {firstName},
+
+Everything is ready for one look from you: the customer profile, 20 of the companies we found, and the four emails that will go out {inWhoseName}.
+
+It takes about five minutes: {approvalUrl}
+
+Approve each part, or tell me what to change and I'll fix it. First send is {day1Date}.
+
+If I don't hear back by {silenceDate}, I'll take it as approved and keep to that date.
+
+{ownerName}`,
+  },
   approval_reminder: {
     from: 'owner',
     subject: 'Still waiting for your OK',
     body: `Hi {firstName},
 
 The list and the four emails for your trial are still waiting for your OK: {approvalUrl}
+
+First send is {day1Date}. If I don't hear back by {silenceDate}, I'll take the emails as approved so the date holds.
+
+{ownerName}`,
+  },
+
+  approval_reminder_paid: {
+    from: 'owner',
+    subject: 'Still waiting for your OK',
+    body: `Hi {firstName},
+
+The list and the four emails are still waiting for your OK: {approvalUrl}
 
 First send is {day1Date}. If I don't hear back by {silenceDate}, I'll take the emails as approved so the date holds.
 
@@ -48,6 +76,18 @@ Approve it, or tell me what else to change. First send is {day1Date}.
   approved_by_silence: {
     from: 'owner',
     subject: 'Your trial emails are approved',
+    body: `Hi {firstName},
+
+I didn't hear back about the list and the emails, so as agreed I've taken them as approved. First send is {day1Date}.
+
+You can still see everything here: {approvalUrl}. If anything should change, reply before then and I'll change it.
+
+{ownerName}`,
+  },
+
+  approved_by_silence_paid: {
+    from: 'owner',
+    subject: 'Your emails are approved',
     body: `Hi {firstName},
 
 I didn't hear back about the list and the emails, so as agreed I've taken them as approved. First send is {day1Date}.
