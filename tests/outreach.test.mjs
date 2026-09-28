@@ -7,7 +7,7 @@ import { summarize } from '@/lib/outreach-summary';
 test('My stats: /api/mc/outreach reports the pre-trial sends (lead records) with totals, inboxes and touches, newest day first', async () => {
   __reset();
   await upsertLead({ email: 'a@acme.com', company: 'Acme', status: 'sent-d3', account_used: 'me@getaviance.site', sent_at: '2026-06-01T14:00:00.000Z', d3_sent_at: '2026-06-04T14:00:00.000Z', original_subject: 'Quick idea' });
-  await upsertLead({ email: 'b@beta.com', company: 'Beta', status: 'replied', account_used: 'you@getaviance.site', sent_at: '2026-06-01T15:00:00.000Z', replied_at: '2026-06-02T09:00:00.000Z', reply_kind: 'human', reply_preview: 'Tell me more' });
+  await upsertLead({ email: 'b@beta.com', company: 'Beta', status: 'replied', account_used: 'you@getaviance.site', sent_at: '2026-06-01T15:00:00.000Z', replied_at: '2026-06-02T09:00:00.000Z', reply_kind: 'human', reply_preview: 'Tell me more', reply_text: 'Tell me more about pricing.\n\nThanks, Bea' });
   await upsertLead({ email: 'c@gamma.com', company: 'Gamma', status: 'bounced', account_used: 'me@getaviance.site', sent_at: '2026-06-02T15:00:00.000Z', bounced_at: '2026-06-02T15:05:00.000Z', bounce_reason: 'no such user' });
   const { GET } = await import('@/app/api/mc/outreach/route');
   const res = await GET();
@@ -20,6 +20,7 @@ test('My stats: /api/mc/outreach reports the pre-trial sends (lead records) with
   assert.ok(d.days.every((x) => !('opens' in x)), 'per-open rows left out');
   assert.equal(d.days[2].sent.find((s) => s.to === 'a@acme.com').subject, 'Quick idea');
   assert.equal(d.days[1].replies[0].snippet, 'Tell me more');
+  assert.equal(d.days[1].replies[0].text, 'Tell me more about pricing.\n\nThanks, Bea', 'the whole reply, not just the preview');
   assert.equal(d.days[1].bounces[0].reason, 'no such user');
 });
 
