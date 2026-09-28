@@ -178,7 +178,10 @@ export async function composeFriday(clientId, now = new Date()) {
     const pace = (await getPaceLog(clientId)).filter((p) => p.at && dayKeyIn(ET, new Date(p.at)) >= weekDays[6]);
     const target = await cfgTree(clientId, 'TARGET');
     const cap = await cfg(clientId, 'EXTENSION_CAP');
-    const weekLabel = day > 30 ? `extension, day ${day} of ${cap}` : `trial week ${Math.min(f.trialWeeks, Math.max(1, Math.ceil(day / 7)))} of ${f.trialWeeks}`;
+    // a paying client has no trial weeks and no extension: just the week of sending
+    const paid = ['starter', 'growth', 'scale'].includes(String(client.plan || '').toLowerCase());
+    const weekLabel = paid ? `week ${Math.max(1, Math.ceil(day / 7))} of sending`
+      : day > 30 ? `extension, day ${day} of ${cap}` : `trial week ${Math.min(f.trialWeeks, Math.max(1, Math.ceil(day / 7)))} of ${f.trialWeeks}`;
     vars = {
       clientName: client.name || clientId, weekLabel,
       sentWeek: w.sent, sentTotal: t.sent, companies: t.companiesContacted,

@@ -235,9 +235,15 @@ export async function ackAlerts(clientId, keys, { reason = 'handled', now = new 
  */
 export async function notifyClient(clientId, key, vars = {}, opts = {}) {
   const { to = null, from = null, dedupe = key, attachments = null, pixelUrl = null, pixel = 'mail', linkify = false, inReplyTo = null, references = null, icalEvent = null, thread = true, now = null } = opts || {};
-  const { renderTemplate } = await import('@/lib/templates/client');
+  const { renderTemplate, TEMPLATES } = await import('@/lib/templates/client');
   const { getClient } = await import('@/lib/db/client');
   const client = await getClient(clientId);
+  // A paying client (Starter / Growth / Scale) gets the `<key>_paid` version of an email when there is one: the same
+  // email without the trial wording. {planName} is there for it ("the Growth plan").
+  const plan = String(client?.plan || '').toLowerCase();
+  const paid = ['starter', 'growth', 'scale'].includes(plan);
+  if (paid && TEMPLATES[`${key}_paid`]) key = `${key}_paid`;
+  if (paid && !vars.planName) vars = { ...vars, planName: plan[0].toUpperCase() + plan.slice(1) };
   const recipient = to || client?.contactEmail;
   if (!recipient) throw new Error(`no contact email for ${clientId}`);
   if (dedupe) {

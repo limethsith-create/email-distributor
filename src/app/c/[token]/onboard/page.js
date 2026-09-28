@@ -97,7 +97,7 @@ export default function Onboard({ params }) {
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', display: 'grid', gap: 20 }}>
       <div>
-        <Eyebrow>Aviance 30-Day Trial</Eyebrow>
+        <Eyebrow>{data.planName ? `Aviance — ${data.planName} plan` : 'Aviance 30-Day Trial'}</Eyebrow>
         <h1 style={{ fontSize: 26, fontWeight: 800, margin: 0 }}>{data.company.name} — one page</h1>
         <p style={{ color: 'var(--fg-muted)' }}>Main domain: <span className="mono">{data.company.mainDomain}</span>. Everything I'll ever ask you for is on this page. It saves as you go — press Save at any time and come back later.</p>
       </div>

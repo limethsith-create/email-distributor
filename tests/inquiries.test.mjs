@@ -121,3 +121,32 @@ test('a paid request with a website becomes a paid application: researched, held
   assert.equal(row.plan, 'growth');
   assert.ok(!/of 30/.test(row.stateLabel) && !/of 30/.test(row.simple.label), row.stateLabel + ' / ' + row.simple.label);
 });
+
+test('the owner adds a paying client by hand (POST /api/mc/clients/new with a plan): paid onboarding email, no trial cap', async () => {
+  await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith'), MAX_ACTIVE_TRIALS: '0' });
+  const { POST } = await import('@/app/api/mc/clients/new/route');
+  const res = await POST(new Request('http://x/api/mc/clients/new', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ companyName: 'Oak Legal', contactName: 'Olive Oak', contactEmail: 'olive@oaklegal.com', website: 'oaklegal.com', plan: 'Scale' }) }));
+  const r = await res.json();
+  assert.equal(r.ok, true); assert.equal(r.outcome, 'onboarding');
+  const c = await getClient(r.clientId);
+  assert.equal(c.plan, 'scale'); assert.equal(c.state, 'onboarding'); assert.equal(c.source, 'owner');
+  assert.deepEqual(emails, ['accepted_call_paid']);
+  // no plan → a trial, as before (the cap of 0 puts it on the waiting list)
+  const t = await (await POST(new Request('http://x/api/mc/clients/new', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ companyName: 'Elm Dental', contactName: 'Eli Elm', contactEmail: 'eli@elmdental.com', website: 'elmdental.com' }) }))).json();
+  assert.equal((await getClient(t.clientId)).plan, 'trial'); assert.equal(t.outcome, 'queued');
+});
+
+test('a paying client signs the plan agreement (their plan, price and calls), never the free-trial one; the onboarding page names the plan', async () => {
+  await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith') });
+  const { agreementFor, loadOnboarding } = await import('@/lib/systems/onboarding');
+  await createClient('oak-legal', { name: 'Oak Legal', contactName: 'Olive Oak', contactEmail: 'olive@oaklegal.com', mainDomain: 'oaklegal.com', plan: 'growth', state: 'applied' });
+  const ag = await agreementFor('oak-legal');
+  assert.equal(ag.paid, true);
+  assert.match(ag.text, /^Aviance — Growth Plan Agreement/);
+  assert.match(ag.text, /\$3,997 a month for 20 booked sales calls a month/);
+  assert.ok(!/free|30-Day Trial|review/i.test(ag.text), 'no trial wording');
+  await createClient('elm-dental', { name: 'Elm Dental', contactName: 'Eli Elm', contactEmail: 'eli@elmdental.com', mainDomain: 'elmdental.com', plan: 'trial', state: 'applied' });
+  assert.match((await agreementFor('elm-dental')).text, /^The Aviance 30-Day Trial — Agreement/);
+  assert.equal((await loadOnboarding('oak-legal')).planName, 'Growth');
+  assert.equal((await loadOnboarding('elm-dental')).planName, null);
+});

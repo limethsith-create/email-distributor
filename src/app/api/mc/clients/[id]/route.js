@@ -45,6 +45,13 @@ export async function POST(request, { params }) {
         await logEvent(id, 'mc', 'profile_updated', { fields: Object.keys(fields) });
         return Response.json({ ok: true });
       }
+      // The client's own dashboard link (systems/clientdash.js); `fresh: true` replaces it (the old one stops working).
+      case 'dashboardLink': {
+        const { dashboardLink } = await import('@/lib/systems/clientdash');
+        const url = await dashboardLink(id, { fresh: body.fresh === true });
+        await logEvent(id, 'mc', 'dashboard_link', { fresh: body.fresh === true });
+        return Response.json({ ok: true, url });
+      }
       case 'addInbox': {
         if (!hasEncKey()) return Response.json({ error: 'ENC_KEY is not set on the server, so passwords cannot be stored safely yet.' }, { status: 503 });
         const rec = await saveInbox(id, { email: body.email, password: body.password, displayName: body.displayName, provider: body.provider || 'google', enabled: false });

@@ -524,6 +524,8 @@ export const DEFAULTS = {
       proposes_time_busy: "Hi {firstName},\n\nSorry, {when} your time is taken on my side. The nearest times I have (your time):\n{times}\n\nOr pick any time that suits you here: {bookingLink}\n\n{ownerName}",
       wants_time: "Hi {firstName},\n\nHappy to. Pick any time that suits you here: {bookingLink}\n\nThe next open times (your time):\n{times}\nOr reply with the one that suits you.\n\n{ownerName}",
       price: "Hi {firstName},\n\nGood question. The 30-day trial is free: no card, nothing to pay. The one thing I ask in return is an honest review at the end.\n\nIf you'd like to keep going after the trial, we'll go through the plans together on the call.\n\n{ownerName}",
+      // a paying client (Starter / Growth / Scale) asking about price: no trial wording
+      price_paid: "Hi {firstName},\n\nGood question. You're on the {planName} plan, and we'll go through exactly what's included and how billing works on the call.\n\n{ownerName}",
       what_needed: "Hi {firstName},\n\nNothing to prepare. The call is {callMinutes} minutes, and we go through who you sell to and who you'd like to reach.\n\nIf you have a moment before it, here's the one page with your details and the agreement: {onboardingLink}\n\n{ownerName}",
       who_are_you: "Hi {firstName},\n\nFair question. I'm {ownerName} from Aviance. {howLine}\n\nMore about us: https://www.aviance.online\n\n{ownerName}",
       later: "Hi {firstName},\n\nNo problem. I'll check back {when}, and you won't get any more reminders from me before then.\n\nIf it suits you sooner, reply to this email any time.\n\n{ownerName}",

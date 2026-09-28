@@ -93,7 +93,12 @@ export const TEMPLATES = {
   // Day 1 ("Your trial started today", Section 10) — the doc's words in the voice.
   day1_started: {
     subject: 'Your first emails went out',
-    body: 'Hi {firstName},\n\nThe first emails for {clientName} went out this morning from {senderAddress}. Day 30 is {day30Date}.\n\nI handle every reply. Anything hot lands in your inbox the same day, with a note on what to do. Your Friday update comes as usual.\n\n{buttons}\n\n{ownerName}',
+    body: 'Hi {firstName},\n\nThe first emails for {clientName} went out this morning from {senderAddress}. Day 30 is {day30Date}.\n\nI handle every reply. Anything hot lands in your inbox the same day, with a note on what to do. Your Friday update comes as usual.\n\n{dashboardLine}\n\n{buttons}\n\n{ownerName}',
+  },
+  // The same for a paying client (no Day 30).
+  day1_started_paid: {
+    subject: 'Your first emails went out',
+    body: 'Hi {firstName},\n\nThe first emails for {clientName} went out this morning from {senderAddress}.\n\nI handle every reply. Anything hot lands in your inbox the same day, with a note on what to do. Your Friday update comes every week.\n\n{dashboardLine}\n\n{buttons}\n\n{ownerName}',
   },
 
   friday_update: { subject: '{title}', body: 'Hi {firstName},\n\n{body}\n\n{ownerName}' },

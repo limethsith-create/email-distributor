@@ -23,7 +23,7 @@ import { getClient, getProfile, getTrial, updateClient } from '@/lib/db/client';
 import { logEvent } from '@/lib/db/events';
 import { addToBlocklist } from '@/lib/db/leads';
 import { dayKeyIn, ET } from '@/lib/time';
-import { renderAgreement, agreementHash, AGREEMENT_VERSION } from '@/lib/templates/agreement';
+import { renderAgreement, renderPaidAgreement, agreementHash, AGREEMENT_VERSION, PAID_AGREEMENT_VERSION } from '@/lib/templates/agreement';
 import { runMarketCount } from '@/lib/systems/market';
 import { addBlocklistInput } from '@/lib/systems/blocklist';
 import { io, asArray, firstNameOf, ownerName, sendClient, formatDay, isPublicUrl } from '@/lib/systems/intake-io';
@@ -189,8 +189,17 @@ export async function agreementFor(clientId, { now = io.now(), clientSignature }
     return { blocked: 'The agreement is being prepared — fill in everything else and come back to this step shortly.' };
   }
   const company = profile.companyName || client?.name;
-  const text = renderAgreement({ company, date: formatDay(dayKeyIn(ET, now), { date: true }), usHours, signerName, ...(clientSignature ? { clientSignature } : {}) });
-  return { text };
+  const date = formatDay(dayKeyIn(ET, now), { date: true });
+  const sig = clientSignature ? { clientSignature } : {};
+  // A paying client signs the plan agreement (its plan, price and calls), not the trial one.
+  const plan = String(client?.plan || '').toLowerCase();
+  if (['starter', 'growth', 'scale'].includes(plan)) {
+    const p = (await cfg(clientId, 'PLANS'))?.[plan] || {};
+    const text = renderPaidAgreement({ company, date, usHours, signerName, plan: { name: plan[0].toUpperCase() + plan.slice(1), price: p.price, calls: p.calls }, ...sig });
+    return { text, version: PAID_AGREEMENT_VERSION, paid: true };
+  }
+  const text = renderAgreement({ company, date, usHours, signerName, ...sig });
+  return { text, version: AGREEMENT_VERSION };
 }
 
 /** Everything the page needs. */
@@ -202,6 +211,8 @@ export async function loadOnboarding(clientId) {
   const agreement = trial.agreementAcceptedAt ? { text: trial.agreementText || null, accepted: true } : await agreementFor(clientId);
   return {
     company: { name: profile.companyName || client.name, mainDomain: client.mainDomain, contactName: client.contactName },
+    // a paying client's page says its plan, not "30-Day Trial"
+    planName: ['starter', 'growth', 'scale'].includes(String(client.plan || '')) ? client.plan[0].toUpperCase() + client.plan.slice(1) : null,
     state: client.state,
     fields: FIELDS,
     profile: parseProfile(profile),
@@ -264,13 +275,13 @@ export async function acceptAgreement(clientId, { name, title, agree, ip, now = 
     agreementName: fullName.slice(0, 120),
     agreementTitle: signerTitle,
     agreementIp: String(ip || 'unknown').slice(0, 64),
-    agreementVersion: AGREEMENT_VERSION,
+    agreementVersion: ag.version || AGREEMENT_VERSION,
     agreementHash: agreementHash(ag.text),
     agreementText: ag.text,
   };
   await kv.hset(K.trial(clientId), record);
   await updateClient(clientId, { intakeStep: 'market' });
-  await logEvent(clientId, SYSTEM, 'agreement_accepted', { name: record.agreementName, title: signerTitle, ip: record.agreementIp, hash: record.agreementHash, version: AGREEMENT_VERSION });
+  await logEvent(clientId, SYSTEM, 'agreement_accepted', { name: record.agreementName, title: signerTitle, ip: record.agreementIp, hash: record.agreementHash, version: record.agreementVersion });
 
   const vars = {
     firstName: firstNameOf(client.contactName), companyName: profile.companyName || client.name,
@@ -283,7 +294,7 @@ export async function acceptAgreement(clientId, { name, title, agree, ip, now = 
     await logEvent(clientId, SYSTEM, 'agreement_copy_failed', { error: String(err.message).slice(0, 200) });
     await io.alertOwner('report_blocked', { clientId, scope: `${clientId}:agreement_copy`, vars: { report: 'agreement_copy', clientId }, body: `The signed agreement copy could not be emailed to ${client.contactEmail}: ${String(err.message).slice(0, 200)}`, did: 'The acceptance is stored (client:{id}:trial) and the market count continues. Send the copy by hand.' });
   }
-  const own = await io.sendOwnerEmail(`[Aviance] Agreement signed: ${vars.companyName}`, `${vars.companyName} accepted the trial agreement.\n\nAccepted by: ${vars.agreementName}, ${signerTitle}\nAt: ${record.agreementAcceptedAt} from IP ${record.agreementIp}\nText fingerprint: ${record.agreementHash}\n\n${ag.text}`).catch((e) => ({ ok: false, error: e.message }));
+  const own = await io.sendOwnerEmail(`[Aviance] Agreement signed: ${vars.companyName}`, `${vars.companyName} accepted the ${ag.paid ? 'plan' : 'trial'} agreement.\n\nAccepted by: ${vars.agreementName}, ${signerTitle}\nAt: ${record.agreementAcceptedAt} from IP ${record.agreementIp}\nText fingerprint: ${record.agreementHash}\n\n${ag.text}`).catch((e) => ({ ok: false, error: e.message }));
   if (!own?.ok) await logEvent(clientId, SYSTEM, 'owner_copy_failed', { error: own?.error || 'unknown' });
 
   // Blocklist Keeper (SPEC §7.3) on onboarding submit: every pasted customer /

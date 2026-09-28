@@ -74,7 +74,7 @@ const BOOKING_RULES = new Set(['reschedule', 'proposes_time', 'wants_time']);
  */
 const LAUNCH_RULES = new Set(['reschedule', 'proposes_time', 'wants_time', 'thanks']);
 /** The placeholders an answer may use. Anything else in {braces} stops the answer (the owner gets the message). */
-const SLOTS = ['bookingLink', 'times', 'firstName', 'onboardingLink', 'ownerName', 'when', 'callMinutes', 'howLine'];
+const SLOTS = ['bookingLink', 'times', 'firstName', 'onboardingLink', 'ownerName', 'when', 'callMinutes', 'howLine', 'planName'];
 
 /**
  * who_are_you: how their email reached us, by the client's `source` — only the
@@ -651,8 +651,13 @@ async function answerFor(client, raw, p, s, onboard, now) {
       const times = onboard.bookingUrl ? [] : nextDayTimes((await freeTimesFor(raw, now, call.kindOf(p.kind))).open, 3);
       return { text: fillAnswer(s.answers.wants_time, { ...base, bookingLink: await bookingLinkFor(client.id, onboard, p), times: timesList(times, tz) }), did: times.length ? 'sent the booking link and the next open times' : 'sent the booking link' };
     }
-    case 'price':
+    case 'price': {
+      const plan = String(client.plan || '').toLowerCase();
+      if (['starter', 'growth', 'scale'].includes(plan) && s.answers.price_paid) {
+        return { text: fillAnswer(s.answers.price_paid, { ...base, planName: plan[0].toUpperCase() + plan.slice(1) }), did: `answered the price question: they're on the ${plan} plan, the details on the call` };
+      }
       return { text: fillAnswer(s.answers.price, base), did: 'answered the price question: the trial is free, no card, an honest review' };
+    }
     case 'what_needed': {
       const token = await mintToken(client.id, `onboarding:bot${shortHash(p.id, 8)}`, { ttl: TTL.long });
       const onboardingLink = pageUrl(token, 'onboard');

@@ -85,7 +85,13 @@ export async function sendDay1Notice(clientId, now = new Date()) {
   const sender = inboxes.find((i) => i.enabled === '1' || i.enabled === 1 || i.enabled === true)?.email || inboxes[0]?.email;
   const day1 = trial.day1Date || dayKeyIn(ET, new Date(trial.firstSendAt));
   if (!sender) return { held: 'no inbox record' };
-  await notifyClient(clientId, 'day1_started', { senderAddress: sender, day30Date: fmtDay(trial.day30Date || addDays(day1, 29)), buttons: await clientButtonsText(clientId), ownerName: sig }, { dedupe: 'day1_started' });
+  // Their own dashboard (systems/clientdash.js): the link goes out with the first emails.
+  let dashboardLine = 'Your numbers come in the Friday update.';
+  try {
+    const { dashboardLink } = await import('@/lib/systems/clientdash');
+    dashboardLine = `You can watch the sending as it happens, any time: ${await dashboardLink(clientId, { now })}`;
+  } catch {}
+  await notifyClient(clientId, 'day1_started', { senderAddress: sender, day30Date: fmtDay(trial.day30Date || addDays(day1, 29)), dashboardLine, buttons: await clientButtonsText(clientId), ownerName: sig }, { dedupe: 'day1_started' });
   await patchTrial(clientId, { day1NoticeAt: now.toISOString() });
   return { sent: 'day1_started' };
 }
