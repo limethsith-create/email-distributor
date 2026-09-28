@@ -585,6 +585,10 @@ export const DEFAULTS = {
     jobEveryMinutes: 10,
   },
   // ── end CheapInboxes ──
+  // The owner's own outreach (the legacy engine, /api/cron/auto-send): false = one email per person,
+  // no follow-ups (due day-3 / day-7 / day-10 touches are skipped, not sent and not expired).
+  // true = the old day-0 → 3 → 7 → 10 sequence. Set in /mc/config (or the hub's Config).
+  OUTREACH_FOLLOWUPS: false,
   // US federal holidays, observed dates. Update once a year (one line per year).
   US_HOLIDAYS: [
     '2026-01-01', '2026-01-19', '2026-02-16', '2026-05-25', '2026-06-19', '2026-07-03',

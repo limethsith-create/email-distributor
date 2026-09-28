@@ -52,6 +52,37 @@ export async function POST(request, { params }) {
         await logEvent(id, 'mc', 'dashboard_link', { fresh: body.fresh === true });
         return Response.json({ ok: true, url });
       }
+      // Email the dashboard link to someone (docs/HUB-API.md "The client's dashboard"); remembered in
+      // trial.dashboardSharedWith ([{email, at}]).
+      case 'shareDashboard': {
+        const { isValidEmail, normalizeEmail } = await import('@/lib/metrics');
+        const email = normalizeEmail(body.email);
+        if (!isValidEmail(email)) return Response.json({ error: 'Enter a valid email address.' }, { status: 400 });
+        const { dashboardLink, sharedWith } = await import('@/lib/systems/clientdash');
+        const { ownerName } = await import('@/lib/systems/dshared');
+        const sig = await ownerName(id, 'The dashboard email');
+        if (!sig) return Response.json({ error: 'Set your signer name (OWNER.signerName) in Config first.' }, { status: 409 });
+        const url = await dashboardLink(id);
+        const { notifyClient } = await import('@/lib/notify');
+        const isContact = email === normalizeEmail(client.contactEmail);
+        // One email per address per minute (a double click sends one).
+        const minute = new Date().toISOString().slice(0, 16);
+        const res = await notifyClient(id, 'dashboard_access', { dashboardLink: url, ownerName: sig, ...(isContact ? {} : { firstName: 'there' }) }, { to: email, dedupe: `dashboard_access:${email}:${minute}` });
+        if (res?.error) return Response.json({ error: res.error }, { status: 500 });
+        const list = (await sharedWith(id)).filter((x) => x.email !== email);
+        list.push({ email, at: new Date().toISOString() });
+        await kv.hset(K.trial(id), { dashboardSharedWith: JSON.stringify(list) });
+        await logEvent(id, 'mc', 'dashboard_shared', { email });
+        return Response.json({ ok: true, url, sharedWith: list });
+      }
+      // A new dashboard link (every old one stops working) and nobody on the shared list.
+      case 'unshareDashboard': {
+        const { dashboardLink } = await import('@/lib/systems/clientdash');
+        const url = await dashboardLink(id, { fresh: true });
+        await kv.hset(K.trial(id), { dashboardSharedWith: '[]' });
+        await logEvent(id, 'mc', 'dashboard_unshared', {});
+        return Response.json({ ok: true, url });
+      }
       case 'addInbox': {
         if (!hasEncKey()) return Response.json({ error: 'ENC_KEY is not set on the server, so passwords cannot be stored safely yet.' }, { status: 503 });
         const rec = await saveInbox(id, { email: body.email, password: body.password, displayName: body.displayName, provider: body.provider || 'google', enabled: false });

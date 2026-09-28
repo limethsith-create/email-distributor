@@ -55,9 +55,9 @@ expiry checks) is:
   under them): `/api/mc/keys`, `/api/mc/config`, `/api/mc/setup`,
   `/api/mc/people`, `/api/mc/google`, `/api/mc/cheapinboxes`,
   `/api/mc/login`, `/api/mc/logout`, `/api/mc/test`, `/api/mc/push`,
-  `/api/mc/warmup` (service keys, Google / CheapInboxes / helper-inbox
+  `/api/mc/warmup`, `/api/mc/archive` (service keys, Google / CheapInboxes / helper-inbox
   credentials and status, machine settings, Test Mode, push devices, the
-  activity log);
+  activity log, the outreach archive);
 - `POST /api/mc/presence` — the only write.
 - Anything else → `403 {error:'Read-only: ask the owner to do this.'}` (with
   the usual CORS headers, so the hub can show the text). Hide the buttons for
@@ -277,6 +277,13 @@ trial hash, and returned in `links.dashboard` of `GET /api/mc/hub/[id]`.
 `POST /api/mc/clients/{id} {action:'dashboardLink', fresh?}` makes or returns
 it (`fresh: true` replaces it and the old link stops working).
 
+**Giving someone access by email** (the owner only; see "Outreach archive and
+dashboard access (2026-09-28)" below for the exact shapes):
+`POST /api/mc/clients/{id} {action:'shareDashboard', email}` emails the link
+(`dashboard_access`, "Your Aviance dashboard") to that address and remembers it;
+`{action:'unshareDashboard'}` replaces the link (every old one stops working)
+and empties the list. `GET /api/mc/hub/{id}` → `dashboardAccess.sharedWith`.
+
 A paying client (`plan` starter|growth|scale) also gets the `<key>_paid`
 version of any client email that has one (notify.js), the plan agreement
 (`templates/agreement.js` `PAID_AGREEMENT_TEXT`, a draft for the owner to
@@ -302,6 +309,11 @@ uniqueOpens, replies, bounces, days, firstDay, lastDay}, `inboxes`
 [{email, sent}] (most first), `byTouch`, `byCampaign`. `days` is newest first,
 each with `summary`, `accountBreakdown`, `byTouch`, `sent`, `replies`,
 `bounces`.
+
+After an archive + clear (`POST /api/mc/archive {action:'clear'}`, below) this
+starts again from zero: the old history lives in the saved archive
+(`GET /api/mc/archive/{id}`). With follow-ups off (`OUTREACH_FOLLOWUPS`, the
+default) every new day is `newSends` only; `followUps` stays 0.
 
 ## Actions the hub calls (all existing; JSON bodies)
 
@@ -382,7 +394,10 @@ Redis reads) — never on the 60-second auto-refresh.
   "placement": [ { "day": "…", "at": "ISO", "tool": "seed|mail-tester|dkimvalidator", "inboxRate": 0.9|null, "score": 9.1|null, "spamAssassin": 1.2|null, "min": 0.8|null, "perProvider": {…}|null, "perInbox": {…}|null } ] }
 ```
 `null` in a series = nothing recorded that day (draw a gap). On a recorded day a
-counter that did not move is `0`. `score` is mail-tester's /10; dkimvalidator
+counter that did not move is `0`. There is **no `opened` series**: a client's
+prospect emails go out without an open pixel (the per-client Sender sends
+with `noTrack: true`), so the machine records no per-client
+opens — show no opens chart rather than zeros. `score` is mail-tester's /10; dkimvalidator
 gives a SpamAssassin score (`spamAssassin`, lower is better, ≥ 5 = spam).
 
 ## Applicant research — `application.research` (in `GET /api/mc/hub/{id}`)
@@ -1611,3 +1626,117 @@ is when it went.
 - A send that failed is not a conversation entry: the retry is 10 minutes
   later, and a second failure is the urgent `client_email_failed` alert (its
   to-do and the big button).
+
+---
+
+# Outreach archive and dashboard access (2026-09-28)
+
+The owner's own outreach starts a new process: **one email per person, no
+follow-ups**. The old history is saved as a file-like archive in the machine and
+then cleared. Clients can be given their dashboard by email.
+
+## Follow-ups off — config `OUTREACH_FOLLOWUPS` (default `false`)
+
+The legacy sender (`/api/cron/auto-send`, the owner's own outreach) sends only
+first emails (day 0) while this is `false`: leads whose day-3 / day-7 / day-10
+would be due are skipped — not sent, not expired, left as they are. Its answer's
+`pools.followUpsOn` says which way it is. **To turn follow-ups back on:**
+`POST /api/mc/config {action:'set', key:'OUTREACH_FOLLOWUPS', value:true}` (or
+`/mc/config`); `{action:'reset', key:'OUTREACH_FOLLOWUPS'}` turns them off again.
+Applies within about a minute. Trial and paying clients' sending is not affected.
+
+## Outreach archive — `/api/mc/archive` (owner only)
+
+Employees get `403 {error:'Read-only: ask the owner to do this.'}` on every
+method (middleware `EMPLOYEE_DENY`; the routes check `x-hub-role` again).
+
+### `GET /api/mc/archive` — the saved archives, newest first
+```jsonc
+{ "archives": [
+  { "id": "arc-20260928-143012-9f2c1a", "createdAt": "ISO",
+    "totals": { "sent": 1840, "opened": 412, "replies": 37, "bounces": 22, "days": 19, "firstDay": "2026-09-01", "lastDay": "2026-09-27" },
+    "bytes": 1938211, "chunks": 5,
+    "clearedAt": "ISO",                                  // only on an archive made by a clear
+    "cleared": { "leads": 1203, "suppressed": 1260, "keys": ["sent_log", "…"] } } ] }
+```
+
+### `GET /api/mc/archive/{id}` — one archive, whole (JSON; 404 when there is none)
+```jsonc
+{ "id": "arc-…", "createdAt": "ISO",
+  "totals": { "sent", "opened", "replies", "bounces", "days", "firstDay", "lastDay" },   // opened = people who opened (unique); days = days with sends
+  "days":    [ { "date": "2026-09-01", "sent": 60, "opened": 14, "replies": 2, "bounces": 1 } ],   // oldest first (UTC days)
+  "sent":    [ { "at": "ISO", "to": "ann@acme.com", "company": "Acme", "subject": "…", "touch": "d0|d3|d7", "from": "me@…" } ],
+  "replies": [ { "at": "ISO", "from": "ann@acme.com", "company": "Acme", "subject": "Re: …", "text": "…" } ],
+  "bounces": [ { "at": "ISO", "email": "…", "reason": "550 …", "account": "me@…|null" } ],
+  "leads":   [ { "email", "company", "status", "sent_at", "d3_sent_at", "d7_sent_at", "account_used", "original_subject",
+                 "name", "first_name", "title", "industry", "city", "country", "website", "phone", "campaign", "source",
+                 "opened_at", "open_count", "replied_at", "reply_kind", "reply_intent", "reply_subject", "reply_text",
+                 "bounced_at", "bounce_reason", "unsubscribed_at", "createdAt", "…" } ] }   // every lead that was ever emailed; empty fields left out
+```
+Built from the same logic as `/api/daily-log` (lib/daily-log.js), reading the
+whole `sent_log` and `open_events`. Lead fields come from an allow-list: no
+passwords, tokens or Message-IDs. The download is sent as a file
+(`Content-Disposition: attachment; filename="{id}.json"`). A big archive can be
+fetched in parts: `?section=days|sent|replies|bounces|leads` →
+`{ id, createdAt, totals, <section> }`.
+
+### `POST /api/mc/archive`
+```jsonc
+// a snapshot now; nothing is cleared
+{ "action": "save" }                      // → { "ok": true, "id": "arc-…", "totals": { … } }
+
+// archive, then clear
+{ "action": "clear", "confirm": "CLEAR" } // → { "ok": true, "archiveId": "arc-…", "totals": { … },
+                                          //     "cleared": { "leads": 1203, "suppressed": 1260, "keys": ["sent_log", "daily_sends", …] } }
+// → 400 { error } without confirm "CLEAR" (nothing changes) · 409 { error } while an email is being sent
+// → 500 { error } when the archive could not be saved or did not read back the same (nothing is cleared)
+```
+A clear, in order (it holds the sender's lock, so nothing is sent meanwhile):
+1. builds the archive, saves it, reads it back and checks the counts match —
+   anything wrong here and **nothing is deleted**;
+2. adds every address that was ever emailed (contacted leads, every `sent` row,
+   every bounce) to the legacy `suppression` set — never emailed or imported
+   again; the reason `archived_outreach:{archiveId}` is kept in
+   `archive:outreach:suppressed`;
+3. removes the contacted leads from `leads` (leads never emailed stay);
+4. deletes the history keys `sent_log`, `daily_sends` (today's per-inbox counts
+   are put back so the daily cap stays right), `replies_v3`, `bounces`,
+   `email_opens`, `email_opens_first`, `email_opens_first_human`,
+   `email_open_counts`, `open_events`, `reply_events`, `conversations`,
+   `msgid_index`, `stats`, and the `aviance` client's own counters
+   (`client:aviance:counters:*`). `cleared.keys` lists the ones that existed.
+   `company_sent` and `suppression` stay.
+
+Storage: `archive:outreach:index` (list of the entries above) and
+`archive:outreach:{id}:{n}` (the JSON text in pieces of at most 400 KB).
+Suggested button: "Save a copy" (save) and "Archive and clear…" with a typed
+confirmation (`CLEAR`).
+
+## Client dashboard by email — `POST /api/mc/clients/{id}`
+
+```jsonc
+{ "action": "shareDashboard", "email": "sam@oaklegal.com" }
+// → { "ok": true, "url": "https://…/c/<token>/dashboard", "sharedWith": [ { "email": "sam@oaklegal.com", "at": "ISO" } ] }
+// → 400 { error: "Enter a valid email address." } · 409 when OWNER.signerName is not set · 500 when the email could not go
+
+{ "action": "unshareDashboard" }
+// → { "ok": true, "url": "https://…/c/<new token>/dashboard" }   // every old link stops working; sharedWith is emptied
+```
+`shareDashboard` emails the current link (the same one as `links.dashboard`)
+with the client email `dashboard_access` — subject "Your Aviance dashboard",
+from the owner, "Hi {their first name}," for the client's contact and "Hi
+there," for anyone else. The same address twice in one minute sends once.
+Kept on the trial hash as `dashboardSharedWith` (JSON), one row per address.
+
+`GET /api/mc/hub/{id}` gains:
+```jsonc
+"dashboardAccess": { "sharedWith": [ { "email": "sam@oaklegal.com", "at": "ISO" } ] }   // oldest first; [] when none
+```
+
+## Per-client opens
+
+Not recorded. Trial and paying clients' prospect emails carry no open pixel
+(the per-client Sender, systems/sender.js, sends with `noTrack: true`), so
+there is no per-day opens counter and growth's `email` series has no `opened`.
+Only the owner's own legacy outreach tracks opens (`email_opens`, in
+`GET /api/mc/outreach` and the archive).
