@@ -313,6 +313,10 @@ export const K = {
   hubPeople: () => 'hub:people',
   /** One hub user (hash): uid, email, name, role, firstSeen, lastSignIn, lastSignOut, lastSeen, lastView, sessions, activeSeconds, lastLogged*. */
   hubPerson: (uid) => `hub:person:${hubUid(uid)}`,
+  /** What a hub user says they are working on (hash): text, at. Set by themselves (the hub's Team tab). */
+  hubStatus: (uid) => `hub:status:${hubUid(uid)}`,
+  /** Who looks after which client (hash): clientId → JSON [uid, …]. Set by the owner (the hub's Team tab). */
+  hubClientOwners: () => 'hub:clientowners',
   /** Active seconds per day for one hub user (hash): YYYY-MM-DD → seconds. */
   hubPersonDays: (uid) => `hub:person:${hubUid(uid)}:days`,
   /** Presence posts by one user in one 10-minute bucket (counter, expires). */

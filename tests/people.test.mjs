@@ -244,3 +244,39 @@ test('/api/mc/presence and /api/mc/people: identity from the token; people is ad
   assert.equal(v.people[0].activeSecondsTotal, 60);
   assert.equal(v.people[0].online, true);
 });
+
+test('team: everyone with their own "working on" line, where they are and the clients they look after; only the owner assigns clients', async () => {
+  __reset();
+  const sign = await makeSigner();
+  stubSupabase();
+  __resetProfileCache();
+  const { createClient } = await import('@/lib/db/client');
+  await createClient('acme', { name: 'Acme Plumbing', contactEmail: 'a@acme.com', mainDomain: 'acme.com', plan: 'trial', state: 'applied' });
+  await createClient('birch', { name: 'Birch Legal', contactEmail: 'b@birch.com', mainDomain: 'birch.com', plan: 'growth', state: 'applied' });
+  await recordPresence({ uid: 'emp-1', email: 'nimal@aviance.store', role: 'employee', name: 'Nimal Perera' }, { event: 'signin', view: 'paying' });
+  await recordPresence({ uid: 'owner-1', email: 'limethsith@gmail.com', role: 'admin', name: 'Limeth' }, { event: 'signin', view: 'trials' });
+  const { GET, POST } = await import('@/app/api/mc/team/route');
+  const post = (token, body) => POST(new Request('http://x/api/mc/team', { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body) }));
+  const emp = await sign(claims({ sub: 'emp-1', email: 'nimal@aviance.store' }));
+  const own = await sign(claims());
+  // a team member sets their own line; cannot assign clients
+  assert.equal((await post(emp, { action: 'status', text: '  Fixing the Birch   Legal copy  ' })).status, 200);
+  assert.equal((await post(emp, { action: 'assign', clientId: 'birch', uids: ['emp-1'] })).status, 403);
+  // the owner assigns
+  assert.equal((await post(own, { action: 'assign', clientId: 'birch', uids: ['emp-1', 'bad id!'] })).status, 200);
+  assert.equal((await post(own, { action: 'assign', clientId: 'acme', uids: ['emp-1', 'owner-1'] })).status, 200);
+  const t = await (await GET()).json();
+  const nimal = t.team.find((p) => p.uid === 'emp-1');
+  assert.equal(nimal.status.text, 'Fixing the Birch Legal copy');
+  assert.equal(nimal.online, true); assert.equal(nimal.lastView, 'paying');
+  assert.deepEqual(nimal.clients.map((c) => c.name).sort(), ['Acme Plumbing', 'Birch Legal']);
+  assert.deepEqual(t.owners.birch, ['emp-1'], 'a bad id is dropped');
+  assert.deepEqual(t.team.find((p) => p.uid === 'owner-1').clients.map((c) => c.id), ['acme']);
+  // clearing
+  await post(emp, { action: 'status', text: '' });
+  await post(own, { action: 'assign', clientId: 'acme', uids: [] });
+  const t2 = await (await GET()).json();
+  assert.equal(t2.team.find((p) => p.uid === 'emp-1').status, null);
+  assert.equal(t2.owners.acme, undefined);
+  assert.equal((await post('nonsense', { action: 'status', text: 'x' })).status, 401);
+});
