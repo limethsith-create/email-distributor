@@ -159,6 +159,16 @@ report and the Day 30 email) on the trial hash (`onboardingLink`,
 token still works. A link whose token expired, was replaced or used up drops
 out; a purpose with no link sent yet is absent.
 
+## `GET /api/mc/outreach` — your own sending so far (My stats)
+
+The pre-trial engine's sends (the lead records, `sent_log`), which the
+`aviance` row's counters do not include: the `/api/daily-log` report without
+the per-open rows, plus `totals` {sent, newSends, followUps, opens,
+uniqueOpens, replies, bounces, days, firstDay, lastDay}, `inboxes`
+[{email, sent}] (most first), `byTouch`, `byCampaign`. `days` is newest first,
+each with `summary`, `accountBreakdown`, `byTouch`, `sent`, `replies`,
+`bounces`.
+
 ## Actions the hub calls (all existing; JSON bodies)
 
 | What | Call |
