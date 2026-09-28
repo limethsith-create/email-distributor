@@ -284,6 +284,15 @@ review), the reply bot's `price_paid` answer, a plan-named onboarding page and
 "week N of sending" in the Friday update. `POST /api/mc/clients/new` takes
 `plan` for a paying client added by hand.
 
+## Team
+
+`GET /api/mc/team` (owner and team members) → `{ team: [{ uid, name, email, role, online, lastSeen, lastView,
+activeSecondsToday, status: {text, at} | null, clients: [{ id, name, state, plan }] }], owners: { clientId: [uid] } }`.
+`POST /api/mc/team {action:'status', text}` sets the caller's own "working on" line (≤ 140 characters; empty
+clears it). `POST /api/mc/team {action:'assign', clientId, uids}` (the owner only) sets who looks after a client
+(an empty list clears it). Stored in `hub:status:{uid}` and `hub:clientowners` (systems/team.js). Team members may
+POST here (middleware); the route allows them only their own status.
+
 ## `GET /api/mc/outreach` — your own sending so far (My stats)
 
 The pre-trial engine's sends (the lead records, `sent_log`), which the

@@ -38,7 +38,7 @@ const MACHINE = [/^\/api\/cron\//, /^\/api\/admin\/(export|import)$/];
 const HUB_API = /^\/api\/mc\//;
 // Owner-only screens: secrets, credentials, owner settings, test mode, the activity log.
 export const EMPLOYEE_DENY = /^\/api\/mc\/(keys|config|setup|people|google|cheapinboxes|login|logout|test|push|warmup)(\/|$)/;
-const EMPLOYEE_POST = /^\/api\/mc\/presence\/?$/;
+const EMPLOYEE_POST = /^\/api\/mc\/(presence|team)\/?$/;   // team: only their own status (the route checks)
 const READ_ONLY = 'Read-only: ask the owner to do this.';
 
 /** Is this request something an employee (read-only hub user) may do? */
