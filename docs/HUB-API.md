@@ -159,6 +159,26 @@ report and the Day 30 email) on the trial hash (`onboardingLink`,
 token still works. A link whose token expired, was replaced or used up drops
 out; a purpose with no link sent yet is absent.
 
+## Paying clients (paid-plan applications)
+
+A paid-plan request from the website (`POST /api/inquiry`) that carries a
+website also becomes an **application**: a client with `plan` =
+`starter|growth|scale` (the plan they picked; Starter when none), `state:
+'applied'`, `source: 'inquiry'`, held for review with the same research and
+fit score as a trial application (`row.fitScore`, `application.research`).
+The inquiry record gets `clientId`, and its "call them back" to-do is dropped
+(the application's own to-do replaces it). Without a website it stays a plain
+inquiry.
+
+The hub lists rows by `plan`: `trial` → Trials; `starter|growth|scale` →
+Paying clients (a converted trial shows in both). "Say yes" is the usual
+`POST /api/mc/clients/{id}/intake {action:'approveApplication'}`. For a paid
+plan it skips the one-trial-per-company rule and the trial cap, sends
+`accepted_call_paid` (no trial wording) and starts the same per-client system
+(onboarding → setup → warm-up → sending). A paying client keeps sending: no
+Day 20 check-in, Day 29 report or Day 30 decision, and no "of 30" in its
+labels.
+
 ## `GET /api/mc/outreach` — your own sending so far (My stats)
 
 The pre-trial engine's sends (the lead records, `sent_log`), which the

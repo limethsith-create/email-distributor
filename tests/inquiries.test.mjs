@@ -116,4 +116,8 @@ test('a paid request with a website becomes a paid application: researched, held
   assert.equal(dj.day, 60, 'Day 60 of sending');
   assert.equal(dj.report, undefined); assert.equal(dj.day30, undefined); assert.equal(dj.disposition, undefined);
   assert.equal((await getClient(r.clientId)).state, 'sending');
+  // the hub: no "of 30" for a paying client
+  const row = (await hubBoard()).stages.find((st) => st.key === 'live').clients.find((c) => c.id === r.clientId);
+  assert.equal(row.plan, 'growth');
+  assert.ok(!/of 30/.test(row.stateLabel) && !/of 30/.test(row.simple.label), row.stateLabel + ' / ' + row.simple.label);
 });
