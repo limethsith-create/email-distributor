@@ -31,7 +31,7 @@ import { getState as leadfinderState } from '@/lib/systems/leadfinder';
 import { getApproval } from '@/lib/systems/approval';
 import { getPaceLog } from '@/lib/systems/pace';
 import { getRunState } from '@/lib/systems/stagec-common';
-import { listQueue } from '@/lib/systems/gatekeeper';
+import { listQueue, isPaidPlan } from '@/lib/systems/gatekeeper';
 import { overduePromises } from '@/lib/systems/health';
 import { jobRecords } from '@/lib/scheduler';
 import { loadAccounts } from '@/lib/smtp-accounts';
@@ -146,7 +146,7 @@ export function stateLabelFor(ctx) {
     case 'awaiting_purchase': return shopping.sentAt ? `${base} — ${ago(shopping.sentAt, now)}` : base;
     case 'warming': return trial.day1Date ? `${base} — Day ${day} (Day 1 on ${trial.day1Date})` : base;
     case 'ready': return trial.day1Date ? `${base} — Day 1 on ${trial.day1Date}` : base;
-    case 'sending': return day != null ? `${base} — Day ${day} of 30` : base;
+    case 'sending': return day != null ? `${base} — Day ${day}${isPaidPlan(client.plan) ? '' : ' of 30'}` : base;
     case 'paused': return client.pausedReason ? `${base} — ${client.pausedReason}` : base;
     case 'extension': return day != null ? `${base} — Day ${day}` : base;
     case 'deciding': return trial.bonusExpiresAt ? `${base} — bonus until ${ownerAndEastern(trial.bonusExpiresAt)}` : base;
@@ -548,6 +548,8 @@ function simpleBase(ctx) {
       if (launchDone(ctx.launchCall)) return r('warming_up', `Launch call done — first emails${on(trial.day1Date)}`, 'Nothing for you');
       return r('warming_up', `Ready — first emails${on(trial.day1Date)}`, 'Nothing for you');
     case 'sending':
+      // a paying client has no Day 30: just the sending day
+      if (isPaidPlan(ctx.client.plan)) return heldSimple(ctx, r) || r('sending', `Sending — day ${ctx.day ?? '—'}${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, null);
       return heldSimple(ctx, r) || r('sending', `Sending — day ${ctx.day ?? '—'} of 30${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, ctx.day ?? null);
     case 'extension':
       return heldSimple(ctx, r) || r('sending', `Free extension — day ${ctx.day ?? '—'}${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, ctx.day ?? null);
@@ -763,7 +765,8 @@ export async function hubBoard({ now = new Date() } = {}) {
   const others = ['aviance', '_test'].map((id) => byId.get(id)).filter(Boolean).map(strip);
   const todos = oneHelpersTodo(rows.filter((r) => r.id !== '_test').flatMap((r) => r.todo));
   const inquiries = await inquirySummary().catch(() => null);
-  for (const q of (inquiries?.latest || []).filter((x) => x.status === 'new')) {
+  // A request that became a paid application is on that application's own to-do (Say yes / Say no).
+  for (const q of (inquiries?.latest || []).filter((x) => x.status === 'new' && !x.clientId)) {
     todos.push({ id: `inquiry:${q.id}`, clientId: null, clientName: q.company, text: `New plan inquiry from ${q.company} — call them back`,
       detail: `${q.name}${q.plan ? ` · ${q.plan[0].toUpperCase()}${q.plan.slice(1)}` : ''}${q.whenHost ? ` · booked for ${q.whenHost}` : ''}`,
       urgent: true, since: q.at, action: { type: 'view', view: 'inquiry', inquiryId: q.id } });

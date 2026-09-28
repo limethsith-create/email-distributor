@@ -182,6 +182,8 @@ export async function runDayJobs(clientId, { now: realNow = new Date() } = {}) {
     if (trial.firstSendAt && !trial.day1NoticeAt) out.day1 = await sendDay1Notice(clientId, now);
     if (trial.endReason && trial.endedAt) { out.earlyEnd = await earlyEnd(clientId, trial, now); return out; }
     if (day == null) return out;
+    // A paying client keeps sending: no Day 20 check-in, Day 29 report or Day 30 decision (those end a trial).
+    if (['starter', 'growth', 'scale'].includes(String(client.plan || ''))) return out;
     if (s !== 'extension') {
       if (day >= 20 && day <= 25 && !trial.dispositionSentAt) out.disposition = await sendDisposition(clientId, now);
       if (day >= T.reportDay && !trial.reportSentAt) out.report = await sendTrialReport(clientId, now);

@@ -27,6 +27,10 @@ const SYSTEM = 'gatekeeper';
 const NON_BLOCKING = new Set(['declined', 'closed_silent']);
 /** Ids that are never real trial clients. */
 const NOT_TRIALS = new Set(['aviance', '_test']);
+/** The paid plans (config PLANS). A client on one came from a paid-plan request, not a trial application. */
+export const PAID_PLANS = new Set(['starter', 'growth', 'scale']);
+export const isPaidPlan = (plan) => PAID_PLANS.has(String(plan || '').toLowerCase());
+const planName = (plan) => { const p = String(plan || ''); return p ? p[0].toUpperCase() + p.slice(1) : ''; };
 
 // ── normalising the application ─────────────────────────────────────────────
 
@@ -267,6 +271,8 @@ async function gatekeeperError(clientId, email, err, stage) {
  * extension rule still apply unless `override` is set.
  */
 export async function decide(clientId, app, { preApproved = false, override = false, now = io.now() } = {}) {
+  // A paying client is not a trial: the one-trial-per-company rule and the trial cap don't apply.
+  if (isPaidPlan((await getClient(clientId))?.plan)) return startOnboarding(clientId, { now });
   const repeat = await findRepeat(app.mainDomain, { excludeId: clientId });
   if (repeat && !override) return decline(clientId, 'one_trial_ever', 'decline_repeat', { mainDomain: app.mainDomain, previousClient: repeat.id }, now);
 
@@ -289,7 +295,7 @@ export async function decide(clientId, app, { preApproved = false, override = fa
  * Entry point for POST /api/apply and the owner's New client button.
  * @returns {{ok, clientId?, outcome?, errors?, duplicate?}}
  */
-export async function applyForTrial(raw, { preApproved = false, override = false, source = 'form', now = io.now(), review = null } = {}) {
+export async function applyForTrial(raw, { preApproved = false, override = false, source = 'form', now = io.now(), review = null, plan = 'trial' } = {}) {
   const app = normaliseApplication(raw);
   const errors = validateApplication(app);
   if (Object.keys(errors).length) return { ok: false, errors };
@@ -304,7 +310,7 @@ export async function applyForTrial(raw, { preApproved = false, override = false
       try {
         await createClient(id, {
           name: app.companyName, contactName: app.contactName, contactEmail: app.contactEmail,
-          website: app.website, mainDomain: app.mainDomain, plan: 'trial', state: 'applied', source,
+          website: app.website, mainDomain: app.mainDomain, plan: isPaidPlan(plan) ? String(plan).toLowerCase() : 'trial', state: 'applied', source,
         });
         clientId = id;
         break;
@@ -373,6 +379,8 @@ async function holdForReview(clientId, app, { answers = [], fit = null, extras =
   });
   await updateClient(clientId, { intakeStep: 'review' });
   await logEvent(clientId, SYSTEM, 'held_for_review', { verdict: fit?.verdict || null, summary: fit?.summary || null });
+  const paid = isPaidPlan((await getClient(clientId))?.plan);
+  const what = paid ? `asked for the ${planName((await getClient(clientId)).plan)} plan (a paying client)` : 'applied for a trial';
   const lines = (answers || []).map((a) => `${a.q}\n  ${a.a}`).join('\n');
   // Research gets a short, bounded head start so the alert can carry its
   // summary; if it is not done in time the alert goes without it (the
@@ -389,8 +397,8 @@ async function holdForReview(clientId, app, { answers = [], fit = null, extras =
   await io.alertOwner('new_application', {
     clientId,
     vars: { company: app.companyName || app.mainDomain || clientId },
-    body: `${app.contactName} <${app.contactEmail}> applied for a trial from the website.\n\n${fit?.summary || ''}${researchText ? `\n\n${researchText}` : ''}\n\n${lines}`,
-    did: 'Saved it and held it for you. Open it in Trials and press “Say yes” or “Say no”; they hear nothing until you do.',
+    body: `${app.contactName} <${app.contactEmail}> ${what} from the website.\n\n${fit?.summary || ''}${researchText ? `\n\n${researchText}` : ''}\n\n${lines}`,
+    did: `Saved it and held it for you. Open it in ${paid ? 'Paying clients' : 'Trials'} and press “Say yes” or “Say no”; they hear nothing until you do.`,
   });
   // Research still running: its fit score follows in one application_scored alert (research.js finish).
   await kv.hset(K.application(clientId), { alertedAt: io.now().toISOString() });
