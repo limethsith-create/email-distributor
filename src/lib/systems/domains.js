@@ -42,8 +42,16 @@ export function brandLabel(mainDomain) {
   return String(mainDomain || '').toLowerCase().replace(/^www\./, '').split('.')[0].replace(/[^a-z0-9-]/g, '');
 }
 
-/** Brand stems without digits: the whole label joined ('acmeplumbing') and its first word ('acme'). */
-export function brandStems(mainDomain) {
+/** Words a company name ends with that are not the brand ('Summit Roofing Co' → summit, roofing). */
+const NAME_FILLER = new Set(['the', 'and', 'co', 'inc', 'llc', 'ltd', 'corp', 'company', 'group', 'pc', 'pllc', 'lp', 'llp']);
+
+/**
+ * Brand stems without digits: the whole label joined ('acmeplumbing') and its first word ('acme').
+ * A one-word label ('harbordentalgroup') has no words to split on, so with the company name
+ * ('Harbor Dental Group') its leading words the label starts with are stems too ('harbordental',
+ * 'harbor') — otherwise a long domain gives no candidate at all.
+ */
+export function brandStems(mainDomain, companyName = '') {
   const label = brandLabel(mainDomain);
   const words = label.split('-').filter(Boolean);
   const stems = [];
@@ -52,6 +60,11 @@ export function brandStems(mainDomain) {
   if (!/\d/.test(joined)) add(joined, true);
   if (words.length > 1 && words[0].length >= 3 && !/\d/.test(words[0])) add(words[0], false);
   if (!stems.length) add(joined.replace(/\d+/g, ''), true); // brand has digits: the letters only, as a last resort
+  const nameWords = String(companyName || '').toLowerCase().normalize('NFKD').replace(/[^a-z\s-]/g, ' ').split(/[\s-]+/).filter((w) => w && !NAME_FILLER.has(w));
+  for (let n = Math.min(nameWords.length, 3); n >= 1; n--) {
+    const lead = nameWords.slice(0, n).join('');
+    if (lead.length >= 3 && lead !== joined && joined.startsWith(lead)) add(lead, false);
+  }
   return stems;
 }
 
@@ -67,26 +80,31 @@ const confusableJoin = (left, right) => {
  * Every candidate in generation order:
  * [{ domain, label, tld, stem, affix, position: 'prefix'|'suffix', fullBrand }].
  */
-export function generateCandidates(mainDomain, D, tlds) {
+export function generateCandidates(mainDomain, D, tlds, companyName = '') {
   const main = String(mainDomain || '').toLowerCase().replace(/^www\./, '');
-  const out = [];
-  const seen = new Set();
-  for (const tld of tlds) {
-    for (const { stem, full } of brandStems(main)) {
-      const variants = [
-        ...(D.prefixes || []).map((p) => ({ label: `${p}${stem}`, affix: p, position: 'prefix', ok: !confusableJoin(p, stem) })),
-        ...(D.suffixes || []).map((s) => ({ label: `${stem}${s}`, affix: s, position: 'suffix', ok: !confusableJoin(stem, s) })),
-      ];
-      for (const v of variants) {
-        if (!v.ok || v.label.length > D.maxLabel || /[^a-z]/.test(v.label)) continue;
-        const domain = `${v.label}.${tld}`;
-        if (domain === main || seen.has(domain)) continue;
-        seen.add(domain);
-        out.push({ domain, label: v.label, tld, stem, affix: v.affix, position: v.position, fullBrand: full });
+  const build = (stems) => {
+    const out = [];
+    const seen = new Set();
+    for (const tld of tlds) {
+      for (const { stem, full } of stems) {
+        const variants = [
+          ...(D.prefixes || []).map((p) => ({ label: `${p}${stem}`, affix: p, position: 'prefix', ok: !confusableJoin(p, stem) })),
+          ...(D.suffixes || []).map((s) => ({ label: `${stem}${s}`, affix: s, position: 'suffix', ok: !confusableJoin(stem, s) })),
+        ];
+        for (const v of variants) {
+          if (!v.ok || v.label.length > D.maxLabel || /[^a-z]/.test(v.label)) continue;
+          const domain = `${v.label}.${tld}`;
+          if (domain === main || seen.has(domain)) continue;
+          seen.add(domain);
+          out.push({ domain, label: v.label, tld, stem, affix: v.affix, position: v.position, fullBrand: full });
+        }
       }
     }
-  }
-  return out;
+    return out;
+  };
+  const out = build(brandStems(main));
+  // A long one-word domain gives no name that fits: then the leading words of the company name are the brand.
+  return out.length || !companyName ? out : build(brandStems(main, companyName));
 }
 
 const TLD_POINTS = { com: 20, net: 8, co: 4 };
@@ -114,9 +132,9 @@ export function scoreCandidate(c, D) {
 }
 
 /** Candidates scored and sorted best first (ties: .com first, then shorter, then generation order). */
-export function rankCandidates(mainDomain, D, tlds) {
+export function rankCandidates(mainDomain, D, tlds, companyName = '') {
   const order = new Map(tlds.map((t, i) => [t, i]));
-  return generateCandidates(mainDomain, D, tlds)
+  return generateCandidates(mainDomain, D, tlds, companyName)
     .map((c, i) => ({ ...c, ...scoreCandidate(c, D), i }))
     .sort((a, b) => b.score - a.score || order.get(a.tld) - order.get(b.tld) || a.label.length - b.label.length || a.i - b.i)
     .map(({ i, ...c }) => c);

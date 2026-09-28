@@ -527,6 +527,9 @@ export async function onInbound(client, raw, { entryId, at, text, subject = '', 
     const s = await replyBotSettings();
     const convo = await conv.readConvo(client.id);
     const ctx = await botContext(client, raw, { now, settings: s, convo, kind });
+    // A plain thank-you needs no answer whatever the bot may do for this client (after onboarding too): no alert,
+    // no "answer them" red dot. Nothing is sent to them either way.
+    if (ctx.why && isThanks(plain(text), [client.contactName, ...(ctx.names || [])])) return { rule: 'thanks', alert: false };
     if (ctx.why) return { rule: null, alert: true, why: ctx.why };
     if (isJunkReply({ from, subject, preview: text })) return { rule: null, alert: true, why: 'it looks like an automatic message' };
     const v = classify(text, ctx);

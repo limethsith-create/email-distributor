@@ -82,7 +82,7 @@ const subjectWords = (subject) => String(subject || '').replace(/^\s*re:\s*/i, '
 const questions = (text) => (String(text).replace(/https?:\/\/\S+/g, 'link').match(/\?/g) || []).length;
 
 /** Templates whose body carries a report, a list or a document (no 120-word or grade limit on the data they carry). */
-const CARRIES_A_REPORT = new Set(['agreement_copy', 'friday_update', 'trial_report', 'trial_report_zero', 'disposition_sheet', 'handover', 'invoice_month1', 'ladder_37', 'call_handoff', 'call_tap', 'call_tap_reminder']);
+const CARRIES_A_REPORT = new Set(['agreement_copy', 'friday_update', 'trial_report', 'trial_report_zero', 'disposition_sheet', 'handover', 'invoice_month1', 'invoice_plan_start', 'ladder_37', 'call_handoff', 'call_tap', 'call_tap_reminder']);
 /** Passed through as they are: the owner's own words, and the reply bot's answer (tested below). */
 const PASSTHROUGH = new Set(['onboard_owner_reply', 'bot_reply']);
 

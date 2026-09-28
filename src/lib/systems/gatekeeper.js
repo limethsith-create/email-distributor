@@ -437,6 +437,7 @@ export async function approveApplication(clientId, { now = io.now() } = {}) {
     const out = await decide(clientId, { mainDomain: application.mainDomain }, { preApproved: true, now });
     // Decided: the new_application alert (urgent) is handled — no to-do or red dot lingers after the yes.
     await ackAlerts(clientId, ['new_application', 'application_scored'], { reason: 'application approved', now });
+    if (isPaidPlan((await getClient(clientId))?.plan)) await (await import('@/lib/systems/inquiries')).settleInquiryFor(clientId, 'contacted', 'Said yes in the hub — the onboarding call email went.', { now });
     return out;
   } catch (err) {
     // Email first, state second: nothing changed for the applicant, so the application waits again.
@@ -458,6 +459,7 @@ export async function declineApplication(clientId, reason, { now = io.now() } = 
   await logEvent(clientId, SYSTEM, 'review_declined', {});
   const out = await decline(clientId, 'owner', 'decline_fit', { reason: text }, now);
   await ackAlerts(clientId, ['new_application', 'application_scored'], { reason: 'application declined', now });
+  if (isPaidPlan((await getClient(clientId))?.plan)) await (await import('@/lib/systems/inquiries')).settleInquiryFor(clientId, 'lost', `Said no in the hub: ${text.slice(0, 200)}`, { now });
   return out;
 }
 

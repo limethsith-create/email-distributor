@@ -132,6 +132,16 @@ function answer(status, body, { url = '', type = 'text/html; charset=utf-8', loc
     arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length),
   };
 }
+// ── other applicants (tests/two-clients.test.mjs) ────────────────────────────
+// Each: { site: 'https://www.x.com', pages: { '/': html, … }, txt: { name: [[…]] }, mx: { name: [...] },
+// ip, registered (ISO), place: { name, category, address, rating, reviews, phone }, competitors: [place…] }.
+export const SITES = new Map();
+export function addApplicantSite(domain, spec) { SITES.set(domain, { ...spec, domain }); }
+const siteByOrigin = (origin) => [...SITES.values()].find((x) => x.site === origin) || null;
+const siteByHost = (host) => SITES.get(host) || [...SITES.values()].find((x) => `www.${x.domain}` === host) || null;
+function siteMap(x) { return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${Object.keys(x.pages).map((p) => `<url><loc>${x.site}${p}</loc></url>`).join('')}</urlset>`; }
+const placeOf = (x, p = x.place) => ({ id: `ChIJ${x.domain.replace(/\W/g, '')}${p === x.place ? '' : p.name.replace(/\W/g, '')}`, displayName: { text: p.name }, formattedAddress: p.address, primaryTypeDisplayName: { text: p.category || x.place.category }, rating: p.rating, userRatingCount: p.reviews, googleMapsUri: `https://maps.google.com/?cid=${p.cid || 9000}`, nationalPhoneNumber: p.phone || null, websiteUri: p.web === undefined ? `${x.site}/` : p.web });
+
 const jsonAnswer = (status, json) => ({ status, ok: status >= 200 && status < 300, json, text: JSON.stringify(json ?? null) });
 const dnsMissing = (name) => Object.assign(new Error(`queryTxt ENOTFOUND ${name}`), { code: 'ENOTFOUND' });
 
@@ -147,6 +157,20 @@ async function fetchExt(url, opts = {}) {
     latency(120);
     const to = `${SITE}${u.pathname}${u.search}`;
     return follow ? fetchExt(to, opts) : answer(301, '', { url: u.href, location: to });
+  }
+  // Another applicant's site: the bare domain redirects to www; robots, sitemap and pages.
+  if (SITES.has(u.hostname) && !siteByOrigin(u.origin)) {
+    latency(120);
+    const to = `${SITES.get(u.hostname).site}${u.pathname}${u.search}`;
+    return follow ? fetchExt(to, opts) : answer(301, '', { url: u.href, location: to });
+  }
+  const other = siteByOrigin(u.origin);
+  if (other) {
+    latency(300);
+    if (u.pathname === '/robots.txt') return answer(200, `User-agent: *\nAllow: /\nSitemap: ${other.site}/sitemap.xml\n`, { url: u.href, type: 'text/plain' });
+    if (u.pathname === '/sitemap.xml') return answer(200, siteMap(other), { url: u.href, type: 'application/xml' });
+    const path = u.pathname.replace(/\/+$/, '') || '/';
+    return other.pages[path] ? answer(200, other.pages[path], { url: u.href }) : answer(404, '<h1>Not found</h1>', { url: u.href });
   }
   if (u.origin === SITE) {
     latency(350);
@@ -232,6 +256,7 @@ const fakeDns = {
   resolveTxt: async (name) => {
     latency(40);
     if (OWN_DNS.txt[name]) return OWN_DNS.txt[name];
+    for (const x of SITES.values()) if (x.txt?.[name]) return x.txt[name];
     const d = trialDnsFor(name);
     if (d) {
       if (name.startsWith('google._domainkey.')) return [['v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAq']];
@@ -244,12 +269,14 @@ const fakeDns = {
   resolveMx: async (name) => {
     latency(40);
     if (OWN_DNS.mx[name]) return OWN_DNS.mx[name];
+    for (const x of SITES.values()) if (x.mx?.[name]) return x.mx[name];
     if (trialDnsFor(name) === name) return [{ exchange: 'smtp.google.com', priority: 1 }];
     throw dnsMissing(name);
   },
   resolve4: async (name) => {
     latency(30);
     if (name === APPLICANT.domain || name === `www.${APPLICANT.domain}`) return ['34.117.59.81'];
+    if (siteByHost(name)) return [siteByHost(name).ip || '34.117.59.90'];
     if (trialDnsFor(name) === name) return ['216.239.32.21'];
     if (/^(smtp|aspmx\.l)\.google\.com$/.test(name)) return ['142.250.4.27'];
     // Every blacklist answers its documented test entry as listed (the checker asks each run) …
@@ -396,6 +423,14 @@ function installFetch() {
       latency(300);
       const mask = String(init.headers?.['X-Goog-FieldMask'] || '');
       const body = JSON.parse(init.body || '{}');
+      const q = String(body.textQuery || '');
+      for (const x of SITES.values()) {
+        if (!mask.includes('formattedAddress')) break;
+        // Their Google category in their city: the competitors (they come back too).
+        if (x.place && q.startsWith(`${x.place.category} in `)) return new Response(JSON.stringify({ places: [placeOf(x), ...(x.competitors || []).map((c) => placeOf(x, c))] }), { status: 200 });
+        // The one business lookup: their name (and city).
+        if (x.place && q.toLowerCase().includes(x.place.name.toLowerCase())) return new Response(JSON.stringify({ places: [placeOf(x)] }), { status: 200 });
+      }
       if (mask.includes('formattedAddress') && /^Computer support and services in /.test(body.textQuery || '')) {
         // The research's competitors search (their Google category in their city) — Ridgeline itself comes back too.
         const place = (name, rating, reviews, web, cid) => ({ displayName: { text: name }, formattedAddress: `${cid} Tryon St, Charlotte, NC 28202, USA`, primaryTypeDisplayName: { text: 'Computer support and services' }, rating, userRatingCount: reviews, googleMapsUri: `https://maps.google.com/?cid=${cid}`, websiteUri: web });
@@ -422,6 +457,8 @@ function installFetch() {
     if (/rdap\.(verisign\.com|org)/.test(u)) {
       latency(150);
       if (u.endsWith(`/${APPLICANT.domain}`)) return new Response(JSON.stringify({ events: [{ eventAction: 'registration', eventDate: '2012-03-19T15:02:11Z' }] }), { status: 200 });
+      const x = SITES.get(u.split('/').pop());
+      if (x?.registered) return new Response(JSON.stringify({ events: [{ eventAction: 'registration', eventDate: x.registered }] }), { status: 200 });
       return new Response('not found', { status: 404 });
     }
     if (u.startsWith('https://emailverifier.reoon.com/')) return new Response(JSON.stringify({ status: 'safe', is_safe_to_send: true }), { status: 200 });

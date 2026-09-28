@@ -294,6 +294,18 @@ export async function acceptAgreement(clientId, { name, title, agree, ip, now = 
     await logEvent(clientId, SYSTEM, 'agreement_copy_failed', { error: String(err.message).slice(0, 200) });
     await io.alertOwner('report_blocked', { clientId, scope: `${clientId}:agreement_copy`, vars: { report: 'agreement_copy', clientId }, body: `The signed agreement copy could not be emailed to ${client.contactEmail}: ${String(err.message).slice(0, 200)}`, did: 'The acceptance is stored (client:{id}:trial) and the market count continues. Send the copy by hand.' });
   }
+  // A paying client (Starter / Growth / Scale) signed the plan agreement: the month-one invoice goes now
+  // (the same Invoice Maker as a trial's Start; the owner marks it paid in the hub). A trial is invoiced on Start.
+  if (ag.paid) {
+    try {
+      const { createInvoice } = await import('@/lib/systems/invoice');
+      await createInvoice(clientId, String(client.plan).toLowerCase(), { bonus: false, now, direct: true });
+      await updateClient(clientId, { planStartedAt: now.toISOString() });
+      await (await import('@/lib/systems/inquiries')).settleInquiryFor(clientId, 'won', 'Signed the plan agreement; month-one invoice sent.', { now });
+    } catch (err) {
+      await logEvent(clientId, SYSTEM, 'invoice_failed', { error: String(err?.message || err).slice(0, 200) });
+    }
+  }
   const own = await io.sendOwnerEmail(`[Aviance] Agreement signed: ${vars.companyName}`, `${vars.companyName} accepted the ${ag.paid ? 'plan' : 'trial'} agreement.\n\nAccepted by: ${vars.agreementName}, ${signerTitle}\nAt: ${record.agreementAcceptedAt} from IP ${record.agreementIp}\nText fingerprint: ${record.agreementHash}\n\n${ag.text}`).catch((e) => ({ ok: false, error: e.message }));
   if (!own?.ok) await logEvent(clientId, SYSTEM, 'owner_copy_failed', { error: own?.error || 'unknown' });
 

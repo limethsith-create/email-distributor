@@ -69,14 +69,14 @@ async function bonusLine(clientId, plan, bonus) {
  * Create (or retry) the month-one invoice. Idempotent: an invoice already
  * sent is never sent again.
  */
-export async function createInvoice(clientId, plan, { bonus = false, now = new Date() } = {}) {
+export async function createInvoice(clientId, plan, { bonus = false, now = new Date(), direct = false } = {}) {
   const existing = await getInvoice(clientId);
   if (existing && existing.status && existing.status !== 'blocked') return { status: existing.status, invoice: existing };
   const plans = await cfgTree(clientId, 'PLANS');
   const p = plans?.[plan];
   if (!p) throw new Error(`unknown plan ${plan}`);
   const base = {
-    plan, amount: p.price, calls: p.calls, bonus: bonus ? '1' : '0',
+    plan, amount: p.price, calls: p.calls, bonus: bonus ? '1' : '0', ...(direct ? { direct: '1' } : {}),
     invoiceNo: existing?.invoiceNo || `AV-${dayKeyIn(ET, now).replace(/-/g, '').slice(0, 6)}-${clientId}`,
     issuedAt: existing?.issuedAt || now.toISOString(),
   };
@@ -100,7 +100,8 @@ export async function createInvoice(clientId, plan, { bonus = false, now = new D
     planName: PLAN_NAMES[plan], invoiceNo: base.invoiceNo, issuedDate: fmtDay(dayKeyIn(ET, now)),
     priceText: money(p.price), calls: p.calls, bonusLine: await bonusLine(clientId, plan, bonus), paymentLines: lines, ownerName: sig,
   };
-  const res = await notifyClient(clientId, 'invoice_month1', vars, { dedupe: 'invoice_month1' });
+  // `direct`: a client who came straight to a plan (no trial, no bonus) — the plan-start wording.
+  const res = await notifyClient(clientId, direct ? 'invoice_plan_start' : 'invoice_month1', vars, { dedupe: 'invoice_month1' });
   await kv.hset(K.invoice(clientId), { ...base, status: 'sent', sentAt: now.toISOString(), remindersSent: '[]', blockedReason: '' });
   await logEvent(clientId, 'invoice', 'invoice_sent', { invoiceNo: base.invoiceNo, amount: p.price, deduped: res.deduped || undefined });
   return { status: 'sent', invoiceNo: base.invoiceNo };
@@ -112,7 +113,7 @@ export async function runInvoiceJob(clientId, { now: realNow = new Date() } = {}
   const now = clientNow(client, realNow);
   const inv = await getInvoice(clientId);
   if (!inv || !inv.plan) return { skipped: 'no invoice' };
-  if (inv.status === 'blocked') return createInvoice(clientId, inv.plan, { bonus: inv.bonus === '1', now });
+  if (inv.status === 'blocked') return createInvoice(clientId, inv.plan, { bonus: inv.bonus === '1', now, direct: inv.direct === '1' });
   if (inv.status !== 'sent' || inv.paidAt) return { skipped: inv.status };
   const days = daysBetween(dayKeyIn(ET, new Date(inv.issuedAt)), dayKeyIn(ET, now));
   const reminderDays = await cfg(clientId, 'INVOICE.reminderDays');

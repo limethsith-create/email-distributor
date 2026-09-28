@@ -172,12 +172,19 @@ export function classifySmtpError(error) {
  *   envelopeTime, messageTime, messageSize, ms, attempts } or on failure
  *   { success: false, error, kind, code, responseCode, command, response, ms, attempts }
  */
+const EXAMPLE_ADDRESS = /@[^\s@>]*\.example>?\s*$/i;
+
 export async function sendEmail(account, mailOptions) {
   const started = Date.now();
   const password = account.appPassword || account.password;
   const senderName = account.displayName || account.email.split('@')[0];
   const to = String(mailOptions.to || '').trim();
   const transactional = Boolean(mailOptions.transactional);
+  // Reserved example domains (RFC 2606) are never delivered — the hub's Test run clients (systems/demo.js) use
+  // only these, so nothing of theirs can ever go out, whichever path tries.
+  if (EXAMPLE_ADDRESS.test(to) || EXAMPLE_ADDRESS.test(String(account?.email || ''))) {
+    return { success: false, error: 'example address (test run) — never sent', kind: 'blocked', code: 'EXAMPLE', ms: 0, attempts: 0 };
+  }
 
   // Open tracking is ON unless explicitly switched off (fail open, not shut:
   // when OPEN_TRACKING once went missing every email silently lost its pixel).

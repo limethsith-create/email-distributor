@@ -11,6 +11,7 @@ import { K, assertClientId } from '@/lib/db/keys';
 import { getClient } from '@/lib/db/client';
 import { logEvent } from '@/lib/db/events';
 import { clientButtonLinks } from '@/lib/systems/clientwatch';
+import { demoRefusal } from '@/lib/systems/demo';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,8 @@ export async function GET(_req, { params }) {
 }
 
 export async function POST(request, { params }) {
+  const refused = demoRefusal((await params)?.id);
+  if (refused) return refused;
   const id = assertClientId(params.id);
   if (!(await getClient(id))) return Response.json({ error: 'not found' }, { status: 404 });
   const body = await request.json().catch(() => ({}));

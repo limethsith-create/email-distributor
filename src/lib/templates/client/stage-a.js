@@ -192,6 +192,23 @@ Reply to this email any time.
 {ownerName}`,
   },
 
+  // A paying client has no Day 30: the same email without the trial's two dates.
+  welcome_two_dates_paid: {
+    from: 'owner',
+    subject: 'We start on {day1Date}',
+    body: `Hi {firstName},
+
+Everything's on track, so we start on {startWhen}.
+
+The emails go out {inWhoseName} from {inboxes}, {sendWindow}.
+
+Every Friday you'll get a short update from me, quiet weeks included.
+
+Reply to this email any time.
+
+{ownerName}`,
+  },
+
   booking_test_request: {
     from: 'owner',
     subject: 'Test your booking link',

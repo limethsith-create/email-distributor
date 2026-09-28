@@ -13,6 +13,7 @@
 import { assertClientId } from '@/lib/db/keys';
 import { logEvent } from '@/lib/db/events';
 import { onboardCallAction, onboardCallFor, OnboardCallError } from '@/lib/systems/onboardcall';
+import { demoRefusal } from '@/lib/systems/demo';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -28,6 +29,8 @@ export async function GET(_req, { params }) {
 }
 
 export async function POST(request, { params }) {
+  const refused = demoRefusal((await params)?.id);
+  if (refused) return refused;
   const id = idOf(params);
   if (!id) return Response.json({ error: 'bad client id' }, { status: 400 });
   const body = await request.json().catch(() => ({}));

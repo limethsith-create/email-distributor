@@ -12,6 +12,7 @@ import { markInboxesCancelled } from '@/lib/systems/wrapup';
 import { markPaid } from '@/lib/systems/invoice';
 import { patchTrial, recordLedger } from '@/lib/systems/dshared';
 import { ackAlerts } from '@/lib/notify';
+import { demoRefusal } from '@/lib/systems/demo';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -32,6 +33,8 @@ export async function GET(_req, { params }) {
 }
 
 export async function POST(request, { params }) {
+  const refused = demoRefusal((await params)?.id);
+  if (refused) return refused;
   const id = assertClientId(params.id);
   const client = await getClient(id);
   if (!client) return Response.json({ error: 'not found' }, { status: 404 });

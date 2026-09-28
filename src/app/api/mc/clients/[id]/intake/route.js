@@ -27,6 +27,7 @@ import { approveApplication, declineApplication } from '@/lib/systems/gatekeeper
 import { after } from 'next/server';
 import { rerunResearch, researchToEnd } from '@/lib/systems/research';
 import { checkOnboardCallsQuietly } from '@/lib/systems/onboardcall';
+import { demoRefusal } from '@/lib/systems/demo';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -54,6 +55,8 @@ export async function GET(_req, { params }) {
 }
 
 export async function POST(request, { params }) {
+  const refused = demoRefusal((await params)?.id);
+  if (refused) return refused;
   const id = assertClientId(params.id);
   const client = await getClient(id);
   if (!client) return Response.json({ error: 'not found' }, { status: 404 });
