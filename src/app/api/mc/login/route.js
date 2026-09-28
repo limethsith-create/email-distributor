@@ -59,6 +59,8 @@ export async function POST(request) {
   // Hub single sign-on.
   if (body.hubToken) {
     const v = await verifyHubToken(String(body.hubToken));
+    // Mission Control is the owner's: an employee's (read-only) token never gets the admin cookie.
+    if (v.ok && v.role !== 'admin') { v.ok = false; v.error = 'not an admin'; }
     if (!v.ok) {
       await countFail(request);
       await logEvent(null, 'auth', 'hub_login_failed', { error: v.error });

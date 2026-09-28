@@ -7,7 +7,11 @@
  *     (`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`, cached for an hour), or
  *     HS256 under SUPABASE_JWT_SECRET when a project still uses a shared secret;
  *   - not expired, issued by this project (`iss`), audience `authenticated`;
- *   - the token's email is one of HUB_ADMIN_EMAILS (default the owner).
+ *   - the token's email is one of HUB_ADMIN_EMAILS (default the owner) → role
+ *     `admin`; otherwise the user's own `profiles` row (read through Supabase
+ *     REST with the user's token, so Row Level Security applies) must say
+ *     `approved = true` and `role = 'employee'` → role `employee` (read-only,
+ *     see the middleware). Lookups are cached in memory for about a minute.
  *
  * Web Crypto + fetch only, so it runs in the edge middleware too.
  * Nothing here trusts the token before the signature check.
@@ -15,12 +19,20 @@
 
 const DEFAULT_SUPABASE_URL = 'https://zjbxnkpktbghhudjbxhk.supabase.co';
 const DEFAULT_ADMINS = 'limethsith@gmail.com';
+const DEFAULT_ANON_KEY = 'sb_publishable_WV4FANV2hNsmbzK3DbiLFg_9bjiB8Z1';
 const JWKS_TTL_MS = 60 * 60 * 1000;
+const PROFILE_TTL_MS = 60 * 1000;
+
+const profileCache = new Map(); // sub → { at, profile|null }
 
 let jwksCache = { at: 0, keys: [] };
 
 export function supabaseUrl() {
   return (process.env.SUPABASE_URL || DEFAULT_SUPABASE_URL).replace(/\/+$/, '');
+}
+
+export function supabaseAnonKey() {
+  return process.env.SUPABASE_ANON_KEY || DEFAULT_ANON_KEY;
 }
 
 export function allowedAdmins() {
@@ -73,9 +85,33 @@ async function verifyHs256(signingInput, signature) {
   return crypto.subtle.verify('HMAC', key, signature, new TextEncoder().encode(signingInput));
 }
 
+/** Test hook: forget cached profile lookups. */
+export function __resetProfileCache() {
+  profileCache.clear();
+}
+
+/**
+ * The signed-in user's own `profiles` row, or null (none / not readable).
+ * Answers (found or not) from a 2xx are cached PROFILE_TTL_MS; a network failure is not
+ * cached and throws, so the caller fails closed for this request only.
+ */
+async function lookupProfile(sub, token, now) {
+  const hit = profileCache.get(sub);
+  if (hit && now - hit.at < PROFILE_TTL_MS) return hit.profile;
+  const url = `${supabaseUrl()}/rest/v1/profiles?id=eq.${encodeURIComponent(sub)}&select=id,name,email,role,approved`;
+  const res = await fetch(url, { headers: { apikey: supabaseAnonKey(), Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
+  if (res.status >= 500) throw new Error(`profiles ${res.status}`);
+  if (!res.ok) return null; // 401/403/4xx: not readable with this token — not cached
+  const rows = await res.json().catch(() => []);
+  const profile = (Array.isArray(rows) ? rows.find((r) => r && String(r.id) === String(sub)) : null) || null;
+  if (profileCache.size > 500) profileCache.clear();
+  profileCache.set(sub, { at: now, profile });
+  return profile;
+}
+
 /**
  * Verify a Supabase access token.
- * @returns {Promise<{ok: boolean, email?: string, sub?: string, error?: string}>}
+ * @returns {Promise<{ok: boolean, email?: string, sub?: string, role?: 'admin'|'employee', name?: string, error?: string}>}
  */
 export async function verifyHubToken(token, { now = Date.now() } = {}) {
   try {
@@ -97,8 +133,20 @@ export async function verifyHubToken(token, { now = Date.now() } = {}) {
     const aud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
     if (!aud.includes('authenticated')) return { ok: false, error: 'wrong audience' };
     const email = String(payload.email || '').toLowerCase();
-    if (!email || !allowedAdmins().has(email)) return { ok: false, error: 'not an admin' };
-    return { ok: true, email, sub: payload.sub };
+    if (!email) return { ok: false, error: 'not an admin' };
+    const metaName = String(payload.user_metadata?.name || payload.user_metadata?.full_name || '').slice(0, 80);
+    if (allowedAdmins().has(email)) return { ok: true, email, sub: payload.sub, role: 'admin', name: metaName };
+    // Not an admin: an approved employee may still read.
+    if (!payload.sub) return { ok: false, error: 'not an admin' };
+    let profile;
+    try {
+      profile = await lookupProfile(String(payload.sub), String(token), now);
+    } catch (err) {
+      return { ok: false, error: `profile lookup failed: ${err?.message || err}` };
+    }
+    if (!profile) return { ok: false, error: 'not an admin' };
+    if (profile.approved !== true || profile.role !== 'employee') return { ok: false, error: 'not an approved employee' };
+    return { ok: true, email, sub: payload.sub, role: 'employee', name: String(profile.name || metaName || '').slice(0, 80) };
   } catch (err) {
     return { ok: false, error: `verify failed: ${err?.message || err}` };
   }

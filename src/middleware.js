@@ -11,6 +11,11 @@
  *  - site:    /api/apply and /api/inquiry answer the public website (SITE_ORIGINS) cross-origin.
  *  - hub:     /api/mc/* also accepts `Authorization: Bearer <Supabase access
  *             token>` of an allowed hub admin, with CORS for the hub's origin.
+ *             An approved employee's token (profiles.role = 'employee') is
+ *             read-only: GET/HEAD outside EMPLOYEE_DENY, plus POST
+ *             /api/mc/presence; anything else is 403. The verified email and
+ *             role are passed on as `x-hub-user` / `x-hub-role` request headers
+ *             (any the caller sent are dropped).
  *  - admin:   everything else needs the ADMIN_SECRET session cookie.
  *
  * Missing secrets fail closed.
@@ -31,6 +36,31 @@ const PUBLIC = [
 ];
 const MACHINE = [/^\/api\/cron\//, /^\/api\/admin\/(export|import)$/];
 const HUB_API = /^\/api\/mc\//;
+// Owner-only screens: secrets, credentials, owner settings, test mode, the activity log.
+export const EMPLOYEE_DENY = /^\/api\/mc\/(keys|config|setup|people|google|cheapinboxes|login|logout|test|push|warmup)(\/|$)/;
+const EMPLOYEE_POST = /^\/api\/mc\/presence\/?$/;
+const READ_ONLY = 'Read-only: ask the owner to do this.';
+
+/** Is this request something an employee (read-only hub user) may do? */
+export function employeeMayAccess(method, pathname) {
+  const m = String(method || '').toUpperCase();
+  if (m === 'POST') return EMPLOYEE_POST.test(pathname);
+  if (m !== 'GET' && m !== 'HEAD') return false;
+  return !EMPLOYEE_DENY.test(pathname);
+}
+
+/** Let the request through with the hub identity headers set (never the caller's own). */
+function passOn(request, { user = '', role = '' } = {}) {
+  const headers = new Headers(request.headers);
+  headers.delete('x-hub-user');
+  headers.delete('x-hub-role');
+  if (user) headers.set('x-hub-user', user);
+  if (role) headers.set('x-hub-role', role);
+  const res = NextResponse.next({ request: { headers } });
+  if (user) res.headers.set('x-hub-user', user);
+  if (role) res.headers.set('x-hub-role', role);
+  return res;
+}
 
 function withCors(res, origin) {
   if (origin) for (const [k, v] of Object.entries(corsHeaders(origin))) res.headers.set(k, v);
@@ -56,16 +86,20 @@ export async function middleware(request) {
 
   if (PUBLIC.some((re) => re.test(pathname))) return withCors(NextResponse.next(), hubOrigin);
 
-  if (await verifySession(request.cookies.get(SESSION_COOKIE)?.value)) return withCors(NextResponse.next(), hubOrigin);
+  if (await verifySession(request.cookies.get(SESSION_COOKIE)?.value)) {
+    return withCors(HUB_API.test(pathname) ? passOn(request, { role: 'admin' }) : NextResponse.next(), hubOrigin);
+  }
 
   if (HUB_API.test(pathname)) {
     const token = bearerOf(request);
     if (token) {
       const v = await verifyHubToken(token);
       if (v.ok) {
-        const res = NextResponse.next();
-        res.headers.set('x-hub-user', v.email);
-        return withCors(res, hubOrigin);
+        const role = v.role === 'employee' ? 'employee' : 'admin';
+        if (role === 'employee' && !employeeMayAccess(request.method, pathname)) {
+          return withCors(NextResponse.json({ error: READ_ONLY }, { status: 403 }), hubOrigin);
+        }
+        return withCors(passOn(request, { user: v.email, role }), hubOrigin);
       }
       // The reason stays on the server (it would help an attacker); the hub only needs "sign in again".
       return withCors(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }), hubOrigin);

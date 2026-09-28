@@ -25,8 +25,12 @@ const claims = (over = {}) => ({ iss: `${SUPA}/auth/v1`, aud: 'authenticated', s
 
 test('hub tokens: a valid admin token passes; everything else fails closed', async () => {
   const sign = await makeSigner();
-  assert.deepEqual(await verifyHubToken(await sign(claims())), { ok: true, email: 'limethsith@gmail.com', sub: 'u1' });
-  assert.equal((await verifyHubToken(await sign(claims({ email: 'someone@else.com' })))).error, 'not an admin');
+  assert.deepEqual(await verifyHubToken(await sign(claims())), { ok: true, email: 'limethsith@gmail.com', sub: 'u1', role: 'admin', name: '' });
+  // Not an admin and no approved-employee profile row (Supabase answers no rows).
+  const blocked = globalThis.fetch;
+  globalThis.fetch = async () => Response.json([]);
+  assert.equal((await verifyHubToken(await sign(claims({ email: 'someone@else.com', sub: 'u2' })))).error, 'not an admin');
+  globalThis.fetch = blocked;
   assert.equal((await verifyHubToken(await sign(claims({ exp: Math.floor(Date.now() / 1000) - 5 })))).error, 'token expired');
   assert.equal((await verifyHubToken(await sign(claims({ iss: 'https://evil.example/auth/v1' })))).error, 'wrong issuer');
   assert.equal((await verifyHubToken(await sign(claims({ aud: 'anon' })))).error, 'wrong audience');
