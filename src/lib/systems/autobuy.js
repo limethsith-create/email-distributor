@@ -194,7 +194,7 @@ export async function buildBuy(clientId, client, { key, s, now = io.now(), deadl
   const [profile, shopping] = await Promise.all([getProfile(clientId), kv.hgetall(K.shopping(clientId)).catch(() => ({}))]);
   const tlds = allowedTlds(await cfg(clientId, 'ALLOWED_TLDS'), await cfg(clientId, 'BANNED_TLDS'));
   const D = await cfg(clientId, 'DOMAINS');
-  const ranked = client.mainDomain ? rankCandidates(client.mainDomain, D, tlds) : [];
+  const ranked = client.mainDomain ? rankCandidates(client.mainDomain, D, tlds, client.name) : [];
   const order = candidateOrder(ranked, shopping || {}, tlds, rec?.pinned || null);
   const want = 1 + s.alternatives;
   const avail = {};
@@ -215,7 +215,8 @@ export async function buildBuy(clientId, client, { key, s, now = io.now(), deadl
   const picked = pickDomains(order, avail, want);
   const buy = buyFrom(picked, profile, s, { now, currency: picked[0] ? avail[picked[0].domain]?.currency || 'USD' : 'USD' });
   const shown = [...new Set([...(rec?.shown || []), ...(buy ? [buy.domain, ...buy.alternatives.map((a) => a.domain)] : []), ...[shopping?.chosenDomain, ...arr(shopping?.backups)].map(norm).filter(Boolean)])].slice(-40);
-  const buyProblem = buy ? '' : !order.length ? 'The client has no main domain to build names from — set it on the trial first.'
+  const buyProblem = buy ? '' : !client.mainDomain ? 'The client has no main domain to build names from — set it on the trial first.'
+    : !order.length ? `We could not build a short sending name from ${client.mainDomain} — buy one you like at CheapInboxes, then link it here.`
     : 'None of the names we tried is free at CheapInboxes — buy one you like there, then link it here.';
   await writeRec(clientId, { buy: buy || '', buyAt: iso(now), buyProblem, shown });
   await logEvent(clientId, SYSTEM, 'shopping_list', { domain: buy?.domain || null, alternatives: buy?.alternatives.length || 0, searches });

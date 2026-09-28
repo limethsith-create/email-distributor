@@ -36,8 +36,15 @@ const PUBLIC = [
 ];
 const MACHINE = [/^\/api\/cron\//, /^\/api\/admin\/(export|import)$/];
 const HUB_API = /^\/api\/mc\//;
-// Owner-only screens: secrets, credentials, owner settings, test mode, the activity log, the outreach archive.
-export const EMPLOYEE_DENY = /^\/api\/mc\/(keys|config|setup|people|google|cheapinboxes|login|logout|test|push|warmup|archive)(\/|$)/;
+// Owner-only screens: secrets, credentials, owner settings, test mode, the activity log, the outreach archive, the test run.
+export const EMPLOYEE_DENY = /^\/api\/mc\/(keys|config|setup|people|google|cheapinboxes|login|logout|test|push|warmup|archive|demo)(\/|$)/;
+// The hub's Test run clients (systems/demo.js) are look-only: no button on them may send or change anything.
+const DEMO_CLIENT_WRITE = /^\/api\/mc\/clients\/(demo-harbor-dental|demo-summit-roofing)(\/|$)/;
+export const DEMO_READ_ONLY = 'This is a test-run client: nothing can be sent or changed for it. Remove the test run to clear it.';
+/** A write on a Test run client (anything but GET / HEAD / OPTIONS under /api/mc/clients/{demo id}). */
+export function demoWriteBlocked(method, pathname) {
+  return !['GET', 'HEAD', 'OPTIONS'].includes(String(method || '').toUpperCase()) && DEMO_CLIENT_WRITE.test(pathname);
+}
 const EMPLOYEE_POST = /^\/api\/mc\/(presence|team)\/?$/;   // team: only their own status (the route checks)
 const READ_ONLY = 'Read-only: ask the owner to do this.';
 
@@ -87,6 +94,7 @@ export async function middleware(request) {
   if (PUBLIC.some((re) => re.test(pathname))) return withCors(NextResponse.next(), hubOrigin);
 
   if (await verifySession(request.cookies.get(SESSION_COOKIE)?.value)) {
+    if (demoWriteBlocked(request.method, pathname)) return withCors(NextResponse.json({ error: DEMO_READ_ONLY }, { status: 409 }), hubOrigin);
     return withCors(HUB_API.test(pathname) ? passOn(request, { role: 'admin' }) : NextResponse.next(), hubOrigin);
   }
 
@@ -99,6 +107,7 @@ export async function middleware(request) {
         if (role === 'employee' && !employeeMayAccess(request.method, pathname)) {
           return withCors(NextResponse.json({ error: READ_ONLY }, { status: 403 }), hubOrigin);
         }
+        if (demoWriteBlocked(request.method, pathname)) return withCors(NextResponse.json({ error: DEMO_READ_ONLY }, { status: 409 }), hubOrigin);
         return withCors(passOn(request, { user: v.email, role }), hubOrigin);
       }
       // The reason stays on the server (it would help an attacker); the hub only needs "sign in again".

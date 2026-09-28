@@ -40,7 +40,7 @@ import crypto from 'node:crypto';
 import { kv } from '@vercel/kv';
 import { K, assertClientId } from '@/lib/db/keys';
 import { DEFAULTS, globalOverrides, isUsHoliday } from '@/lib/config';
-import { getClient, getProfile } from '@/lib/db/client';
+import { getClient, getProfile, isDemoId } from '@/lib/db/client';
 import { logEvent } from '@/lib/db/events';
 import { mintToken, pageUrl } from '@/lib/pagetokens';
 import { onboardSender, ackAlerts } from '@/lib/notify';
@@ -886,6 +886,8 @@ async function block(body, s, now) {
  * press again. An onboarding meeting keeps the onboarding call in step.
  */
 export async function calendarAction(body = {}, { now = io.now() } = {}) {
+  // A Test run client's meeting (systems/demo.js) is look-only: no email, no Google event is ever touched for it.
+  if (body.id && isDemoId((await getMeeting(body.id))?.clientId)) throw new CalendarError('This is a test-run meeting: nothing can be changed for it.', 409);
   const s = await calendarSettings();
   const meeting = await withLock(async () => {
     let m;
@@ -977,6 +979,8 @@ export function hubMeeting(m, s = normaliseCalendar()) {
   const tz = m.theirZone || null;
   return {
     ...m,
+    // A Test run client's meeting (systems/demo.js): shown, never acted on.
+    ...(isDemoId(m.clientId) ? { demo: true } : {}),
     // Google Meet: the link to join, its event on his Google Calendar, and why there is no link (plain words) — null when none.
     meetLink: m.meetLink || null, googleEventId: m.googleEventId || null, meetError: m.meetError || null,
     end: t == null ? null : iso(t + (Number(m.minutes) || 30) * 60e3),

@@ -90,7 +90,9 @@ export async function clientButtonLinks(clientId) {
 /** The three client buttons as a short block for the Day 1 notice and the Friday update. */
 export async function clientButtonsText(clientId) {
   const l = await clientButtonLinks(clientId);
-  return `If you ever need them:\n• We emailed one of your customers: ${l.customerUrl}\n• You're away (we halve the volume those days): ${l.awayUrl}\n• Stop the trial: ${l.stopUrl}`;
+  // "Stop the trial" is a trial's button; a paying client stops by writing to the owner (the plan's notice period).
+  const paid = ['starter', 'growth', 'scale'].includes(String((await getClient(clientId))?.plan || '').toLowerCase());
+  return `If you ever need them:\n• We emailed one of your customers: ${l.customerUrl}\n• You're away (we halve the volume those days): ${l.awayUrl}${paid ? '' : `\n• Stop the trial: ${l.stopUrl}`}`;
 }
 
 /** "You emailed my customer": apology, blocklist, alert with how it slipped. */

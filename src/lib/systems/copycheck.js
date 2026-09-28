@@ -226,6 +226,12 @@ export function capsWords(text) {
     .filter((w) => w.replace(/[^A-Z]/g, '').length > 2 && !CAPS_OK.has(w.replace(/[’']S$/, '')));
 }
 
+/** Short all-caps words (2–5 letters) in the client's own onboarding answers: their acronyms, not shouting. */
+export function clientAcronyms(profile = {}) {
+  const text = ['sellsTo', 'proofLine', 'defaultIcp', 'defaultNiche', 'industry', 'companyName', 'offer'].map((k) => String(profile?.[k] || '')).join(' ');
+  return (text.match(/\b[A-Z][A-Z0-9]{1,4}\b/g) || []).filter((w) => /[A-Z].*[A-Z]/.test(w));
+}
+
 let fileWords = null;
 function spamList() {
   if (!fileWords) { try { fileWords = spamWords(); } catch { fileWords = []; } }
@@ -264,8 +270,9 @@ export function checkEmail(rendered = {}, profile = {}, opts = {}) {
   const stale = STALE_PHRASES.filter((p) => lower.replace(/[’]/g, "'").includes(p));
   if (stale.length) fail('stale_phrase', stale.slice(0, 3).join(', '));
 
-  // The prospect's own name, company and city may be written in capitals ("ABC Plumbing"): not shouting.
-  const exempt = new Set((rendered.exemptWords || []).flatMap((w) => String(w || '').split(/\s+/)).filter(Boolean));
+  // The prospect's own name, company and city may be written in capitals ("ABC Plumbing"): not shouting. Nor is a
+  // short acronym the client wrote themselves on the onboarding page ("HOA boards", "ADU builds").
+  const exempt = new Set([...(rendered.exemptWords || []).flatMap((w) => String(w || '').split(/\s+/)).filter(Boolean), ...clientAcronyms(profile)]);
   const caps = capsWords(`${subject}\n${body}`).filter((w) => !exempt.has(w));
   if (caps.length) fail('all_caps', caps.slice(0, 5).join(', '));
   if (/!/.test(`${subject}\n${body}`)) fail('no_exclamation', 'contains "!"');
@@ -278,7 +285,11 @@ export function checkEmail(rendered = {}, profile = {}, opts = {}) {
     const avg = lens.length ? lens.reduce((a, b) => a + b, 0) / lens.length : 0;
     const longest = lens.length ? Math.max(...lens) : 0;
     if (avg > L.maxAvgSentenceWords || longest > L.maxSentenceWords) fail('readability', `average ${avg.toFixed(1)} words per sentence (limit ${L.maxAvgSentenceWords}), longest ${longest} (limit ${L.maxSentenceWords})`);
-    const grade = readingGrade(plain);
+    // Their one sentence ("what you sell and to whom, in your words") goes into the emails as written, so it is not
+    // graded: an email is not failed for the client's own words. The rest of the body still has to read at grade 8.
+    let graded = plain;
+    for (const own of [profile.sellsTo, profile.proofLine].map((x) => String(x || '').trim()).filter((x) => x.length >= 20)) graded = graded.split(own).join('');
+    const grade = readingGrade(graded);
     if (grade > L.maxGrade) fail('reading_grade', `reads at grade ${grade} (limit ${L.maxGrade}) — shorter words and sentences`);
   }
   const sy = selfYouCounts(body);

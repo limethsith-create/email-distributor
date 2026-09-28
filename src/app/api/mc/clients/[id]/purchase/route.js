@@ -13,6 +13,7 @@ import { hasEncKey } from '@/lib/crypto';
 import { getShopping } from '@/lib/systems/pricescout';
 import { setupSummary } from '@/lib/systems/setupcheck';
 import { submitPurchase } from '@/lib/systems/purchase';
+import { demoRefusal } from '@/lib/systems/demo';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -32,6 +33,8 @@ export async function GET(_req, { params }) {
 }
 
 export async function POST(request, { params }) {
+  const refused = demoRefusal((await params)?.id);
+  if (refused) return refused;
   const id = assertClientId(params.id);
   const body = await request.json().catch(() => ({}));
   const r = await submitPurchase(id, body, { deadline: Date.now() + 20000 });

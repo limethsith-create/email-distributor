@@ -14,6 +14,7 @@
 import { assertClientId } from '@/lib/db/keys';
 import { logEvent } from '@/lib/db/events';
 import { autobuyAction, autobuyFor, AutobuyError } from '@/lib/systems/autobuy';
+import { demoRefusal } from '@/lib/systems/demo';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -28,6 +29,8 @@ export async function GET(_req, { params }) {
 }
 
 export async function POST(request, { params }) {
+  const refused = demoRefusal((await params)?.id);
+  if (refused) return refused;
   let id;
   try { id = assertClientId(params.id); } catch { return Response.json({ ok: false, error: 'bad client id', autobuy: null }, { status: 400 }); }
   const body = await request.json().catch(() => ({}));

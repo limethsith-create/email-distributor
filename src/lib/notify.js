@@ -11,6 +11,7 @@
  * Control views still show it.
  */
 
+import { isDemoId } from '@/lib/db/client';
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { logEvent } from '@/lib/db/events';
@@ -101,6 +102,8 @@ function esc(s) {
 export async function alertOwner(key, { clientId = null, vars = {}, body = '', did = '', scope = null, force = false, url = null } = {}) {
   const spec = ALERTS[key];
   if (!spec) throw new Error(`unknown alert ${key}`);
+  // A Test run client (systems/demo.js) never raises an alert: no email, no phone push, no log entry.
+  if (clientId && isDemoId(clientId)) return { sent: false, skipped: 'demo' };
   const now = new Date();
   const day = dayKeyIn(OWNER_TZ, now);
   const dedupeScope = scope || clientId || 'global';
@@ -236,8 +239,10 @@ export async function ackAlerts(clientId, keys, { reason = 'handled', now = new 
 export async function notifyClient(clientId, key, vars = {}, opts = {}) {
   const { to = null, from = null, dedupe = key, attachments = null, pixelUrl = null, pixel = 'mail', linkify = false, inReplyTo = null, references = null, icalEvent = null, thread = true, now = null } = opts || {};
   const { renderTemplate, TEMPLATES } = await import('@/lib/templates/client');
-  const { getClient } = await import('@/lib/db/client');
+  const { getClient, isDemo } = await import('@/lib/db/client');
   const client = await getClient(clientId);
+  // A Test run client (systems/demo.js) is never emailed.
+  if (isDemo(client) || isDemoId(clientId)) return { sent: false, skipped: 'demo' };
   // A paying client (Starter / Growth / Scale) gets the `<key>_paid` version of an email when there is one: the same
   // email without the trial wording. {planName} is there for it ("the Growth plan").
   const plan = String(client?.plan || '').toLowerCase();

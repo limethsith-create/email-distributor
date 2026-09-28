@@ -15,6 +15,7 @@ import { getState as lfState, listReady, dispatchLeadFinder } from '@/lib/system
 import { addBlocklistInput } from '@/lib/systems/blocklist';
 import { readinessGate } from '@/lib/systems/readiness';
 import { getSanityRows } from '@/lib/systems/sanity';
+import { demoRefusal } from '@/lib/systems/demo';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -35,6 +36,8 @@ export async function GET(_req, { params }) {
 }
 
 export async function POST(request, { params }) {
+  const refused = demoRefusal((await params)?.id);
+  if (refused) return refused;
   const id = assertClientId(params.id);
   if (!(await getClient(id))) return Response.json({ error: 'not found' }, { status: 404 });
   const body = await request.json().catch(() => ({}));

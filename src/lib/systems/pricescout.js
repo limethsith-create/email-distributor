@@ -264,7 +264,7 @@ export async function computeShoppingList(clientId, client, { deadline = Date.no
   const price = await cfg(clientId, 'PRICE');
   const D = await cfg(clientId, 'DOMAINS');
   const P = await cfg(clientId, 'INBOX_PROVIDER');
-  const ranked = rankCandidates(client.mainDomain, D, tlds).filter((c) => !exclude.includes(c.domain));
+  const ranked = rankCandidates(client.mainDomain, D, tlds, client.name).filter((c) => !exclude.includes(c.domain));
 
   let live = await livePrices();
   try { live = { ...live, porkbun: await refreshLivePrices({ now }) }; } catch (err) { await logEvent(clientId, SYSTEM, 'porkbun_pricing_failed', { error: String(err.message).slice(0, 200) }); }

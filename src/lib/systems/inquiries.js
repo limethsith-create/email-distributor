@@ -181,3 +181,17 @@ export async function inquirySummary() {
   const open = inquiries.filter((q) => q.status === 'new' || q.status === 'contacted');
   return { counts, open: open.length, latest: open.slice(0, 5).map((q) => ({ id: q.id, at: q.at, name: q.name, company: q.company, plan: q.plan, status: q.status, slotStart: q.slotStart, whenHost: q.whenHost, clientId: q.clientId || null })) };
 }
+
+/**
+ * The website request behind a paid application moves with it, so the Inquiries list never shows it as
+ * "new" after the owner answered it: Say yes → contacted, the plan agreement signed → won, Say no → lost.
+ * Only forward (a won or lost request stays as it is). Never throws.
+ */
+export async function settleInquiryFor(clientId, status, note = '', { now = new Date() } = {}) {
+  try {
+    const { inquiries } = await listInquiries({ limit: 500 });
+    const q = inquiries.find((x) => x.clientId === clientId);
+    if (!q || q.status === status || ['won', 'lost'].includes(q.status)) return null;
+    return await setInquiryStatus(q.id, status, note, { now });
+  } catch { return null; }
+}

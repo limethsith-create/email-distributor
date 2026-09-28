@@ -52,6 +52,11 @@ export const TEMPLATES = {
     subject: 'Your first call — {Company}',
     body: 'Your first call from the trial was held: {Name} at {Company}. What was the meeting like? One or two sentences is plenty. Reply to this email.\n\nIf it’s all right with you, I’d like to write that down and use it, with your name and company. I’ll send it to you first, so you can change it or kill it.',
   },
+  quote_request_paid: {
+    from: 'trial',
+    subject: 'Your first call — {Company}',
+    body: 'Your first booked call was held: {Name} at {Company}. What was the meeting like? One or two sentences is plenty. Reply to this email.\n\nIf it’s all right with you, I’d like to write that down and use it, with your name and company. I’ll send it to you first, so you can change it or kill it.',
+  },
   // Off-pace call script (The 30-Day Trial §7), sent as an email. {ownerName} signs it
   // (new in the voice pass — systems/pace.js passes it).
   offpace_day15: {

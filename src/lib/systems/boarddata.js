@@ -6,7 +6,7 @@
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { cfg } from '@/lib/config';
-import { getAllClients, getTrial, ACTIVE_TRIAL_STATES } from '@/lib/db/client';
+import { getAllClients, getTrial, ACTIVE_TRIAL_STATES, isDemo } from '@/lib/db/client';
 import { getTotals } from '@/lib/db/counters';
 import { getInboxRecords } from '@/lib/db/inboxes';
 import { getPromises } from '@/lib/db/promises';
@@ -43,6 +43,8 @@ export async function clientRow(c, { alerts = [], now = new Date() } = {}) {
     lastJobAt,
     openAlerts: open.length, urgentAlerts: open.filter((a) => a.urgent).length,
     extension: c.state === 'extension',
+    // A Test run client (systems/demo.js): shown in the hub, flagged, never acted on.
+    demo: isDemo(c),
   };
 }
 
@@ -55,14 +57,16 @@ async function usagePct(service, field, limit, month) {
   } catch { return { used: null, limit, pct: null }; }
 }
 
-export async function boardData(now = new Date()) {
-  const [hb, clients, alerts] = await Promise.all([kv.hgetall(K.heartbeat()).catch(() => ({})), getAllClients(), getAlertLog(500)]);
+/** `includeDemo`: the hub's board shows the Test run clients; the owner digests and Mission Control never do. */
+export async function boardData(now = new Date(), { includeDemo = false } = {}) {
+  const [hb, clients, alerts] = await Promise.all([kv.hgetall(K.heartbeat()).catch(() => ({})), getAllClients(null, { includeDemo }), getAlertLog(500)]);
   const rows = await Promise.all(clients.map((c) => clientRow(c, { alerts, now })));
   rows.sort((a, b) => COLOUR_RANK[a.health] - COLOUR_RANK[b.health] || b.urgentAlerts - a.urgentAlerts || b.openAlerts - a.openAlerts || a.id.localeCompare(b.id));
   const month = partsIn('UTC', now).monthKey;
   const reoonLimit = LIMITS.reoon.monthly;
   const reoon = await usagePct('reoon', LIMITS.reoon.field, reoonLimit, month);
-  const trialRows = rows.filter((r) => r.id !== 'aviance' && r.id !== '_test');
+  // Only trials count toward the trial cap (a paying client is not a trial — gatekeeper.capacity agrees).
+  const trialRows = rows.filter((r) => r.id !== 'aviance' && r.id !== '_test' && r.plan === 'trial' && !r.demo);
   return {
     heartbeat: { lastTickAt: hb?.lastTickAt || null, ageSec: hb?.lastTickAt ? Math.round((now.getTime() - Date.parse(hb.lastTickAt)) / 1000) : null, source: hb?.lastTickSource || null, lastSendAt: hb?.lastSendAt || null },
     usage: {

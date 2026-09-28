@@ -187,6 +187,12 @@ export const TEMPLATES = {
     subject: 'Invoice {invoiceNo} — {planName}, month one',
     body: 'Hi {firstName},\n\nWelcome to {planName}.\n\nInvoice {invoiceNo} · issued {issuedDate} · due today\n{planName}: {priceText} a month for {calls} guaranteed booked calls\n{bonusLine}\nTotal due: {priceText}\n\nPay by:\n{paymentLines}\n\nThe trial domain and inboxes stay live, so you’re at full volume inside two weeks. Month to month, 14 days’ notice, no setup fee.\n\n{ownerName}',
   },
+  // A client who came straight to a plan (Starter / Growth / Scale, no trial) is invoiced for month one when they
+  // sign the plan agreement (systems/onboarding.js). A converted trial gets invoice_month1 with its bonus line.
+  invoice_plan_start: {
+    subject: 'Invoice {invoiceNo} — {planName}, month one',
+    body: 'Hi {firstName},\n\nWelcome to {planName}.\n\nInvoice {invoiceNo} · issued {issuedDate} · due today\n{planName}: {priceText} a month for {calls} guaranteed booked calls\nTotal due: {priceText}\n\nPay by:\n{paymentLines}\n\nWe’re setting up your sending address and inboxes now; after about two weeks of warm-up the first emails go out. Month to month, 14 days’ notice, no setup fee.\n\n{ownerName}',
+  },
   invoice_reminder: {
     subject: 'Reminder: invoice {invoiceNo}',
     body: 'Hi {firstName},\n\nA reminder that invoice {invoiceNo} ({priceText}, {planName}) is still open.\n\nPay by:\n{paymentLines}\n\nIf it’s already on its way, ignore this, and thank you.\n\n{ownerName}',

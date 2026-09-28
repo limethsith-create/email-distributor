@@ -1740,3 +1740,120 @@ Not recorded. Trial and paying clients' prospect emails carry no open pixel
 there is no per-day opens counter and growth's `email` series has no `opened`.
 Only the owner's own legacy outreach tracks opens (`email_opens`, in
 `GET /api/mc/outreach` and the archive).
+
+---
+
+# Two clients end to end + the Test run (2026-09-28)
+
+`tests/two-clients.test.mjs` runs a trial client (Harbor Dental Group, the
+website trial form) and a paying client (Summit Roofing Co, the website's
+Growth request) side by side through the real routes — apply, say yes,
+onboarding calls, agreements, CheapInboxes, warm-up, launch calls, a month of
+sending, replies and the reply bot, the client ↔ owner messages, invoices —
+and checks the hub, the growth tab and the client dashboards agree. What it
+changed for the hub is below; the rest is in "Test run (demo clients)".
+
+## Money — where "money received" lives
+
+The month-one invoice, on the board row and in the trial:
+
+```jsonc
+// GET /api/mc/hub → every row (stages[].clients[] and machine.others[])
+"invoice": { "number": "AV-202611-acme", "amount": 3997, "issuedAt": "ISO", "paidAt": "ISO|null",
+             "status": "sent|paid|blocked", "plan": "starter|growth|scale" } | null     // null = no invoice yet
+
+// GET /api/mc/hub/{id} → `invoice` (unchanged, the full shape) — row.invoice above is the same values
+"invoice": { "number", "amount", "issuedAt", "paidAt", "dueDate", "remindersSent", "plan", "calls", "bonus", "status", "sentAt", "blockedReason" } | null
+```
+
+- **Money received** = `row.invoice.amount` where `row.invoice.paidAt` is set
+  (`status: 'paid'`). Unpaid = `issuedAt` set, `paidAt` null (the to-do
+  `invoice:{id}` "Mark the month-one invoice paid…" is there too; its button is
+  `POST /api/mc/clients/{id} {action:'markPaid'}`).
+- **Amounts** are the plan prices (config `PLANS`): Starter 2 497, Growth
+  3 997, Scale 8 497 (USD).
+- **When an invoice is issued:** a trial on Start (the decision page) as
+  before; a client who came **straight to a plan** (a paid request the owner
+  said yes to) when they **sign the plan agreement** on the onboarding page —
+  the email `invoice_plan_start` ("Welcome to Growth … Total due …", no trial
+  or bonus words). Before this change a paying client was never invoiced.
+- Only the month-one invoice exists in the machine (one per client,
+  `client:{id}:invoice`); there are no month-2+ invoices and no `invoices`
+  list.
+
+## Other changes the hub sees
+
+- `machine.activeTrials` counts only `plan: 'trial'` rows (a paying client
+  in onboarding no longer counted as a trial) and never a demo client.
+- A paid application's website request (`inquiries`) moves on with it:
+  "Say yes" → `contacted`, the plan agreement signed → `won`, "Say no" →
+  `lost` (with a note) — it no longer stays `new` in the Inquiries list.
+- A paying client's emails carry no trial words: `welcome_two_dates_paid`
+  (no "Day 1 of your 30 / Day 30"), `quote_request_paid` ("Your first booked
+  call was held"), and the client buttons under the Day 1 notice and the
+  Friday update leave out "Stop the trial" for them.
+- The CheapInboxes shopping list works for a long one-word domain
+  (`harbordentalgroup.com` → `harborhq.com`, from the company name's leading
+  words). Before, such a client got no list and the hub said "The client has
+  no main domain…".
+- Copy Checker: a short acronym the client wrote on the onboarding page
+  ("HOA boards") is not "shouting", and their own "what you sell" sentence is
+  not reading-graded (it goes in as written). Before, such a client's launch
+  call was skipped and every email was blocked.
+- A plain thank-you from a client after onboarding ("Perfect — thanks!") is
+  `rule: 'thanks'` in the conversation: no `onboard_reply` alert, no
+  `needsReply`, no red dot.
+
+## Test run (demo clients) — `/api/mc/demo` (owner only)
+
+Two finished example clients the owner can click through in the real hub:
+
+| id | what it is | at the end |
+| --- | --- | --- |
+| `demo-harbor-dental` | Harbor Dental Group — a 30-day trial that pressed Start | `state: 'converted'`, `plan: 'starter'`, invoice 2 497 paid |
+| `demo-summit-roofing` | Summit Roofing Co — a paying client on Growth | `state: 'sending'`, `plan: 'growth'`, invoice 3 997 paid |
+
+Their data is the final state of the two clients in the simulation
+(`tests/fixtures/demo-state.json`; regenerate with
+`DEMO_STATE=1 node --import ./tests/register.mjs --test tests/two-clients.test.mjs`),
+every date moved so the simulation's last day is **today** (ET): about seven weeks of
+daily counters, the replies, the booked and held prospect call, the
+conversation (the reply bot's answers and the client ↔ owner messages), the
+timeline, both calls, the inboxes (fake logins), warm-up done, the invoice
+paid. Every domain in it is a reserved `.example` one.
+
+```jsonc
+// GET /api/mc/demo
+{ "loaded": true, "ids": ["demo-harbor-dental", "demo-summit-roofing"], "at": "ISO|null" }   // at = when it was loaded
+// → loaded false: { "loaded": false, "ids": [], "at": null }
+
+// POST /api/mc/demo { "action": "load" }     (a second load replaces the first)
+{ "ok": true, "ids": ["demo-harbor-dental", "demo-summit-roofing"] }
+
+// POST /api/mc/demo { "action": "remove" }   (every key it wrote, and anything written under the two ids since)
+{ "ok": true, "removed": 512 }
+
+// → 400 { error } unknown action · 403 { error: 'Read-only: ask the owner to do this.' } for an employee · 500 { error }
+```
+
+**The flag:** `demo: true` on the board row (`GET /api/mc/hub` →
+`stages[].clients[].demo`), on `GET /api/mc/hub/{id}` → `row.demo`, and on their
+Calendar meetings (`GET /api/mc/calendar` → `meetings[].demo`). Every real row
+has `demo: false`. The client hash carries `demo: '1'`. Suggested: a "Test run"
+badge on the card and a "Load test run" / "Remove test run" pair in Settings.
+
+**Safety — a demo client is never acted on:**
+- no job runs for them (the heartbeat, the hub's check and every scan skip
+  them: `getAllClients` leaves them out unless a hub view asks);
+- no email (notify and the reply bot skip them; the mailer never sends to or
+  from a `.example` address), no owner alert or phone push, no Google /
+  CheapInboxes / Stripe call;
+- they never count against the 3-trial cap or the queue, and are not in the
+  owner's own outreach numbers or archives;
+- every `POST` under `/api/mc/clients/{demo id}/…` answers
+  `409 { error: 'This is a test-run client: nothing can be sent or changed for it. Remove the test run to clear it.' }`
+  (middleware and the routes), and so does a Calendar action on one of their
+  meetings — hide those buttons on a demo card;
+- reading them costs the Redis budget only when the hub opens them (a tick
+  reads nothing of theirs).
+- Their dashboard link (`links.dashboard`) works: a read-only page.

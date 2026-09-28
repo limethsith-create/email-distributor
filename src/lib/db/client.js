@@ -63,6 +63,15 @@ export const LIVE_STATES = new Set([
 /** Terminal states no job ever acts on; the tick does not load these clients. */
 export const REST_STATES = new Set(['declined', 'closed_silent']);
 
+/**
+ * The hub's "Test run" clients (systems/demo.js): two finished example clients the owner can click through.
+ * They live in Redis like real clients, but nothing may ever act for them — no job, no email, no alert, no
+ * outside call. Their ids are fixed, so the check needs no Redis read; the client hash also carries demo '1'.
+ */
+export const DEMO_IDS = new Set(['demo-harbor-dental', 'demo-summit-roofing']);
+export const isDemoId = (id) => DEMO_IDS.has(String(id || ''));
+export const isDemo = (client) => Boolean(client) && (isDemoId(client.id) || client.demo === '1' || client.demo === 1 || client.demo === true);
+
 const parseList = (v) => { if (Array.isArray(v)) return v; try { const j = JSON.parse(v || '[]'); return Array.isArray(j) ? j : []; } catch { return []; } };
 
 /**
@@ -102,14 +111,19 @@ export async function getClient(id) {
   return rec && Object.keys(rec).length ? { id, ...rec } : null;
 }
 
-/** Every client hash in one pipeline (tick step 2). `ids` skips the SMEMBERS. */
-export async function getAllClients(ids = null) {
+/**
+ * Every client hash in one pipeline (tick step 2). `ids` skips the SMEMBERS. The Test run clients (isDemo)
+ * are left out unless `includeDemo` — only the hub's views ask for them; every job, count and email path
+ * never sees them.
+ */
+export async function getAllClients(ids = null, { includeDemo = false } = {}) {
   if (!ids) ids = await listClientIds();
+  if (!includeDemo) ids = ids.filter((id) => !isDemoId(id));
   if (!ids.length) return [];
   const p = kv.pipeline();
   for (const id of ids) p.hgetall(K.client(id));
   const rows = await p.exec();
-  return ids.map((id, i) => (rows[i] && Object.keys(rows[i]).length ? { id, ...rows[i] } : null)).filter(Boolean);
+  return ids.map((id, i) => (rows[i] && Object.keys(rows[i]).length ? { id, ...rows[i] } : null)).filter((c) => c && (includeDemo || !isDemo(c)));
 }
 
 /**
@@ -118,6 +132,7 @@ export async function getAllClients(ids = null) {
  */
 export async function createClient(id, fields = {}) {
   assertClientId(id);
+  if (isDemoId(id)) throw new Error(`client ${id} already exists`); // the Test run's ids are never a real client's
   const now = new Date().toISOString();
   const rec = { plan: 'trial', state: 'applied', createdAt: now, ...fields };
   const created = await kv.hsetnx(K.client(id), 'createdAt', now);
