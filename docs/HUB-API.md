@@ -12,14 +12,15 @@ Every `/api/mc/*` request from the hub carries the hub user's Supabase access
 token: `Authorization: Bearer <supabase access_token>`. The machine verifies
 it against the Supabase project's public signing keys (JWKS, ES256), checks it
 has not expired, and checks the token's `email` is an allowed admin
-(`HUB_ADMIN_EMAILS`, default `limethsith@gmail.com`). Nothing else is needed
+(`HUB_ADMIN_EMAILS`, default `limethsith@gmail.com`) — or an approved
+employee, who is read-only (see "Employees" below). Nothing else is needed
 — no ADMIN_SECRET in the hub.
 
 CORS: the machine answers `/api/mc/*` for the origins in `HUB_ORIGINS`
 (default `https://aviance.store,https://aviance-hub.vercel.app`) and handles
 `OPTIONS` preflights. Cookies are not used cross-site.
 
-Errors: `401 {error:'Unauthorized'}` (bad/expired token, not an admin),
+Errors: `401 {error:'Unauthorized'}` (bad/expired token, not an admin or approved employee),
 `403 {error:'...'}`, `503 {error:'...'}` when the machine is not configured
 yet (e.g. ENC_KEY missing). The hub shows the `error` text as-is.
 
@@ -32,6 +33,91 @@ form (target `_blank`) to `POST /api/mc/login` with fields
 the token the same way, sets its own admin session cookie and redirects
 (303) to `next`. This needs `ADMIN_SECRET` set on the machine (the cookie is
 signed with it); otherwise it answers 503 with a plain-text explanation.
+
+## Employees (read-only hub users) and the activity log
+
+**Who gets in.** A valid Supabase token (same signature / issuer / audience /
+expiry checks) is:
+
+- **admin** when its `email` is in `HUB_ADMIN_EMAILS` — everything, as before;
+- **employee** otherwise, when the user's own `profiles` row says
+  `approved = true` and `role = 'employee'`. The machine reads it with the
+  user's token (so Row Level Security applies):
+  `GET {SUPABASE_URL}/rest/v1/profiles?id=eq.{sub}&select=id,name,email,role,approved`,
+  headers `apikey: SUPABASE_ANON_KEY` (default the project's publishable key)
+  and `Authorization: Bearer <user token>`. Answers are cached in memory for
+  about 60 s; a Supabase outage fails closed (401) and is not cached.
+- anyone else (no row, not approved, any other role) → `401 {error:'Unauthorized'}`.
+
+**What an employee may do on `/api/mc/*`:**
+
+- `GET` / `HEAD` on anything **except** the owner-only paths (and everything
+  under them): `/api/mc/keys`, `/api/mc/config`, `/api/mc/setup`,
+  `/api/mc/people`, `/api/mc/google`, `/api/mc/cheapinboxes`,
+  `/api/mc/login`, `/api/mc/logout`, `/api/mc/test`, `/api/mc/push`,
+  `/api/mc/warmup` (service keys, Google / CheapInboxes / helper-inbox
+  credentials and status, machine settings, Test Mode, push devices, the
+  activity log);
+- `POST /api/mc/presence` — the only write.
+- Anything else → `403 {error:'Read-only: ask the owner to do this.'}` (with
+  the usual CORS headers, so the hub can show the text). Hide the buttons for
+  employees; the machine refuses them anyway.
+- Single sign-on to Mission Control (`POST /api/mc/login` with `hubToken`)
+  stays admin-only: an employee token gets 401 and no cookie.
+
+The middleware passes the verified identity on to the route as request
+headers `x-hub-user` (email) and `x-hub-role` (`admin` | `employee`); any
+the caller sent are dropped. (Also echoed as response headers.)
+
+### `POST /api/mc/presence` — sign-ins, heartbeats and screens
+
+Any hub user (admin or employee). Identity (`uid` = token `sub`, email, role,
+name from the profile row) always comes from the verified token; the body is
+never trusted for it.
+
+```jsonc
+// request
+{ "event": "signin|signout|active|view", "view": "trials|paying|trial:acme|…", "name": "optional display name" }
+// → 200
+{ "ok": true }
+// → 400 { "error": "event must be one of signin, signout, active, view" } · 401 { "error": "Unauthorized" }
+```
+
+- `signin` once after sign-in (counts a session), `signout` before signing out,
+  `view` when a screen opens (`view` ≤ 60 characters), `active` about every
+  60 s while the page is visible (may carry the current `view`).
+- `active` is never written to the log (it only updates `lastSeen` /
+  `lastView`); a `view` identical to the user's previous logged event within
+  10 minutes is not logged again. The log keeps the newest 5 000 entries.
+- Active time: an `active` or `view` within 3 minutes of the previous sign of
+  life adds that gap to the person's total and to today's (day in `HUB_TZ`,
+  default `Asia/Colombo`).
+- More than 120 posts per user in 10 minutes are dropped silently (still 200).
+- `name` is only used when the token/profile gives none.
+
+### `GET /api/mc/people` — who uses the hub (owner only)
+
+Admins only (employees get 403). The owner appears too.
+
+```jsonc
+{
+  "people": [                     // online first, then most recently seen
+    {
+      "uid": "9b1c…", "email": "nimal@aviance.store", "name": "Nimal Perera",
+      "role": "employee",          // admin | employee
+      "online": true,              // lastSeen within 2 minutes and not signed out since
+      "firstSeen": "ISO", "lastSignIn": "ISO|null", "lastSignOut": "ISO|null",
+      "lastSeen": "ISO", "lastView": "trial:acme|null",
+      "sessions": 12,              // sign-ins
+      "activeSecondsToday": 1860, "activeSecondsTotal": 50400
+    }
+  ],
+  "events": [                     // newest 300
+    { "at": "ISO", "uid": "9b1c…", "email": "nimal@aviance.store", "name": "Nimal Perera",
+      "role": "employee", "event": "signin|signout|view", "view": "trials|null" }
+  ]
+}
+```
 
 ## `GET /api/mc/hub` — everything the Trials board needs (one call)
 

@@ -30,6 +30,13 @@ export function slugify(input) {
     .replace(/-+$/, '');
 }
 
+/** A Supabase user id (a UUID) made safe for a key. */
+function hubUid(uid) {
+  const u = String(uid || '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 64);
+  if (!u) throw new Error('invalid hub user id');
+  return u;
+}
+
 const e = (email) => String(email || '').trim().toLowerCase();
 const c = (id) => `client:${assertClientId(id)}`;
 
@@ -298,6 +305,19 @@ export const K = {
    */
   secrets: () => 'secrets',
   // ── end keys store ──
+
+  // ── Hub people & activity (docs/HUB-API.md "Employees") ──
+  /** Sign-in / view log for every hub user (list, newest first, capped 5 000): {at, uid, email, name, role, event, view}. */
+  hubActivity: () => 'hub:activity',
+  /** Every hub user ever seen (set of Supabase user ids). */
+  hubPeople: () => 'hub:people',
+  /** One hub user (hash): uid, email, name, role, firstSeen, lastSignIn, lastSignOut, lastSeen, lastView, sessions, activeSeconds, lastLogged*. */
+  hubPerson: (uid) => `hub:person:${hubUid(uid)}`,
+  /** Active seconds per day for one hub user (hash): YYYY-MM-DD → seconds. */
+  hubPersonDays: (uid) => `hub:person:${hubUid(uid)}:days`,
+  /** Presence posts by one user in one 10-minute bucket (counter, expires). */
+  hubPresenceRate: (uid, bucket) => `hub:presence:rate:${hubUid(uid)}:${bucket}`,
+  // ── end hub people ──
 };
 
 /**
