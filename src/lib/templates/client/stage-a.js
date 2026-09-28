@@ -199,6 +199,21 @@ There's also one page with your details and the agreement. Fill it in before we 
 {ownerName}`,
   },
 
+  // The same email for a paying client (a paid-plan request the owner said yes to).
+  accepted_call_paid: {
+    from: 'onboard',
+    subject: "Let's book your onboarding call",
+    body: `Hi {firstName},
+
+Good news: we'd love to work with {companyName} on the {planName} plan.
+
+First, a {callMinutes}-minute onboarding call, so I can hear how you sell and who you'd like to reach. {bookingLine}
+
+There's also one page with your details and the agreement. Fill it in before we talk if you like, or we'll do it together on the call: {onboardingLink}
+
+{ownerName}`,
+  },
+
   accepted_call_reminder: {
     from: 'onboard',
     subject: 'Re: {threadSubject}',

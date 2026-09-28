@@ -7,10 +7,12 @@
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { sha256 } from '@/lib/crypto';
+import { after } from 'next/server';
 import { saveInquiry } from '@/lib/systems/inquiries';
+import { researchToEnd } from '@/lib/systems/research';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+export const maxDuration = 60;
 const PER_HOUR = 10;
 
 export async function POST(request) {
@@ -25,5 +27,7 @@ export async function POST(request) {
   } catch {}
   const r = await saveInquiry(body, { source: 'website' });
   if (!r.ok) return Response.json({ ok: false, errors: r.errors }, { status: 400 });
+  // A paid application: finish its research (and fit score) after the answer, like /api/apply.
+  if (r.clientId) { try { after(() => researchToEnd(r.clientId, 52_000)); } catch { /* not inside a request (tests): the research job finishes it */ } }
   return Response.json({ ok: true, id: r.id || null });
 }

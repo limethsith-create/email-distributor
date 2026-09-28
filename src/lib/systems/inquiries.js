@@ -7,6 +7,10 @@
  *
  * Storage: `inquiries` hash (id → record) + `inquiries:order` list (newest
  * first, capped). Nothing here emails the enquirer.
+ *
+ * A request with a website also becomes a paid application (inquiryToApplication): a client on
+ * the plan they picked, researched and scored like a trial application, answered in the hub's
+ * Paying clients tab. "Say yes" there is what emails them.
  */
 
 import { kv } from '@vercel/kv';
@@ -66,6 +70,12 @@ export async function saveInquiry(raw, { source = 'website', now = new Date() } 
   await p.exec();
   await logEvent(null, 'inquiries', 'received', { id, company: inq.company, plan: inq.plan, slotStart: inq.slotStart });
 
+  // With a website, the request becomes a paid application the owner answers in the hub's Paying
+  // clients tab: the same research and fit score as a trial application, held until "Say yes"
+  // (which emails them the onboarding call) or "Say no". That application's alert replaces the one below.
+  const app = await inquiryToApplication(id, rec, { now });
+  if (app?.clientId) return { ok: true, id, clientId: app.clientId };
+
   const when = inq.whenHost ? `${inq.whenHost} (your time)` : 'no time picked';
   await alertOwner('new_inquiry', {
     scope: id,
@@ -75,6 +85,40 @@ export async function saveInquiry(raw, { source = 'website', now = new Date() } 
     did: 'Saved under Inquiries in the hub. Nothing was sent to them.',
   }).catch(() => {});
   return { ok: true, id };
+}
+
+/** The questions a paid request answers, as the application shows them. */
+export function inquiryAnswers(inq) {
+  const plan = inq.plan ? inq.plan[0].toUpperCase() + inq.plan.slice(1) : 'Not picked (Starter assumed)';
+  return [
+    { q: 'Plan they asked for', a: plan },
+    { q: 'What they sell', a: inq.sells || '—' },
+    { q: 'Website', a: inq.website || '—' },
+    { q: 'Call they booked', a: inq.whenTheirs ? `${inq.whenTheirs}${inq.theirTz ? ` (${inq.theirTz})` : ''}` : inq.whenHost || 'No time picked' },
+  ];
+}
+
+/**
+ * A paid request with a website → a client on that plan in `applied`, held for the owner's review
+ * (systems/gatekeeper.js applyForTrial with `plan` + `review`). Never throws: the inquiry stays
+ * saved either way, and without a website (or on any error) it is a plain inquiry as before.
+ */
+export async function inquiryToApplication(id, inq, { now = new Date() } = {}) {
+  if (!inq.website) return null;
+  try {
+    const { applyForTrial } = await import('@/lib/systems/gatekeeper');
+    const r = await applyForTrial(
+      { companyName: inq.company, contactName: inq.name, contactEmail: inq.email, website: inq.website, notes: inq.sells },
+      { source: 'inquiry', plan: inq.plan || 'starter', now, review: { answers: inquiryAnswers(inq), fit: { verdict: 'unknown', summary: 'A paid-plan request: read the fit score and the research, then say yes or no.', lines: [] } } },
+    );
+    if (!r.ok || !r.clientId) return null;
+    await patch(id, { clientId: r.clientId, trialOutcome: r.outcome || null, paid: true });
+    await logEvent(null, 'inquiries', 'to_application', { id, clientId: r.clientId, outcome: r.outcome });
+    return r;
+  } catch (err) {
+    await logEvent(null, 'inquiries', 'to_application_failed', { id, error: String(err?.message || err).slice(0, 200) });
+    return null;
+  }
 }
 
 export async function getInquiry(id) {
@@ -135,5 +179,5 @@ export async function inquiryToTrial(id) {
 export async function inquirySummary() {
   const { inquiries, counts } = await listInquiries({ limit: 100 });
   const open = inquiries.filter((q) => q.status === 'new' || q.status === 'contacted');
-  return { counts, open: open.length, latest: open.slice(0, 5).map((q) => ({ id: q.id, at: q.at, name: q.name, company: q.company, plan: q.plan, status: q.status, slotStart: q.slotStart, whenHost: q.whenHost })) };
+  return { counts, open: open.length, latest: open.slice(0, 5).map((q) => ({ id: q.id, at: q.at, name: q.name, company: q.company, plan: q.plan, status: q.status, slotStart: q.slotStart, whenHost: q.whenHost, clientId: q.clientId || null })) };
 }

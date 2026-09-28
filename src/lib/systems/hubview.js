@@ -763,7 +763,8 @@ export async function hubBoard({ now = new Date() } = {}) {
   const others = ['aviance', '_test'].map((id) => byId.get(id)).filter(Boolean).map(strip);
   const todos = oneHelpersTodo(rows.filter((r) => r.id !== '_test').flatMap((r) => r.todo));
   const inquiries = await inquirySummary().catch(() => null);
-  for (const q of (inquiries?.latest || []).filter((x) => x.status === 'new')) {
+  // A request that became a paid application is on that application's own to-do (Say yes / Say no).
+  for (const q of (inquiries?.latest || []).filter((x) => x.status === 'new' && !x.clientId)) {
     todos.push({ id: `inquiry:${q.id}`, clientId: null, clientName: q.company, text: `New plan inquiry from ${q.company} — call them back`,
       detail: `${q.name}${q.plan ? ` · ${q.plan[0].toUpperCase()}${q.plan.slice(1)}` : ''}${q.whenHost ? ` · booked for ${q.whenHost}` : ''}`,
       urgent: true, since: q.at, action: { type: 'view', view: 'inquiry', inquiryId: q.id } });

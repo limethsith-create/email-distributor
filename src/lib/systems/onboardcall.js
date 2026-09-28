@@ -583,7 +583,10 @@ export async function sendAcceptance(clientId, { onboardingLink, now = io.now(),
     companyName: client.name || client.mainDomain || clientId, callMinutes: s.callMinutes,
     bookingLine: bookingLine(s, await ownBookingLink(clientId, s, `a${n}`)), onboardingLink,
   };
-  const res = await sendClient(clientId, 'accepted_call', vars, {
+  // A paying client (Starter / Growth / Scale) gets the same call and page, without the trial wording.
+  const paid = ['starter', 'growth', 'scale'].includes(String(client.plan || ''));
+  if (paid) vars.planName = client.plan[0].toUpperCase() + client.plan.slice(1);
+  const res = await sendClient(clientId, paid ? 'accepted_call_paid' : 'accepted_call', vars, {
     dedupe: n === 1 ? 'accepted_call' : `accepted_call:${n}`,
     thread: false, // its own entry below (kind 'acceptance')
     pixel: 'onboard', // the call's own pixel, also naming this email (delivery monitoring)
@@ -595,7 +598,7 @@ export async function sendAcceptance(clientId, { onboardingLink, now = io.now(),
   const at = now.toISOString();
   // The hub shows the last onboarding link they were sent (docs/HUB-API.md `links`).
   await rememberLink(clientId, 'onboarding', onboardingLink, { now });
-  const copy = sentCopy(res, 'accepted_call', vars, client);
+  const copy = sentCopy(res, paid ? 'accepted_call_paid' : 'accepted_call', vars, client);
   const fromInbox = await fromInboxOf(res);
   await patch(clientId, {
     ...(flag(raw.sentAt) ? {} : { sentAt: at, subject: copy.subject }),
