@@ -24,9 +24,11 @@
  *   ZeroBounce  → GET /v2/getcredits
  *   Hunter      → GET /v2/account
  *   GitHub      → GET /repos/{repo} and `permissions.push` (never a dispatch)
+ *   Groq / Cerebras / Gemini / OpenRouter (Ava's brains) → GET {api}/models
+ *                 (lists the models; no tokens spent)
  * CheapInboxes and Google Meet have their own settings cards (ext/cheapinboxes.js, ext/google.js).
  *
- * No AI anywhere.
+ * The AI keys are only for Ava (lib/ava/); no other system uses AI.
  */
 
 import { logEvent } from '@/lib/db/events';
@@ -50,6 +52,13 @@ export const REOON_BALANCE_URL = 'https://emailverifier.reoon.com/api/v1/check-a
 export const ZEROBOUNCE_CREDITS_URL = 'https://api.zerobounce.net/v2/getcredits';
 export const HUNTER_ACCOUNT_URL = 'https://api.hunter.io/v2/account';
 export const GITHUB_API = 'https://api.github.com';
+/** Ava's brains: each one's OpenAI-compatible model list (lib/ava/brains.js has the same bases). */
+export const AI_MODELS_URLS = {
+  GROQ_API_KEY: 'https://api.groq.com/openai/v1/models',
+  CEREBRAS_API_KEY: 'https://api.cerebras.ai/v1/models',
+  GEMINI_API_KEY: 'https://generativelanguage.googleapis.com/v1beta/openai/models',
+  OPENROUTER_API_KEY: 'https://openrouter.ai/api/v1/key',
+};
 const NOT_TESTED = 'not tested yet';
 
 // ─── one call ────────────────────────────────────────────────────────────────
@@ -183,7 +192,28 @@ async function checkGitHub({ GITHUB_TOKEN: token, GITHUB_REPO: repo }) {
   return good(`Can start the lead finder on ${repo}`);
 }
 
+/** Ava's brains: one model-list call (no tokens). OpenRouter's /key also says the credit left. */
+function aiCheck(name, who) {
+  return async (values) => {
+    const r = await call(AI_MODELS_URLS[name], { headers: { authorization: `Bearer ${values[name]}`, accept: 'application/json' } });
+    if (r.status === 401 || r.status === 403 || (r.status === 400 && /key/i.test(JSON.stringify(r.json || '')))) return bad(`${who} said the key is invalid`);
+    if (r.status === 429) return warn(`${who} says this key is busy or out of free use for now — it comes back by itself`);
+    if (!r.ok) return bad(`${who} said ${r.status || 'nothing'}`);
+    if (name === 'OPENROUTER_API_KEY') {
+      const d = asObject(r.json?.data) || {};
+      const left = d.limit_remaining ?? null;
+      return good(left !== null ? `The key works · $${Number(left).toFixed(2)} credit left` : 'The key works');
+    }
+    const n = Array.isArray(r.json?.data) ? r.json.data.length : null;
+    return good(n ? `The key works · ${plural(n, 'model')} available` : 'The key works');
+  };
+}
+
 const CHECKS = {
+  GROQ_API_KEY: aiCheck('GROQ_API_KEY', 'Groq'),
+  CEREBRAS_API_KEY: aiCheck('CEREBRAS_API_KEY', 'Cerebras'),
+  GEMINI_API_KEY: aiCheck('GEMINI_API_KEY', 'Google'),
+  OPENROUTER_API_KEY: aiCheck('OPENROUTER_API_KEY', 'OpenRouter'),
   PLACES_API_KEY: checkPlaces,
   QUICKEMAILVERIFICATION_API_KEY: checkQuickEmail,
   VERIFALIA: checkVerifalia,
@@ -292,6 +322,46 @@ export const GUIDES = {
       'Generate token → copy it (GitHub shows it once) → paste it here.',
     ],
     note: CHECKED,
+  },
+  GROQ_API_KEY: {
+    url: 'https://console.groq.com/keys',
+    free: 'Free, no card: about 30 questions a minute and 1,000 a day. Groq\'s terms say it does not train on what is sent to the API.',
+    steps: [
+      'Go to console.groq.com and sign up (Google, GitHub or email).',
+      'Left menu → API Keys → Create API Key → name it "Aviance Ava" → Submit.',
+      'Copy the key (it starts with gsk_) and paste it here. Optional: Settings → Data controls → Zero Data Retention on.',
+    ],
+    note: UNCHECKED,
+  },
+  CEREBRAS_API_KEY: {
+    url: 'https://cloud.cerebras.ai/',
+    free: 'Free tier: about 1 million tokens (word pieces) a day. Cerebras says it does not keep or train on API inputs and outputs.',
+    steps: [
+      'Go to cloud.cerebras.ai and sign up.',
+      'Open API Keys in the left menu → Generate API key (or copy the one made for you).',
+      'Copy the key (it starts with csk-) and paste it here.',
+    ],
+    note: UNCHECKED,
+  },
+  GEMINI_API_KEY: {
+    url: 'https://aistudio.google.com/apikey',
+    free: 'PAID KEY ONLY. A free Gemini key (no billing) lets Google use what is sent to improve its products, with people reading it — do not paste one. With billing on it is pay-as-you-go (Flash costs cents) and nothing is used for training.',
+    steps: [
+      'Go to aistudio.google.com/apikey → Create API key, in a Google Cloud project.',
+      'Turn on billing for that project: console.cloud.google.com/billing → link a billing account. Without billing the key is a free key and must not be used.',
+      'Copy the key (it starts with AIza) and paste it here.',
+    ],
+    note: UNCHECKED,
+  },
+  OPENROUTER_API_KEY: {
+    url: 'https://openrouter.ai/settings/keys',
+    free: 'Paid credits (a few dollars last a long time). Ava asks OpenRouter on every question for providers that neither train on nor keep the data, so its free models (which train) are never used.',
+    steps: [
+      'Sign in at openrouter.ai → Settings › Privacy: turn OFF every "may train on inputs" / "may publish prompts" switch.',
+      'Credits → add a few dollars.',
+      'Settings › API Keys → Create key → copy it (it starts with sk-or-) and paste it here.',
+    ],
+    note: UNCHECKED,
   },
   GITHUB_REPO: {
     url: 'https://github.com/limethsith-create/email-distributor',

@@ -58,7 +58,8 @@ expiry checks) is:
   `/api/mc/warmup`, `/api/mc/archive` (service keys, Google / CheapInboxes / helper-inbox
   credentials and status, machine settings, Test Mode, push devices, the
   activity log, the outreach archive);
-- `POST /api/mc/presence` — the only write.
+- `POST /api/mc/presence`, `POST /api/mc/team` (their own status), `POST /api/mc/ava/chat` and
+  `POST /api/mc/ava/requests` (`add` only) — the only writes (see "Ava (AI helper)").
 - Anything else → `403 {error:'Read-only: ask the owner to do this.'}` (with
   the usual CORS headers, so the hub can show the text). Hide the buttons for
   employees; the machine refuses them anyway.
@@ -2112,3 +2113,112 @@ left out (the Messages tab). Unknown / broken id → 404.
   returns the link too. Every other write on a demo client stays 409 (the
   middleware reads the body's `action` only on that one path). The preview
   links' lookups are removed with the Test run.
+
+# Ava (AI helper) (2026-09-29)
+
+Ava, the hub's helper, gets her answers through the machine. The owner's rules:
+**only AI services whose terms say they do not train on API inputs**, and **no
+personal data of prospects or of the clients' contacts leaves the machine**.
+The hub keeps its local Ava as a fallback when the machine says `needsKeys`
+or fails.
+
+## The brains (Settings › Keys)
+
+Four new optional cards in `GET /api/mc/keys` (same save / test / forget as
+every key; env var of the same name wins; values never returned). The test is
+one model-list call (no tokens spent).
+
+| card | brain id | why it is allowed | cost | default model (env override) |
+| --- | --- | --- | --- | --- |
+| `GROQ_API_KEY` | `groq` | Groq may not use inputs/outputs for training; not retained by default | free (≈30 req/min, 1 000 req/day, 100K tokens/day on the 70B) | `llama-3.3-70b-versatile` (`AVA_GROQ_MODEL`) |
+| `CEREBRAS_API_KEY` | `cerebras` | inputs/outputs not retained or used for training | free (≈1M tokens/day) | `gpt-oss-120b` (`AVA_CEREBRAS_MODEL`) |
+| `GEMINI_API_KEY` | `gemini` | **paid key only** — free Gemini keys may be used to improve Google's products (the card says so) | pay as you go | `gemini-2.5-flash` (`AVA_GEMINI_MODEL`) |
+| `OPENROUTER_API_KEY` | `openrouter` | every request carries `provider: {data_collection:'deny', zdr:true}` (no-training, no-retention providers only) | paid credits | `openai/gpt-oss-120b` (`AVA_OPENROUTER_MODEL`) |
+
+Mistral's free "Experiment" plan trains on inputs by default and is not used.
+
+## `GET /api/mc/ava/status` (owner and team)
+
+```jsonc
+{ "brains": [ { "id": "cerebras|groq|gemini|openrouter", "name": "Cerebras", "ready": true, "model": "gpt-oss-120b",
+                "lastError": "No key yet — add CEREBRAS_API_KEY in Settings › Keys|… (resting until ISO)|null",
+                "lastOkAt": "ISO|null" } ],
+  "ready": true }            // at least one brain can answer now
+```
+`lastError` / `lastOkAt` / resting are per server instance (memory).
+
+## `POST /api/mc/ava/chat` (owner and team)
+
+```jsonc
+// request
+{ "messages": [ { "role": "user|assistant", "content": "…" } ],     // the talk so far, last one the user's (≤ 16 kept, ≤ 4 000 chars each)
+  "page": { "view": "trials", "clientId": "acme|null", "tab": "overview|null" } }
+// → 200
+{ "reply": "Lakeview is on day 13 of 30 with one call booked.",   // spoken style, short
+  "actions": [ /* below, at most 4 */ ],
+  "brain": "cerebras",
+  "tried": [ { "brain": "cerebras", "ok": true, "ms": 820, "error": null } ] }
+// → 503 { "error": "Ava has no AI key yet. …", "needsKeys": true }
+// → 429 { "error": "…" }   20 questions a minute per person, or AVA_DAILY_CAP (config, default 300 a day for everyone)
+// → 502 { "error": "…", "tried": [...] }   no brain answered in time · 400 { error } bad body
+```
+
+**Actions** (the hub runs `navigate` at once; everything else is a button the user presses — Ava never does a write):
+
+| action | fields |
+| --- | --- |
+| `navigate` | `view` ∈ `trials, paying, calendar, team, mystats, activity*, inquiries, behind, settings*, client`; `id` (client id, required for `client`); `tab` — for `client`: `overview, conversations, emails, calls, messages, money*, health*, leads*, setup*, history`; for `settings`: `alerts, phone, details, keys, google, inboxes, warmup, replybot, demo, status, behind, advanced, theme, account` |
+| `confirm` | `label` (button text), `name`, `args`: `open_add_trial` · `open_add_paid` · `open_client {id}` · `mark_todo_seen {id, todoId}` · `give_access {id}` (opens the place; never an email) · `load_test_run` · `remove_test_run` · `set_my_status {text ≤140}` · `add_change_request {text ≤1000}` |
+| `draft` | `title`, `text` (for the user to copy) |
+
+`*` = owner only. For a team member the machine drops owner-only views/tabs and
+every `confirm` except `open_client`, `set_my_status`, `add_change_request`.
+The hub still checks before running anything.
+
+**Router.** Short question (last message ≤ 160 chars and the talk ≤ 1 500) →
+fastest first (Cerebras, Groq, Gemini, OpenRouter); longer → strongest first
+(Gemini, Cerebras, OpenRouter, Groq). A 429 / 5xx / timeout / network error
+falls through to the next brain; each call ≤ 10 s, the whole question ≤ 20 s.
+A 429 rests that brain for 60 s (or its `retry-after`, ≤ 5 min); a refused key
+10 min. Brains without a key are skipped.
+
+**Tools** (run on the machine; a tool loop of at most 4 rounds with
+OpenAI-compatible function calling; a brain that refuses tools gets them
+described in its prompt and answers `{"tool", "args"}` JSON instead):
+`hub_summary` (clients by stage with step and day, what needs the owner as
+types — "1 reply to read and answer at Ridgeline IT" —, alerts, waiting list),
+`client_overview {name}` (fuzzy name; stage, day, status, next step,
+sent/replies/bounced/interested/booked, reply types, warm-up day and inbox
+rate, leads by status, to-do types), `calendar_summary {from, to}` (Sri Lanka
+and Eastern times, company, meeting type, status), `team_summary` (first
+names, online, status line, clients they look after), `my_outreach` (totals
+only), `money_summary` (**owner only**, `x-hub-role: admin`; totals and each
+client's month-one invoice), `search_kb {query}` (the written guide,
+`src/lib/ava/kb.md`).
+
+**Privacy.** Every tool output is built from structured fields (to-dos become
+their type, never their text) and then passes a net that removes email
+addresses, phone numbers and links and turns the clients' contact names into
+"the client". So no prospect name, email address, phone number, message
+body, contact person's email, credential, token or link reaches an AI
+service; a team member gets no money at all. The user's own words are sent as
+typed or spoken (their choice); the system prompt tells Ava not to repeat
+personal data. `tests/ava-privacy.test.mjs` checks every tool and every
+request body against the Test run's prospects.
+
+**System prompt:** Ava — warm, brief, spoken; today's date and time in Sri
+Lanka; the user's first name and role; the current page; never claims to have
+done a write (proposes a `confirm`); code changes → `add_change_request`
+(she never claims to edit code); team members get no money.
+
+## `GET/POST /api/mc/ava/requests` — change requests
+
+```jsonc
+// GET (owner and team) → newest first, at most 200 kept (Redis list ava:requests)
+{ "requests": [ { "id": "3f1c…", "at": "ISO", "by": "Nimal", "text": "Show the warm-up day on the list", "status": "open|done", "doneAt": "ISO?" } ] }
+// POST { "action": "add", "text": "…" }   any signed-in user → { ok, request }   (400 empty text)
+// POST { "action": "done", "id": "…" }    the owner only     → { ok, request }   (403 team member, 404 unknown id)
+```
+The hub posts `add` when the user presses Ava's `add_change_request` button.
+
+Config: `AVA_DAILY_CAP` (default 300; 0 = no cap), `/mc/config`.
