@@ -44,7 +44,7 @@ import { autobuyView, readRec as readAutobuy, autobuySettings, AUTOBUY_STATES } 
 import { isConnected as cheapInboxesConnected, readDomainIndex, unmatchedOf } from '@/lib/ext/cheapinboxes';
 import { warmupView, hubWarmupData, WARMUP_VIEW_STATES } from '@/lib/systems/warmup';
 import { nextSendingDay } from '@/lib/systems/readiness';
-import { sharedWith as dashboardSharedWith } from '@/lib/systems/clientdash';
+import { sharedWith as dashboardSharedWith, dashboardLink } from '@/lib/systems/clientdash';
 
 export const STATE_LABELS = {
   applied: 'Applied', queued: 'In the queue', onboarding: 'Onboarding', awaiting_purchase: 'Waiting for you to buy',
@@ -842,7 +842,7 @@ async function machineTodos(board, queue, { cheapInboxes = false } = {}) {
 }
 
 /** One trial in full (docs/HUB-API.md "GET /api/mc/hub/[id]"). */
-export async function hubClient(id, { now = new Date() } = {}) {
+export async function hubClient(id, { now = new Date(), owner = false } = {}) {
   const client = await getClient(id);
   if (!client) return null;
   // The same alert log the board reads, so `row` (health, openAlerts, urgentAlerts) matches the board row.
@@ -895,7 +895,11 @@ export async function hubClient(id, { now = new Date() } = {}) {
     // The last onboarding / approval / decision link they were sent, while it still works (docs/HUB-API.md).
     links: await currentLinks(id, ctx.trial).catch(() => ({})),
     // Who the owner emailed the dashboard link to (shareDashboard), oldest first.
-    dashboardAccess: { sharedWith: await dashboardSharedWith(id, ctx.trial).catch(() => []) },
+    // `url` (owner only, minted when none): the client's page as they see it — the hub's "Open what they see".
+    dashboardAccess: {
+      sharedWith: await dashboardSharedWith(id, ctx.trial).catch(() => []),
+      ...(owner ? { url: await dashboardLink(id, { now }).catch(() => null) } : {}),
+    },
     virtualNow: id === '_test' ? clientNow(client, now).toISOString() : null,
   };
 }

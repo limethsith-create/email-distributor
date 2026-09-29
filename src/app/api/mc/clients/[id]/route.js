@@ -1,6 +1,6 @@
 import { kv } from '@vercel/kv';
 import { K, assertClientId } from '@/lib/db/keys';
-import { getClient, getProfile, getTrial, getDomain, setState, STATES } from '@/lib/db/client';
+import { getClient, getProfile, getTrial, getDomain, setState, STATES, isDemoId } from '@/lib/db/client';
 import { getInboxRecords, saveInbox, removeInbox, patchInbox, publicInbox } from '@/lib/db/inboxes';
 import { getEvents, logEvent } from '@/lib/db/events';
 import { runTick, jobRecords } from '@/lib/scheduler';
@@ -33,12 +33,24 @@ export async function GET(_req, { params }) {
 }
 
 export async function POST(request, { params }) {
-  const refused = demoRefusal((await params)?.id);
+  const body = await request.json().catch(() => ({}));
+  const pid = (await params)?.id;
+  // A Test run client: only its dashboard link, for the owner's preview (nothing is sent or changed).
+  if (isDemoId(pid) && (body.action === 'shareDashboard' || (body.action === 'dashboardLink' && body.fresh !== true))) {
+    if (!(await getClient(pid))) return Response.json({ error: 'not found' }, { status: 404 });
+    if (body.action === 'shareDashboard') {
+      const { isValidEmail, normalizeEmail } = await import('@/lib/metrics');
+      if (!isValidEmail(normalizeEmail(body.email))) return Response.json({ error: 'Enter a valid email address.' }, { status: 400 });
+    }
+    const { dashboardLink } = await import('@/lib/systems/clientdash');
+    const url = await dashboardLink(pid);
+    return Response.json(body.action === 'shareDashboard' ? { ok: true, url, sent: false, demo: true } : { ok: true, url, demo: true });
+  }
+  const refused = demoRefusal(pid);
   if (refused) return refused;
   const id = assertClientId(params.id);
   const client = await getClient(id);
   if (!client) return Response.json({ error: 'not found' }, { status: 404 });
-  const body = await request.json().catch(() => ({}));
   try {
     switch (body.action) {
       case 'profile': {
@@ -76,7 +88,7 @@ export async function POST(request, { params }) {
         list.push({ email, at: new Date().toISOString() });
         await kv.hset(K.trial(id), { dashboardSharedWith: JSON.stringify(list) });
         await logEvent(id, 'mc', 'dashboard_shared', { email });
-        return Response.json({ ok: true, url, sharedWith: list });
+        return Response.json({ ok: true, url, sent: true, sharedWith: list });
       }
       // A new dashboard link (every old one stops working) and nobody on the shared list.
       case 'unshareDashboard': {

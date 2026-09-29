@@ -117,7 +117,7 @@ test('load → the hub shows both finished clients, flagged, with the same numbe
     assert.ok(lastSent <= etDay(clock.now) && lastSent >= etDay(new Date(clock.now.getTime() - 4 * 864e5)), `${id}: last send ${lastSent}, today ${etDay(clock.now)}`);
     const tok = /\/c\/([A-Za-z0-9_-]{20,})\/dashboard/.exec(d.links.dashboard)[1];
     const dash = (await call('api/c/dashboard/route', 'GET', { path: `/api/c/dashboard?token=${tok}` })).json;
-    assert.deepEqual(dash.five, row.five, 'the client dashboard agrees');
+    assert.deepEqual(dash.five, { sent: row.five.sent, opened: null, replies: row.five.replies, bounced: Number(d.counters.bounces ?? 0), interested: row.five.positive, booked: row.five.booked }, 'the client dashboard agrees');
   }
   // Their calls are on the Calendar, flagged; the owner's buttons on them are refused.
   const cal = (await call('api/mc/calendar/route', 'GET', { path: `/api/mc/calendar?from=${encodeURIComponent(new Date(clock.now.getTime() - 60 * 864e5).toISOString())}&to=${encodeURIComponent(clock.iso())}&all=1` })).json;
@@ -169,7 +169,7 @@ test('owner only: employees get 403; nothing on a demo client can be changed', a
   const mark = sim.sent.length;
   for (const [route, body] of [
     ['api/mc/clients/[id]/messages/route', { action: 'reply', text: 'Hello' }],
-    ['api/mc/clients/[id]/route', { action: 'shareDashboard', email: 'someone@example.org' }],
+    ['api/mc/clients/[id]/route', { action: 'unshareDashboard' }],   // shareDashboard only returns the link (shared-view.test.mjs)
     ['api/mc/clients/[id]/intake/route', { action: 'resendWelcome' }],
     ['api/mc/clients/[id]/onboard-call/route', { action: 'reply', text: 'Hi' }],
     ['api/mc/clients/[id]/launch-call/route', { action: 'reply', text: 'Hi' }],

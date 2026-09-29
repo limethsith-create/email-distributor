@@ -17,8 +17,8 @@ test('client dashboard: one lasting link per client (the hub shows it), a read-o
   const v = await dashboardView(tokenOf(url));
   assert.equal(v.ok, true);
   assert.equal(v.company, 'Oak Legal'); assert.equal(v.plan, 'Growth plan'); assert.equal(v.paid, true);
-  assert.ok(Array.isArray(v.inboxes) && Array.isArray(v.replies) && Array.isArray(v.bookings));
-  for (const k of ['alerts', 'jobs', 'events', 'invoice', 'promises', 'holds', 'todo']) assert.ok(!(k in v), 'no owner-only data: ' + k);
+  assert.ok(v.five && v.last30 && v.journey && Array.isArray(v.messages) && Array.isArray(v.calls.prospects) && Array.isArray(v.calls.ours));
+  for (const k of ['alerts', 'jobs', 'events', 'invoice', 'promises', 'holds', 'todo', 'inboxes', 'fitScore', 'deliverability']) assert.ok(!(k in v), 'no owner-only data: ' + k);
   // a new link replaces the old one
   const url2 = await dashboardLink('oak-legal', { fresh: true });
   assert.notEqual(url2, url);

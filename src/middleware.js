@@ -41,9 +41,20 @@ export const EMPLOYEE_DENY = /^\/api\/mc\/(keys|config|setup|people|google|cheap
 // The hub's Test run clients (systems/demo.js) are look-only: no button on them may send or change anything.
 const DEMO_CLIENT_WRITE = /^\/api\/mc\/clients\/(demo-harbor-dental|demo-summit-roofing|demo-lakeview-pt)(\/|$)/;
 export const DEMO_READ_ONLY = 'This is a test-run client: nothing can be sent or changed for it. Remove the test run to clear it.';
-/** A write on a Test run client (anything but GET / HEAD / OPTIONS under /api/mc/clients/{demo id}). */
-export function demoWriteBlocked(method, pathname) {
-  return !['GET', 'HEAD', 'OPTIONS'].includes(String(method || '').toUpperCase()) && DEMO_CLIENT_WRITE.test(pathname);
+// The one write a Test run client allows: its dashboard link (shareDashboard returns it and sends nothing), so the
+// owner can preview the client's page. Only on POST /api/mc/clients/{demo id} itself; the route checks again.
+const DEMO_CLIENT_ROOT = /^\/api\/mc\/clients\/(demo-harbor-dental|demo-summit-roofing|demo-lakeview-pt)\/?$/;
+export const DEMO_ALLOWED_ACTIONS = new Set(['shareDashboard', 'dashboardLink']);
+/** A write on a Test run client (anything but GET / HEAD / OPTIONS under /api/mc/clients/{demo id}, bar `action` above). */
+export function demoWriteBlocked(method, pathname, action = null) {
+  const m = String(method || '').toUpperCase();
+  if (['GET', 'HEAD', 'OPTIONS'].includes(m) || !DEMO_CLIENT_WRITE.test(pathname)) return false;
+  return !(m === 'POST' && DEMO_CLIENT_ROOT.test(pathname) && DEMO_ALLOWED_ACTIONS.has(action));
+}
+/** The JSON body's `action` of a POST to a demo client's root (the only place it matters); null otherwise. */
+async function demoActionOf(request, pathname) {
+  if (request.method !== 'POST' || !DEMO_CLIENT_ROOT.test(pathname)) return null;
+  try { const b = await request.clone().json(); return typeof b?.action === 'string' ? b.action : null; } catch { return null; }
 }
 const EMPLOYEE_POST = /^\/api\/mc\/(presence|team)\/?$/;   // team: only their own status (the route checks)
 const READ_ONLY = 'Read-only: ask the owner to do this.';
@@ -94,7 +105,7 @@ export async function middleware(request) {
   if (PUBLIC.some((re) => re.test(pathname))) return withCors(NextResponse.next(), hubOrigin);
 
   if (await verifySession(request.cookies.get(SESSION_COOKIE)?.value)) {
-    if (demoWriteBlocked(request.method, pathname)) return withCors(NextResponse.json({ error: DEMO_READ_ONLY }, { status: 409 }), hubOrigin);
+    if (demoWriteBlocked(request.method, pathname, await demoActionOf(request, pathname))) return withCors(NextResponse.json({ error: DEMO_READ_ONLY }, { status: 409 }), hubOrigin);
     return withCors(HUB_API.test(pathname) ? passOn(request, { role: 'admin' }) : NextResponse.next(), hubOrigin);
   }
 
@@ -107,7 +118,7 @@ export async function middleware(request) {
         if (role === 'employee' && !employeeMayAccess(request.method, pathname)) {
           return withCors(NextResponse.json({ error: READ_ONLY }, { status: 403 }), hubOrigin);
         }
-        if (demoWriteBlocked(request.method, pathname)) return withCors(NextResponse.json({ error: DEMO_READ_ONLY }, { status: 409 }), hubOrigin);
+        if (demoWriteBlocked(request.method, pathname, await demoActionOf(request, pathname))) return withCors(NextResponse.json({ error: DEMO_READ_ONLY }, { status: 409 }), hubOrigin);
         return withCors(passOn(request, { user: v.email, role }), hubOrigin);
       }
       // The reason stays on the server (it would help an attacker); the hub only needs "sign in again".
