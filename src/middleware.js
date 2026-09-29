@@ -39,7 +39,7 @@ const HUB_API = /^\/api\/mc\//;
 // Owner-only screens: secrets, credentials, owner settings, test mode, the activity log, the outreach archive, the test run.
 export const EMPLOYEE_DENY = /^\/api\/mc\/(keys|config|setup|people|google|cheapinboxes|login|logout|test|push|warmup|archive|demo)(\/|$)/;
 // The hub's Test run clients (systems/demo.js) are look-only: no button on them may send or change anything.
-const DEMO_CLIENT_WRITE = /^\/api\/mc\/clients\/(demo-harbor-dental|demo-summit-roofing)(\/|$)/;
+const DEMO_CLIENT_WRITE = /^\/api\/mc\/clients\/(demo-harbor-dental|demo-summit-roofing|demo-lakeview-pt)(\/|$)/;
 export const DEMO_READ_ONLY = 'This is a test-run client: nothing can be sent or changed for it. Remove the test run to clear it.';
 /** A write on a Test run client (anything but GET / HEAD / OPTIONS under /api/mc/clients/{demo id}). */
 export function demoWriteBlocked(method, pathname) {

@@ -412,7 +412,8 @@ async function handleClientMessage(clientId, meta, ctx, now) {
     if (!h || h.answeredAt) continue;
     const hit = (h.hotMessageId && ids.has(normId(h.hotMessageId))) || (h.prospectMessageId && ids.has(normId(h.prospectMessageId)));
     if (!hit) continue;
-    await kv.hset(K.hot(clientId), { [hid]: { ...h, answeredAt: at } });
+    // Their answer's words too (the hub shows them in that prospect's conversation, systems/maillog.js).
+    await kv.hset(K.hot(clientId), { [hid]: { ...h, answeredAt: at, answerText: stripQuotedReply(meta.text || '').slice(0, 2000), answerFrom: lower(meta.from) || null } });
     if (h.holdingAt) await decrementUnanswered(clientId);
     out.answered = hid;
   }

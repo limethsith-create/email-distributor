@@ -22,6 +22,7 @@ import { fill } from '@/lib/templates/render';
 import { normId } from '@/lib/mail-utils';
 import { guardOutbound, unsubscribeHeaders } from '@/lib/systems/compliance';
 import { deps, alert, claimOnce, releaseOnce, lower, ccfg } from '@/lib/systems/stagec-common';
+import { keepProspectMail } from '@/lib/systems/maillog';
 
 /** Render a Stage C template → { subject, text, from }. Throws TemplateError on a missing slot. */
 export function renderTemplate(key, vars = {}) {
@@ -147,6 +148,7 @@ export async function sendToProspect(clientId, key, { lead, vars = {}, thread = 
   }
   if (!res || !res.success) return fail(res?.error || 'send failed');
   await indexMessageId(clientId, res.messageId, to);
+  await keepProspectMail(clientId, to, { at: now.toISOString(), key, subject, from: account.email, text }); // the hub's conversations (systems/maillog.js)
   await logEvent(clientId, 'outbound', 'prospect_sent', { template: key, to, inbox: account.email });
   return { sent: true, messageId: res.messageId, subject, inbox: account.email };
 }

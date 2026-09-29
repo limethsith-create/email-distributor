@@ -17,6 +17,10 @@ import { sim, world, clock, et, installJourney, call } from './journey-world.mjs
 
 const H = 'demo-harbor-dental';
 const S = 'demo-summit-roofing';
+const L = 'demo-lakeview-pt';
+const ALL = [H, S, L];
+const partOf = (id) => STATE.parts.find((p) => p.ids.includes(id));
+const keyOf = (id, suffix) => partOf(id).keys[`client:${id}${suffix}`];
 const EMPLOYEE = { 'x-hub-role': 'employee', 'x-hub-user': 'nimal@aviance.store' };
 const rowOf = (board, id) => board.stages.flatMap((s) => s.clients).find((r) => r.id === id) || null;
 const etDay = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(d);
@@ -41,12 +45,18 @@ async function setup() {
   await kv.zadd(K.meetingsByStart(), { member: 'mreal0001', score: Date.parse('2026-12-15T16:00:00.000Z') });
 }
 
-test('the fixture: two clients, no real domain, no credential, no link', () => {
+test('the fixture: three clients, no real domain, no credential, no link', () => {
   const text = JSON.stringify(STATE);
-  assert.deepEqual(STATE.ids, [H, S]);
-  assert.ok(Object.keys(STATE.keys).every((k) => k.includes(H) || k.includes(S) || k.startsWith('warmup:stats:')), 'only the two clients’ own keys');
+  assert.deepEqual(STATE.ids, ALL);
+  assert.deepEqual(STATE.parts.map((p) => p.ids), [[H, S], [L]]);
+  for (const part of STATE.parts) assert.ok(Object.keys(part.keys).every((k) => part.ids.some((id) => k.includes(id)) || k.startsWith('warmup:stats:')), 'only the part’s own clients’ keys');
   assert.ok(!/"(app|login)?[pP]assword(Enc)?":\s*"(?!\[redacted\])/.test(text), 'no password value');
-  for (const bad of ['passwordEnc', 'harbordentalgroup', 'summitroofingco', '.com"', '@gmail.com', 'machine.test', 'tokenidx:']) assert.ok(!text.includes(bad), `the fixture has ${bad}`);
+  for (const bad of ['passwordEnc', 'harbordentalgroup', 'summitroofingco', '.com"', '.com/', '@gmail.com', 'machine.test', 'tokenidx:']) assert.ok(!text.includes(bad), `the fixture has ${bad}`);
+  // The Lakeview trial is its own business: none of Harbor's names, trade or prospects in it.
+  const lake = JSON.stringify(partOf(L));
+  for (const bad of ['Harbor', 'harbor', 'Megan', 'megan', 'Ortiz', 'ental', 'Reyes']) assert.ok(!lake.includes(bad), `Lakeview has ${bad}`);
+  const harborLeads = new Set(Object.keys(keyOf(H, ':leads').v));
+  assert.deepEqual(Object.keys(keyOf(L, ':leads').v).filter((e) => harborLeads.has(e)), [], 'other prospects than Harbor’s');
   assert.equal(shiftText('Thursday 22 October · Tue 6 Oct · 2026-10-22 · 2026-10-22T13:00:00.000Z', 7, 2026), 'Thursday 29 October · Tue 13 Oct · 2026-10-29 · 2026-10-29T13:00:00.000Z');
   assert.equal(shiftText('Friday 20 November', 3, 2026), 'Monday 23 November', 'the weekday follows the date');
 });
@@ -59,29 +69,39 @@ test('load → the hub shows both finished clients, flagged, with the same numbe
 
   const loaded = await call('api/mc/demo/route', 'POST', { path: '/api/mc/demo', body: { action: 'load' } });
   assert.equal(loaded.status, 200, JSON.stringify(loaded.json));
-  assert.deepEqual(loaded.json, { ok: true, ids: [H, S] });
+  assert.deepEqual(loaded.json, { ok: true, ids: ALL });
   const status = (await call('api/mc/demo/route', 'GET', { path: '/api/mc/demo' })).json;
-  assert.deepEqual([status.loaded, status.ids], [true, [H, S]]);
+  assert.deepEqual([status.loaded, status.ids], [true, ALL]);
   assert.equal(status.at, clock.iso());
 
   const board = (await call('api/mc/hub/route', 'GET', { path: '/api/mc/hub' })).json;
   const h = rowOf(board, H);
   const s = rowOf(board, S);
-  assert.ok(h && s, 'both on the board');
+  const l = rowOf(board, L);
+  assert.ok(h && s && l, 'all three on the board');
   assert.equal(rowOf(board, 'acme').demo, false, 'a real client is not flagged');
-  const totals = (id) => STATE.keys[`client:${id}:counters:total`].v;
-  for (const [row, id, plan, amount, state] of [[h, H, 'starter', 2497, 'converted'], [s, S, 'growth', 3997, 'sending']]) {
+  const totals = (id) => keyOf(id, ':counters:total').v;
+  for (const [row, id, plan, amount, state] of [[h, H, 'starter', 2497, 'converted'], [s, S, 'growth', 3997, 'sending'], [l, L, 'trial', null, 'sending']]) {
     assert.equal(row.demo, true, `${id}: the demo flag`);
     assert.deepEqual([row.state, row.plan], [state, plan]);
-    assert.deepEqual([row.invoice.plan, row.invoice.amount, row.invoice.status], [plan, amount, 'paid'], JSON.stringify(row.invoice));
-    assert.ok(row.invoice.paidAt && row.invoice.number && row.invoice.issuedAt);
+    if (amount) {
+      assert.deepEqual([row.invoice.plan, row.invoice.amount, row.invoice.status], [plan, amount, 'paid'], JSON.stringify(row.invoice));
+      assert.ok(row.invoice.paidAt && row.invoice.number && row.invoice.issuedAt);
+      assert.ok(row.five.sent > 400, `${id}: a month of sending (${row.five.sent})`);
+    } else {
+      // The live trial: mid-way through its 30 days, sending, no invoice yet.
+      assert.equal(row.invoice, null);
+      assert.equal(row.simple.step, 'sending', JSON.stringify(row.simple));
+      assert.match(row.simple.label, /^Sending — day 1[23] of 30/, JSON.stringify(row.simple));
+      assert.ok(row.five.sent > 100, `${id}: about twelve days of sending (${row.five.sent})`);
+    }
     for (const f of ['sent', 'replies', 'positive', 'booked', 'qualified']) assert.equal(row.five[f], Number(totals(id)[f]), `${id} ${f}`);
-    assert.ok(row.five.sent > 400, `${id}: a month of sending (${row.five.sent})`);
     assert.equal(row.openAlerts, 0, 'no alert of theirs in the owner’s list');
     const d = (await call('api/mc/hub/[id]/route', 'GET', { path: `/api/mc/hub/${id}`, params: { id } })).json;
     assert.equal(d.row.demo, true);
-    assert.deepEqual(d.invoice.paidAt, row.invoice.paidAt);
+    assert.deepEqual(d.invoice?.paidAt ?? null, row.invoice?.paidAt ?? null);
     assert.equal(d.bookings.length, 1, 'the booked prospect call');
+    if (id === L) assert.equal(d.bookings[0].status, 'booked', 'Lakeview’s call is still ahead');
     assert.ok(d.replies.length >= 5, 'the prospects’ replies');
     assert.ok(d.conversation.thread.some((e) => e.kind === 'owner_reply'), 'the client ↔ owner messages');
     assert.ok(d.conversation.thread.some((e) => e.auto && e.rule === 'wants_time') || id === S, 'the reply bot’s answer');
@@ -106,13 +126,14 @@ test('load → the hub shows both finished clients, flagged, with the same numbe
   const refused = await call('api/mc/calendar/route', 'POST', { path: '/api/mc/calendar', body: { action: 'cancel', id: demoMeetings[0].id, reason: 'x' } });
   assert.equal(refused.status, 409, JSON.stringify(refused.json));
   // Never against the trial cap or the queue.
-  assert.equal(board.machine.activeTrials, 1, 'only acme');
+  assert.equal(board.machine.activeTrials, 1, 'only acme (the Lakeview trial never counts)');
   assert.equal((await capacity()).active, 1);
   assert.deepEqual((await getAllClients()).map((c) => c.id), ['acme'], 'no job ever sees them');
 
   // A second load replaces the first (no duplicates).
   await call('api/mc/demo/route', 'POST', { path: '/api/mc/demo', body: { action: 'load' } });
-  assert.equal((await kv.lrange(K.events(H), 0, -1)).length, STATE.keys[`client:${H}:events`].v.length);
+  assert.equal((await kv.lrange(K.events(H), 0, -1)).length, keyOf(H, ':events').v.length);
+  assert.equal((await kv.lrange(K.events(L), 0, -1)).length, keyOf(L, ':events').v.length);
 
   // The hub opens their pages (views may write their own caches) — remove still clears everything.
   await call('api/mc/hub/[id]/route', 'GET', { path: `/api/mc/hub/${H}`, params: { id: H } });
@@ -120,13 +141,15 @@ test('load → the hub shows both finished clients, flagged, with the same numbe
   assert.equal(removed.status, 200, JSON.stringify(removed.json));
   assert.ok(removed.json.ok && removed.json.removed > 300, JSON.stringify(removed.json));
   const after = snapshot();
-  const skip = (k) => /^(system:heartbeat|onboardcall:checkedat|cheapinboxes:syncedat|usage:|jobs:claim:|system:alerts:)/.test(k);
+  // demo:autoloaded stays on purpose: after a Remove the test run never loads itself again.
+  const skip = (k) => /^(system:heartbeat|onboardcall:checkedat|cheapinboxes:syncedat|usage:|jobs:claim:|system:alerts:|demo:autoloaded$)/.test(k);
   const added = [...after.keys()].filter((k) => !before.has(k) && !skip(k));
   const lost = [...before.keys()].filter((k) => !after.has(k) && !skip(k));
   const changed = [...before.keys()].filter((k) => after.has(k) && after.get(k) !== before.get(k) && !skip(k));
   assert.deepEqual({ added, lost, changed }, { added: [], lost: [], changed: [] }, 'the store is exactly as before the load');
   assert.deepEqual((await call('api/mc/demo/route', 'GET', { path: '/api/mc/demo' })).json, { loaded: false, ids: [], at: null });
-  assert.equal(rowOf((await call('api/mc/hub/route', 'GET', { path: '/api/mc/hub' })).json, H), null);
+  const gone = (await call('api/mc/hub/route', 'GET', { path: '/api/mc/hub' })).json;
+  for (const id of ALL) assert.equal(rowOf(gone, id), null);
 });
 
 test('owner only: employees get 403; nothing on a demo client can be changed', async () => {
@@ -157,7 +180,7 @@ test('owner only: employees get 403; nothing on a demo client can be changed', a
   assert.equal(sim.sent.length, mark, 'nothing was sent');
 });
 
-test('safety: with both demo clients loaded, a full run of the heartbeat sends and calls nothing more than without them', { timeout: 300_000 }, async () => {
+test('safety: with all three demo clients loaded, a full run of the heartbeat sends and calls nothing more than without them', { timeout: 300_000 }, async () => {
   const run = async (withDemo) => {
     await setup();
     await call('api/mc/config/route', 'POST', { body: { action: 'set', key: 'OWNER', value: { ...(await call('api/mc/config/route', 'GET')).json.settings.find((x) => x.key === 'OWNER').value, signerName: 'Limeth Sith' } } });

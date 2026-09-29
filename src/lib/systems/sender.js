@@ -25,6 +25,7 @@ import { getLeadsByStatus, getLead, saveLead, isBlocked, hostOf } from '@/lib/db
 import { bump, getTotals } from '@/lib/db/counters';
 import { logEvent } from '@/lib/db/events';
 import { varsFor, renderTouch, TemplateError } from '@/lib/systems/sequence';
+import { keepColdText } from '@/lib/systems/maillog';
 import { getInboxHealth, recordSendSuccess, recordSendFailure, updateInboxHealth, shouldSkipInbox } from '@/lib/inbox-health';
 import { partsIn, dayKeyIn, ET, isWeekday, hhmmToMin, trialDay, addDays } from '@/lib/time';
 import { guardOutbound, unsubscribeHeaders } from '@/lib/systems/compliance';
@@ -366,6 +367,7 @@ async function recordSuccess(clientId, { account, lead, touch, built, res, varia
   p.hincrby(K.inboxSends(clientId, day), account.email, 1);
   p.hincrby(K.inboxSends(clientId, day), `${account.email}:${touch}`, 1);
   p.expire(K.inboxSends(clientId, day), 30 * 86400);
+  keepColdText(p, clientId, lead.email, touch, built.text); // the hub's email log (systems/maillog.js)
   await p.exec();
   await bump(clientId, 'sent', 1, now);
   await bump(clientId, `sent${touch.toUpperCase()}`, 1, now);

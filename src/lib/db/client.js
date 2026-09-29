@@ -64,11 +64,11 @@ export const LIVE_STATES = new Set([
 export const REST_STATES = new Set(['declined', 'closed_silent']);
 
 /**
- * The hub's "Test run" clients (systems/demo.js): two finished example clients the owner can click through.
+ * The hub's "Test run" clients (systems/demo.js): three example clients the owner can click through (two finished, one trial mid-way).
  * They live in Redis like real clients, but nothing may ever act for them — no job, no email, no alert, no
  * outside call. Their ids are fixed, so the check needs no Redis read; the client hash also carries demo '1'.
  */
-export const DEMO_IDS = new Set(['demo-harbor-dental', 'demo-summit-roofing']);
+export const DEMO_IDS = new Set(['demo-harbor-dental', 'demo-summit-roofing', 'demo-lakeview-pt']);
 export const isDemoId = (id) => DEMO_IDS.has(String(id || ''));
 export const isDemo = (client) => Boolean(client) && (isDemoId(client.id) || client.demo === '1' || client.demo === 1 || client.demo === true);
 

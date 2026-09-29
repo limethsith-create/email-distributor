@@ -1806,31 +1806,47 @@ The month-one invoice, on the board row and in the trial:
 
 ## Test run (demo clients) — `/api/mc/demo` (owner only)
 
-Two finished example clients the owner can click through in the real hub:
+Three example clients the owner can click through in the real hub:
 
-| id | what it is | at the end |
+| id | what it is | when loaded |
 | --- | --- | --- |
-| `demo-harbor-dental` | Harbor Dental Group — a 30-day trial that pressed Start | `state: 'converted'`, `plan: 'starter'`, invoice 2 497 paid |
-| `demo-summit-roofing` | Summit Roofing Co — a paying client on Growth | `state: 'sending'`, `plan: 'growth'`, invoice 3 997 paid |
+| `demo-harbor-dental` | Harbor Dental Group — a 30-day trial that pressed Start | `state: 'converted'`, `plan: 'starter'`, invoice 2 497 paid; 516 cold emails, 568 emails in all, 13 conversations |
+| `demo-summit-roofing` | Summit Roofing Co — a paying client on Growth | `state: 'sending'`, `plan: 'growth'`, invoice 3 997 paid; 428 cold emails, 485 in all, 18 conversations |
+| `demo-lakeview-pt` | Lakeview Physical Therapy — a 30-day trial live mid-way | `state: 'sending'`, `plan: 'trial'`, `simple.step: 'sending'` ("Sending — day 13 of 30, 1 call booked" on the day it loads), no invoice; 118 cold emails, 146 in all, 7 conversations, the prospect call still ahead |
 
-Their data is the final state of the two clients in the simulation
-(`tests/fixtures/demo-state.json`; regenerate with
-`DEMO_STATE=1 node --import ./tests/register.mjs --test tests/two-clients.test.mjs`),
-every date moved so the simulation's last day is **today** (ET): about seven weeks of
-daily counters, the replies, the booked and held prospect call, the
-conversation (the reply bot's answers and the client ↔ owner messages), the
-timeline, both calls, the inboxes (fake logins), warm-up done, the invoice
-paid. Every domain in it is a reserved `.example` one.
+Harbor and Summit are the final state of the two clients in the simulation;
+Lakeview is Harbor's trial snapshotted on the evening of its Day 12 with every
+name changed (company, people, trade, prospects, domains) — so the Trials list
+shows a trial at "Sending emails" with the steps before it done, its emails
+and conversations so far, its Messages with the owner, both calls
+(`onboardCall`, `launchCall`) and one booked prospect call
+(`tests/fixtures/demo-state.json`, `{ version: 2, ids, parts: [{ ids, endedAt,
+year, endsDaysAgo, keys, members }] }`; regenerate with
+`DEMO_STATE=1 node --import ./tests/register.mjs --test tests/two-clients.test.mjs`).
+Every date is moved so each part's last evening is **yesterday** (ET) — nothing
+in the hub is dated later than now: daily counters, the replies, the booked
+prospect call, the conversation (the reply bot's answers and the client ↔
+owner messages), the timeline, both calls, the inboxes (fake logins), warm-up
+done, the invoice paid, and every email's full text (see "Emails and
+conversations" below). Every domain in it is a reserved `.example` one.
+
+**It loads itself once.** The first time the hub opens in production
+(`GET /api/mc/hub`), the test run loads by itself and `demo:autoloaded` = the
+time is set in Redis. That mark is never removed: after **Remove test run**
+it never comes back (a manual Load sets it too). Config `DEMO_AUTOLOAD`
+(default `true`, `/mc/config`) turns the automatic load off. Cost: one Redis
+read per server instance until the mark is seen.
 
 ```jsonc
 // GET /api/mc/demo
-{ "loaded": true, "ids": ["demo-harbor-dental", "demo-summit-roofing"], "at": "ISO|null" }   // at = when it was loaded
+{ "loaded": true, "ids": ["demo-harbor-dental", "demo-summit-roofing", "demo-lakeview-pt"], "at": "ISO|null" }   // at = when it was loaded
 // → loaded false: { "loaded": false, "ids": [], "at": null }
 
 // POST /api/mc/demo { "action": "load" }     (a second load replaces the first)
-{ "ok": true, "ids": ["demo-harbor-dental", "demo-summit-roofing"] }
+{ "ok": true, "ids": ["demo-harbor-dental", "demo-summit-roofing", "demo-lakeview-pt"] }
 
-// POST /api/mc/demo { "action": "remove" }   (every key it wrote, and anything written under the two ids since)
+// POST /api/mc/demo { "action": "remove" }   (every key it wrote, and anything written under the three ids since;
+//                                              the store is exactly as before, except the `demo:autoloaded` mark)
 { "ok": true, "removed": 512 }
 
 // → 400 { error } unknown action · 403 { error: 'Read-only: ask the owner to do this.' } for an employee · 500 { error }
@@ -1857,3 +1873,125 @@ badge on the card and a "Load test run" / "Remove test run" pair in Settings.
 - reading them costs the Redis budget only when the hub opens them (a tick
   reads nothing of theirs).
 - Their dashboard link (`links.dashboard`) works: a read-only page.
+
+# Emails and conversations, per client (2026-09-29)
+
+Every email that went out for a client, and every conversation with a
+prospect, word for word — for real clients and the Test run alike. Three
+`GET` routes, owner and employees (read-only; not in `EMPLOYEE_DENY`), the
+same auth as every `/api/mc/hub` route. Nothing here runs in a tick: only a
+hub view reads.
+
+**Where the words are kept.** Each cold email's text as sent (with its
+footer) goes to `client:{id}:mailtext` (hash, `{leadEmail}|{touch}` → text,
+at most 4 000 characters) in the sender's existing pipeline — one more
+command per send, about 0.7 KB per email (≈ 0.4 MB for a 500-email month),
+deleted with the client's data (`client:{id}:*`). The machine's own answers
+to a prospect (the Speed Responder, reminders, re-books, apologies) go to
+`client:{id}:prospectmail` (hash, leadEmail → up to 10 `{at, key, subject,
+from, to, text}`). The client's answer to a hot-lead hand-off is kept on its
+hot-lead record (`answerText`, ≤ 2 000 characters). A prospect's reply was
+already kept (`client:{id}:replies`, ≤ 2 000 characters). Emails sent before
+2026-09-29 show their subject and, as `text`, *"(This email went out before
+the machine kept email texts, so only its subject is known.)"*
+
+## `GET /api/mc/hub/{id}/emails?limit=200&before=ISO&kind=`
+
+```jsonc
+{
+  "total": 568,              // every email across all pages (with ?kind=: of that kind)
+  "sent": [                  // newest first
+    { "id": "bmF0aGFuQHNvdXRocG9ydHBsYXN0aWNzLmV4YW1wbGU.d0",   // URL-safe, unique
+      "at": "ISO",
+      "to": "nathan@southportplastics.example", "toName": "Nathan Vaughn|null", "company": "Southport Plastics|null",
+      "subject": "Southport Plastics and Lakeview Physical Therapy",   // '' when none was kept
+      "from": "dana@lakeviewhq.example",            // the sending inbox (plain address)
+      "kind": "first|followup|bot|owner|client",
+      "status": "sent|bounced|replied|failed",
+      "threadId": "bmF0aGFuQHNvdXRocG9ydHBsYXN0aWNzLmV4YW1wbGU" }  // every email has one
+  ],
+  "next": "ISO|null"         // = the `at` of the last email returned; pass it as ?before= for the next page
+}
+// → 404 { error } unknown client · 400 { error } bad id or `before` not a time · 500 { error }
+```
+
+- `kind`: `first` the first cold email; `followup` a follow-up (days 3, 7,
+  10); `bot` the machine's own answer to a prospect (or the reply bot's
+  answer to the client, `threadId: 'client'`); `owner` the owner's own
+  message to the client (the hub's Messages); `client` every other email to
+  the client (hot leads, Friday updates, invoices, the onboarding emails).
+  `?kind=` returns only that kind.
+- `status`: `replied` on the cold email they answered; `bounced` on the one
+  that bounced (or refused at send time); `failed` a send that did not go
+  (its next try is still due); else `sent`.
+- `to` / `toName` / `company` for `owner` / `client` / reply-bot emails: the
+  client's contact, name and company.
+- Paging: `limit` 1–500 (default 200). `before` is exclusive; a page never
+  splits emails of the same second (it stops before them, so a page can be a
+  little shorter than `limit`; ties are ordered by `id`). `next` is `null` on
+  the last page.
+- Redis: about 11 reads a call.
+
+## `GET /api/mc/hub/{id}/threads`
+
+One row per prospect who wrote back (a reply, an out-of-office, a bounce),
+newest first:
+
+```jsonc
+{ "threads": [
+  { "threadId": "YnJpYW5AYmVhY29ucGxhc3RpY3MuZXhhbXBsZQ",
+    "lead": { "email": "brian@beaconplastics.example", "name": "Brian Gibson|null", "company": "Beacon Plastics|null" },
+    "lastAt": "ISO",           // the newest message in the conversation
+    "count": 6,                // messages in GET …/threads/{threadId}
+    "kind": "interested|question|not_now|out_of_office|bounce|unsubscribe|not_interested|referral|unclear|legal|angry",   // their latest reply
+    "handledBy": "client|bot|owner|null",   // client = handed to the client as a hot lead; bot = the machine answered;
+                                            // owner = a legal / angry reply (the owner's alert); null = nothing to do (out-of-office, bounce)
+    "snippet": "Interested — can you come and look at it next week? What does it cost?" }
+] }
+// → 404 unknown client
+```
+
+## `GET /api/mc/hub/{id}/threads/{threadId}`
+
+The whole conversation, oldest first — works for **every** `threadId` in the
+email log (a prospect who never answered shows our emails):
+
+```jsonc
+{ "threadId": "YnJpYW5AYmVhY29ucGxhc3RpY3MuZXhhbXBsZQ",
+  "lead": { "email": "brian@beaconplastics.example", "name": "Brian Gibson", "company": "Beacon Plastics" },
+  "messages": [
+    { "at": "ISO", "dir": "out", "by": "system", "from": "Dana Whitfield <dana.whitfield@lakeviewhq.example>", "to": "Brian Gibson <brian@beaconplastics.example>",
+      "subject": "Beacon Plastics and Lakeview Physical Therapy", "text": "Hi Brian,\n\nSaw Beacon Plastics is one of …\n\nIf this isn't for you, reply STOP and I won't email you again." },
+    { "at": "ISO", "dir": "in",  "by": "prospect", "from": "Brian Gibson <brian@beaconplastics.example>", "to": "Dana Whitfield <dana.whitfield@lakeviewhq.example>",
+      "subject": "Re: Beacon Plastics and Lakeview Physical Therapy", "text": "Interested — can you come and look at it next week? What does it cost?" },
+    { "at": "ISO", "dir": "out", "by": "system", "from": "Dana Whitfield <dana.whitfield@lakeviewhq.example>", "to": "Dana Whitfield <dana@lakeviewpt.example>",
+      "subject": "Hot — Beacon Plastics, Brian Gibson, HR Director", "text": "Brian Gibson at Beacon Plastics (Bangor) replied: …" },   // the hand-off to the client
+    { "at": "ISO", "dir": "out", "by": "bot", "from": "…", "to": "Brian Gibson <brian@beaconplastics.example>",
+      "subject": "Re: Beacon Plastics and Lakeview Physical Therapy", "text": "Thanks, Brian — glad it’s of interest. Would either of these work …" },
+    { "at": "ISO", "dir": "in",  "by": "client", "from": "Dana Whitfield <dana@lakeviewpt.example>", "to": "…",
+      "subject": "Re: Hot — Beacon Plastics, Brian Gibson, HR Director", "text": "On it — I will call them this afternoon." }
+  ] }
+// → 404 unknown client, unknown / broken threadId, or a prospect this client never wrote to
+```
+
+- `by`: `system` our cold emails and the hand-off to the client; `bot` the
+  machine's answers to the prospect; `prospect` their replies; `client` the
+  client answering the hand-off (in a prospect thread) or writing to the
+  owner (in the `client` thread); `owner` the owner's own message; a bounce
+  is `dir: 'in', by: 'system'` from `Mail Delivery System <mailer-daemon>`.
+- `from` / `to` are `"Name <address>"` when a name is known (the sender name
+  on the client's inboxes, the prospect's name, the client's contact, the
+  owner's name), else the plain address.
+- `threadId` is the prospect's address in URL-safe base64 (no padding).
+  **`threadId: 'client'`** is the client ↔ owner conversation (the onboarding
+  Gmail — every `owner` / `client` email in the log points to it); the same
+  conversation, with the reply bot's switch, is `conversation` in
+  `GET /api/mc/hub/{id}` (see "Messages + the reply bot") and stays the
+  hub's Messages tab.
+- Redis: about 9 reads a call.
+
+## Also in this change
+
+- A paying client's delivery-problem email is `deliverability_notice_paid`
+  ("Sending paused for now", no trial words) and the quiet pause is
+  `paused_quiet_paid`.
