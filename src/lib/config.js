@@ -594,6 +594,10 @@ export const DEFAULTS = {
   // Ava (the hub's AI helper, lib/ava/): questions a day for everyone together (0 = no cap). Each question is
   // up to 4 calls to a free, no-training AI service (Groq / Cerebras first).
   AVA_DAILY_CAP: 300,
+  // Ava's models: normally picked live from each service's model list (lib/ava/models.js). Set one here to force it,
+  // e.g. { groq: 'openai/gpt-oss-120b', groqSmart: 'qwen/qwen3-32b', cloudflare: '@cf/openai/gpt-oss-120b' }.
+  // Env AVA_{BRAIN}_MODEL / AVA_{BRAIN}_SMART_MODEL win over this.
+  AVA_MODELS: {},
   // US federal holidays, observed dates. Update once a year (one line per year).
   US_HOLIDAYS: [
     '2026-01-01', '2026-01-19', '2026-02-16', '2026-05-25', '2026-06-19', '2026-07-03',

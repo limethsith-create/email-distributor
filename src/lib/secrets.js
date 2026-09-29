@@ -19,8 +19,8 @@
  * the verifiers and the Places client do not read Redis on every call, and a
  * caller that checks several keys at once passes one snapshot around.
  *
- * The AI keys (Groq, Cerebras, Gemini, OpenRouter) are Ava's brains (lib/ava/);
- * nothing else in the machine uses AI.
+ * The AI keys (Groq, Cloudflare, Cerebras, Gemini, OpenRouter) are Ava's brains
+ * and Tavily / Exa her web search (lib/ava/); nothing else in the machine uses AI.
  */
 
 import { kv } from '@vercel/kv';
@@ -47,8 +47,11 @@ export const CARDS = [
   { name: 'HUNTER_API_KEY', short: 'Hunter key', label: 'Hunter key — about 100 checks a month free (optional)', fields: ['HUNTER_API_KEY'], optional: true },
   { name: 'GITHUB_TOKEN', short: 'GitHub token', label: 'GitHub token — starts the lead finder', fields: ['GITHUB_TOKEN'], needs: ['GITHUB_TOKEN', 'GITHUB_REPO'] },
   // Ava's brains (lib/ava/brains.js): only services whose terms say API inputs are not used for training.
-  { name: 'GROQ_API_KEY', short: 'Groq key', label: 'Groq key — Ava\'s fast brain, free (Groq does not train on API data)', fields: ['GROQ_API_KEY'], optional: true },
-  { name: 'CEREBRAS_API_KEY', short: 'Cerebras key', label: 'Cerebras key — Ava\'s second free brain (Cerebras does not keep or train on API data)', fields: ['CEREBRAS_API_KEY'], optional: true },
+  { name: 'GROQ_API_KEY', short: 'Groq key', label: 'Groq key — Ava\'s main brain and her ears, free (Groq does not train on API data)', fields: ['GROQ_API_KEY'], optional: true },
+  { name: 'CLOUDFLARE', short: 'Cloudflare Workers AI', label: 'Cloudflare Workers AI — Ava\'s second free brain: your account ID and an API token (Cloudflare does not train on your data)', fields: ['CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN'], parts: { accountId: 'CLOUDFLARE_ACCOUNT_ID', apiToken: 'CLOUDFLARE_API_TOKEN' }, partLabels: { accountId: 'Account ID', apiToken: 'API token' }, optional: true },
+  { name: 'TAVILY_API_KEY', short: 'Tavily key', label: 'Tavily key — lets Ava search the web for current facts, 1,000 searches a month free (optional)', fields: ['TAVILY_API_KEY'], optional: true },
+  { name: 'EXA_API_KEY', short: 'Exa key', label: 'Exa key — a second web search for Ava, free monthly credit (optional)', fields: ['EXA_API_KEY'], optional: true },
+  { name: 'CEREBRAS_API_KEY', short: 'Cerebras key', label: 'Cerebras key — an extra brain; no longer free (needs a card), does not keep or train on API data (optional)', fields: ['CEREBRAS_API_KEY'], optional: true },
   { name: 'GEMINI_API_KEY', short: 'Gemini key', label: 'Gemini key — paid key only: free Gemini keys may train on your data (optional)', fields: ['GEMINI_API_KEY'], optional: true },
   { name: 'OPENROUTER_API_KEY', short: 'OpenRouter key', label: 'OpenRouter key — paid credits; Ava always asks for providers that do not train or keep data (optional)', fields: ['OPENROUTER_API_KEY'], optional: true },
   { name: 'GITHUB_REPO', short: 'GitHub repository', label: 'GitHub repository — where the lead finder runs (leave the default unless it moved)', fields: ['GITHUB_REPO'], needs: ['GITHUB_TOKEN', 'GITHUB_REPO'], secret: false, default: DEFAULT_REPO },
@@ -203,6 +206,7 @@ function statusFrom(card, hash) {
     secret: card.secret !== false,
     fields: card.fields,
     ...(card.parts ? { parts: Object.keys(card.parts) } : {}),
+    ...(card.partLabels ? { partLabels: card.partLabels } : {}),
     set,
     from: !set ? (sources.find(Boolean) || null) : sources.every((s) => s === 'env') ? 'env' : sources.every((s) => s === 'hub') ? 'hub' : 'env',
     savedAt: str(hash[`${card.name}:savedAt`]) || null,
