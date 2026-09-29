@@ -1,63 +1,35 @@
 /**
  * Ava's tools (docs/HUB-API.md "Ava (AI helper)") — what the brain may look
- * up, run here on the machine. EVERY output is free of personal data:
- * company names, counts, stages, dates, day numbers, rates and plan names
- * only. Never a prospect's name, an email address, a phone number, a message
- * body, the client's contact person's email, a credential, a token, a link,
- * or (for team members) any money.
+ * up, run here on the machine. Seven broad tools (fewer, richer tools keep
+ * each request small and the choice easy):
  *
- * Built from structured fields only (to-dos become their TYPE, never their
- * text), then passed through clean() as a second net: email addresses,
- * phone numbers and links are removed, and the contact people's names
- * become "the client".
+ *   search_hub {query}      clients / applications / calls / team by name or state, + the guide
+ *   get_client {name|id}    one client's whole picture (money only for the owner)
+ *   list_clients {filter}   clients by step, what needs the owner, the waiting list
+ *   get_numbers {scope}     my_outreach | all_clients | money (owner only)
+ *   get_calendar {from,to}  calls and meetings
+ *   web_search {query}      current / outside facts (Tavily, then Exa) — only with a search key
+ *   propose_action {name, args, label}  a button for the user (navigate, draft, or a confirm)
+ *
+ * EVERY output is free of personal data: company names, counts, stages,
+ * dates, day numbers, rates and plan names only. Never a prospect's name, an
+ * email address, a phone number, a message body, the client's contact
+ * person's email, a credential, a token, a link, or (for team members) any
+ * money. Built from structured fields only (to-dos become their TYPE, never
+ * their text), then passed through clean() (lib/ava/text.js) as a second
+ * net. Outputs are compact (lists capped) to keep each request small.
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
 import { hubBoard, hubClient } from '@/lib/systems/hubview';
 import { teamView } from '@/lib/systems/team';
 import { calendarView } from '@/lib/systems/calendar';
-import { getAllClients } from '@/lib/db/client';
+import { personNames, prospectNames, cleanText, clean } from '@/lib/ava/text';
+import { retrieve, guideChunks } from '@/lib/ava/kb';
+import { webSearch } from '@/lib/ava/search';
+import { proposalToAction, CONFIRMS, VIEWS, CLIENT_TABS, SETTINGS_SECTIONS } from '@/lib/ava/actions';
 
 export const OWNER_TZ = 'Asia/Colombo';
-
-// ─── the personal-data net ───────────────────────────────────────────────────
-
-const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
-const AT_RE = /\S*@\S+/g;
-const URL_RE = /\bhttps?:\/\/\S+|\bwww\.\S+/gi;
-const PHONE_RE = /(?:\+?\d[\d\s().-]{6,}\d)/g;
-const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/** The words to hide: every client's contact person (whole name, first and last). */
-export async function personNames() {
-  const clients = await getAllClients(null, { includeDemo: true }).catch(() => []);
-  const set = new Set();
-  for (const c of clients) {
-    const n = String(c.contactName || '').trim();
-    if (!n) continue;
-    set.add(n);
-    for (const part of n.split(/\s+/)) if (part.length >= 3) set.add(part);
-  }
-  return [...set].sort((a, b) => b.length - a.length);
-}
-
-/** One string, cleaned. Dates like 2026-10-06 and times survive the phone rule (it needs 8+ digits in a row-ish run). */
-export function cleanText(s, names = []) {
-  let t = String(s ?? '');
-  t = t.replace(URL_RE, '[link]').replace(EMAIL_RE, '[email]').replace(AT_RE, '[email]');
-  t = t.replace(PHONE_RE, (m) => ((m.match(/\d/g) || []).length >= 8 && !/^\d{4}-\d{2}-\d{2}/.test(m.trim()) ? '[phone]' : m));
-  for (const n of names) t = t.replace(new RegExp(`\\b${esc(n)}\\b(?:'s)?`, 'g'), 'the client');
-  return t;
-}
-
-/** Deep: every string in an answer goes through cleanText. */
-export function clean(v, names = []) {
-  if (typeof v === 'string') return cleanText(v, names);
-  if (Array.isArray(v)) return v.map((x) => clean(x, names));
-  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, clean(x, names)]));
-  return v;
-}
+export { personNames, cleanText, clean };
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -140,97 +112,73 @@ function lev(a, b) {
 }
 const GENERIC = new Set('it inc llc ltd co company group the and of dental plumbing roofing legal law hvac clinic services service solutions systems tech media marketing studio partners consulting health care home homes'.split(' '));
 
-/** The best client for a name said or typed a bit wrong → { id, name } | null. */
-export function matchClient(query, clients) {
+/** Every client that matches a name said or typed a bit wrong → [{ c, s }] best first. */
+export function scoreClients(query, clients) {
   const q = norm(query);
-  if (!q) return null;
-  let best = null;
-  const consider = (c, s) => { if (s > 0 && (!best || s > best.s)) best = { c, s }; };
+  if (!q) return [];
+  const out = [];
   for (const c of clients) {
+    let best = 0;
+    const consider = (s) => { if (s > best) best = s; };
     const full = norm(c.name);
     const id = norm(String(c.id).replace(/^demo-/, ''));
-    if (full === q || id === q) { consider(c, 100); continue; }
-    if (full.includes(q) || q.includes(full)) consider(c, 60 + Math.min(q.length, full.length));
+    if (full === q || id === q) { out.push({ c, s: 100 }); continue; }
+    if (full && (full.includes(q) || q.includes(full))) consider(60 + Math.min(q.length, full.length));
     const words = full.split(' ').filter((w) => w.length >= 3 && !GENERIC.has(w));
     for (const w of words) {
       for (const qw of q.split(' ')) {
-        if (qw === w) consider(c, 40 + w.length);
-        else if (qw.length >= 4 && w.length >= 4) { const d = lev(qw, w); if (d <= (w.length >= 8 ? 2 : 1)) consider(c, 30 + w.length - d * 5); }
+        if (qw === w) consider(40 + w.length);
+        else if (qw.length >= 4 && w.length >= 4) { const d = lev(qw, w); if (d <= (w.length >= 8 ? 2 : 1)) consider(30 + w.length - d * 5); }
       }
     }
     const flat = full.replace(/ /g, ''); const qflat = q.replace(/ /g, '');
-    if (qflat.length >= 5 && flat.length >= 5) { const d = lev(qflat, flat.slice(0, qflat.length)); if (d <= 1) consider(c, 25); }
+    if (qflat.length >= 5 && flat.length >= 5) { const d = lev(qflat, flat.slice(0, qflat.length)); if (d <= 1) consider(25); }
+    if (best > 0) out.push({ c, s: best });
   }
-  return best ? best.c : null;
+  return out.sort((a, b) => b.s - a.s);
 }
 
-// ─── the tools ───────────────────────────────────────────────────────────────
+/** The best client for a name said or typed a bit wrong → { id, name } | null. */
+export function matchClient(query, clients) {
+  return scoreClients(query, clients)[0]?.c || null;
+}
 
-async function hub_summary(_args, ctx) {
-  const board = await ctx.board();
-  const alertsById = new Map((board.alerts || []).map((a) => [String(a.id), a]));
-  const rows = boardRows(board);
-  const stages = (board.stages || []).filter((s) => (s.clients || []).some((r) => !HIDDEN_IDS.has(r.id))).map((s) => ({
-    stage: s.label,
-    count: s.clients.filter((r) => !HIDDEN_IDS.has(r.id)).length,
-    clients: s.clients.filter((r) => !HIDDEN_IDS.has(r.id)).map((r) => ({
-      name: r.name, plan: r.plan || 'trial', step: r.simple?.step || null,
-      day: num(r.simple?.dayOf30) ?? num(r.trialDay), needsYou: Boolean(r.simple?.needsYou), ...(r.demo ? { testRun: true } : {}),
-    })),
-  }));
+// ─── shared pieces ───────────────────────────────────────────────────────────
+
+const PAID = ['starter', 'growth', 'scale'];
+const LIST_CAP = 20;
+const cap = (arr, n = LIST_CAP) => (arr.length > n ? arr.slice(0, n) : arr);
+
+/** One compact line about a client on the board. */
+function clientLine({ row, stage }) {
+  return {
+    id: row.id, name: row.name, plan: row.plan || 'trial', stage, step: row.simple?.step || null,
+    status: row.simple?.label || row.stateLabel || null,
+    day: num(row.simple?.dayOf30) ?? num(row.trialDay), needsYou: Boolean(row.simple?.needsYou),
+    ...(row.demo ? { testRun: true } : {}),
+  };
+}
+
+/** Stage key for a row (board.stages[].key). */
+function rowsWithKeys(board) {
+  const out = [];
+  for (const s of board.stages || []) for (const r of s.clients || []) if (!HIDDEN_IDS.has(r.id)) out.push({ row: r, stage: s.label, key: s.key });
+  return out;
+}
+
+function counts(rows) {
   return {
     totalClients: rows.length,
-    trials: rows.filter((x) => (x.row.plan || 'trial') === 'trial').length,
-    paying: rows.filter((x) => ['starter', 'growth', 'scale'].includes(x.row.plan)).length,
-    needYouNow: rows.filter((x) => x.row.simple?.needsYou).map((x) => x.row.name),
-    stages,
-    needsTheOwner: needsLines(board.todos, alertsById),
-    openAlerts: num(board.machine?.openAlerts) ?? 0,
-    activeTrials: num(board.machine?.activeTrials), maxActiveTrials: num(board.machine?.maxActiveTrials),
-    waitingList: (board.machine?.queue || []).map((q) => q.name || q.id),
-    newPlanInquiries: (board.inquiries?.latest || []).filter((q) => q.status === 'new').length,
+    trials: rows.filter((x) => !PAID.includes(x.row.plan)).length,
+    paying: rows.filter((x) => PAID.includes(x.row.plan)).length,
+    needYouNow: rows.filter((x) => x.row.simple?.needsYou).length,
   };
 }
 
-async function client_overview(args, ctx) {
-  const board = await ctx.board();
-  const rows = boardRows(board);
-  const hit = matchClient(args?.name, rows.map((x) => ({ id: x.row.id, name: x.row.name })));
-  if (!hit) return { found: false, message: 'No client by that name.', clients: rows.map((x) => x.row.name) };
-  const { row, stage } = rows.find((x) => x.row.id === hit.id);
-  const d = (await hubClient(row.id, { owner: ctx.role === 'admin' }).catch(() => null)) || {};
-  const alertsById = new Map((board.alerts || []).map((a) => [String(a.id), a]));
-  const five = row.five || {};
-  const counters = d.counters || {};
-  const w = d.warmup || null;
-  const kinds = d.repliesByKind && typeof d.repliesByKind === 'object' ? Object.fromEntries(Object.entries(d.repliesByKind).map(([k, v]) => [k, num(v) ?? 0])) : {};
-  return {
-    found: true,
-    id: row.id, name: row.name, plan: row.plan || 'trial', stage, step: row.simple?.step || null,
-    ...(row.demo ? { testRun: true } : {}),
-    status: row.simple?.label || row.stateLabel || null,
-    next: row.simple?.next || null,
-    needsYou: Boolean(row.simple?.needsYou),
-    day: num(row.simple?.dayOf30) ?? num(row.trialDay), day1Date: row.day1Date || null, day30Date: (row.plan || 'trial') === 'trial' ? row.day30Date || null : null,
-    health: row.health || null,
-    numbers: {
-      sent: num(five.sent) ?? num(counters.sent), replies: num(five.replies) ?? num(counters.replies),
-      bounced: num(counters.bounces) ?? num(counters.bounced), interested: num(five.positive) ?? num(kinds.interested),
-      booked: num(five.booked) ?? num(counters.booked), qualified: num(five.qualified),
-    },
-    replyTypes: kinds,
-    warmup: w ? { status: w.status || null, day: num(w.day), of: num(w.of), inboxRatePct: pct(w.inboxRate), readyBy: w.readyBy || null, inboxes: Array.isArray(w.inboxes) ? w.inboxes.length : null } : (row.inboxRate != null ? { inboxRatePct: pct(row.inboxRate) } : null),
-    leads: d.leadsByStatus && typeof d.leadsByStatus === 'object' ? d.leadsByStatus : null,
-    nextUp: row.nextUp || null,
-    thingsToDo: needsLines(row.todo, alertsById).map((x) => x.text),
-    openAlerts: num(row.openAlerts) ?? 0,
-  };
-}
-
-async function calendar_summary(args, ctx) {
+async function calendarRange(args, ctx, { defaultBackDays = 1, defaultAheadDays = 14 } = {}) {
   const now = ctx.now();
-  const from = Date.parse(args?.from) || now.getTime() - 86400e3;
-  let to = Date.parse(args?.to) || from + 14 * 86400e3;
+  const from = Date.parse(args?.from) || now.getTime() - defaultBackDays * 86400e3;
+  let to = Date.parse(args?.to) || from + (defaultBackDays + defaultAheadDays) * 86400e3;
   if (to <= from) to = from + 86400e3;
   if (to - from > 62 * 86400e3) to = from + 62 * 86400e3;
   const v = await calendarView({ from: new Date(from).toISOString(), to: new Date(to).toISOString(), now });
@@ -239,25 +187,163 @@ async function calendar_summary(args, ctx) {
     company: m.company || (m.status === 'blocked' ? 'busy block' : null), type: m.status === 'blocked' ? 'block' : m.kind || 'other', status: m.status,
     ...(m.meetLink ? { hasMeetLink: true } : {}), ...(m.demo ? { testRun: true } : {}),
   });
-  return {
-    from: new Date(from).toISOString(), to: new Date(to).toISOString(), timeZone: 'Sri Lanka (Asia/Colombo), US Eastern beside it',
-    meetings: (v.meetings || []).map(one),
-    waitingForYourYes: (v.requests || []).map(one),
-  };
+  return { from: new Date(from).toISOString(), to: new Date(to).toISOString(), meetings: (v.meetings || []).map(one), waitingForYourYes: (v.requests || []).map(one) };
 }
 
-async function team_summary(_args) {
+async function teamList() {
   const { team } = await teamView();
-  return {
-    team: (team || []).map((p) => ({
-      firstName: firstName(p.name) || (p.role === 'admin' ? 'The owner' : 'A team member'),
-      role: p.role === 'admin' ? 'owner' : 'team member',
-      online: Boolean(p.online),
-      status: p.status?.text || null, statusAt: p.status?.at || null,
-      looksAfter: (p.clients || []).map((c) => c.name),
-    })),
-  };
+  return (team || []).map((p) => ({
+    firstName: firstName(p.name) || (p.role === 'admin' ? 'The owner' : 'A team member'),
+    role: p.role === 'admin' ? 'owner' : 'team member',
+    online: Boolean(p.online),
+    status: p.status?.text || null, statusAt: p.status?.at || null,
+    looksAfter: (p.clients || []).map((c) => c.name),
+  }));
 }
+
+// ─── search_hub ──────────────────────────────────────────────────────────────
+
+const STATE_WORDS = [
+  [/\b(appl(y|ied|ication)s?|new|review|queue|waiting list)\b/i, ['intake']],
+  [/\bonboard(ing)?\b/i, ['onboard']],
+  [/\b(buy(ing)?|set ?up|setting up|domain|inbox(es)?)\b/i, ['setup']],
+  [/\bwarm(ing)?[- ]?up\b|\bwarming\b/i, ['build']],
+  [/\b(send(ing)?|live|paused|extension)\b/i, ['live']],
+  [/\b(decid(e|ing)|day ?30|decision)\b/i, ['decide']],
+  [/\b(convert(ed)?|won|paying|paid)\b/i, ['won']],
+  [/\b(done|ended|finished|declined|not taken|closing|not now)\b/i, ['closing', 'ended']],
+];
+
+async function search_hub(args, ctx) {
+  const query = String(args?.query || '').slice(0, 200);
+  const board = await ctx.board();
+  const rows = rowsWithKeys(board);
+  const scored = scoreClients(query, rows.map((x) => ({ id: x.row.id, name: x.row.name })));
+  const byName = scored.filter((x) => x.s >= 30).map((x) => rows.find((r) => r.row.id === x.c.id));
+  const keys = new Set(STATE_WORDS.filter(([re]) => re.test(query)).flatMap(([, k]) => k));
+  const byState = keys.size ? rows.filter((r) => keys.has(r.key)) : [];
+  const needs = /\bneed(s)? (me|you|the owner)|urgent|to-?do|what('s| is) (waiting|next)/i.test(query) ? rows.filter((r) => r.row.simple?.needsYou) : [];
+  const seen = new Set();
+  const clients = [];
+  for (const r of [...byName, ...needs, ...byState]) { if (r && !seen.has(r.row.id)) { seen.add(r.row.id); clients.push(clientLine(r)); } }
+  const out = { query, clients: cap(clients, 12) };
+  if (clients.length > 12) out.moreClients = clients.length - 12;
+  // Calls: by company or by call type.
+  const cal = await calendarRange({}, ctx, { defaultBackDays: 7, defaultAheadDays: 30 }).catch(() => null);
+  if (cal) {
+    const names = new Set(clients.map((c) => norm(c.name)));
+    const typeHit = /\b(call|calls|meeting|meetings|calendar|launch|onboarding|booked)\b/i.test(query);
+    const meetings = cal.meetings.filter((m) => (m.company && names.has(norm(m.company))) || (typeHit && m.type !== 'block'));
+    if (meetings.length) out.calls = cap(meetings, 10);
+    if (typeHit && cal.waitingForYourYes.length) out.callTimesWaitingForYourYes = cap(cal.waitingForYourYes, 10);
+  }
+  // Team.
+  const team = await teamList().catch(() => []);
+  const teamHit = /\b(team|staff|online|who is working|people|colleague|employee)\b/i.test(query);
+  const q = norm(query);
+  const people = team.filter((p) => teamHit || (p.firstName && q.split(' ').includes(norm(p.firstName))) || p.looksAfter.some((n) => names2(n, q)));
+  if (people.length) out.team = cap(people, 12);
+  if (/\bwait(ing)? ?list|queue\b/i.test(query)) out.waitingList = (board.machine?.queue || []).map((x) => x.name || x.id);
+  // The guide.
+  const guide = retrieve(query, { page: ctx.page || {}, facts: await ctx.facts(), limit: 3, maxTokens: 600 });
+  if (guide.length) out.guide = guide.map((g) => ({ title: g.title, text: g.text }));
+  if (!clients.length && !out.calls && !out.team && !out.guide) out.message = 'Nothing in the hub matches that. Try a company name, a step (applied, warming up, sending…) or "team".';
+  return out;
+}
+const names2 = (clientName, q) => { const n = norm(clientName); return n && q && (n.includes(q) || q.includes(n)); };
+
+// ─── get_client ──────────────────────────────────────────────────────────────
+
+function callsOf(d) {
+  const list = Array.isArray(d.bookings) ? d.bookings : [];
+  const byStatus = {};
+  for (const b of list) { const k = String(b.status || 'booked'); byStatus[k] = (byStatus[k] || 0) + 1; }
+  const upcoming = list.filter((b) => b.scheduledAt && Date.parse(b.scheduledAt) > Date.now() && ['booked', 'rebooked'].includes(b.status)).length;
+  return { total: list.length, qualified: list.filter((b) => b.qualified).length, byStatus, upcoming };
+}
+const callCard = (c) => (c ? { status: c.status || null, bookedFor: c.bookedFor || null, heldAt: c.heldAt || null, overdue: Boolean(c.overdue), remindersSent: num(c.remindersSent), needsReply: Boolean(c.needsReply) } : null);
+
+async function get_client(args, ctx) {
+  const board = await ctx.board();
+  const rows = rowsWithKeys(board);
+  const wanted = String(args?.id || args?.name || '').trim() || ctx.page?.clientId || '';
+  let hit = rows.find((x) => x.row.id === wanted);
+  if (!hit) {
+    const m = matchClient(wanted, rows.map((x) => ({ id: x.row.id, name: x.row.name })));
+    hit = m ? rows.find((x) => x.row.id === m.id) : null;
+  }
+  if (!hit) return { found: false, message: wanted ? 'No client by that name.' : 'Which client? Give a name.', clients: cap(rows.map((x) => x.row.name), 30) };
+  const { row, stage } = hit;
+  const owner = ctx.role === 'admin';
+  const d = (await hubClient(row.id, { owner }).catch(() => null)) || {};
+  const alertsById = new Map((board.alerts || []).map((a) => [String(a.id), a]));
+  const five = row.five || {};
+  const counters = d.counters || {};
+  const w = d.warmup || null;
+  const kinds = d.repliesByKind && typeof d.repliesByKind === 'object' ? Object.fromEntries(Object.entries(d.repliesByKind).map(([k, v]) => [k, num(v) ?? 0]).filter(([, v]) => v)) : {};
+  const out = {
+    found: true,
+    id: row.id, name: row.name, plan: row.plan || 'trial', stage, step: row.simple?.step || null,
+    ...(row.demo ? { testRun: true } : {}),
+    status: row.simple?.label || row.stateLabel || null,
+    next: row.simple?.next || null,
+    needsYou: Boolean(row.simple?.needsYou),
+    day: num(row.simple?.dayOf30) ?? num(row.trialDay), day1Date: row.day1Date || null, day30Date: (row.plan || 'trial') === 'trial' ? row.day30Date || null : null,
+    health: row.health || null,
+    emails: {
+      sent: num(five.sent) ?? num(counters.sent), replies: num(five.replies) ?? num(counters.replies),
+      bounced: num(counters.bounces) ?? num(counters.bounced), interested: num(five.positive) ?? num(kinds.interested),
+      booked: num(five.booked) ?? num(counters.booked), qualified: num(five.qualified),
+    },
+    replyTypes: kinds,
+    calls: callsOf(d),
+    onboardingCall: callCard(d.onboardCall),
+    launchCall: callCard(d.launchCall),
+    warmup: w ? { status: w.status || null, day: num(w.day), of: num(w.of), inboxRatePct: pct(w.inboxRate), readyBy: w.readyBy || null, inboxes: Array.isArray(w.inboxes) ? w.inboxes.length : null } : (row.inboxRate != null ? { inboxRatePct: pct(row.inboxRate) } : null),
+    leads: d.leadsByStatus && typeof d.leadsByStatus === 'object' ? d.leadsByStatus : null,
+    nextUp: row.nextUp || null,
+    thingsToDo: cap(needsLines(row.todo, alertsById).map((x) => x.text), 8),
+    openAlerts: num(row.openAlerts) ?? 0,
+  };
+  if (owner) {
+    const inv = row.invoice || d.invoice || null;
+    if (inv && inv.amount != null) out.money = { plan: inv.plan || row.plan || null, amountUsd: Number(inv.amount) || 0, status: inv.paidAt || inv.status === 'paid' ? 'paid' : inv.status || 'sent', issued: dateOnly(inv.issuedAt), paid: dateOnly(inv.paidAt) };
+  }
+  return out;
+}
+
+// ─── list_clients ────────────────────────────────────────────────────────────
+
+export const FILTERS = ['all', 'needs_you', 'trials', 'paying', 'applied', 'onboarding', 'setting_up', 'warming_up', 'sending', 'deciding', 'done', 'waiting_list', 'test_run'];
+const FILTER_KEYS = { applied: ['intake'], onboarding: ['onboard'], setting_up: ['setup'], warming_up: ['build'], sending: ['live'], deciding: ['decide'], done: ['won', 'closing', 'ended'] };
+
+async function list_clients(args, ctx) {
+  const filter = FILTERS.includes(args?.filter) ? args.filter : 'all';
+  const board = await ctx.board();
+  const alertsById = new Map((board.alerts || []).map((a) => [String(a.id), a]));
+  const rows = rowsWithKeys(board);
+  let pick = rows;
+  if (filter === 'needs_you') pick = rows.filter((r) => r.row.simple?.needsYou);
+  else if (filter === 'trials') pick = rows.filter((r) => !PAID.includes(r.row.plan));
+  else if (filter === 'paying') pick = rows.filter((r) => PAID.includes(r.row.plan));
+  else if (filter === 'test_run') pick = rows.filter((r) => r.row.demo);
+  else if (FILTER_KEYS[filter]) pick = rows.filter((r) => FILTER_KEYS[filter].includes(r.key));
+  const out = { filter, ...counts(rows), count: filter === 'waiting_list' ? (board.machine?.queue || []).length : pick.length };
+  if (filter !== 'waiting_list') out.clients = cap(pick.map(clientLine));
+  if (pick.length > LIST_CAP) out.more = pick.length - LIST_CAP;
+  if (filter === 'all' || filter === 'needs_you') {
+    out.needsTheOwner = cap(needsLines(board.todos, alertsById).map((x) => ({ text: x.text, urgent: x.urgent })), 15);
+    out.openAlerts = num(board.machine?.openAlerts) ?? 0;
+    out.newPlanInquiries = (board.inquiries?.latest || []).filter((q) => q.status === 'new').length;
+  }
+  if (filter === 'all' || filter === 'waiting_list' || filter === 'applied') {
+    out.activeTrials = num(board.machine?.activeTrials); out.maxActiveTrials = num(board.machine?.maxActiveTrials);
+    out.waitingList = (board.machine?.queue || []).map((q) => q.name || q.id);
+  }
+  return out;
+}
+
+// ─── get_numbers ─────────────────────────────────────────────────────────────
 
 async function my_outreach() {
   const { GET } = await import('@/app/api/mc/outreach/route');
@@ -266,10 +352,31 @@ async function my_outreach() {
   if (!res.ok) return { error: 'The sending history could not be read just now.' };
   const t = j.totals || {};
   const keep = ['sent', 'newSends', 'followUps', 'opens', 'uniqueOpens', 'replies', 'bounces', 'days', 'firstDay', 'lastDay'];
-  return { totals: Object.fromEntries(keep.map((k) => [k, t[k] ?? null])), inboxCount: Array.isArray(j.inboxes) ? j.inboxes.length : null };
+  return { scope: 'my_outreach', about: "Aviance's own cold emails (My stats)", totals: Object.fromEntries(keep.map((k) => [k, t[k] ?? null])), inboxCount: Array.isArray(j.inboxes) ? j.inboxes.length : null };
 }
 
-async function money_summary(_args, ctx) {
+async function all_clients(ctx) {
+  const board = await ctx.board();
+  const rows = rowsWithKeys(board);
+  const tot = { sent: 0, replies: 0, interested: 0, booked: 0, qualified: 0 };
+  const per = [];
+  for (const { row, stage } of rows) {
+    const f = row.five || {};
+    const one = { name: row.name, stage, sent: num(f.sent), replies: num(f.replies), interested: num(f.positive), booked: num(f.booked), qualified: num(f.qualified), ...(row.demo ? { testRun: true } : {}) };
+    if (!row.demo) for (const k of Object.keys(tot)) tot[k] += one[k] || 0;
+    if (Object.values(one).some((v) => typeof v === 'number' && v > 0)) per.push(one);
+  }
+  const byStage = {};
+  for (const r of rows) byStage[r.stage] = (byStage[r.stage] || 0) + 1;
+  return {
+    scope: 'all_clients', ...counts(rows), byStage, totalsRealClients: tot,
+    replyRatePct: tot.sent ? Math.round((tot.replies / tot.sent) * 1000) / 10 : null,
+    clients: cap(per.sort((a, b) => (b.sent || 0) - (a.sent || 0))),
+    activeTrials: num(board.machine?.activeTrials), maxActiveTrials: num(board.machine?.maxActiveTrials),
+  };
+}
+
+async function money(ctx) {
   if (ctx.role !== 'admin') return { error: 'Money is only for the owner.' };
   const board = await ctx.board();
   const others = (board.machine?.others || []).filter((r) => !HIDDEN_IDS.has(r.id));
@@ -289,81 +396,113 @@ async function money_summary(_args, ctx) {
     if (paid) { totals.receivedAllTime += amount; totals.paidInvoices += 1; if (inv.paidAt && monthOf(inv.paidAt) === month) totals.receivedThisMonth += amount; }
     else { totals.unpaid += amount; totals.unpaidInvoices += 1; }
   }
-  return { currency: 'USD', month, totals, ...(test.received ? { testRunReceivedNotCounted: test.received } : {}), clients, prices: { starter: 2497, growth: 3997, scale: 8497 } };
+  const { cfg } = await import('@/lib/config');
+  const plans = (await cfg(null, 'PLANS').catch(() => null)) || {};
+  const prices = {};
+  for (const k of PAID) if (plans[k]) prices[k] = { priceUsdPerMonth: num(plans[k].price), callsIncluded: num(plans[k].calls), reach: num(plans[k].reach) };
+  return { scope: 'money', currency: 'USD', month, totals, ...(test.received ? { testRunReceivedNotCounted: test.received } : {}), clients: cap(clients), prices };
 }
 
-// ─── the guide ───────────────────────────────────────────────────────────────
-
-let kbCache = null;
-export function kbSections() {
-  if (kbCache) return kbCache;
-  const file = path.join(process.cwd(), 'src', 'lib', 'ava', 'kb.md');
-  let text = '';
-  try { text = fs.readFileSync(file, 'utf8'); } catch { text = ''; }
-  kbCache = text.split(/\n(?=## )/).filter((s) => s.startsWith('## ')).map((s) => {
-    const [head, ...rest] = s.split('\n');
-    return { title: head.replace(/^##\s*/, '').trim(), text: rest.join('\n').trim() };
-  });
-  return kbCache;
+async function get_numbers(args, ctx) {
+  const scope = String(args?.scope || 'all_clients');
+  if (scope === 'my_outreach') return my_outreach();
+  if (scope === 'money') return money(ctx);
+  return all_clients(ctx);
 }
-const STOP = new Set('a an the to of for in on at is are am be do does did i me my we our you your it its this that and or please can could would will should with about what how why when where who which there any some tell show give get let know need needs want'.split(' '));
-const stem = (w) => w.replace(/(ing|ed|es|s)$/, '');
-const toks = (s) => norm(s).split(' ').filter((w) => w.length > 1 && !STOP.has(w)).map(stem);
 
-async function search_kb(args) {
-  const q = toks(args?.query || '');
-  const secs = kbSections();
-  if (!q.length) return { results: secs.slice(0, 1) };
-  const scored = secs.map((s) => {
-    const head = new Set(toks(s.title));
-    const body = new Set(toks(s.text));
-    let score = 0;
-    for (const w of new Set(q)) { if (head.has(w)) score += 3; if (body.has(w)) score += 1; }
-    return { s, score };
-  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
-  return { results: scored.map((x) => ({ title: x.s.title, text: x.s.text.slice(0, 1800) })) };
+// ─── get_calendar ────────────────────────────────────────────────────────────
+
+async function get_calendar(args, ctx) {
+  const r = await calendarRange(args, ctx);
+  return { ...r, timeZone: 'Sri Lanka (Asia/Colombo), US Eastern beside it', meetings: cap(r.meetings, 25), waitingForYourYes: cap(r.waitingForYourYes, 10) };
+}
+
+// ─── web_search ──────────────────────────────────────────────────────────────
+
+async function web_search(args, ctx) {
+  // Only the question's words go out: no emails, phones, links, contact or prospect names.
+  const names = [...await ctx.names(), ...await prospectNames().catch(() => [])];
+  const out = await webSearch(args?.query, { names });
+  return out.query ? { ...out, query: cleanText(out.query, names) } : out;
+}
+
+// ─── propose_action ──────────────────────────────────────────────────────────
+
+async function propose_action(args, ctx) {
+  const action = proposalToAction(args, ctx.role);
+  if (!action) return { error: `That button can't be offered${ctx.role !== 'admin' ? ' to a team member' : ''} — check the name and args.` };
+  ctx.actions.push(action);
+  return { ok: true, action, note: action.type === 'navigate' ? 'The hub opens this page now.' : 'The user sees this as a button; nothing has happened yet — do not say it is done.' };
 }
 
 // ─── definitions (OpenAI function calling) ──────────────────────────────────
 
+const obj = (properties, required = []) => ({ type: 'object', properties, ...(required.length ? { required } : {}), additionalProperties: false });
 const DEFS = {
-  hub_summary: { description: 'Everything at a glance: clients by stage (company names, step, day), what needs the owner now (as types, e.g. "1 reply to read and answer at Ridgeline IT"), open alerts, waiting list.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-  client_overview: { description: 'One client by (fuzzy) company name: stage, day, status, next step, sent/replies/bounced/interested/booked counts, reply types, warm-up progress and inbox rate, leads by status, things to do.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'Company name as the user said it' } }, required: ['name'], additionalProperties: false } },
-  calendar_summary: { description: 'Calls and meetings between two times (ISO dates; default: yesterday to two weeks ahead): Sri Lanka time, US Eastern, company, meeting type, status; plus times waiting for a yes.', parameters: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } }, additionalProperties: false } },
-  team_summary: { description: 'The team: first names, online now, their "working on" status line, clients each looks after.', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-  my_outreach: { description: "The owner's own outreach (My stats): totals only — sent, opens, replies, bounces, days.", parameters: { type: 'object', properties: {}, additionalProperties: false } },
-  money_summary: { description: 'OWNER ONLY. Money received (all time, this month), unpaid invoices, and each client\'s month-one invoice (plan, amount, paid or not).', parameters: { type: 'object', properties: {}, additionalProperties: false } },
-  search_kb: { description: 'Search the written guide: the whole process (apply → yes → onboarding call → inboxes → warm-up → launch call → sending → replies → calls → day 30 → invoice), every hub page and button, settings, roles, FAQs.', parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false } },
+  search_hub: { description: 'Search the hub: clients and applications by (fuzzy) name or by step (applied, onboarding, setting up, warming up, sending, deciding, done, needs me), calls by company or type, the team (who is online, what they work on, who looks after whom), the waiting list, plus the matching parts of the guide.', parameters: obj({ query: { type: 'string' } }, ['query']) },
+  get_client: { description: "One client's whole picture: stage, day, status, next step, emails sent/replies/bounced/interested/booked, reply types, calls (booked, qualified, upcoming), onboarding and launch call, warm-up and inbox rate, leads, things to do; money for the owner. No name = the client on screen.", parameters: obj({ name: { type: 'string', description: 'Company name as said' }, id: { type: 'string' } }) },
+  list_clients: { description: 'Clients by filter, with counts. "needs_you" and "all" also list what needs the owner now (as types, e.g. "1 reply to read and answer at Ridgeline IT"), open alerts and new plan inquiries.', parameters: obj({ filter: { type: 'string', enum: FILTERS } }, ['filter']) },
+  get_numbers: { description: 'Numbers. my_outreach = Aviance\'s own cold emails (My stats: sent, opens, replies, bounces). all_clients = totals and per-client emails, replies, interested, calls booked. money = OWNER ONLY: money received (all time, this month), unpaid invoices, plan prices.', parameters: obj({ scope: { type: 'string', enum: ['my_outreach', 'all_clients', 'money'] } }, ['scope']) },
+  get_calendar: { description: 'Calls and meetings between two ISO dates (default: yesterday to two weeks ahead): Sri Lanka time with US Eastern, company, call type, status; plus call times waiting for the owner\'s yes.', parameters: obj({ from: { type: 'string' }, to: { type: 'string' } }) },
+  web_search: { description: 'Search the web for current or outside facts (news, prices, laws, other companies, anything after your training). Send only a short topic query — never a person\'s name, email address or phone number.', parameters: obj({ query: { type: 'string' } }, ['query']) },
+  propose_action: { description: `Offer the user a button (you cannot change anything yourself). name: "navigate" (args {view: ${VIEWS.join('|')}, id?: client id, tab?: client tab ${CLIENT_TABS.join('|')} or settings section ${SETTINGS_SECTIONS.join('|')}}) opens a page; "draft" (args {title, text}) gives text to copy, e.g. an email; or a confirm button: ${CONFIRMS.join(', ')} (open_client/give_access {id}; mark_todo_seen {id, todoId}; set_my_status {text}; add_change_request {text} for a wish to change how the hub works).`, parameters: obj({ name: { type: 'string' }, args: { type: 'object' }, label: { type: 'string', description: 'Button text' } }, ['name']) },
 };
-const RUN = { hub_summary, client_overview, calendar_summary, team_summary, my_outreach, money_summary, search_kb };
+const RUN = { search_hub, get_client, list_clients, get_numbers, get_calendar, web_search, propose_action };
 export const TOOL_NAMES = Object.keys(RUN);
 
-/** The tools a role may use (a team member never gets money_summary). */
-export function toolsFor(role) {
-  return TOOL_NAMES.filter((n) => n !== 'money_summary' || role === 'admin');
+/** Old names (a brain may still use them) → the new tool and args. */
+const ALIASES = {
+  hub_summary: () => ['list_clients', { filter: 'all' }],
+  client_overview: (a) => ['get_client', a],
+  calendar_summary: (a) => ['get_calendar', a],
+  team_summary: () => ['search_hub', { query: 'team' }],
+  my_outreach: () => ['get_numbers', { scope: 'my_outreach' }],
+  money_summary: () => ['get_numbers', { scope: 'money' }],
+  search_kb: (a) => ['search_hub', a],
+};
+
+/** The tools a role may use (web_search only with a search key: `opts.search`). */
+export function toolsFor(role, { search = true } = {}) {
+  return TOOL_NAMES.filter((n) => n !== 'web_search' || search);
 }
-export function toolDefs(role) {
-  return toolsFor(role).map((name) => ({ type: 'function', function: { name, description: DEFS[name].description, parameters: DEFS[name].parameters } }));
+export function toolDefs(role, opts = {}) {
+  const owner = role === 'admin';
+  return toolsFor(role, opts).map((name) => {
+    let { description, parameters } = DEFS[name];
+    if (name === 'get_numbers' && !owner) parameters = obj({ scope: { type: 'string', enum: ['my_outreach', 'all_clients'] } }, ['scope']);
+    if (name === 'get_numbers' && !owner) description = description.replace(/ money = OWNER ONLY.*$/, '');
+    return { type: 'function', function: { name, description, parameters } };
+  });
 }
 
 /**
- * A tool's context: role, the clock, and the board read at most once per
- * question (several tools share it).
+ * A tool's context: role, the clock, the page, and the board read at most
+ * once per question (several tools share it). `actions` collects what
+ * propose_action offers.
  */
-export function toolContext({ role = 'employee', now = () => new Date() } = {}) {
+export function toolContext({ role = 'employee', now = () => new Date(), page = {}, facts = null } = {}) {
   let boardP = null;
   let namesP = null;
+  let factsP = null;
   return {
-    role, now,
+    role, now, page, actions: [],
     board: () => (boardP ||= hubBoard({ now: now() })),
     names: () => (namesP ||= personNames()),
+    facts: () => (factsP ||= (facts != null ? Promise.resolve(facts) : import('@/lib/ava/facts').then((m) => m.getFacts()).then((f) => f.text).catch(() => ''))),
   };
 }
 
 /** Run one tool → a clean, personal-data-free object (errors become { error }). */
 export async function runTool(name, args, ctx) {
-  if (!toolsFor(ctx.role).includes(name)) return { error: name === 'money_summary' ? 'Money is only for the owner.' : `There is no tool called ${String(name).slice(0, 40)}.` };
+  let n = String(name || '');
+  let a = args && typeof args === 'object' ? args : {};
+  if (ALIASES[n]) [n, a] = ALIASES[n](a);
+  if (!RUN[n]) return { error: `There is no tool called ${String(name).slice(0, 40)}.` };
+  if (n === 'get_numbers' && a.scope === 'money' && ctx.role !== 'admin') return { error: 'Money is only for the owner.' };
   let out;
-  try { out = await RUN[name](args && typeof args === 'object' ? args : {}, ctx); } catch (err) { out = { error: `That look-up failed: ${String(err?.message || err).slice(0, 120)}` }; }
+  try { out = await RUN[n](a, ctx); } catch (err) { out = { error: `That look-up failed: ${String(err?.message || err).slice(0, 120)}` }; }
   return clean(out, await ctx.names());
 }
+
+/** Kept for callers of the old guide search: the guide's sections by title. */
+export const kbSections = () => guideChunks().map((c) => ({ title: c.title, text: c.text }));

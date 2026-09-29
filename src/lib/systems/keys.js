@@ -26,9 +26,12 @@
  *   GitHub      → GET /repos/{repo} and `permissions.push` (never a dispatch)
  *   Groq / Cerebras / Gemini / OpenRouter (Ava's brains) → GET {api}/models
  *                 (lists the models; no tokens spent)
+ *   Cloudflare  → GET /accounts/{id}/ai/models/search (proves the account id AND the token; no Neurons spent)
+ *   Tavily      → GET /usage (no search spent)
+ *   Exa         → one 1-result search (a fraction of a cent of the free credit)
  * CheapInboxes and Google Meet have their own settings cards (ext/cheapinboxes.js, ext/google.js).
  *
- * The AI keys are only for Ava (lib/ava/); no other system uses AI.
+ * The AI and search keys are only for Ava (lib/ava/); no other system uses AI.
  */
 
 import { logEvent } from '@/lib/db/events';
@@ -59,6 +62,9 @@ export const AI_MODELS_URLS = {
   GEMINI_API_KEY: 'https://generativelanguage.googleapis.com/v1beta/openai/models',
   OPENROUTER_API_KEY: 'https://openrouter.ai/api/v1/key',
 };
+export const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4/accounts';
+export const TAVILY_USAGE_URL = 'https://api.tavily.com/usage';
+export const EXA_SEARCH_URL = 'https://api.exa.ai/search';
 const NOT_TESTED = 'not tested yet';
 
 // ─── one call ────────────────────────────────────────────────────────────────
@@ -209,7 +215,44 @@ function aiCheck(name, who) {
   };
 }
 
+/** Cloudflare Workers AI: the account id and the token together, one model search (no Neurons). */
+async function checkCloudflare({ CLOUDFLARE_ACCOUNT_ID: id, CLOUDFLARE_API_TOKEN: token }) {
+  if (!/^[a-f0-9]{32}$/i.test(String(id || ''))) return bad('The account ID is 32 letters and numbers — copy it from the right side of the Cloudflare dashboard (Workers & Pages, or Account home)');
+  const r = await call(`${CLOUDFLARE_API}/${id}/ai/models/search?per_page=1`, { headers: { authorization: `Bearer ${token}`, accept: 'application/json' } });
+  const msg = String(r.json?.errors?.[0]?.message || '');
+  if (r.status === 401 || r.status === 403 || /auth/i.test(msg)) return bad('Cloudflare refused the token — make it with the "Workers AI" template (Account › Workers AI › Read and Edit) for this account');
+  if (r.status === 404 || /account/i.test(msg)) return bad('Cloudflare does not know that account ID — check it on the dashboard');
+  if (r.status === 429) return warn('Cloudflare says to slow down — it comes back by itself');
+  if (!r.ok || r.json?.success === false) return bad(`Cloudflare said ${r.status || 'nothing'}${msg ? `: ${msg.slice(0, 140)}` : ''}`);
+  return good('The account ID and token work · Workers AI is ready (10,000 free Neurons a day)');
+}
+
+/** Tavily: the usage page (no search spent). */
+async function checkTavily({ TAVILY_API_KEY: key }) {
+  const r = await call(TAVILY_USAGE_URL, { headers: { authorization: `Bearer ${key}`, accept: 'application/json' } });
+  if (r.status === 401 || r.status === 403) return bad('Tavily said the key is invalid');
+  if (r.status === 429) return warn('Tavily says this key is busy or out of searches for now');
+  if (!r.ok) return warn(`Tavily answered ${r.status || 'nothing'} — saved; Ava tries it on her first search`);
+  const k = asObject(r.json?.key) || asObject(r.json?.account) || {};
+  const used = num(k.usage ?? k.plan_usage); const limit = num(k.limit ?? k.plan_limit);
+  const left = used !== null && limit ? Math.max(0, limit - used) : null;
+  return good(left !== null ? `The key works · ${left} search${left === 1 ? '' : 'es'} left this month` : 'The key works');
+}
+
+/** Exa: one 1-result search (no page text). */
+async function checkExa({ EXA_API_KEY: key }) {
+  const r = await call(EXA_SEARCH_URL, { method: 'POST', headers: { 'x-api-key': key, 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ query: 'weather', numResults: 1 }) });
+  if (r.status === 401 || r.status === 403) return bad('Exa said the key is invalid');
+  if (r.status === 402) return warn('Exa says the free credit is used up for now — it comes back next month');
+  if (r.status === 429) return warn('Exa says to slow down — it comes back by itself');
+  if (!r.ok) return bad(`Exa said ${r.status || 'nothing'}`);
+  return good('The key works');
+}
+
 const CHECKS = {
+  CLOUDFLARE: checkCloudflare,
+  TAVILY_API_KEY: checkTavily,
+  EXA_API_KEY: checkExa,
   GROQ_API_KEY: aiCheck('GROQ_API_KEY', 'Groq'),
   CEREBRAS_API_KEY: aiCheck('CEREBRAS_API_KEY', 'Cerebras'),
   GEMINI_API_KEY: aiCheck('GEMINI_API_KEY', 'Google'),
@@ -325,17 +368,49 @@ export const GUIDES = {
   },
   GROQ_API_KEY: {
     url: 'https://console.groq.com/keys',
-    free: 'Free, no card: about 30 questions a minute and 1,000 a day. Groq\'s terms say it does not train on what is sent to the API.',
+    free: 'Free, no card: each model allows about 30 questions a minute and 1,000 a day, and Ava uses several models. It also turns speech into text for Ava. Groq\'s terms say it does not train on what is sent to the API.',
     steps: [
       'Go to console.groq.com and sign up (Google, GitHub or email).',
       'Left menu → API Keys → Create API Key → name it "Aviance Ava" → Submit.',
-      'Copy the key (it starts with gsk_) and paste it here. Optional: Settings → Data controls → Zero Data Retention on.',
+      'Copy the key (it starts with gsk_) and paste it here.',
+      'Recommended: Settings → Data controls → turn Zero Data Retention on, so nothing is kept even for a day.',
+    ],
+    note: UNCHECKED,
+  },
+  CLOUDFLARE: {
+    url: 'https://dash.cloudflare.com/profile/api-tokens',
+    free: 'Free: 10,000 "Neurons" a day (roughly 150,000–300,000 words of answers), reset at midnight UTC; no card. Cloudflare\'s terms say it does not use your content to train any AI model.',
+    steps: [
+      'Go to dash.cloudflare.com and sign up (free plan).',
+      'Copy your Account ID: on Account home (or Workers & Pages) it is on the right side, under "Account ID". Paste it in the first box.',
+      'Top right: your profile → My Profile → API Tokens → Create Token → use the "Workers AI" template → Continue to summary → Create Token.',
+      'Copy the token (Cloudflare shows it once) and paste it in the second box.',
+    ],
+    note: UNCHECKED,
+  },
+  TAVILY_API_KEY: {
+    url: 'https://app.tavily.com',
+    free: 'Free: 1,000 searches a month, no card. Ava only sends the words of the question (never names, emails or phone numbers). Tavily says it does not keep what is searched.',
+    steps: [
+      'Go to app.tavily.com and sign up (Google, GitHub or email).',
+      'On the Overview page your API key is shown (it starts with tvly-) — press copy.',
+      'Paste it here.',
+    ],
+    note: UNCHECKED,
+  },
+  EXA_API_KEY: {
+    url: 'https://dashboard.exa.ai/api-keys',
+    free: 'Free monthly credit (about 1,000 searches). Used only when Tavily is missing or fails. Only the words of the question are sent.',
+    steps: [
+      'Go to dashboard.exa.ai and sign up.',
+      'Left menu → API Keys → Create key (or copy the default one).',
+      'Paste it here.',
     ],
     note: UNCHECKED,
   },
   CEREBRAS_API_KEY: {
     url: 'https://cloud.cerebras.ai/',
-    free: 'Free tier: about 1 million tokens (word pieces) a day. Cerebras says it does not keep or train on API inputs and outputs.',
+    free: 'No longer free: new accounts get a small one-time credit and need a card. Optional — Groq and Cloudflare are enough. Cerebras says it does not keep or train on API inputs and outputs.',
     steps: [
       'Go to cloud.cerebras.ai and sign up.',
       'Open API Keys in the left menu → Generate API key (or copy the one made for you).',
@@ -390,18 +465,24 @@ const card = (name) => { const c = cardOf(name); if (!c) throw new KeysError('un
  * 400, the reason in plain words). A check that could not run → saved as
  * 'not tested yet'.
  */
-export async function saveKey({ name, value, username, password } = {}, { now = io.now() } = {}) {
+export async function saveKey(body = {}, { now = io.now() } = {}) {
+  const { name, value } = body;
   const c = card(name);
   const envField = c.fields.find((f) => String(process.env[f] || '').trim());
   if (envField) throw new KeysError('env_key', `The ${c.short} is set on the server (${envField}) — change it there.`);
-  if (c.parts && !(String(username || '').trim() && String(password || '').trim())) throw new KeysError('bad_value', 'Paste both the user name and the password.');
+  // A two-box card: each box by its part name ({ accountId, apiToken }); `username` / `password` stand for the first / second box.
+  const partNames = c.parts ? Object.keys(c.parts) : [];
+  const partValue = (part, i) => String(body[part] ?? (i === 0 ? body.username : body.password) ?? '').trim();
+  if (c.parts && !partNames.every((p, i) => partValue(p, i))) {
+    throw new KeysError('bad_value', c.partLabels ? `Paste both the ${Object.values(c.partLabels).map((l) => l.toLowerCase()).join(' and the ')}.` : 'Paste both the user name and the password.');
+  }
   const pasted = c.parts
-    ? Object.fromEntries(Object.entries(c.parts).map(([part, field]) => [field, cleanValue(field, part === 'username' ? username : password)]))
+    ? Object.fromEntries(partNames.map((part, i) => [c.parts[part], cleanValue(c.parts[part], partValue(part, i))]))
     : { [c.fields[0]]: cleanValue(c.fields[0], value) };
   if (c.secret !== false && !hasEncKey()) throw new KeysError('no_enc_key');
   const result = await runCheck(c, await valuesFor(c, pasted));
   if (result.ok === false) throw new KeysError('refused', result.problem);
-  const status = await setSecret(c.name, c.parts ? { username: pasted[c.parts.username], password: pasted[c.parts.password] } : pasted[c.fields[0]], { now, test: result });
+  const status = await setSecret(c.name, c.parts ? Object.fromEntries(partNames.map((part) => [part, pasted[c.parts[part]]])) : pasted[c.fields[0]], { now, test: result });
   await logEvent(null, SYSTEM, 'key_saved', { name: c.name, tested: result.ok });
   return status;
 }

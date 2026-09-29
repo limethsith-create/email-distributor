@@ -325,6 +325,10 @@ export const K = {
   avaRequests: () => 'ava:requests',
   /** Ava's questions today, everyone together (counter; day in Sri Lanka time; expires after 2 days). */
   avaDay: (day) => `ava:day:${day}`,
+  /** The models one AI service offers (JSON {at, available: [ids]}, expires after 6 h; lib/ava/models.js). */
+  avaModels: (brain) => `ava:models:${brain}`,
+  /** The owner's "Business facts" note for Ava (string ≤ 4 KB; lib/ava/facts.js). */
+  avaFacts: () => 'ava:facts',
   /** Active seconds per day for one hub user (hash): YYYY-MM-DD → seconds. */
   hubPersonDays: (uid) => `hub:person:${hubUid(uid)}:days`,
   /** Presence posts by one user in one 10-minute bucket (counter, expires). */

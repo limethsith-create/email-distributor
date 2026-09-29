@@ -187,7 +187,7 @@ export function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, content-type',
+    'Access-Control-Allow-Headers': 'authorization, content-type, accept',
     'Access-Control-Max-Age': '600',
     Vary: 'Origin',
   };

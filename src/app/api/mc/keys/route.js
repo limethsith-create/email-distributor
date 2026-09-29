@@ -3,7 +3,8 @@
  * "Keys"). Admin cookie or hub token (middleware).
  *   GET → { keys: [ { name, label, short, optional, secret, fields, set, from: 'env|hub|null',
  *                     savedAt, testedAt, ok, problem, detail, url, free, steps, note } ], encKey }
- *   POST { action: 'save', name, value } (Verifalia: { name: 'VERIFALIA', username, password })
+ *   POST { action: 'save', name, value } (Verifalia: { name: 'VERIFALIA', username, password };
+ *        Cloudflare: { name: 'CLOUDFLARE', accountId, apiToken } — or username / password for the two boxes)
  *        → { saved: true, …status } (the key was checked with the service first)
  *        { action: 'test', name } → { tested: true, …status } (ok / problem = the outcome)
  *        { action: 'forget', name } → { forgotten: true, …status }
@@ -31,7 +32,7 @@ export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   try {
     switch (body.action) {
-      case 'save': return Response.json({ saved: true, ...(await saveKey({ name: body.name, value: body.value, username: body.username, password: body.password })) });
+      case 'save': return Response.json({ saved: true, ...(await saveKey(body)) });
       case 'test': return Response.json({ tested: true, ...(await testKey({ name: body.name })) });
       case 'forget': return Response.json({ forgotten: true, ...(await forgetKey({ name: body.name })) });
       default: return Response.json({ error: 'Unknown action — use save, test or forget.' }, { status: 400 });
