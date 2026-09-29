@@ -5,7 +5,7 @@
  *          user?: { firstName, role } }   (role is taken ONLY from the verified request, never from the body)
  *
  * JSON (default):
- *   → 200 { reply, actions: [...], suggestions: [3], brain, model, tried: [{ brain, model, ok, ms, error }], ms }
+ *   → 200 { reply, actions: [...], suggestions: [3], brain, model, tried: [{ brain, model, ok, ms, error }], ms, timing, plan }
  *   → 503 { error, needsKeys: true } no AI key yet · 429 { error } too many questions
  *   → 502 { error, tried } no brain answered · 400 { error } bad body
  *
@@ -13,13 +13,25 @@
  * → 200 text/event-stream (always; a failure is an `error` event):
  *   event: delta    data: {"text":"…"}                       pieces of the answer as it is written
  *   event: actions  data: {"actions":[…],"suggestions":[…]}   once, after the text
- *   event: done     data: {"brain":"groq","model":"…","ms":1234,"tried":[…],"suggestions":[…]}
+ *   event: done     data: {"brain":"groq","model":"…","ms":1234,"tried":[…],"suggestions":[…],
+ *                          "timing":{"firstTokenMs":…,"toolMs":…,"modelMs":…,"totalMs":…},
+ *                          "plan":{"mode":"direct"|"tools","why":"…","prefetch":["get_client",…],"quick":true}}
  *   event: error    data: {"error":"…","status":503,"needsKeys":true?,"tried":[…]?}
- * The tool look-ups happen before the first delta (not streamed).
+ * A general question streams from the first call (no tools); a live-data one
+ * gets its obvious look-ups run side by side before that call.
  */
 
 import { avaChat, prepareChat, answerChat, AvaError } from '@/lib/ava/chat';
 import { whoIsAsking } from '@/lib/ava/who';
+import { modelsSettled } from '@/lib/ava/models';
+
+/** Model lists read in the background during a question finish after the answer is sent (never before it). */
+async function settleLater() {
+  try {
+    const { after } = await import('next/server');
+    after(() => modelsSettled());
+  } catch { /* outside a request (tests): the reads finish on their own */ }
+}
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -60,7 +72,7 @@ function stream(body, user) {
         const q = await prepareChat(body, user);
         const r = await answerChat(q, { onDelta: (text) => { if (text) send('delta', { text }); } });
         send('actions', { actions: r.actions, suggestions: r.suggestions });
-        send('done', { brain: r.brain, model: r.model, ms: r.ms, tried: r.tried, suggestions: r.suggestions, ...(r.cut ? { cut: true } : {}) });
+        send('done', { brain: r.brain, model: r.model, ms: r.ms, tried: r.tried, suggestions: r.suggestions, timing: r.timing, plan: r.plan, ...(r.cut ? { cut: true } : {}) });
       } catch (err) {
         const e = errorBody(err);
         send('error', { ...e.body, status: e.status });
@@ -79,6 +91,7 @@ export async function POST(request) {
     return Response.json({ error: 'Send { messages, page }.' }, { status: 400 });
   }
   const user = await whoIsAsking(request);
+  await settleLater();
   if (streaming) return new Response(stream(body, user), { status: 200, headers: SSE_HEADERS });
   try {
     return Response.json(await avaChat(body, user));

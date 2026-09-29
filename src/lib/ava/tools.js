@@ -9,7 +9,7 @@
  *   get_numbers {scope}     my_outreach | all_clients | money (owner only)
  *   get_calendar {from,to}  calls and meetings
  *   web_search {query}      current / outside facts (Tavily, then Exa) — only with a search key
- *   propose_action {name, args, label}  a button for the user (navigate, draft, or a confirm)
+ *   propose_action {name, args, label}  a button for the user (navigate, read, draft, or a confirm)
  *
  * EVERY output is free of personal data: company names, counts, stages,
  * dates, day numbers, rates and plan names only. Never a prospect's name, an
@@ -432,7 +432,7 @@ async function propose_action(args, ctx) {
   const action = proposalToAction(args, ctx.role);
   if (!action) return { error: `That button can't be offered${ctx.role !== 'admin' ? ' to a team member' : ''} — check the name and args.` };
   ctx.actions.push(action);
-  return { ok: true, action, note: action.type === 'navigate' ? 'The hub opens this page now.' : 'The user sees this as a button; nothing has happened yet — do not say it is done.' };
+  return { ok: true, action, note: action.type === 'navigate' ? 'The hub opens this page now.' : action.type === 'read' ? 'The hub reads the screen out loud itself; say one short line.' : 'The user sees this as a button; nothing has happened yet — do not say it is done.' };
 }
 
 // ─── definitions (OpenAI function calling) ──────────────────────────────────
@@ -445,7 +445,7 @@ const DEFS = {
   get_numbers: { description: 'Numbers. my_outreach = Aviance\'s own cold emails (My stats: sent, opens, replies, bounces). all_clients = totals and per-client emails, replies, interested, calls booked. money = OWNER ONLY: money received (all time, this month), unpaid invoices, plan prices.', parameters: obj({ scope: { type: 'string', enum: ['my_outreach', 'all_clients', 'money'] } }, ['scope']) },
   get_calendar: { description: 'Calls and meetings between two ISO dates (default: yesterday to two weeks ahead): Sri Lanka time with US Eastern, company, call type, status; plus call times waiting for the owner\'s yes.', parameters: obj({ from: { type: 'string' }, to: { type: 'string' } }) },
   web_search: { description: 'Search the web for current or outside facts (news, prices, laws, other companies, anything after your training). Send only a short topic query — never a person\'s name, email address or phone number.', parameters: obj({ query: { type: 'string' } }, ['query']) },
-  propose_action: { description: `Offer the user a button (you cannot change anything yourself). name: "navigate" (args {view: ${VIEWS.join('|')}, id?: client id, tab?: client tab ${CLIENT_TABS.join('|')} or settings section ${SETTINGS_SECTIONS.join('|')}}) opens a page; "draft" (args {title, text}) gives text to copy, e.g. an email; or a confirm button: ${CONFIRMS.join(', ')} (open_client/give_access {id}; mark_todo_seen {id, todoId}; set_my_status {text}; add_change_request {text} for a wish to change how the hub works).`, parameters: obj({ name: { type: 'string' }, args: { type: 'object' }, label: { type: 'string', description: 'Button text' } }, ['name']) },
+  propose_action: { description: `Offer the user a button (you cannot change anything yourself). name: "navigate" opens a page at once — args {view: ${VIEWS.join('|')}; for view client also id (client id from get_client/search_hub; fuzzy names are fine there) and tab? ${CLIENT_TABS.join('|')}; for view settings section? ${SETTINGS_SECTIONS.join('|')}}. "read" (args {what:"page"}) has the hub read out what is on the screen (after a navigate when they said "open X and read it"). "draft" (args {title, text}) gives text to copy, e.g. an email. Or a confirm button: ${CONFIRMS.join(', ')} (open_client/give_access {id}; mark_todo_seen {id, todoId}; set_my_status {text}; add_change_request {text} for a wish to change how the hub works).`, parameters: obj({ name: { type: 'string' }, args: { type: 'object' }, label: { type: 'string', description: 'Button text' } }, ['name']) },
 };
 const RUN = { search_hub, get_client, list_clients, get_numbers, get_calendar, web_search, propose_action };
 export const TOOL_NAMES = Object.keys(RUN);

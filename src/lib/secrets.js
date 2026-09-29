@@ -49,6 +49,8 @@ export const CARDS = [
   // Ava's brains (lib/ava/brains.js): only services whose terms say API inputs are not used for training.
   { name: 'GROQ_API_KEY', short: 'Groq key', label: 'Groq key — Ava\'s main brain and her ears, free (Groq does not train on API data)', fields: ['GROQ_API_KEY'], optional: true },
   { name: 'CLOUDFLARE', short: 'Cloudflare Workers AI', label: 'Cloudflare Workers AI — Ava\'s second free brain: your account ID and an API token (Cloudflare does not train on your data)', fields: ['CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN'], parts: { accountId: 'CLOUDFLARE_ACCOUNT_ID', apiToken: 'CLOUDFLARE_API_TOKEN' }, partLabels: { accountId: 'Account ID', apiToken: 'API token' }, optional: true },
+  { name: 'MISTRAL_API_KEY', short: 'Mistral key', label: 'Mistral key — Ava\'s third brain, free — only after you switch off training (Admin › Privacy › "Anonymous improvement data" off)', fields: ['MISTRAL_API_KEY'], optional: true },
+  { name: 'OLLAMA_API_KEY', short: 'Ollama key', label: 'Ollama Cloud key — Ava\'s fourth brain, a small free allowance; Ollama keeps no prompts or answers (optional)', fields: ['OLLAMA_API_KEY'], optional: true },
   { name: 'TAVILY_API_KEY', short: 'Tavily key', label: 'Tavily key — lets Ava search the web for current facts, 1,000 searches a month free (optional)', fields: ['TAVILY_API_KEY'], optional: true },
   { name: 'EXA_API_KEY', short: 'Exa key', label: 'Exa key — a second web search for Ava, free monthly credit (optional)', fields: ['EXA_API_KEY'], optional: true },
   { name: 'CEREBRAS_API_KEY', short: 'Cerebras key', label: 'Cerebras key — an extra brain; no longer free (needs a card), does not keep or train on API data (optional)', fields: ['CEREBRAS_API_KEY'], optional: true },

@@ -237,6 +237,26 @@ fresh saves a copy, then clears the numbers so My stats starts from zero — peo
 The owner's page: who signed in and out, for how long, what they opened, and new accounts waiting for approval.
 Approve lets a person in as a team member (read-only). The Activity badge counts people waiting.
 
+## Where things are (every page, tab and Settings section)
+<!-- pages: trials, paying, calendar, team, mystats, activity, inquiries, behind, settings, client -->
+Ava can open any of these ("open Lakeview's money", "take me to the keys", "show the warm-up settings") and read it out
+("open my stats and read it", "what's on this tab?" — the hub reads the screen aloud on your device).
+Pages: Trials (every trial client, Needs you first, stage tiles); Paying clients (Starter, Growth, Scale clients, paid
+applications, money received — owner); Calendar (every call in Sri Lanka and US Eastern time, times waiting for a yes);
+Team (who is in the hub, status lines, who looks after which clients); My stats (Aviance's own outreach: sent, opens,
+replies, bounces, per inbox, Saved history); Activity (owner: sign-ins, what people opened, accounts to approve); Plan
+call requests (inquiries); Behind the scenes (every to-do, every trial by stage, the waiting list); Settings (owner).
+A client's email system — shared with the client: Overview (sent, opened, replies, bounced, interested, calls booked),
+Conversations (every reply thread), Emails sent, Calls (booked, qualified, no-shows), Messages (the owner's emails with
+the client, the reply box). Only you: Money & plan (owner: plan, invoice, paid or not), Health (inboxes, warm-up, inbox
+rate, deliverability, growth, auto-buy), Leads & emails (lead grades, email checks, the copy, reply types, coming up),
+Setup & history (who can see their page / Give access, application, onboarding and launch calls, disputes, parts,
+history, actions). Team members see the shared tabs; the Only-you tabs, Settings and Activity are opened for the owner.
+Settings sections: Alerts (every machine message), Phone alerts, Your details (signer, postal address, call link,
+PayPal, Wise), Keys (every service key), Ava (brains, voice, Business facts, change requests), Google Meet, Inboxes &
+domains (CheapInboxes), Warm-up (helper inboxes), Reply bot, Test run, Is everything running? (health check), Behind the
+scenes, Advanced (Mission Control, config), Light or dark, Your account (log out).
+
 ## Settings sections
 <!-- pages: settings -->
 Settings has named sections, each saying its state in one word: Alerts, Phone alerts, Your details, Keys, Ava,
@@ -254,15 +274,20 @@ counts the empty ones, and the two the first trial needs are marked in amber.
 One card per service key: its state in words, the steps to get it and an "Open …" link, a password box, Test and save,
 Test and Forget. A saved key is never shown again. A key set on the server (Vercel) shows no box. Cards: Google Places,
 QuickEmailVerification, Verifalia (user name + password), Reoon, ZeroBounce, Hunter, GitHub token and repository (the
-lead finder), and Ava's: Groq, Cloudflare Workers AI (account ID + API token), Tavily and Exa (web search), Cerebras,
-Gemini (paid key only) and OpenRouter.
+lead finder), and Ava's: Groq, Cloudflare Workers AI (account ID + API token), Mistral, Ollama Cloud, Tavily and Exa
+(web search), Cerebras, Gemini (paid key only) and OpenRouter.
 
 ## Ava's keys: which ones and why
 <!-- pages: settings, keys, ava -->
 Ava only uses AI services that do not train on what is sent. Groq (free, no card; console.groq.com/keys → API Keys →
 Create API Key; turn on Zero Data Retention under Data controls) is her main brain and her ears. Cloudflare Workers AI
 (free 10,000 Neurons a day; dash.cloudflare.com → copy the Account ID → My Profile › API Tokens › Create Token with the
-"Workers AI" template) is the second brain. Tavily (app.tavily.com, 1,000 free searches a month) and Exa
+"Workers AI" template) is the second brain. Mistral is the third, free only after training is switched off: get a key
+at console.mistral.ai/api-keys (Create new key), then BEFORE using it open the Admin console (admin.mistral.ai) →
+Privacy → "Anonymous improvement data" → switch it off (the API switch; the Vibe switch is separate). Mistral keeps
+requests 30 days for abuse checks. Ollama Cloud is the fourth: ollama.com → Settings → Keys (ollama.com/settings/keys)
+→ Add API key; a small free allowance, one question at a time, and Ollama keeps nothing. Order tried: Groq, Cloudflare,
+Mistral, Ollama, then the paid ones. Tavily (app.tavily.com, 1,000 free searches a month) and Exa
 (dashboard.exa.ai) let her search the web for current facts. Cerebras is no longer free; Gemini only with a paid key
 (free Gemini keys train on data); OpenRouter only with paid credits and no-training providers.
 
@@ -270,7 +295,8 @@ Create API Key; turn on Zero Data Retention under Data controls) is her main bra
 <!-- pages: ava, settings -->
 Ava answers any question: about the hub, the clients and the process, and general things (facts, how-tos, advice,
 writing emails). She looks up live numbers (clients, calls, the team, money for the owner), searches the web when a
-Tavily or Exa key is set, and offers buttons (open a page, a draft to copy, a confirm). Open her with Ctrl/Cmd J or the
+Tavily or Exa key is set, opens any page, client tab or Settings section and reads it out on request, and offers
+buttons (a draft to copy, a confirm). Open her with Ctrl/Cmd J or the
 Ava button; talk with the microphone or type. She cannot change anything herself and cannot edit the system's code:
 she writes a wish down as a change request (Settings › Ava lists them; the owner marks them done). Settings › Ava shows
 her brains and models, her voice and the Business facts note.
@@ -284,7 +310,9 @@ owner can change it.
 ## Ava and privacy
 <!-- pages: ava -->
 Ava answers from the hub's data through the machine. The AI services she uses do not train on what is sent (Groq,
-Cloudflare Workers AI, and Cerebras, Gemini or OpenRouter only on paid, no-training settings). Her look-ups never send
+Cloudflare Workers AI, Mistral with training switched off, Ollama Cloud, and Cerebras, Gemini or OpenRouter only on
+paid, no-training settings). When she reads a page out loud, the hub reads its own screen on your device — the page
+itself is never sent anywhere. Her look-ups never send
 prospects' names, email addresses, phone numbers or message text — only company names, counts, stages, dates and
 rates. Web searches carry only the words of the question, with emails, phone numbers and contact names taken out.
 What you type or say is sent as you wrote it, so avoid personal details. Speech is turned into text by Groq (not kept).

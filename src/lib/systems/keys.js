@@ -59,6 +59,8 @@ export const GITHUB_API = 'https://api.github.com';
 export const AI_MODELS_URLS = {
   GROQ_API_KEY: 'https://api.groq.com/openai/v1/models',
   CEREBRAS_API_KEY: 'https://api.cerebras.ai/v1/models',
+  MISTRAL_API_KEY: 'https://api.mistral.ai/v1/models',
+  OLLAMA_API_KEY: 'https://ollama.com/v1/models',
   GEMINI_API_KEY: 'https://generativelanguage.googleapis.com/v1beta/openai/models',
   OPENROUTER_API_KEY: 'https://openrouter.ai/api/v1/key',
 };
@@ -255,6 +257,8 @@ const CHECKS = {
   EXA_API_KEY: checkExa,
   GROQ_API_KEY: aiCheck('GROQ_API_KEY', 'Groq'),
   CEREBRAS_API_KEY: aiCheck('CEREBRAS_API_KEY', 'Cerebras'),
+  MISTRAL_API_KEY: aiCheck('MISTRAL_API_KEY', 'Mistral'),
+  OLLAMA_API_KEY: aiCheck('OLLAMA_API_KEY', 'Ollama'),
   GEMINI_API_KEY: aiCheck('GEMINI_API_KEY', 'Google'),
   OPENROUTER_API_KEY: aiCheck('OPENROUTER_API_KEY', 'OpenRouter'),
   PLACES_API_KEY: checkPlaces,
@@ -405,6 +409,27 @@ export const GUIDES = {
       'Go to dashboard.exa.ai and sign up.',
       'Left menu → API Keys → Create key (or copy the default one).',
       'Paste it here.',
+    ],
+    note: UNCHECKED,
+  },
+  MISTRAL_API_KEY: {
+    url: 'https://console.mistral.ai/api-keys',
+    free: 'Free — only after you switch off training. The free "Experiment" plan lets Mistral use what is sent to the API to train its models UNLESS you turn that off, so do step 3 before you paste the key. No card needed (a phone number check). Mistral still keeps requests for 30 days to catch abuse. Roughly 1 question a second — a backup brain for when Groq and Cloudflare are busy.',
+    steps: [
+      'Go to console.mistral.ai and sign up (email, Google or Microsoft). Choose the free "Experiment" plan and confirm your phone number.',
+      'API Keys (console.mistral.ai/api-keys) → Create new key → name it "Aviance Ava" → copy it (Mistral shows it once).',
+      'Switch off training FIRST: open Admin (the admin console, admin.mistral.ai) → Privacy in the left menu → under "Anonymous improvement data" turn the switch OFF for the API. (The Vibe switch is separate — turning one off does not turn off the other.)',
+      'Paste the key here.',
+    ],
+    note: UNCHECKED,
+  },
+  OLLAMA_API_KEY: {
+    url: 'https://ollama.com/settings/keys',
+    free: 'Free plan: a small allowance of cloud use each month and one question at a time — a last backup brain. Ollama says it never logs or trains on prompts and answers sent to its cloud. No card needed.',
+    steps: [
+      'Go to ollama.com and sign up (free).',
+      'Top right: your profile → Settings → Keys (ollama.com/settings/keys) → Add API key → name it "Aviance Ava".',
+      'Copy the key and paste it here.',
     ],
     note: UNCHECKED,
   },

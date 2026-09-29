@@ -17,10 +17,13 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** The words to hide: every client's contact person (whole name, first and last). */
 export async function personNames() {
-  const clients = await getAllClients(null, { includeDemo: true }).catch(() => []);
+  return personNamesOf(await getAllClients(null, { includeDemo: true }).catch(() => []));
+}
+/** The same from a client list already read. */
+export function personNamesOf(clients = []) {
   const set = new Set();
   for (const c of clients) {
-    const n = String(c.contactName || '').trim();
+    const n = String(c?.contactName || '').trim();
     if (!n) continue;
     set.add(n);
     for (const part of n.split(/\s+/)) if (part.length >= 3) set.add(part);

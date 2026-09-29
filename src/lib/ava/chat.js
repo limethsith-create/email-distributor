@@ -4,8 +4,11 @@
  * One question: the hub sends the talk so far + the page the user is on; the
  * machine builds a small prompt (who is asking, the page, the date, the best
  * parts of the guide and the owner's Business facts for this question — BM25,
- * lib/ava/kb.js), lets the brain call the tools (≤ 4 rounds, OpenAI-compatible
- * function calling, or a JSON fallback for a brain without tools) and returns
+ * lib/ava/kb.js). A local planner (lib/ava/plan.js, no AI call) decides first:
+ * a general question is answered in ONE streamed call with no tools; a
+ * live-data one gets its obvious look-ups run side by side before the first
+ * call, and the brain may call more tools (≤ 4 rounds, OpenAI-compatible
+ * function calling, or a JSON fallback for a brain without tools). Returns
  * { reply, actions, suggestions, brain, model, tried, ms } — or streams it
  * (Server-Sent Events: `delta` pieces of the answer as it is written, then
  * `actions`, then `done`; `error` instead when it fails).
@@ -25,7 +28,8 @@
  * emails, phones and contact names taken out.
  *
  * Ava never does a write: she proposes actions the hub shows as buttons
- * (navigate at once; `confirm` only on the user's click; `draft` to copy).
+ * (navigate and read at once; `confirm` only on the user's click; `draft` to
+ * copy). `read` makes the hub read its own screen aloud — no page data comes here.
  * Team members get no money and only their own status / a change request.
  *
  * Limits: 20 questions a minute per user (memory) and AVA_DAILY_CAP a day for
@@ -37,11 +41,13 @@ import { K } from '@/lib/db/keys';
 import { cfg } from '@/lib/config';
 import { AVA_IO, AVA_TIMING, ask, isSmart, keyedBrains, planSlots, usesTools } from '@/lib/ava/brains';
 import { OWNER_TZ, runTool, toolContext, toolDefs, toolsFor } from '@/lib/ava/tools';
-import { cleanActions, VIEWS, CLIENT_TABS, SETTINGS_SECTIONS, CONFIRMS, ID_RE } from '@/lib/ava/actions';
+import { cleanActions, placesMap, VIEWS, CLIENT_TABS, SETTINGS_SECTIONS, CONFIRMS, ID_RE, PLACES } from '@/lib/ava/actions';
 import { retrieve } from '@/lib/ava/kb';
-import { getFacts } from '@/lib/ava/facts';
+import { factsForQuestion } from '@/lib/ava/facts';
 import { searchProviders } from '@/lib/ava/search';
-import { cleanText, personNames } from '@/lib/ava/text';
+import { cleanText, personNamesOf } from '@/lib/ava/text';
+import { getAllClients } from '@/lib/db/client';
+import { planQuestion } from '@/lib/ava/plan';
 
 export { cleanActions, VIEWS, CLIENT_TABS, SETTINGS_SECTIONS, CONFIRMS };
 
@@ -51,7 +57,8 @@ const MAX_IN = 40;          // messages read from the request
 const KEEP_RECENT = 8;      // messages kept word for word; older ones → a running summary
 const SUMMARY_AFTER = 10;   // messages before the summary starts
 const MAX_MSG = 4000;
-export const BUDGET = { tokens: 2500, guideTokens: 1000, toolChars: 3200 };
+export const BUDGET = { tokens: 2500, guideTokens: 1000, voiceGuideTokens: 600, voiceChunks: 4, toolChars: 3200 };
+export const MAX_TOKENS = { text: 900, voice: 250 };
 
 export class AvaError extends Error {
   constructor(message, status = 400, extra = {}) { super(message); this.status = status; this.extra = extra; }
@@ -96,7 +103,7 @@ export const SUGGEST_RE = /<<\s*next\s*:([\s\S]*?)(?:>>|$)/i;
  * exists; `voice` = the answer will be spoken; `jsonTools` = tool defs for a
  * brain without function calling.
  */
-export function systemPrompt({ user, page, now, guide = [], search = false, voice = false, summary = '', jsonTools = null }) {
+export function systemPrompt({ user, page, now, guide = [], search = false, voice = false, summary = '', jsonTools = null, mode = 'tools', opening = null, read = false }) {
   const owner = user.role === 'admin';
   const L = [
     'You are Ava, the helper inside the Aviance Hub, and a capable general assistant. Aviance does cold-email outreach for small US businesses: a free 30-day trial, then paid plans (Starter, Growth, Scale). The owner runs it from Sri Lanka.',
@@ -104,20 +111,27 @@ export function systemPrompt({ user, page, now, guide = [], search = false, voic
     `Now: ${nowWords(now)} (Sri Lanka time). Times you mention are Sri Lanka time unless you say otherwise.`,
     `You are talking to ${user.name || 'someone'} — ${owner ? 'the owner (can do everything)' : 'a team member (read-only: sees but changes nothing, never sees money)'}. They are on: view=${page.view || 'unknown'}${page.clientId ? `, client id=${page.clientId}` : ''}${page.clientName ? ` (${page.clientName})` : ''}${page.tab ? `, tab=${page.tab}` : ''} ("this client" = that one).`,
     'How to answer:',
-    '- Clients, numbers, calls, the team, what needs attention: look it up with the tools; never guess or invent numbers or names.',
-    '- How the hub or the process works: use the guide below (search_hub finds more); name the place, like "Settings › Keys".',
+    mode === 'tools'
+      ? '- Clients, numbers, calls, the team, what needs attention: look it up with the tools (results already given below count); never guess or invent numbers or names.'
+      : '- Never guess or invent numbers or client names; for live numbers they can ask you to check.',
+    `- How the hub or the process works: use the guide below${mode === 'tools' ? ' (search_hub finds more)' : ''}; name the place, like "Settings › Keys".`,
     search
       ? '- General knowledge: answer directly. For anything current or time-sensitive (news, prices, laws, weather, recent events, other companies) call web_search first and mention the sites you used.'
       : '- General knowledge: answer directly. You have no web search, so for current or time-sensitive things answer from what you know and say it may be out of date.',
     '- If the question is unclear, ask one short question back.',
     'Privacy: tool results never contain prospects\' names, email addresses, phone numbers or message text; do not ask for them or repeat personal data the user types.',
-    'You cannot change anything yourself and must never claim you did. To help them act, call propose_action (navigate to open a page, draft for text to copy, or a confirm button they press). For a wish to change how the hub or system works, propose add_change_request.',
+    mode === 'tools'
+      ? 'You cannot change anything yourself and must never claim you did. To help them act, call propose_action (navigate to open a page, read to have the hub read the screen out loud, draft for text to copy, or a confirm button they press). For a wish to change how the hub or system works, propose add_change_request.'
+      : 'You cannot change anything yourself and must never claim you did.',
     owner ? 'Money: the owner may ask about money (get_numbers scope money).' : 'Money: never mention invoices, prices or amounts to a team member; say it is only for the owner.',
     voice
       ? 'Style: this will be SPOKEN. Answer in 1–3 short, natural sentences. No lists, no markdown, no symbols or links. Offer to show details on screen if there is more.'
       : 'Style: warm, clear and brief. Plain text; a short dash list is fine; no tables, no headings. Longer only when asked (e.g. writing an email).',
     'After your answer, on its own last line, write <<next: q1 | q2 | q3>> with three short follow-up questions they might ask next (≤ 8 words each).',
   ];
+  if (opening) L.push(`The hub is opening ${opening} for them right now — say so in a few words (do not describe how to get there).`);
+  if (read) L.push('They want to hear what is on the screen: the hub reads the page out loud itself on their device (in tools mode propose_action read after navigate). Keep your answer to one short line and do not invent what is on the page; give numbers only from tool results.');
+  if (mode === 'tools') L.push(placesMap(user.role));
   if (summary) L.push('', `Earlier in this conversation (summary): ${summary}`);
   if (guide.length) {
     L.push('', '<guide>');
@@ -316,85 +330,130 @@ function fallbackSuggestions(page, usedTools, owner) {
  * Throws AvaError (400 bad body, 503 { needsKeys }, 429 limits).
  */
 export async function prepareChat({ messages, page = {}, voice = false, user: said = null } = {}, verified) {
+  const t0 = AVA_IO.now();
   const history = cleanHistory(messages);
   const pg = { view: str(page?.view, 40) || null, clientId: page?.clientId && ID_RE.test(String(page.clientId)) ? String(page.clientId) : null, clientName: str(page?.clientName, 80) || null, tab: str(page?.tab, 40) || null };
   // The role only ever comes from the verified request; the hub's own `user.firstName` only fills a missing name.
   const user = { ...verified, name: verified.name || str(said?.firstName, 40).split(' ')[0] || '' };
   const brains = await keyedBrains();
-  if (!brains.length) throw new AvaError('Ava has no AI key yet. The owner adds a free Groq key (or Cloudflare) in Settings › Keys.', 503, { needsKeys: true });
+  if (!brains.length) throw new AvaError('Ava has no AI key yet. The owner adds a free Groq key (or Cloudflare, Mistral or Ollama) in Settings › Keys.', 503, { needsKeys: true });
   if (!perMinute(user.id)) throw new AvaError('That is a lot of questions in one minute — give me a moment.', 429);
   const now = new Date(AVA_IO.now());
   if (!(await underDailyCap(now))) throw new AvaError("Ava has answered today's limit of questions. She's back tomorrow (the owner can raise AVA_DAILY_CAP).", 429);
-  return { history, page: pg, brains, now, voice: voice === true, user };
+  return { history, page: pg, brains, now, voice: voice === true, user, t0 };
 }
+
+/** A tool-call id every service accepts (Mistral wants 9 letters and digits). */
+const callId = (tag, n) => { const t = String(tag).replace(/[^A-Za-z0-9]/g, '').slice(0, 4); return `${t}${String(n).padStart(9 - t.length, '0')}`.slice(-9); };
+const labelOf = (nav, clientName) => {
+  if (!nav) return null;
+  if (nav.view === 'client') return `${clientName || 'the client'}${nav.tab ? ` › ${PLACES.tabs[nav.tab]?.split(' (')[0] || nav.tab}` : ''}`;
+  if (nav.view === 'settings') return `Settings${nav.section ? ` › ${PLACES.sections[nav.section]?.split(' — ')[0] || nav.section}` : ''}`;
+  return PLACES.views[nav.view]?.split(' — ')[0] || nav.view;
+};
 
 /**
  * Answer a prepared question. `onDelta(text)` streams the answer's text as it
- * comes (the tool rounds before it are not streamed).
- * → { reply, actions, suggestions, brain, model, tried, ms } · throws AvaError 502.
+ * comes (from the first call; tool rounds in between are not streamed).
+ * → { reply, actions, suggestions, brain, model, tried, ms, plan, timing } · throws AvaError 502.
+ * timing = { firstTokenMs, toolMs, modelMs, totalMs } (from the start of the request).
  */
 export async function answerChat(q, { onDelta = null } = {}) {
   const { history, page, brains, now, voice, user } = q;
-  const t0 = AVA_IO.now();
-  const [facts, providers, names] = await Promise.all([
-    getFacts().then((f) => f.text).catch(() => ''),
+  const t0 = q.t0 ?? AVA_IO.now();
+  let firstTokenAt = null;
+  let toolMs = 0;
+  const [facts, providers, clients] = await Promise.all([
+    factsForQuestion().then((f) => f.text).catch(() => ''),
     searchProviders().catch(() => []),
-    personNames().catch(() => []),
+    getAllClients(null, { includeDemo: true }).catch(() => []),
   ]);
+  const names = personNamesOf(clients);
   const search = providers.length > 0;
   const lastUser = history[history.length - 1].content;
-  const guide = retrieve(lastUser, { page, facts: cleanText(facts, names), maxTokens: BUDGET.guideTokens }).map((g) => ({ title: g.title, text: cleanText(g.text, names) }));
-  const smart = isSmart(history);
+  const smart = isSmart(history) && !(voice && lastUser.length < 160);
+  const plan = planQuestion(lastUser, { page, role: user.role, voice, smart, search, clients: clients.map((c) => ({ id: c.id, name: c.name })) });
+  const tools = plan.mode === 'tools';
+  const guide = retrieve(lastUser, { page, facts: cleanText(facts, names), maxTokens: voice ? BUDGET.voiceGuideTokens : BUDGET.guideTokens, limit: voice ? BUDGET.voiceChunks : 6 })
+    .map((g) => ({ title: g.title, text: cleanText(g.text, names) }));
   const { talk: recentTalk, summary } = compactHistory(history);
   const tctx = toolContext({ role: user.role, now: () => new Date(AVA_IO.now()), page, facts });
-  const defs = toolDefs(user.role, { search });
-  const deadline = AVA_IO.now() + AVA_TIMING.totalMs;
+  const defs = tools ? toolDefs(user.role, { search }) : [];
+  const deadline = t0 + AVA_TIMING.totalMs;
   const tried = [];
-  let order = await planSlots(brains, { smart });
   const talk = recentTalk.slice();   // + assistant tool calls and tool results
   const used = [];
+
+  // The navigation the planner placed goes first (the model need not spend a round on it).
+  const pre = [];
+  if (plan.nav) pre.push({ type: 'navigate', ...plan.nav });
+  if (plan.read) pre.push({ type: 'read', what: 'page' });
+  const preClean = cleanActions(pre, user.role);
+  const opening = preClean.find((a) => a.type === 'navigate') ? labelOf(preClean.find((a) => a.type === 'navigate'), plan.client?.name || (plan.nav?.id === page.clientId ? page.clientName : null)) : null;
+
+  // The obvious look-ups, side by side, before the first call; the model gets their results with the question.
+  const [order0] = await Promise.all([
+    planSlots(brains, { smart, quick: plan.quick }),
+    (async () => {
+      if (!plan.prefetch.length) return;
+      const ts = AVA_IO.now();
+      const outs = await Promise.all(plan.prefetch.map((p) => runTool(p.name, p.args, tctx).catch(() => ({ error: 'could not look that up' }))));
+      toolMs += AVA_IO.now() - ts;
+      const calls = plan.prefetch.map((p, i) => ({ id: callId('pf', i + 1), type: 'function', function: { name: p.name, arguments: cleanText(JSON.stringify(p.args), names) } }));
+      talk.push({ role: 'assistant', content: '', tool_calls: calls });
+      calls.forEach((c, i) => { used.push(c.function.name); talk.push({ role: 'tool', tool_call_id: c.id, name: c.function.name, content: JSON.stringify(outs[i]).slice(0, BUDGET.toolChars) }); });
+    })(),
+  ]);
+  let order = order0;
+
   let streamedAny = false;
   let filter = null;
-  const relay = onDelta ? (piece) => { if (!filter) return false; const s = filter.push(piece); if (s) streamedAny = true; return s; } : null;
+  const relay = onDelta ? (piece) => { if (!filter) return false; const sent = filter.push(piece); if (sent) streamedAny = true; return sent; } : null;
+  const emit = onDelta ? (t) => { if (firstTokenAt === null) firstTokenAt = AVA_IO.now(); onDelta(t); } : null;
+  const rounds = tools ? MAX_ROUNDS : 1;
 
-  for (let round = 0; round < MAX_ROUNDS; round++) {
-    const last = round === MAX_ROUNDS - 1;
+  for (let round = 0; round < rounds; round++) {
+    const last = round === rounds - 1;
     const build = (slot) => {
-      if (onDelta) {
+      if (emit) {
         // Text already shown in an earlier round (e.g. "Let me check.") stays; the answer starts on a new line.
         let lead = streamedAny ? '\n\n' : '';
-        filter = new StreamFilter((t) => { onDelta(lead + t); lead = ''; });
+        filter = new StreamFilter((t) => { emit(lead + t); lead = ''; });
       }
-      const tools = usesTools(slot.brain);
-      const sys = { role: 'system', content: systemPrompt({ user, page, now, guide, search, voice, summary, jsonTools: tools || last ? null : defs }) + (last ? '\n\nAnswer now; no more tools.' : '') };
-      const base = { temperature: 0.3, max_tokens: voice ? 350 : 900 };
-      if (tools) return { messages: [sys, ...talk.map((m) => (m.role === 'tool' ? { role: 'tool', tool_call_id: m.tool_call_id, content: m.content } : m))], ...base, ...(last ? {} : { tools: defs, tool_choice: 'auto' }) };
+      const fnTools = tools && usesTools(slot.brain);
+      const sys = { role: 'system', content: systemPrompt({ user, page, now, guide, search, voice, summary, mode: plan.mode, opening, read: plan.read, jsonTools: tools && !fnTools && !last ? defs : null }) + (tools && last ? '\n\nAnswer now; no more tools.' : '') };
+      const base = { temperature: 0.3, max_tokens: voice ? MAX_TOKENS.voice : MAX_TOKENS.text };
+      if (fnTools) return { messages: [sys, ...talk.map((m) => (m.role === 'tool' ? { role: 'tool', tool_call_id: m.tool_call_id, content: m.content } : m))], ...base, ...(fnTools && !last ? { tools: defs, tool_choice: 'auto' } : {}) };
       return { messages: [sys, ...plainify(talk)], ...base };
     };
     const got = await ask(order, build, { deadline, tried, onDelta: relay, smart });
     if (!got) break;
-    order = [got.slot, ...order.filter((s) => s !== got.slot)];
+    order = [got.slot, ...order.filter((x) => x !== got.slot)];
     const msg = got.message;
     const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls.filter((c) => c?.function?.name) : [];
-    if (calls.length && !last) {
-      talk.push({ role: 'assistant', content: msg.content || '', tool_calls: calls.slice(0, 4).map((c, i) => ({ id: c.id || `call_${round}_${i}`, type: 'function', function: { name: c.function.name, arguments: typeof c.function.arguments === 'string' ? c.function.arguments : JSON.stringify(c.function.arguments || {}) } })) });
+    if (tools && calls.length && !last) {
+      talk.push({ role: 'assistant', content: msg.content || '', tool_calls: calls.slice(0, 4).map((c, i) => ({ id: c.id || callId(`c${round}`, i), type: 'function', function: { name: c.function.name, arguments: typeof c.function.arguments === 'string' ? c.function.arguments : JSON.stringify(c.function.arguments || {}) } })) });
       // What goes back to the service carries no contact names (the tools get the args as the brain wrote them).
       const echo = talk[talk.length - 1];
-      for (const c of echo.tool_calls) {
+      const ts = AVA_IO.now();
+      const outs = await Promise.all(echo.tool_calls.map((c) => runTool(c.function.name, safeArgs(c.function.arguments), tctx)));
+      toolMs += AVA_IO.now() - ts;
+      echo.tool_calls.forEach((c, i) => {
         used.push(c.function.name);
-        const out = await runTool(c.function.name, safeArgs(c.function.arguments), tctx);
         c.function.arguments = cleanText(c.function.arguments, names);
-        talk.push({ role: 'tool', tool_call_id: c.id, name: c.function.name, content: JSON.stringify(out).slice(0, BUDGET.toolChars) });
-      }
+        talk.push({ role: 'tool', tool_call_id: c.id, name: c.function.name, content: JSON.stringify(outs[i]).slice(0, BUDGET.toolChars) });
+      });
       squeezeTools(talk);
       continue;
     }
-    const obj = !got.cut ? parseJsonObject(stripThink(msg.content)) : null;
+    const obj = tools && !got.cut ? parseJsonObject(stripThink(msg.content)) : null;
     if (obj && typeof obj.tool === 'string' && !last && /^\s*(```|\{)/.test(stripThink(msg.content))) {
-      const id = `json_${round}`;
+      const id = callId(`j${round}`, 0);
       used.push(obj.tool);
       talk.push({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name: obj.tool, arguments: JSON.stringify(obj.args || {}) } }] });
+      const ts = AVA_IO.now();
       const out = await runTool(obj.tool, obj.args || {}, tctx);
+      toolMs += AVA_IO.now() - ts;
       talk.push({ role: 'tool', tool_call_id: id, name: obj.tool, content: JSON.stringify(out).slice(0, BUDGET.toolChars) });
       continue;
     }
@@ -402,17 +461,24 @@ export async function answerChat(q, { onDelta = null } = {}) {
     const raw = got.cut ? (filter?.out || '') : msg.content;
     const fin = parseFinal(raw, user.role);
     let reply = fin.reply.slice(0, 6000);
-    if (!reply) reply = "Sorry, I didn't catch that — could you say it another way?";
+    if (!reply) reply = opening ? `Opening ${opening}.` : "Sorry, I didn't catch that — could you say it another way?";
     // A JSON-shaped answer was held back while streaming: send its words now.
-    if (onDelta && !filter?.out) { onDelta(streamedAny ? `\n\n${reply}` : reply); streamedAny = true; }
+    if (emit && !filter?.out) { emit(streamedAny ? `\n\n${reply}` : reply); streamedAny = true; }
+    const end = AVA_IO.now();
+    // The model's own navigate wins over the planner's guess; `read` is added when they asked for it.
+    const modelNav = [...tctx.actions, ...fin.actions].some((a) => a.type === 'navigate');
+    const actions = cleanActions([...(modelNav ? [] : preClean.filter((a) => a.type === 'navigate')), ...tctx.actions, ...fin.actions, ...preClean.filter((a) => a.type === 'read')], user.role)
+      .filter((a, i, arr) => arr.findIndex((b) => JSON.stringify(b) === JSON.stringify(a)) === i);
     return {
       reply,
-      actions: cleanActions([...tctx.actions, ...fin.actions], user.role),
+      actions,
       suggestions: fin.suggestions.length ? fin.suggestions : fallbackSuggestions(page, used, user.role === 'admin'),
       brain: got.brain.id,
       model: got.model,
       tried,
-      ms: AVA_IO.now() - t0,
+      ms: end - t0,
+      plan: { mode: plan.mode, why: plan.why, prefetch: plan.prefetch.map((p) => p.name), quick: plan.quick },
+      timing: { firstTokenMs: firstTokenAt === null ? end - t0 : firstTokenAt - t0, toolMs, modelMs: tried.reduce((n, x) => n + (x.ms || 0), 0), totalMs: end - t0 },
       ...(got.cut ? { cut: true } : {}),
     };
   }

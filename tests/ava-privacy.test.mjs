@@ -133,7 +133,7 @@ test('every tool, owner and team member, with the Test run loaded: no personal d
     const n = sent.length;
     const order = [['list_clients', args.list_clients], ['get_client', args.get_client], ['search_hub', { query: 'what does Megan think about the office line' }]];
     if (n <= 3) return Response.json({ choices: [{ message: { role: 'assistant', content: null, tool_calls: [{ id: `c${n}`, type: 'function', function: { name: order[n - 1][0], arguments: JSON.stringify(order[n - 1][1]) } }] } }] });
-    assert.equal(body.messages.filter((m) => m.role === 'tool').length, 3);
+    assert.equal(body.messages.filter((m) => m.role === 'tool').length, 4, 'the look-up done before the first call (get_client for Summit) + 3');
     return Response.json({ choices: [{ message: { role: 'assistant', content: 'All good.' } }] });
   };
   AVA_IO.fetch = net; MODELS_IO.fetch = net;

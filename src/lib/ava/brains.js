@@ -7,6 +7,12 @@
  *                The main brain: a fast model and a stronger one.
  *   cloudflare — Workers AI, free daily allowance; Cloudflare does not use
  *                customer content to train. Needs the account id + a token.
+ *   mistral    — La Plateforme's free "Experiment" plan, ONLY after the owner
+ *                switches off "Anonymous improvement data" (Admin › Privacy):
+ *                the free plan trains on API data by default. Kept 30 days for
+ *                abuse checks. Tool calling.
+ *   ollama     — Ollama Cloud: keeps no prompts or answers; a small free
+ *                allowance (1 question at a time). gpt-oss:120b first.
  *   cerebras   — no longer free (a card and credit); not retained or trained on.
  *   gemini     — PAID key only (free Gemini keys may be used for training;
  *                the Keys card says so). OpenAI-compatible endpoint.
@@ -20,9 +26,10 @@
  * Keys come from the keys store (lib/secrets.js: env wins, else Settings ›
  * Keys). Never returned by any answer.
  *
- * The router: a list of (brain, model) "slots" — Groq first (its fast model,
- * or its strong model for a smart question, then its other models: each has
- * its own rate limit), then Cloudflare, then the paid ones. A 429 / 5xx /
+ * The router: a list of (brain, model) "slots" — Groq first (its quick model
+ * for a short or spoken question, its fast model, or its strong model for a
+ * smart question, then its other models: each has its own rate limit), then
+ * Cloudflare, Mistral, Ollama, then the paid ones. A 429 / 5xx /
  * timeout / network error falls through to the next slot (each call ≤
  * AVA_TIMING.callMs, the whole question ≤ AVA_TIMING.totalMs). A 429 cools
  * that model down (per server instance; `retry-after` honoured up to 5 min);
@@ -50,6 +57,8 @@ export function brainList() {
     { id: 'cloudflare', name: 'Cloudflare Workers AI', keys: ['CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN'], free: true,
       url: (v) => `${CF}/${encodeURIComponent(v.CLOUDFLARE_ACCOUNT_ID)}/ai/v1/chat/completions`,
       modelsUrl: (v) => `${CF}/${encodeURIComponent(v.CLOUDFLARE_ACCOUNT_ID)}/ai/models/search?task=Text%20Generation&per_page=100` },
+    { id: 'mistral', name: 'Mistral (training switched off)', keys: ['MISTRAL_API_KEY'], url: 'https://api.mistral.ai/v1/chat/completions', modelsUrl: 'https://api.mistral.ai/v1/models', free: true },
+    { id: 'ollama', name: 'Ollama Cloud', keys: ['OLLAMA_API_KEY'], url: 'https://ollama.com/v1/chat/completions', modelsUrl: 'https://ollama.com/v1/models', free: true },
     { id: 'cerebras', name: 'Cerebras', keys: ['CEREBRAS_API_KEY'], url: 'https://api.cerebras.ai/v1/chat/completions', modelsUrl: 'https://api.cerebras.ai/v1/models' },
     { id: 'gemini', name: 'Gemini (paid key)', keys: ['GEMINI_API_KEY'], url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions' },
     { id: 'openrouter', name: 'OpenRouter (no-training providers only)', keys: ['OPENROUTER_API_KEY'], url: 'https://openrouter.ai/api/v1/chat/completions',
@@ -92,7 +101,7 @@ export async function brainsStatus() {
     const s = st(b.id);
     const kb = byId.get(b.id);
     let model = null; let models = [];
-    if (kb) { const m = await modelsFor(kb); model = m.fast; models = m.ranked.slice(0, 12); }
+    if (kb) { const m = await modelsFor(kb, { wait: true }); model = m.fast; models = m.ranked.slice(0, 12); }
     else { const c = cachedModels(b.id); model = c?.fast || null; models = c?.ranked?.slice(0, 12) || []; }
     const cool = cooling(b.id);
     out.push({
@@ -117,13 +126,16 @@ export const isShort = (messages) => !isSmart(messages);
 
 /**
  * The (brain, model) slots to try, in order. Groq: 3 models (smart first for
- * a smart question); every other brain: 2. Cooling slots go last.
+ * a smart question, the quick one for a short or spoken one); every other
+ * brain: 2. Cooling slots go last. The brains' model lists are read side by
+ * side (never one after another).
  */
-export async function planSlots(brains, { smart = false } = {}) {
+export async function planSlots(brains, { smart = false, quick = false } = {}) {
   const slots = [];
-  for (const brain of brains) {
-    const m = await modelsFor(brain);
-    const first = smart ? m.smart || m.fast : m.fast || m.smart;
+  const lists = await Promise.all(brains.map((b) => modelsFor(b)));
+  for (const [i, brain] of brains.entries()) {
+    const m = lists[i];
+    const first = smart ? m.smart || m.fast : quick ? m.quick || m.fast : m.fast || m.smart;
     const list = [first, ...m.ranked.filter((x) => x !== first)].filter(Boolean).slice(0, brain.id === 'groq' ? 3 : 2);
     for (const model of list) slots.push({ brain, model });
   }
