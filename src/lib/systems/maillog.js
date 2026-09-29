@@ -103,7 +103,7 @@ export function replyKind(rec) {
   return ({ notnow: 'not_now', ooo: 'out_of_office', wrongperson: 'referral' })[k] || k || 'unclear';
 }
 
-async function leadsByEmail(clientId, emails) {
+export async function leadsByEmail(clientId, emails) {
   const out = new Map();
   const list = [...new Set(emails.map(lower).filter(Boolean))];
   for (let i = 0; i < list.length; i += 500) {
@@ -132,7 +132,7 @@ const KINDS = new Set(['first', 'followup', 'bot', 'owner', 'client']);
  * Every email that went out for the client, newest first, paged by time.
  * → { total, sent: [{ id, at, to, toName, company, subject, from, kind, status, threadId }], next } | null (no client).
  */
-export async function emailsFor(clientId, { limit = 200, before = null, kind = null } = {}) {
+export async function emailsFor(clientId, { limit = 200, before = null, kind = null, shared = false } = {}) {
   const client = await getClient(clientId);
   if (!client) return null;
   const max = Math.min(Math.max(Number.parseInt(limit, 10) || 200, 1), 500);
@@ -147,7 +147,7 @@ export async function emailsFor(clientId, { limit = 200, before = null, kind = n
   const [replies, answers, convo] = await Promise.all([
     repliesOf(clientId),
     prospectMailOf(clientId),
-    kv.lrange(K.onboardThread(clientId), 0, -1).then((l) => (l || []).map(asRec).filter(Boolean)).catch(() => []),
+    shared ? [] : kv.lrange(K.onboardThread(clientId), 0, -1).then((l) => (l || []).map(asRec).filter(Boolean)).catch(() => []),
   ]);
   const firstReply = new Map();
   for (const r of replies) {
@@ -196,7 +196,9 @@ export async function emailsFor(clientId, { limit = 200, before = null, kind = n
     });
   }
 
-  const pool = (want ? all.filter((x) => x.kind === want) : all).sort((a, b) => b.at.localeCompare(a.at) || a.id.localeCompare(b.id));
+  // The client's shared page (systems/clientdash.js): only the emails to prospects, never the ones to the client.
+  const mine = shared ? all.filter((x) => x.threadId !== CLIENT_THREAD) : all;
+  const pool = (want ? mine.filter((x) => x.kind === want) : mine).sort((a, b) => b.at.localeCompare(a.at) || a.id.localeCompare(b.id));
   const rest = beforeMs ? pool.filter((x) => ms(x.at) < beforeMs) : pool;
   let page = rest.slice(0, max);
   let next = null;
@@ -301,15 +303,30 @@ async function namesOf(clientId, client) {
   };
 }
 
-/** The client ↔ owner conversation as a thread: what went to the client and what they wrote. */
-async function clientThread(clientId) {
+// Money never shows on the client's shared page: invoices, the plan agreement (prices), quotes, the
+// reply bot's price answers (and the question it answered), and anything with an amount or "invoice" in it.
+const MONEY_TEMPLATE = /^(invoice|agreement_copy|quote_request|winback|payment)/;
+const MONEY_TEXT = /\binvoices?\b|\bpayments?\b|\bpay by\b|\$\s?\d|\b\d[\d,.]*\s?(usd|dollars)\b/i;
+/** May this client ↔ owner conversation entry show on the client's shared page? */
+export function sharedEntry(e) {
+  if (!e) return false;
+  if (e.template && MONEY_TEMPLATE.test(String(e.template))) return false;
+  if (e.rule === 'price') return false;
+  return !MONEY_TEXT.test(`${e.subject || ''}\n${e.text || ''}`);
+}
+
+/**
+ * The client ↔ owner conversation as a thread: what went to the client and what they wrote.
+ * `shared`: the client's shared page — money left out (sharedEntry).
+ */
+async function clientThread(clientId, { shared = false } = {}) {
   const client = await getClient(clientId);
   if (!client) return null;
   const [entries, name] = await Promise.all([
     kv.lrange(K.onboardThread(clientId), 0, -1).then((l) => (l || []).map(asRec).filter(Boolean)),
     namesOf(clientId, client),
   ]);
-  const messages = entries.filter((e) => ms(e.at)).map((e) => ({
+  const messages = entries.filter((e) => ms(e.at) && (!shared || sharedEntry(e))).map((e) => ({
     at: iso(ms(e.at)),
     dir: e.dir === 'in' ? 'in' : 'out',
     by: e.dir === 'in' ? 'client' : e.kind === 'owner_reply' ? 'owner' : e.kind === 'auto_reply' ? 'bot' : 'system',
@@ -323,10 +340,10 @@ async function clientThread(clientId) {
  * The whole conversation with one prospect, oldest first: our cold emails (full text), their replies,
  * the machine's answers, the hand-off to the client and the client's answer to it.
  * → { threadId, lead, messages: [{ at, dir: 'out'|'in', by: 'system'|'bot'|'owner'|'client'|'prospect', from, to, subject, text }] } | null (unknown).
- * threadId 'client' is the client ↔ owner conversation.
+ * threadId 'client' is the client ↔ owner conversation (`shared`: without money, for the client's shared page).
  */
-export async function threadFor(clientId, threadId) {
-  if (threadId === CLIENT_THREAD) return clientThread(clientId);
+export async function threadFor(clientId, threadId, { shared = false } = {}) {
+  if (threadId === CLIENT_THREAD) return clientThread(clientId, { shared });
   const email = emailOfThread(threadId);
   if (!email) return null;
   const lead = asRec(await kv.hget(K.leads(clientId), email));

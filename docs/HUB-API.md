@@ -269,9 +269,8 @@ labels.
 
 Every client (trial or paying) can have one read-only page with their own
 sending: `/c/{token}/dashboard` (token purpose `dashboard`, 400 days,
-`systems/clientdash.js`). It shows the five numbers, the last 30 days day by
-day, their inboxes (emails a day, inbox rate, health), the newest replies and
-their booked calls. It never shows owner-only data. The link is emailed in
+`systems/clientdash.js`). Since 2026-09-29 it is the shared view — see "The
+client's page (shared view)" at the end. It never shows owner-only data. The link is emailed in
 `day1_started` ("You can watch the sending as it happens"), remembered on the
 trial hash, and returned in `links.dashboard` of `GET /api/mc/hub/[id]`.
 `POST /api/mc/clients/{id} {action:'dashboardLink', fresh?}` makes or returns
@@ -1995,3 +1994,121 @@ email log (a prospect who never answered shows our emails):
 - A paying client's delivery-problem email is `deliverability_notice_paid`
   ("Sending paused for now", no trial words) and the quiet pause is
   `paused_quiet_paid`.
+
+---
+
+# The client's page (shared view) (2026-09-29)
+
+"I give people from the client's business access by email, so we are both
+looking at the same thing." The page at `/c/{token}/dashboard` (the token is
+the dashboard link's, purpose `dashboard`, `systems/clientdash.js`) is what
+the hub shows under **"Shared with <Business>"**: the same labels, the same
+numbers. Five tabs — **Overview**, **Conversations**, **Emails sent**,
+**Calls**, **Messages** — read-only, refreshes every 5 minutes.
+
+**Never on this page** (and never in these routes): money / invoices (the
+plan agreement, quotes, invoice emails, the reply bot's price answers and the
+question it answered, any text with an amount or "invoice"), the fit score,
+costs, the owner's to-dos, reply-bot rule names, other clients,
+deliverability internals (inbox rates, placement, health), credentials, lead
+grades. The old "Your inboxes" section is gone for that reason.
+
+All four routes are public (the token is the credential): an unknown,
+expired or replaced link (after `unshareDashboard` or `dashboardLink
+{fresh:true}`) → **404** `{ ok:false, error }`; more than 120 calls a minute
+on one link (counted in server memory, no Redis) → 429. Nothing runs in a tick;
+each call is a bounded read.
+
+## `GET /api/c/dashboard?token=` — header, Overview, Calls, Messages
+
+```jsonc
+{ "ok": true,
+  "company": "Oak Legal",
+  "plan": "Growth plan|Starter plan|Scale plan|30-day trial",   // header: "Aviance — <plan>"
+  "paid": true, "demo": false,                                  // demo: a Test run client (the owner's preview)
+  "status": "Sending emails — day 12 of 30.",                   // one plain sentence by state (below); never a to-do
+  "day": 12,                                                    // trial day; null on a paid plan
+  "five": { "sent": 400, "opened": null, "replies": 20, "bounced": 8, "interested": 6, "booked": 3 },
+          // opened is always null → "—" + "Not tracked yet" (client emails carry no open pixel)
+  "rates": { "replies": 0.05, "bounced": 0.02, "interested": 0.3 },   // replies / bounced: of emails sent; interested: of replies; null when 0
+  "sentSince": "YYYY-MM-DD|null",                               // "Since <day>" under Emails sent (trial Day 1)
+  "openedTracked": false,
+  "last30": { "days": ["YYYY-MM-DD", … 30], "sent": [n…], "replies": [n…], "booked": [n…],
+              "totals": { "sent": 37, "replies": 2, "booked": 0 } },   // "Emails sent per day · last 30 days", replies as dots
+  "journey": { "steps": [ {"key":"applied","label":"Applied"}, {"key":"onboarding","label":"Onboarding call"},
+                          {"key":"setup","label":"Setting up"}, {"key":"sending","label":"Sending emails"}, {"key":"done","label":"Done"} ],
+               "current": 3, "currentKey": "sending", "status": "…same as status…" },
+  "calls": {
+    "prospects": [ { "at": "ISO", "name": "Pat Doe|null", "email": "pat@firm.com", "company": "Firm|null",
+                     "status": "booked|showed|no_show|cancelled|moved|checking" } ],   // newest first; checking = "Being checked"
+    "ours": [ { "kind": "onboarding", "label": "Onboarding call", "at": "ISO|null", "status": "done|booked|missed|not_needed|not_booked" },
+              { "kind": "launch",     "label": "Launch call",     "at": "ISO|null", "status": "…" } ] },   // the "Setup calls" card, always both
+  "messages": [ { "at", "dir": "out|in", "by": "system|bot|owner|client", "from", "to", "subject", "text" } ],
+              // the conversation with us (the onboarding Gmail thread), oldest first, money left out
+              // = GET /api/c/thread?id=client → messages. Show "Reply by email — it comes straight to us."
+  "replyTo": "owner@…|null",
+  "updatedAt": "ISO" }                                          // "Updated … · refreshes on its own"
+```
+Journey: applied / queued → Applied; onboarding → Onboarding call;
+awaiting_purchase / setup_check / warming / ready → Setting up; sending /
+paused / extension / converted → Sending emails; deciding and every ended
+state → Done.
+
+The status sentence (times in US Eastern, "Thu, Dec 10, 10:00 AM ET"):
+applied "Application received — it is being reviewed." · queued "Accepted —
+waiting for a start date." · onboarding "Accepted — next is the onboarding
+call." / "The onboarding call is booked for <when>." (after the call: the
+setting-up line) · awaiting_purchase / setup_check / ready "Setting up. The
+launch call is booked for <when>." or "Setting up the new email inboxes and
+the list of people to write to." · warming "Warming up the new inboxes, so the
+emails land in the inbox and not in spam. Emails start on <Monday, December
+14>." · sending / extension "Sending emails — day N of 30." (paying: "Sending
+emails.") · paused "Sending is paused for now." · deciding "The 30 days are
+done. Next: choosing whether to go on." · declined "Not going ahead." ·
+converted "On the <Growth plan>." · every other end "The trial is finished."
+(a paying client: "On the <Plan> plan.").
+
+Page layout: Overview = "Where you are" (journey + sentence) first, then
+Emails sent ("Since <day>"), Opened ("—" / "Not tracked yet"), Replies and
+Bounced ("x% of emails sent"), then Interested ("x% of replies") and Calls
+booked ("Prospects who booked a call"), then the chart. Conversations ·
+N ("Everyone who wrote back — tap one to read it all"); Every email sent · N;
+Calls prospects booked · N + Setup calls; Messages.
+
+## `GET /api/c/emails?token=&limit=200&before=ISO` — Emails sent
+
+Same shape and paging as `GET /api/mc/hub/{id}/emails` (`{ total, sent:
+[{ id, at, to, toName, company, subject, from, kind, status, threadId }],
+next }`) but **only the emails to prospects** (`kind` first | followup | bot,
+never `threadId: 'client'` — the emails to the client are the Messages tab).
+200 a page; "Show more" passes `next` as `before`. Bad `before` → 400.
+
+## `GET /api/c/threads?token=` — Conversations
+
+Same as `GET /api/mc/hub/{id}/threads`: `{ threads: [{ threadId, lead:
+{email, name, company}, lastAt, count, kind, handledBy, snippet }] }`.
+Labels: `handledBy` bot / owner → "We answered", client → "Handed to you",
+null → "Nothing to answer"; `kind` pills: Interested, Question, Not now, Out
+of office, Bounced, Unsubscribed, Not interested, Referral, Unclear, Needs
+care (legal), Unhappy (angry).
+
+## `GET /api/c/thread?token=&id=` — one whole conversation
+
+Same as `GET /api/mc/hub/{id}/threads/{threadId}` (`{ threadId, lead,
+messages }`, oldest first). `id=client` → the conversation with us, money
+left out (the Messages tab). Unknown / broken id → 404.
+
+## The hub
+
+- `GET /api/mc/hub/{id}` → `dashboardAccess.url` (the owner only; employees
+  get `sharedWith` alone): the client's current page link, minted when there
+  is none — the hub's **"Open what they see"**. The same link as
+  `links.dashboard` and the one `shareDashboard` emails.
+- `shareDashboard` now answers `{ ok, url, sent: true, sharedWith }`.
+- **Test run clients** (`demo-*`): their page works (read-only) so the owner
+  can preview it. `POST /api/mc/clients/{demo id} {action:'shareDashboard',
+  email}` sends nothing and records nobody → `{ ok: true, url, sent: false,
+  demo: true }` (open the `url`). `{action:'dashboardLink'}` (not `fresh`)
+  returns the link too. Every other write on a demo client stays 409 (the
+  middleware reads the body's `action` only on that one path). The preview
+  links' lookups are removed with the Test run.

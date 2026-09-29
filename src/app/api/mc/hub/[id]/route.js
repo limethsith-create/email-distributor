@@ -6,11 +6,12 @@ import { hubClient } from '@/lib/systems/hubview';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
-export async function GET(_req, { params }) {
+export async function GET(request, { params }) {
   let id;
   try { id = assertClientId(params.id); } catch { return Response.json({ error: 'bad client id' }, { status: 400 }); }
   try {
-    const data = await hubClient(id);
+    // The owner (not an employee) also gets dashboardAccess.url — the client's page link.
+    const data = await hubClient(id, { owner: request?.headers?.get('x-hub-role') !== 'employee' });
     if (!data) return Response.json({ error: 'not found' }, { status: 404 });
     return Response.json(data);
   } catch (err) {

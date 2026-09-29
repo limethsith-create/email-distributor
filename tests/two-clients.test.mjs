@@ -889,8 +889,8 @@ test('two clients, trial + paying: website → yes → setup → warm-up → a m
     assert.ok(dashToken, `${c.company}: a dashboard link`);
     const dash = (await call('api/c/dashboard/route', 'GET', { path: `/api/c/dashboard?token=${dashToken}` })).json;
     assert.equal(dash.ok, true);
-    assert.deepEqual(dash.five, row.five, `${c.company}: the dashboard's five = the hub's`);
-    assert.equal(dash.bookings.length, d.bookings.length);
+    assert.deepEqual(dash.five, { sent: row.five.sent, opened: null, replies: row.five.replies, bounced: Number(d.counters.bounces ?? 0), interested: row.five.positive, booked: row.five.booked }, `${c.company}: the dashboard's numbers = the hub's`);
+    assert.equal(dash.calls.prospects.length, d.bookings.filter((b) => b.scheduledAt).length);
     assert.ok(dash.last30.totals.sent <= row.five.sent && dash.last30.totals.sent > 0);
     assert.ok(!JSON.stringify(dash).includes('invoice'), 'the client dashboard shows no owner money data');
     // A month of sending at realistic volumes (no day over the inboxes' caps).
