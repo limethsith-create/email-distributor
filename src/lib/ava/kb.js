@@ -99,6 +99,17 @@ export function guideChunks() {
 }
 export const __resetGuide = () => { guideCache = null; };
 
+/** The search index over the guide + facts, built once per facts text (not on every question). */
+let indexMemo = { facts: null, index: null, guide: null };
+export function indexFor(facts = '') {
+  const f = String(facts || '');
+  const guide = guideChunks();
+  if (indexMemo.index && indexMemo.facts === f && indexMemo.guide === guide) return indexMemo.index;
+  const index = buildIndex([...guide, ...factChunks(f)]);
+  indexMemo = { facts: f, index, guide };
+  return index;
+}
+
 /** The owner's facts note → chunks titled "Business facts" (paragraphs, ~120 words each). */
 export function factChunks(facts) {
   const t = String(facts || '').trim();
@@ -119,8 +130,7 @@ export function factChunks(facts) {
  * boosted). → [{ title, text, score }].
  */
 export function retrieve(query, { page = {}, facts = '', limit = 6, maxTokens = 1500, minScore = 0.8 } = {}) {
-  const chunks = [...guideChunks(), ...factChunks(facts)];
-  const index = buildIndex(chunks);
+  const index = indexFor(facts);
   const boostPages = [page.view, page.tab, page.view === 'client' ? 'client' : null].filter(Boolean).map((v) => String(v).toLowerCase());
   const hits = index.search(query, { limit: limit + 4, boostPages, boostTitles: ['Business facts (from the owner)'] });
   const top = hits[0]?.score || 0;
