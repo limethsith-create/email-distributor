@@ -591,6 +591,9 @@ export const DEFAULTS = {
   // no follow-ups (due day-3 / day-7 / day-10 touches are skipped, not sent and not expired).
   // true = the old day-0 → 3 → 7 → 10 sequence. Set in /mc/config (or the hub's Config).
   OUTREACH_FOLLOWUPS: false,
+  // Ava (the hub's AI helper, lib/ava/): questions a day for everyone together (0 = no cap). Each question is
+  // up to 4 calls to a free, no-training AI service (Groq / Cerebras first).
+  AVA_DAILY_CAP: 300,
   // US federal holidays, observed dates. Update once a year (one line per year).
   US_HOLIDAYS: [
     '2026-01-01', '2026-01-19', '2026-02-16', '2026-05-25', '2026-06-19', '2026-07-03',

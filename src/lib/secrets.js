@@ -19,7 +19,8 @@
  * the verifiers and the Places client do not read Redis on every call, and a
  * caller that checks several keys at once passes one snapshot around.
  *
- * No AI anywhere.
+ * The AI keys (Groq, Cerebras, Gemini, OpenRouter) are Ava's brains (lib/ava/);
+ * nothing else in the machine uses AI.
  */
 
 import { kv } from '@vercel/kv';
@@ -45,6 +46,11 @@ export const CARDS = [
   { name: 'ZEROBOUNCE_API_KEY', short: 'ZeroBounce key', label: 'ZeroBounce key — 100 a month free', fields: ['ZEROBOUNCE_API_KEY'], optional: true },
   { name: 'HUNTER_API_KEY', short: 'Hunter key', label: 'Hunter key — about 100 checks a month free (optional)', fields: ['HUNTER_API_KEY'], optional: true },
   { name: 'GITHUB_TOKEN', short: 'GitHub token', label: 'GitHub token — starts the lead finder', fields: ['GITHUB_TOKEN'], needs: ['GITHUB_TOKEN', 'GITHUB_REPO'] },
+  // Ava's brains (lib/ava/brains.js): only services whose terms say API inputs are not used for training.
+  { name: 'GROQ_API_KEY', short: 'Groq key', label: 'Groq key — Ava\'s fast brain, free (Groq does not train on API data)', fields: ['GROQ_API_KEY'], optional: true },
+  { name: 'CEREBRAS_API_KEY', short: 'Cerebras key', label: 'Cerebras key — Ava\'s second free brain (Cerebras does not keep or train on API data)', fields: ['CEREBRAS_API_KEY'], optional: true },
+  { name: 'GEMINI_API_KEY', short: 'Gemini key', label: 'Gemini key — paid key only: free Gemini keys may train on your data (optional)', fields: ['GEMINI_API_KEY'], optional: true },
+  { name: 'OPENROUTER_API_KEY', short: 'OpenRouter key', label: 'OpenRouter key — paid credits; Ava always asks for providers that do not train or keep data (optional)', fields: ['OPENROUTER_API_KEY'], optional: true },
   { name: 'GITHUB_REPO', short: 'GitHub repository', label: 'GitHub repository — where the lead finder runs (leave the default unless it moved)', fields: ['GITHUB_REPO'], needs: ['GITHUB_TOKEN', 'GITHUB_REPO'], secret: false, default: DEFAULT_REPO },
 ];
 /** Every env name the store knows. */
