@@ -36,12 +36,13 @@ import { getClient } from '@/lib/db/client';
 import { getLeads } from '@/lib/db/leads';
 import { getInboxRecords } from '@/lib/db/inboxes';
 import { decrypt } from '@/lib/crypto';
+import { trialDay } from '@/lib/time';
 import {
   sim, world, clock, et, colombo, installJourney, call, deliver, sentSince, linkIn,
   OWNER, GOOGLE, CI_KEY, addApplicantSite,
   ownerBuysInCheapInboxes, cheapInboxesDomainReady, cheapInboxesMailboxesReady, cheapInboxesWebhook,
 } from './journey-world.mjs';
-import { exportDemoState } from '@/lib/systems/demo';
+import { exportDemoState, exportDemoPart, DEMO } from '@/lib/systems/demo';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEMO_FIXTURE = path.join(HERE, 'fixtures', 'demo-state.json');
@@ -97,6 +98,52 @@ function addSites() {
       { name: 'Front Range Roofing', category: 'Roofing contractor', address: '10 Blake St, Denver, CO 80202, USA', rating: 4.6, reviews: 320, web: 'https://www.frontrangeroofing.com/', cid: 8102 },
     ],
   });
+}
+
+// ── the Test run's live trial: Harbor on its Day 12, renamed Lakeview Physical Therapy ──
+
+/** Every name in Harbor's snapshot changed consistently: the client, its trade, its people and its prospects. */
+function lakeviewPart(harbor, dump, now) {
+  const words = [
+    ['Harbor Dental Group', 'Lakeview Physical Therapy'], ['Harbor Dental', 'Lakeview PT'], ['harbor-dental', 'lakeview-pt'], ['harborhq', 'lakeviewhq'],
+    ['Dr. Alan Reyes', 'Dr. Paul Novak'], ['Alan Reyes', 'Paul Novak'], ['Megan Ortiz', 'Dana Whitfield'], ['megan.ortiz', 'dana.whitfield'], ['Megan', 'Dana'], ['megan', 'dana'], ['Ortiz', 'Whitfield'],
+    ['workplace dental care', 'on-site physical therapy'], ['dental check-ups and cleanings', 'physical therapy and injury screenings'],
+    ['On-site dental days', 'On-site PT days'], ['on-site dental days', 'on-site PT days'], ['on-site dental day', 'on-site PT day'],
+    ['Workplace dental plans', 'Workplace injury-prevention plans'], ['workplace dental plans', 'workplace injury-prevention plans'],
+    ['Family dentistry', 'Sports rehab'], ['dentists', 'physical therapists'], ['hygienists', 'athletic trainers'], ['Dental clinic', 'Physical therapy clinic'],
+    ['cleanings', 'screenings'], ['check-ups', 'screenings'], ['Dental', 'Physical Therapy'], ['dental', 'physical therapy'], ['Harbor', 'Lakeview'], ['harbor', 'lakeview'],
+  ];
+  // Its prospects: other companies and other people (a fixed one-to-one swap, so every mention agrees).
+  const swap = (a, b) => new Map(a.map((x, i) => [x, b[i]]));
+  const FIRSTS = swap(['Alan', 'Beth', 'Carl', 'Dina', 'Evan', 'Faye', 'Glen', 'Hana', 'Ivan', 'Jill', 'Kyle', 'Lena', 'Mark', 'Nora', 'Owen', 'Pia', 'Reid', 'Sara', 'Tate', 'Vera'],
+    ['Brian', 'Clara', 'Derek', 'Elena', 'Frank', 'Grace', 'Henry', 'Irene', 'Jason', 'Karen', 'Leo', 'Maria', 'Nathan', 'Olivia', 'Peter', 'Rosa', 'Simon', 'Tina', 'Victor', 'Wendy']);
+  const LASTS = swap(['Adams', 'Brooks', 'Chen', 'Dalton', 'Ellis', 'Foster', 'Grant', 'Hayes', 'Irwin', 'Jensen', 'Keller', 'Lowe', 'Mercer', 'Nash', 'Okafor', 'Price', 'Quinn', 'Rivera', 'Shaw', 'Tran', 'Upton', 'Vance', 'Webb'],
+    ['Bishop', 'Carver', 'Doyle', 'Everett', 'Fischer', 'Gibson', 'Holland', 'Ingram', 'Jordan', 'Kramer', 'Lambert', 'Moreno', 'Norris', 'Osborne', 'Patel', 'Ramsey', 'Sutton', 'Tucker', 'Vaughn', 'Walsh', 'Young', 'Zimmer', 'Barker']);
+  const NAMES2 = swap(['Granite', 'Bayview', 'Northgate', 'Cedar', 'Atlantic', 'Pinecrest', 'Riverside', 'Keystone', 'Maplewood', 'Ironwood', 'Lighthouse', 'Coastal', 'Birchwood', 'Stonebridge', 'Oakridge', 'Westbrook', 'Fairfield', 'Evergreen', 'Silverline', 'Redwood', 'Clearwater', 'Highland', 'Brightside', 'Meridian', 'Blue Ridge', 'Willowbrook', 'Falcon', 'Copperline', 'Liberty', 'Frontier'],
+    ['Pioneer', 'Crestview', 'Southport', 'Aspen', 'Pacific', 'Hillcrest', 'Lakeshore', 'Cornerstone', 'Elmwood', 'Driftwood', 'Beacon', 'Tidewater', 'Rosewood', 'Millbrook', 'Ridgeline', 'Eastgate', 'Greenfield', 'Sequoia', 'Goldline', 'Sycamore', 'Brookside', 'Lowland', 'Sunnyside', 'Horizon', 'Green Valley', 'Foxhollow', 'Osprey', 'Ironline', 'Heritage', 'Pathway']);
+  const leads = dump.get(`client:${harbor.id}:leads`);
+  const people = [];
+  for (const [email, raw] of leads) {
+    const l = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const [first, last] = String(l.name || '').split(' ');
+    const nf = FIRSTS.get(first);
+    const nl = LASTS.get(last);
+    const pre = [...NAMES2.keys()].find((k) => String(l.company || '').startsWith(`${k} `));
+    if (!nf || !nl || !pre) continue;
+    const company = `${NAMES2.get(pre)}${l.company.slice(pre.length)}`;
+    const host = `${company.toLowerCase().replace(/[^a-z]/g, '')}.com`;
+    const oldHost = email.split('@')[1];
+    people.push([email, `${nf.toLowerCase()}@${host}`], [oldHost, host], [l.company, company], [l.name, `${nf} ${nl}`]);
+  }
+  for (const [a, b] of FIRSTS) people.push([`${a},`, `${b},`], [`Hi ${a}`, `Hi ${b}`], [`${a} —`, `${b} —`], [`, ${a}.`, `, ${b}.`]);
+  const part = exportDemoPart([[harbor.id, DEMO.lakeview]], { dump, now, before: [[harbor.domain, 'lakeviewpt.com'], [SUMMIT.domain, 'summitroofing.com'], [SUMMIT.id, DEMO.summit]], words: [...words, ...people], meetingPrefix: 'mdlake' });
+  // The bare first / last names on the lead records.
+  const rec = part.keys[`client:${DEMO.lakeview}:leads`];
+  for (const l of Object.values(rec?.v || {})) {
+    if (FIRSTS.has(l.first_name)) l.first_name = FIRSTS.get(l.first_name);
+    if (LASTS.has(l.last_name)) l.last_name = LASTS.get(l.last_name);
+  }
+  return part;
 }
 
 // ── the hub, as the owner sees it ────────────────────────────────────────────
@@ -481,8 +528,14 @@ test('two clients, trial + paying: website → yes → setup → warm-up → a m
     harbor: { places: [['Portland', 'ME'], ['Bangor', 'ME'], ['Manchester', 'NH']], titles: ['HR Director', 'HR Manager', 'Office Manager', 'CEO'], kind: ['Manufacturing', 'manufacturing'], kind2: ['Health Services', 'health'], emp: (n) => 60 + (n % 300) },
     summit: { places: [['Denver', 'CO'], ['Aurora', 'CO'], ['Lakewood', 'CO']], titles: ['Property Manager', 'Facilities Manager', 'HOA Board President', 'Owner'], kind: ['Property Management', 'property_management'], kind2: ['Real Estate', 'real_estate'], emp: (n) => 8 + (n % 120) },
   };
+  // Real-looking prospects: 450 different companies per client (30 names × 15 trades), one person each.
   const FIRST = ['Alan', 'Beth', 'Carl', 'Dina', 'Evan', 'Faye', 'Glen', 'Hana', 'Ivan', 'Jill', 'Kyle', 'Lena', 'Mark', 'Nora', 'Owen', 'Pia', 'Reid', 'Sara', 'Tate', 'Vera'];
-  const LAST = ['Adams', 'Brooks', 'Chen', 'Dalton', 'Ellis', 'Foster', 'Grant', 'Hayes', 'Irwin', 'Jensen', 'Keller', 'Lowe', 'Mercer', 'Nash', 'Ortiz', 'Price', 'Quinn', 'Reyes', 'Shaw', 'Tran', 'Upton', 'Vance', 'Webb'];
+  const LAST = ['Adams', 'Brooks', 'Chen', 'Dalton', 'Ellis', 'Foster', 'Grant', 'Hayes', 'Irwin', 'Jensen', 'Keller', 'Lowe', 'Mercer', 'Nash', 'Okafor', 'Price', 'Quinn', 'Rivera', 'Shaw', 'Tran', 'Upton', 'Vance', 'Webb'];
+  const NAMES = ['Granite', 'Bayview', 'Northgate', 'Cedar', 'Atlantic', 'Pinecrest', 'Riverside', 'Keystone', 'Maplewood', 'Ironwood', 'Lighthouse', 'Coastal', 'Birchwood', 'Stonebridge', 'Oakridge', 'Westbrook', 'Fairfield', 'Evergreen', 'Silverline', 'Redwood', 'Clearwater', 'Highland', 'Brightside', 'Meridian', 'Blue Ridge', 'Willowbrook', 'Falcon', 'Copperline', 'Liberty', 'Frontier'];
+  const TRADES = {
+    harbor: ['Manufacturing', 'Health Partners', 'Precision Parts', 'Medical Group', 'Foods', 'Industries', 'Care Center', 'Fabrication', 'Family Health', 'Plastics', 'Logistics', 'Components', 'Credit Union', 'Packaging', 'Insurance'],
+    summit: ['Property Management', 'Realty', 'HOA Services', 'Properties', 'Management Group', 'Real Estate', 'Property Group', 'Residential', 'Commercial Properties', 'Asset Management', 'Community Management', 'Realty Partners', 'Estates', 'Property Services', 'Holdings'],
+  };
   const posted = new Set();
   const leadFinder = async () => {
     for (const c of BOTH) {
@@ -495,11 +548,12 @@ test('two clients, trial + paying: website → yes → setup → warm-up → a m
         const leads = Array.from({ length: 90 }, (_, i) => {
           const n = b * 90 + i;
           const [city, st2] = L.places[n % 3];
-          const [label, type] = n % 2 === 0 ? L.kind : L.kind2;
+          const [, type] = n % 2 === 0 ? L.kind : L.kind2;
           const first = FIRST[n % FIRST.length];
           const last = LAST[(n * 7) % LAST.length];
-          const host = `${last.toLowerCase()}${c.key === 'harbor' ? 'works' : 'props'}${n}.com`;
-          return { email: `${first.toLowerCase()}@${host}`, first_name: first, name: `${first} ${last}`, title: L.titles[n % 4], company: `${last} ${label} ${n}`, website: `https://www.${host}`, city, state: st2, types: [type], employees: L.emp(n), riskLevel: 'safe', score: 3 };
+          const company = `${NAMES[n % NAMES.length]} ${TRADES[c.key][Math.floor(n / NAMES.length) % 15]}`;
+          const host = `${company.toLowerCase().replace(/[^a-z]/g, '')}.com`;
+          return { email: `${first.toLowerCase()}@${host}`, first_name: first, name: `${first} ${last}`, title: L.titles[n % 4], company, website: `https://www.${host}`, city, state: st2, types: [type], employees: L.emp(n), riskLevel: 'safe', score: 3 };
         });
         const r = await call('api/webhooks/leadfinder/route', 'POST', { path: '/api/webhooks/leadfinder', headers: { authorization: 'Bearer journey-leadfinder' }, body: { clientId: c.id, type: 'batch', runId: `lf-${c.key}`, batchNo: b, mode: 'initial', leads, placesRequests: 30 } });
         assert.equal(r.status, 200, JSON.stringify(r.json));
@@ -570,7 +624,9 @@ test('two clients, trial + paying: website → yes → setup → warm-up → a m
   const inboxesOf = async (c) => (await getInboxRecords(c.id)).map((r) => r.email);
   for (const c of BOTH) c.inboxes = await inboxesOf(c);
   const clientOf = (addr) => BOTH.find((c) => c.inboxes.includes(addr)) || null;
-  const sentLeads = async (c) => (await getLeads(c.id)).filter((l) => l.sent_at && l.status === 'in_sequence' && l.original_message_id).sort((a, b) => a.email.localeCompare(b.email));
+  const sentLeads = async (c) => (await getLeads(c.id)).filter((l) => l.sent_at && l.status === 'in_sequence' && l.original_message_id)
+    // The most recently contacted first: no follow-up of theirs is due while their answer is read.
+    .sort((a, b) => String(b.sent_at).localeCompare(String(a.sent_at)) || a.email.localeCompare(b.email));
   // Each client answers every hot lead in its thread, in their working hours.
   const answered = new Set();
   const clientsAnswerHotLeads = async (now) => {
@@ -758,7 +814,17 @@ test('two clients, trial + paying: website → yes → setup → warm-up → a m
       assert.equal((await call('api/mc/alerts/route', 'POST', { body: t.action.body })).status, 200);
     }
   };
-  hooks = [clientsAnswerHotLeads, prospectsReply, clientsAct, clientsTap, ownerMorning];
+  // The Test run's third client: Harbor's trial on its Day 12 (Monday evening), every name changed (Lakeview).
+  let lakeview = null;
+  const lakeviewSnapshot = async (now) => {
+    if (lakeview || now.getTime() < et('2026-11-02', '20:00').getTime()) return;
+    const d = await hubDetail(HARBOR.id);
+    assert.equal(d.row.state, 'sending', 'Harbor is sending on its Day 12');
+    assert.equal(d.row.plan, 'trial');
+    assert.equal(trialDay(d.trial, now), 12, 'the snapshot is the evening of Day 12');
+    lakeview = { part: lakeviewPart(HARBOR, __dump(), clock.now), day: trialDay(d.trial, now), sent: d.row.five.sent };
+  };
+  hooks = [clientsAnswerHotLeads, prospectsReply, clientsAct, clientsTap, ownerMorning, lakeviewSnapshot];
   await goTo(et('2026-11-06', '12:00'));
   const l12 = await hubLooks();
   for (const c of BOTH) {
@@ -856,11 +922,66 @@ test('two clients, trial + paying: website → yes → setup → warm-up → a m
   console.log('RESULT', JSON.stringify(report));
   if (process.env.TWO_CLIENTS_REPORT) fs.writeFileSync(process.env.TWO_CLIENTS_REPORT, JSON.stringify(report, null, 1));
 
-  // ── The finished state for the hub's Test run (POST /api/mc/demo) ─────────
-  const state = await exportDemoState([HARBOR.id, SUMMIT.id], { dump: __dump(), now: clock.now });
-  if (process.env.DEMO_STATE === '1') fs.writeFileSync(DEMO_FIXTURE, `${JSON.stringify(state, null, 1)}\n`);
+  // ── Every email and every conversation, per client, in the hub ────────────
+  for (const c of BOTH) {
+    const d = fin[c.key].detail;
+    const leads = await getLeads(c.id);
+    const coldSent = leads.reduce((n, l) => n + ['sent_at', 'd3_sent_at', 'd7_sent_at', 'd10_sent_at'].filter((f) => l[f]).length, 0);
+    assert.equal(coldSent, fin[c.key].row.five.sent, `${c.company}: one cold email on the lead records per email counted`);
+    const emails = async (q = '') => (await call('api/mc/hub/[id]/emails/route', 'GET', { path: `/api/mc/hub/${c.id}/emails${q}`, params: { id: c.id } })).json;
+    const all = [];
+    let page = await emails('?limit=200');
+    for (let guard = 0; guard < 50; guard++) {
+      all.push(...page.sent);
+      if (!page.next) break;
+      page = await emails(`?limit=200&before=${encodeURIComponent(page.next)}`);
+    }
+    assert.equal(all.length, page.total, `${c.company}: the pages add up to the total`);
+    assert.equal(new Set(all.map((e) => e.id)).size, all.length, 'no email twice');
+    const cold = all.filter((e) => e.kind === 'first' || e.kind === 'followup');
+    assert.equal(cold.filter((e) => e.status !== 'failed').length, coldSent, `${c.company}: every cold email is in the log`);
+    assert.ok(all.some((e) => e.kind === 'bot' && e.threadId), `${c.company}: the machine's answers to prospects`);
+    assert.ok(all.some((e) => e.kind === 'owner') && all.some((e) => e.kind === 'client'), `${c.company}: what went to the client`);
+    assert.ok(all.some((e) => e.status === 'replied') && all.some((e) => e.status === 'bounced'));
+    const threads = (await call('api/mc/hub/[id]/threads/route', 'GET', { path: `/api/mc/hub/${c.id}/threads`, params: { id: c.id } })).json.threads;
+    const replied = new Set(d.replies.map((r) => r.leadEmail));
+    assert.equal(threads.length, replied.size, `${c.company}: one thread per prospect who wrote back`);
+    const it = threads.find((t) => t.lead.email === used[c.key].interested.email);
+    assert.deepEqual([it.kind, it.handledBy], ['interested', 'client']);
+    const th = (await call('api/mc/hub/[id]/threads/[threadId]/route', 'GET', { path: `/api/mc/hub/${c.id}/threads/${it.threadId}`, params: { id: c.id, threadId: it.threadId } })).json;
+    const first = sim.sent.find((m) => m.to === it.lead.email && m.subject === used[c.key].interested.original_subject);
+    assert.equal(th.messages[0].text, first.text, `${c.company}: our first email, word for word`);
+    assert.deepEqual(th.messages.map((m) => `${m.dir}:${m.by}`).slice(0, 2), ['out:system', 'in:prospect'], 'our email, then their reply');
+    assert.equal(th.messages[1].text, TEXT.interested);
+    assert.equal(th.messages[1].from, `${used[c.key].interested.name} <${it.lead.email}>`, 'names on the addresses');
+    assert.match(th.messages.find((m) => m.by === 'bot').text, /glad it’s of interest/, 'the machine’s answer');
+    assert.equal(th.messages.find((m) => m.by === 'client')?.text, 'On it — I will call them this afternoon.', 'the client answered the hand-off');
+    assert.deepEqual([...th.messages].sort((a, b) => a.at.localeCompare(b.at)).map((m) => m.at), th.messages.map((m) => m.at), 'oldest first');
+    // A prospect who never wrote back: their thread still opens (our emails, word for word).
+    const quiet = all.find((e) => e.kind === 'first' && e.status === 'sent');
+    const qt = (await call('api/mc/hub/[id]/threads/[threadId]/route', 'GET', { path: `/api/mc/hub/${c.id}/threads/${quiet.threadId}`, params: { id: c.id, threadId: quiet.threadId } })).json;
+    assert.ok(qt.messages.length >= 1 && qt.messages.every((m) => m.dir === 'out' && m.text && !m.text.startsWith('(This email')), JSON.stringify(qt).slice(0, 300));
+    // What went to the client: its own thread, the client ↔ owner conversation.
+    assert.ok(all.filter((e) => e.kind === 'owner' || e.kind === 'client').every((e) => e.threadId === 'client'));
+    const ct = (await call('api/mc/hub/[id]/threads/[threadId]/route', 'GET', { path: `/api/mc/hub/${c.id}/threads/client`, params: { id: c.id, threadId: 'client' } })).json;
+    assert.ok(ct.messages.some((m) => m.by === 'client') && ct.messages.some((m) => m.by === 'owner'));
+    assert.ok(all.every((e) => typeof e.threadId === 'string' && e.threadId), 'every email opens a conversation');
+  }
+
+  // ── The state for the hub's Test run (POST /api/mc/demo) ──────────────────
+  assert.ok(lakeview, 'the Day-12 snapshot of the trial was taken');
+  const state = await exportDemoState([HARBOR.id, SUMMIT.id], {
+    dump: __dump(), now: clock.now,
+    before: [[HARBOR.domain, 'harbordental.com'], [SUMMIT.domain, 'summitroofing.com']],
+    extra: [{ ...lakeview.part, endsDaysAgo: 1 }],
+  });
+  // Loaded, each part ends the evening before the load: nothing in the hub is dated later than now.
+  state.parts[0].endsDaysAgo = 1;
+  console.log('DEMO', JSON.stringify({ lakeviewDay: lakeview.day, lakeviewSent: lakeview.sent, parts: state.parts.map((p) => [p.ids, Object.keys(p.keys).length]) }));
+  if (process.env.DEMO_STATE === '1') fs.writeFileSync(DEMO_FIXTURE, `${JSON.stringify(state)}\n`);
   else if (fs.existsSync(DEMO_FIXTURE)) {
     const saved = JSON.parse(fs.readFileSync(DEMO_FIXTURE, 'utf8'));
-    assert.deepEqual(Object.keys(saved.keys).sort(), Object.keys(state.keys).sort(), 'tests/fixtures/demo-state.json is out of date: run DEMO_STATE=1 npm test');
+    const keysOf = (st) => (st.parts || [st]).map((p) => Object.keys(p.keys).sort());
+    assert.deepEqual(keysOf(saved), keysOf(state), 'tests/fixtures/demo-state.json is out of date: run DEMO_STATE=1 npm test');
   }
 });

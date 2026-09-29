@@ -154,6 +154,10 @@ export const K = {
   imapState: (id) => `${c(id)}:imapstate`,
   /** Message-ID index (hash): normalised Message-ID → lead email (every mail we sent a prospect). */
   msgIndex: (id) => `${c(id)}:msgindex`,
+  /** The text of every cold email a prospect got (hash): `{leadEmail}|{touch}` (d0 d3 d7 d10) → body text, ≤ 4 000 chars (systems/maillog.js). */
+  mailText: (id) => `${c(id)}:mailtext`,
+  /** The machine's own answers to a prospect (hash): leadEmail → JSON [{at, key, subject, from, to, text}] (≤ 10, text ≤ 4 000 chars). */
+  prospectMail: (id) => `${c(id)}:prospectmail`,
   /** Per-inbox sends on one ET day (hash): `{inbox}`, `{inbox}:{touch}`, `{inbox}:bounces`. */
   inboxSends: (id, day) => `${c(id)}:inboxsends:${day}`,
   /** Hosts that already got a first touch (set) — companiesContacted. */

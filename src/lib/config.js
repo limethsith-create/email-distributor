@@ -19,6 +19,8 @@ export const HARD_WARMUP_CAP = 15;
 
 export const DEFAULTS = {
   MAX_ACTIVE_TRIALS: 3,
+  // The hub's Test run loads itself once, the first time the hub opens in production (systems/demo.js).
+  DEMO_AUTOLOAD: true,
   MIN_MARKET: 1000,
   FIT: { employeesMin: 5, employeesMax: 50, dealValueMin: 2000, slotsPerWeekMin: 5 },
   ONBOARD: { reminderDays: [2, 4], closeDay: 7 },

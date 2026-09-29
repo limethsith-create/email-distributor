@@ -72,6 +72,17 @@ export const TEMPLATES = {
     subject: 'Sending paused on your trial',
     body: 'Hi {firstName},\n\nHeads up: we caught an email delivery problem on your campaign today and paused sending within the hour. We’ve set the affected inbox aside, and we’re checking the whole list again before anything else goes out.\n\nExpect two or three quieter days, then normal volume again. The trial promise isn’t affected.\n\n{ownerName}',
   },
+  // The same for a paying client (notify picks `<key>_paid` for Starter / Growth / Scale): no trial words.
+  deliverability_notice_paid: {
+    from: 'owner',
+    subject: 'Sending paused for now',
+    body: 'Hi {firstName},\n\nHeads up: we caught an email delivery problem on your campaign today and paused sending within the hour. We’ve set the affected inbox aside, and we’re checking the whole list again before anything else goes out.\n\nExpect two or three quieter days, then normal volume again. Your {planName} plan’s booked-call promise isn’t affected.\n\n{ownerName}',
+  },
+  paused_quiet_paid: {
+    from: 'trial',
+    subject: 'Sending paused — waiting on you',
+    body: 'I’ve paused sending on your campaign. {pending} hot lead(s) have waited on you for {days} business days, and the agreement asks for an answer within one business day. Sending starts again as soon as you reply to this email or answer one of them.',
+  },
   paused_quiet: {
     from: 'trial',
     subject: 'Trial paused — waiting on you',
