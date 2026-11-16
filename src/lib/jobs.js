@@ -13,6 +13,7 @@ import { SENDING_STATES } from '@/lib/db/client';
 import { partsIn, isWeekday, ET } from '@/lib/time';
 import { runWatchdog } from '@/lib/systems/watchdog';
 import { runUsageMeter } from '@/lib/systems/usage';
+import { runSalesReminders } from '@/lib/systems/salescall';
 import { JOBS as STAGE_A } from '@/lib/joblist/stage-a';
 import { JOBS as STAGE_B } from '@/lib/joblist/stage-b';
 import { JOBS as STAGE_C } from '@/lib/joblist/stage-c';
@@ -133,7 +134,17 @@ const usage = {
   async run(ctx) { return runUsageMeter(ctx); },
 };
 
-export const JOBS = [watchdog, usage, avianceSend, avianceReplies, avianceEodReport, ...STAGE_A, ...STAGE_B, ...STAGE_C, ...STAGE_D];
+/** Website sales calls: the day-before and 1-hour reminders (systems/salescall.js). Every 15 minutes (the 1-hour reminder's window is 55 minutes wide). */
+const salesReminders = {
+  name: 'sales-reminders',
+  scope: 'global',
+  cost: 1,
+  claimTtl: 900,
+  async due({ now }) { const p = partsIn('UTC', now); return `${p.dayKey}T${String(p.hour).padStart(2, '0')}:${String(Math.floor(p.minute / 15) * 15).padStart(2, '0')}`; },
+  async run(ctx) { return runSalesReminders(ctx); },
+};
+
+export const JOBS = [watchdog, usage, salesReminders, avianceSend, avianceReplies, avianceEodReport, ...STAGE_A, ...STAGE_B, ...STAGE_C, ...STAGE_D];
 
 /**
  * Tick budget (20 s, SPEC §5): a job starts only when at least minBudgetMs

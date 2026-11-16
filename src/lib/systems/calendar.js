@@ -914,11 +914,79 @@ export async function calendarAction(body = {}, { now = io.now() } = {}) {
     return saved;
   });
   await logEvent(meeting.clientId || null, SYSTEM, `owner_${body.action}`, { meetingId: meeting.id, start: meeting.start, status: meeting.status });
+  // A website sales call: its inquiry follows (Call done / No-show / Cancelled), and a new time is emailed to them.
+  if (meeting.kind === 'sales' && meeting.inquiryId) {
+    try {
+      const sales = await import('@/lib/systems/salescall');
+      await sales.afterCalendarAction(meeting, body.action, { now });
+    } catch (err) { console.error('[calendar] sales follow-up failed', err?.message); }
+  }
   // The owner answered their request (Yes, another time, Decline, or cancelled it): its "asked for … — say yes" alert is handled.
   if (meeting.clientId && ['confirm', 'suggest', 'decline', 'cancel'].includes(body.action)) {
     await ackAlerts(meeting.clientId, ['meeting_requested'], { reason: `answered in the Calendar (${body.action})`, now });
   }
   return { ok: true, meeting: hubMeeting(meeting, s) };
+}
+
+// ─── sales calls booked on the public website (docs/CALENDAR.md "Sales calls") ──
+
+/**
+ * A sales call someone booked on the website's "Book a call" form. Confirmed at
+ * once — they picked a free time on the site and were told "You're booked" — so
+ * there is no request to answer. It gets its Google Meet (when Google is set up)
+ * before it is saved, so the confirmation email and the invite carry the link.
+ * One meeting per inquiry (a resubmit returns the same one). A clash with
+ * another busy meeting does not stop it (the website cannot see the calendar):
+ * it is returned so the owner's alert can say so.
+ * → { meeting, clash: { id, title, start } | null, same? }
+ */
+export async function bookSalesCall({ inquiryId, company, person = null, email = null, start, minutes = 15, theirZone = null, note = '', linkedClientId = null } = {}, { now = io.now() } = {}) {
+  const t = msOf(start);
+  if (t == null) throw new CalendarError('No time was picked.');
+  if (!inquiryId) throw new CalendarError('A sales call needs its inquiry.');
+  const s = await calendarSettings();
+  const mins = Math.min(120, Math.max(10, Number(minutes) || 15));
+  return withLock(async () => {
+    const around = await meetingsBetween(t - DAY_MS, t + DAY_MS);
+    const same = around.find((m) => m.kind === 'sales' && m.inquiryId === inquiryId && m.status !== 'cancelled');
+    if (same) return { meeting: same, clash: null, same: true };
+    const clash = clashWith(around, t, mins);
+    let m = newMeeting({
+      client: null, kind: 'sales', title: `Sales call — ${company || person || email || 'website booking'}`, start: iso(t), minutes: mins,
+      status: 'confirmed', source: 'website', theirZone: pickZone(theirZone) || s.usZone, note: String(note || '').trim().slice(0, NOTE_MAX), now, by: 'them',
+    });
+    m = { ...m, company: company || null, person: person || null, email: email || null, inquiryId, linkedClientId: linkedClientId || null };
+    m = await saveMeeting(await withMeet(m, s));
+    await logEvent(null, SYSTEM, 'sales_booked', { meetingId: m.id, inquiryId, start: m.start, clash: clash?.id || undefined });
+    return { meeting: m, clash: clash ? { id: clash.id, title: clash.title, start: clash.start } : null };
+  });
+}
+
+/** The .ics for a sales call (REQUEST, or CANCEL), organised by the inbox that sends it. */
+export async function salesInvite(m, { method = 'REQUEST', now = io.now() } = {}) {
+  return inviteFor(m, await calendarSettings(), { method, now });
+}
+
+/** The words a sales-call email shares, in their zone: {when}, {whenShort}, {minutes}, {linkLine}. */
+export async function salesVars(m) {
+  const s = await calendarSettings();
+  const t = msOf(m.start);
+  const tz = zoneOf(m, s);
+  return {
+    when: theirWhen(t, tz, s),
+    whenShort: theirShort(t, tz),
+    minutes: Number(m.minutes) || 15,
+    linkLine: linkOf(m, s) ? `Join here: ${linkOf(m, s)}` : "I'll send the video link before the call.",
+  };
+}
+
+/** Change a few fields of a meeting (reminders sent, the inquiry's outcome) under the calendar lock. */
+export async function patchMeeting(id, fields, { now = io.now(), historyStep = null } = {}) {
+  return withLock(async () => {
+    const m = await need(id);
+    const next = { ...m, ...fields, updatedAt: now.toISOString(), ...(historyStep ? { history: [...(m.history || []), step(historyStep, 'owner', now)] } : {}) };
+    return saveMeeting(next);
+  });
 }
 
 // ─── the onboarding card and the inbox → the calendar ────────────────────────

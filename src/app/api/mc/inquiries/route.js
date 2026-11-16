@@ -1,7 +1,7 @@
 /**
  * /api/mc/inquiries — the hub's Inquiries section (admin / hub token).
  *   GET                                   → { inquiries (newest first), counts }
- *   POST {action:'status', id, status, note?}   status: new | contacted | won | lost
+ *   POST {action:'status', id, status, note?}   status: new (Booked) | held (Call done) | no_show | contacted (Following up) | proposal (Proposal sent) | won | lost
  *   POST {action:'note', id, text}
  *   POST {action:'toTrial', id}           → runs the Gatekeeper pre-approved (onboarding link or queue)
  */
