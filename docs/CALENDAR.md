@@ -59,6 +59,22 @@ CALENDAR: {
 ```
 `blocked` = a time the owner marked busy (no client, title "Busy").
 
+## Sales calls (website "Book a call", 2026-11-16)
+The public website's booking form (US time zones, 15-minute slots) posts to
+`/api/inquiry`. With a time, `bookSalesCall` puts a meeting in the calendar:
+`kind: 'sales'`, `status: 'confirmed'` at once (they were told "You're booked"),
+`source: 'website'`, `title: 'Sales call — {company}'`, plus `inquiryId`,
+`linkedClientId` (when the request became a paid application) and `reminders:
+{tomorrow, soon}`. No client: `clientId` stays null, so none of the onboarding
+machinery touches it. It gets a Google Meet when Google is set up. A clash with
+another busy meeting does not block it (the website cannot see the calendar);
+the owner's alert names the clash.
+Emails (systems/salescall.js, templates/client/sales.js, from the onboarding
+inbox): `sales_call_confirmed` (+ .ics) on booking, `sales_call_tomorrow`
+~24 h before (only if booked > 26 h ahead), `sales_call_soon` ~1 h before,
+`sales_call_moved` (+ .ics) when the owner moves it. Reminders go only while the
+inquiry is at Booked; the `sales-reminders` tick job checks every 15 minutes.
+
 ## Booking page (public, client token — same token system as the onboarding page)
 - `GET /c/{token}/book` — the page: next CALENDAR.daysAhead days, open slots in their zone (a zone switcher), a note box, one button. Shows the confirmed/requested meeting instead when one exists (with "ask for a different time").
 - `GET /api/c/book/slots?token=` → `{ zone, slots: [ { start: ISO, label: "Tue 30 Sep · 2:00 pm" } ], existing: meeting|null }`

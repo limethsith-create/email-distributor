@@ -585,13 +585,21 @@ the home screen; iOS 16.4+). Under `/api/mc/push/*`, same auth as the rest:
 
 The website's "Book a call" form posts to public `POST /api/inquiry` (CORS for
 SITE_ORIGINS). Each inquiry is saved, the owner gets `new_inquiry` (phone push
-+ email; push `url` = `/#inquiry/{id}`), and nothing is sent to the enquirer.
++ email; push `url` = `/#inquiry/{id}`). An inquiry with a time also becomes a
+confirmed `sales` meeting in the Calendar and the enquirer gets the confirmation
+email (+ .ics), then reminders the day before and an hour before
+(systems/salescall.js, docs/CALENDAR.md "Sales calls").
 
-`GET /api/mc/hub` adds `inquiries: { counts: {new, contacted, won, lost}, open, latest: [ {id, at, name, company, plan, status, slotStart, whenHost} ] }`
-and, for each `new` one, a to-do `{ id: "inquiry:{id}", clientName: company, urgent: true, action: { type: "view", view: "inquiry", inquiryId } }`.
+Stages (`status`, in pipeline order): `new` (Booked) · `held` (Call done) ·
+`no_show` (No-show) · `contacted` (Following up) · `proposal` (Proposal sent) ·
+`won` · `lost`. Call done / No-show set here also mark the Calendar meeting; the
+Calendar's Call done / No-show / Cancel move the inquiry (cancel → lost).
+
+`GET /api/mc/hub` adds `inquiries: { counts: {new, held, no_show, contacted, proposal, won, lost}, open, latest: [ {id, at, name, company, plan, status, slotStart, whenHost} ] }`
+and, for each `new` one, a to-do `{ id: "inquiry:{id}", clientName: company, urgent: (false while the call is ahead, true once it has passed or with no time), action: { type: "view", view: "inquiry", inquiryId } }`.
 
 `GET /api/mc/inquiries` → `{ inquiries: [record…] (newest first), counts }` where a record is
-`{ id, at, source, status: new|contacted|won|lost, statusAt, notes: [{at, text}], name, email, company, website, sells, plan: starter|growth|scale|null, slotStart, slotEnd (ISO), theirTz, whenTheirs, whenHost (text, owner's time), clientId?, trialOutcome? }`.
+`{ id, at, source, status (stage above), statusAt, stageHistory: [{at, from, to}], notes: [{at, text}], name, email, company, website, sells, plan: starter|growth|scale|null, slotStart, slotEnd (ISO), theirTz, whenTheirs, whenHost (text, owner's time), role, dealSize, channel, capacity, timing (the website's five questions, text|null), meetingId, meetLink, confirmationSentAt | confirmationError, reminded_tomorrow, reminded_soon (ISO), calendarError?, clientId?, trialOutcome? }`.
 `POST /api/mc/inquiries` `{action:'status', id, status, note?}` · `{action:'note', id, text}` · `{action:'toTrial', id}` (runs the Gatekeeper pre-approved → the accepted_call email or queue; returns `{ok, clientId, outcome}`).
 
 ---

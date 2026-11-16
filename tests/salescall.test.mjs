@@ -1,0 +1,166 @@
+import { test, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { __reset, kv } from '@vercel/kv';
+import { saveInquiry, getInquiry, setInquiryStatus, listInquiries, STATUSES, answersText } from '@/lib/systems/inquiries';
+import { salesIo, dueSalesReminder, runSalesReminders, planLineFor } from '@/lib/systems/salescall';
+import { getMeeting, calendarAction, calendarView } from '@/lib/systems/calendar';
+import { hubBoard } from '@/lib/systems/hubview';
+import { io } from '@/lib/systems/intake-io';
+import { JOBS } from '@/lib/jobs';
+import { pushIo, savePushSub } from '@/lib/push';
+
+// What the website's "Book a call" form sends now (with the five quick questions).
+const NOW = new Date('2026-11-16T08:00:00.000Z');
+const site = (over = {}) => ({
+  name: 'Bob Stone', email: 'bob@stoneroofing.com', company: 'Stone Roofing', website: '',
+  sells: 'Commercial roofing for property managers in Texas', plan: null,
+  slotStart: '2026-11-18T15:00:00.000Z', slotEnd: '2026-11-18T15:15:00.000Z', theirTz: 'America/Chicago',
+  whenTheirs: 'Wednesday, November 18, 2026 at 9:00 AM CST', whenHost: 'Wednesday, November 18, 2026 at 8:30 PM',
+  role: 'Founder / CEO', dealSize: '$5,000 – $25,000', channel: 'Mostly referrals', capacity: 'Around 10', timing: 'As soon as possible',
+  ...over,
+});
+let sent = [];
+let alerts = [];
+let pushed = [];
+
+beforeEach(async () => {
+  __reset();
+  sent = []; alerts = []; pushed = [];
+  process.env.VAPID_PUBLIC_KEY = 'BPUB'; process.env.VAPID_PRIVATE_KEY = 'priv';
+  pushIo.send = async (sub, payload) => { pushed.push(JSON.parse(payload)); return { statusCode: 201 }; };
+  await savePushSub({ endpoint: 'https://web.push.apple.com/x', keys: { p256dh: 'p', auth: 'a' } }, 'iPhone');
+  await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth') });
+  salesIo.sender = async () => ({ email: 'calls@aviance.test' });
+  salesIo.send = async (account, mail) => { sent.push({ from: account.email, ...mail }); return { success: true, messageId: `<m${sent.length}@x>` }; };
+  io.alertOwner = async (key, opts) => { alerts.push({ key, ...opts }); return { sent: true }; };
+  io.notifyClient = async () => ({ sent: true });
+  io.now = () => NOW;
+});
+
+test('a website booking lands in the Calendar as a confirmed sales call and they get the confirmation with an invite', async () => {
+  const r = await saveInquiry(site(), { now: NOW });
+  assert.equal(r.ok, true);
+  const q = await getInquiry(r.id);
+  // The five answers are kept.
+  assert.equal(q.role, 'Founder / CEO');
+  assert.equal(q.capacity, 'Around 10');
+  assert.equal(q.status, 'new');
+  // In the Calendar, confirmed, linked both ways.
+  assert.ok(q.meetingId);
+  const m = await getMeeting(q.meetingId);
+  assert.equal(m.kind, 'sales');
+  assert.equal(m.status, 'confirmed');
+  assert.equal(m.inquiryId, r.id);
+  assert.equal(m.start, '2026-11-18T15:00:00.000Z');
+  assert.equal(m.minutes, 15);
+  assert.equal(m.title, 'Sales call — Stone Roofing');
+  assert.equal(m.theirZone, 'America/Chicago');
+  const view = await calendarView({ from: '2026-11-17T00:00:00.000Z', to: '2026-11-20T00:00:00.000Z', now: NOW });
+  assert.ok(view.meetings.some((x) => x.id === m.id && x.kind === 'sales'));
+  // The confirmation: to them, in their zone, with the plan from "Around 10", the guarantee, and an .ics.
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, 'bob@stoneroofing.com');
+  assert.equal(sent[0].subject, 'Confirmed: our call Wed 18 Nov at 9:00 am CT');
+  assert.match(sent[0].text, /Hi Bob,/);
+  assert.match(sent[0].text, /Wednesday 18 November at 9:00 am Central Time/);
+  assert.match(sent[0].text, /Growth is 10 booked calls a month/);
+  assert.match(sent[0].text, /month one, we refund double/);
+  assert.match(sent[0].text, /Limeth/);
+  assert.ok(sent[0].icalEvent && /BEGIN:VCALENDAR/.test(sent[0].icalEvent.content));
+  assert.ok(q.confirmationSentAt);
+  // The owner's alert carries the answers and says the email went.
+  assert.ok(pushed.find((x) => /New plan inquiry: Stone Roofing/.test(x.title)), 'the owner is alerted');
+  assert.match(answersText(q), /Deal size: \$5,000 – \$25,000/);
+  assert.match(answersText(q), /Calls a month they can take: Around 10/);
+  // A double submit: no second meeting, no second email.
+  assert.equal((await saveInquiry(site(), { now: NOW })).duplicate, true);
+  assert.equal(sent.length, 1);
+});
+
+test('when the email cannot go, the inquiry says why and the owner is told', async () => {
+  salesIo.send = async () => ({ success: false, error: 'auth failed' });
+  const r = await saveInquiry(site(), { now: NOW });
+  const q = await getInquiry(r.id);
+  assert.ok(q.meetingId, 'still in the Calendar');
+  assert.match(q.confirmationError, /auth failed/);
+  assert.ok(pushed.find((x) => /New plan inquiry/.test(x.title)));
+  assert.equal(q.confirmationSentAt, undefined);
+});
+
+test('reminders: the day before and an hour before, once each, only while still Booked', async () => {
+  const r = await saveInquiry(site(), { now: NOW });
+  const q = await getInquiry(r.id);
+  let m = await getMeeting(q.meetingId);
+  assert.equal(dueSalesReminder(m, NOW), null, 'nothing right after booking');
+  // 23 hours before → the "tomorrow" email.
+  const dayBefore = new Date(Date.parse(m.start) - 23 * 3600e3);
+  assert.equal(dueSalesReminder(m, dayBefore).key, 'sales_call_tomorrow');
+  let out = await runSalesReminders({ now: dayBefore });
+  assert.equal(out.sent, 1);
+  assert.equal(sent.at(-1).subject, 'Our call tomorrow');
+  assert.equal((await runSalesReminders({ now: new Date(dayBefore.getTime() + 60e3) })).sent, 0, 'never twice');
+  // 50 minutes before → "in 1 hour".
+  const hourBefore = new Date(Date.parse(m.start) - 50 * 60e3);
+  out = await runSalesReminders({ now: hourBefore });
+  assert.equal(out.sent, 1);
+  assert.equal(sent.at(-1).subject, 'Our call in 1 hour');
+  m = await getMeeting(q.meetingId);
+  assert.ok(m.reminders.tomorrow && m.reminders.soon);
+  assert.ok((await getInquiry(r.id)).reminded_soon);
+  assert.equal(sent.length, 3);
+});
+
+test('no reminders once the owner moved them on, and a booking made the same day skips the day-before one', async () => {
+  const late = await saveInquiry(site({ email: 'amy@x.com', name: 'Amy', slotStart: '2026-11-16T20:00:00.000Z', slotEnd: '2026-11-16T20:15:00.000Z' }), { now: NOW });
+  const lm = await getMeeting((await getInquiry(late.id)).meetingId);
+  assert.equal(dueSalesReminder(lm, new Date('2026-11-16T09:00:00.000Z')), null, 'booked 12 h ahead: no "tomorrow"');
+  assert.equal(dueSalesReminder(lm, new Date('2026-11-16T19:10:00.000Z')).key, 'sales_call_soon');
+  await setInquiryStatus(late.id, 'lost', 'Not a fit', { now: NOW });
+  const before = sent.length;
+  await runSalesReminders({ now: new Date('2026-11-16T19:10:00.000Z') });
+  assert.equal(sent.length, before);
+});
+
+test('stages: Calendar buttons move the inquiry, and Inquiries moves the Calendar', async () => {
+  assert.deepEqual(STATUSES, ['new', 'held', 'no_show', 'contacted', 'proposal', 'won', 'lost']);
+  const r = await saveInquiry(site(), { now: NOW });
+  const q = await getInquiry(r.id);
+  await calendarAction({ action: 'held', id: q.meetingId }, { now: new Date('2026-11-18T15:20:00.000Z') });
+  assert.equal((await getInquiry(r.id)).status, 'held');
+  await setInquiryStatus(r.id, 'proposal', 'Sent the Growth proposal', { now: NOW });
+  await setInquiryStatus(r.id, 'won', '', { now: NOW });
+  const done = await getInquiry(r.id);
+  assert.equal(done.status, 'won');
+  assert.deepEqual(done.stageHistory.map((h) => h.to), ['held', 'proposal', 'won']);
+  // The other way: No-show in Inquiries marks the meeting.
+  const r2 = await saveInquiry(site({ email: 'cy@x.com', slotStart: '2026-11-19T15:00:00.000Z', slotEnd: '2026-11-19T15:15:00.000Z' }), { now: NOW });
+  const q2 = await getInquiry(r2.id);
+  await setInquiryStatus(r2.id, 'no_show', '', { now: NOW });
+  assert.equal((await getMeeting(q2.meetingId)).status, 'no_show');
+  const { counts } = await listInquiries();
+  assert.equal(counts.won, 1);
+  assert.equal(counts.no_show, 1);
+});
+
+test('moving the call in the Calendar emails the new time and restarts the reminders', async () => {
+  const r = await saveInquiry(site(), { now: NOW });
+  const q = await getInquiry(r.id);
+  await calendarAction({ action: 'move', id: q.meetingId, start: '2026-11-19T16:00:00.000Z' }, { now: NOW });
+  assert.equal(sent.at(-1).subject, 'New time: Thu 19 Nov at 10:00 am CT');
+  assert.equal((await getInquiry(r.id)).slotStart, '2026-11-19T16:00:00.000Z');
+});
+
+test('the hub to-do is calm while the call is ahead and urgent once it has passed', async () => {
+  const ahead = await saveInquiry(site({ slotStart: '2099-01-01T15:00:00.000Z', slotEnd: '2099-01-01T15:15:00.000Z' }), { now: NOW });
+  const board = await hubBoard();
+  const t = board.todos.find((x) => x.id === `inquiry:${ahead.id}`);
+  assert.equal(t.urgent, false);
+  assert.match(t.text, /is booked/);
+});
+
+test('plan line and the reminder job is registered', () => {
+  assert.match(planLineFor({ plan: 'scale' }), /Scale is 15/);
+  assert.match(planLineFor({ capacity: 'Around 5' }), /Starter is 5/);
+  assert.match(planLineFor({}), /5, 10 or 15/);
+  assert.ok(JOBS.some((j) => j.name === 'sales-reminders' && j.scope === 'global'));
+});

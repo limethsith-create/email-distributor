@@ -11,6 +11,7 @@ import { TEMPLATES, renderTemplate } from '@/lib/templates/client';
 import { TEMPLATES as A } from '@/lib/templates/client/stage-a';
 import { TEMPLATES as B } from '@/lib/templates/client/stage-b';
 import { TEMPLATES as C } from '@/lib/templates/client/stage-c';
+import { TEMPLATES as S } from '@/lib/templates/client/sales';
 import { TEMPLATES as D, FRIDAY_TRIAL_LINES, FRIDAY_BUILD_LINES, REPORT_LINES, REPORT_ZERO_LINES } from '@/lib/templates/client/stage-d';
 import { slotsOf } from '@/lib/templates/render';
 import { DEFAULTS } from '@/lib/config';
@@ -62,8 +63,15 @@ const SAMPLE_D = {
   leadCount: 400, invoiceNo: 'INV-001', planName: 'Growth', issuedDate: '2 December', priceText: '$3,997', calls: 20,
   paymentLines: 'PayPal: https://paypal.me/aviance/3997USD', whatsNew: 'call notes',
 };
-const STAGE_SAMPLE = new Map([[A, SAMPLE_A], [B, SAMPLE_B], [C, SAMPLE_C], [D, SAMPLE_D]]);
-const stageOf = (key) => [A, B, C, D].find((s) => key in s);
+// Website sales calls (systems/salescall.js): the calendar's words plus the confirmation's two lines.
+const SAMPLE_S = {
+  ownerName: OWNER, when: 'Wednesday 18 November at 9:00 am Central Time (10:00 am Eastern)', whenShort: 'Wed 18 Nov at 9:00 am CT', minutes: 15,
+  linkLine: 'Join here: https://meet.google.com/abc-defg-hij', company: 'Acme IT',
+  planLine: 'Your guaranteed number (Growth is 10 booked calls a month) and what it would cost',
+  guaranteeLine: 'And the guarantee: if we miss your number in month one, we refund double what you paid. Miss it in any month after, and that month is refunded in full.',
+};
+const STAGE_SAMPLE = new Map([[A, SAMPLE_A], [B, SAMPLE_B], [C, SAMPLE_C], [D, SAMPLE_D], [S, SAMPLE_S]]);
+const stageOf = (key) => [A, B, C, D, S].find((s) => key in s);
 
 /** A template's sample values: its stage's, notifyClient's own, and a plain word for any slot a newer template adds. */
 function varsFor1(key) {

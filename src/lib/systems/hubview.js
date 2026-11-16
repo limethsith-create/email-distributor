@@ -769,10 +769,16 @@ export async function hubBoard({ now = new Date() } = {}) {
   const todos = oneHelpersTodo(rows.filter((r) => r.id !== '_test').flatMap((r) => r.todo));
   const inquiries = await inquirySummary().catch(() => null);
   // A request that became a paid application is on that application's own to-do (Say yes / Say no).
+  // A booked call still ahead is a calm reminder; once its time has passed (or with no time) it is urgent: say how it went.
+  const nowMs = Date.now();
   for (const q of (inquiries?.latest || []).filter((x) => x.status === 'new' && !x.clientId)) {
-    todos.push({ id: `inquiry:${q.id}`, clientId: null, clientName: q.company, text: `New plan inquiry from ${q.company} — call them back`,
-      detail: `${q.name}${q.plan ? ` · ${q.plan[0].toUpperCase()}${q.plan.slice(1)}` : ''}${q.whenHost ? ` · booked for ${q.whenHost}` : ''}`,
-      urgent: true, since: q.at, action: { type: 'view', view: 'inquiry', inquiryId: q.id } });
+    const at = Date.parse(q.slotStart || '');
+    const ahead = Number.isFinite(at) && at + 20 * 60e3 > nowMs;
+    const passed = Number.isFinite(at) && !ahead;
+    todos.push({ id: `inquiry:${q.id}`, clientId: null, clientName: q.company,
+      text: ahead ? `Sales call with ${q.company} is booked` : passed ? `How did the call with ${q.company} go? Move them to the next stage` : `New plan inquiry from ${q.company} — call them back`,
+      detail: `${q.name}${q.plan ? ` · ${q.plan[0].toUpperCase()}${q.plan.slice(1)}` : ''}${q.whenHost ? ` · ${ahead ? '' : 'booked for '}${q.whenHost}` : ''}`,
+      urgent: !ahead, since: q.at, action: { type: 'view', view: 'inquiry', inquiryId: q.id } });
   }
   todos.push(...(await machineTodos(board, queue, { cheapInboxes: ciOn })));
   todos.sort((a, b) => Number(b.urgent) - Number(a.urgent) || String(a.since || '').localeCompare(String(b.since || '')));

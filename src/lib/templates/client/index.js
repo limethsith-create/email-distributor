@@ -3,9 +3,10 @@ import { TEMPLATES as A } from './stage-a';
 import { TEMPLATES as B } from './stage-b';
 import { TEMPLATES as C } from './stage-c';
 import { TEMPLATES as D } from './stage-d';
+import { TEMPLATES as S } from './sales';
 import { fill } from '@/lib/templates/render';
 
-export const TEMPLATES = { ...A, ...B, ...C, ...D };
+export const TEMPLATES = { ...A, ...B, ...C, ...D, ...S };
 
 const squash = (s) => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
