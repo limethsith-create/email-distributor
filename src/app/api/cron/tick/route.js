@@ -12,11 +12,16 @@ import { safeEqual } from '@/lib/crypto';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
+/**
+ * CRON_SECRET, or TICK_SECRET: a key only for the pinger (cron-job.org), so it can be set or
+ * changed without touching CRON_SECRET, which also signs the links in our emails (lib/tokens.js).
+ */
 function authorized(request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false; // fail closed: the tick never runs open
   const header = request.headers.get('authorization') || '';
-  return safeEqual(header, `Bearer ${secret}`);
+  const tick = process.env.TICK_SECRET;
+  const secrets = [process.env.CRON_SECRET, tick && tick.length >= 16 ? tick : null].filter(Boolean);
+  if (!secrets.length) return false; // fail closed: the tick never runs open
+  return secrets.some((s) => safeEqual(header, `Bearer ${s}`));
 }
 
 export async function GET(request) {
