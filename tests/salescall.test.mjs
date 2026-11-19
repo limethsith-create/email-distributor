@@ -189,3 +189,39 @@ test('the website is told when the confirmation did go', async () => {
   assert.equal(r.emailed, true);
   assert.equal((await saveInquiry(site({ slotStart: null, slotEnd: null, email: 'x@y.com' }), { now: NOW })).emailed, null);
 });
+
+test('5 minutes before: a short "starting in 5 minutes" email, once, after the day-before and 1-hour ones', async () => {
+  const r = await saveInquiry(site(), { now: NOW });
+  const q = await getInquiry(r.id);
+  const start = Date.parse((await getMeeting(q.meetingId)).start);
+  await runSalesReminders({ now: new Date(start - 23 * 3600e3) });
+  await runSalesReminders({ now: new Date(start - 50 * 60e3) });
+  // 8 minutes out: the hour reminder has closed and the 5-minute one is not open yet.
+  assert.equal(dueSalesReminder(await getMeeting(q.meetingId), new Date(start - 8 * 60e3)), null);
+  const fiveOut = new Date(start - 5 * 60e3 + 20e3);
+  const out = await runSalesReminders({ now: fiveOut });
+  assert.equal(out.sent, 1);
+  const mail = sent.at(-1);
+  assert.equal(mail.subject, 'Starting in 5 minutes');
+  assert.match(mail.text, /^Hi Bob,/);
+  assert.match(mail.text, /our call starts in 5 minutes/);
+  assert.match(mail.text, /reply to this email and I'll send it straight away/, 'no "I\'ll send the link before the call" five minutes out');
+  assert.equal((await runSalesReminders({ now: new Date(fiveOut.getTime() + 60e3) })).sent, 0, 'never twice');
+  assert.ok((await getInquiry(r.id)).reminded_now);
+  assert.deepEqual(sent.map((s) => s.subject).slice(1), ['Our call tomorrow', 'Our call in 1 hour', 'Starting in 5 minutes']);
+});
+
+test('ten calls at once: each gets its own 5-minute reminder, once', async () => {
+  const ids = [];
+  for (let i = 0; i < 10; i++) {
+    const startAt = new Date(Date.parse('2026-11-18T15:00:00.000Z') + i * 15 * 60e3);
+    const r = await saveInquiry(site({ email: `p${i}@x.com`, name: `Person${i} X`, slotStart: startAt.toISOString(), slotEnd: new Date(startAt.getTime() + 15 * 60e3).toISOString() }), { now: NOW });
+    ids.push(r.id);
+  }
+  const confirmations = sent.length;
+  // Walk the clock minute by minute through all ten calls.
+  for (let t = Date.parse('2026-11-18T14:50:00.000Z'); t <= Date.parse('2026-11-18T17:30:00.000Z'); t += 60e3) await runSalesReminders({ now: new Date(t) });
+  const fiveMin = sent.slice(confirmations).filter((s) => s.subject === 'Starting in 5 minutes');
+  assert.equal(fiveMin.length, 10);
+  assert.deepEqual(new Set(fiveMin.map((s) => s.to)).size, 10, 'one each, nobody twice');
+});

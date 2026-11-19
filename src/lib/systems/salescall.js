@@ -47,8 +47,10 @@ export const salesIo = {
 export const REMINDERS = [
   // The day before — only when they booked more than ~a day ahead (else the confirmation is fresh).
   { key: 'sales_call_tomorrow', field: 'tomorrow', opensBefore: 24 * H, closesBefore: 3 * H, minLead: 26 * H },
-  // An hour before.
-  { key: 'sales_call_soon', field: 'soon', opensBefore: 60 * MIN, closesBefore: 5 * MIN, minLead: 0 },
+  // An hour before (stops 10 minutes out, where the 5-minute one takes over).
+  { key: 'sales_call_soon', field: 'soon', opensBefore: 60 * MIN, closesBefore: 10 * MIN, minLead: 0 },
+  // Five minutes before: a short "starting soon" — only when they booked more than 15 minutes ahead.
+  { key: 'sales_call_now', field: 'now', opensBefore: 5 * MIN, closesBefore: 0, minLead: 15 * MIN },
 ];
 
 const PLAN_CALLS = { starter: 5, growth: 10, scale: 15 };
@@ -157,7 +159,10 @@ export async function runSalesReminders({ now = io.now() } = {}) {
     const inq = m.inquiryId ? await getInquiry(m.inquiryId) : null;
     if (!inq || inq.status !== 'new') continue;
     try {
-      const res = await sendSales(m, r.key, await cal.salesVars(m), { dedupe: `${r.field}:${m.start}`, now });
+      const vars = await cal.salesVars(m);
+      // Five minutes out, "I'll send the link before the call" is too late: offer it by reply instead.
+      if (r.field === 'now' && !/^Join here:/.test(vars.linkLine)) vars.linkLine = "If you don't have the video link yet, reply to this email and I'll send it straight away.";
+      const res = await sendSales(m, r.key, vars, { dedupe: `${r.field}:${m.start}`, now });
       const at = now.toISOString();
       await cal.patchMeeting(m.id, { reminders: { ...(m.reminders || {}), [r.field]: at } }, { now });
       await patchInquiry(inq.id, { [`reminded_${r.field}`]: at });
@@ -167,7 +172,7 @@ export async function runSalesReminders({ now = io.now() } = {}) {
       await io.alertOwner('sales_reminder_failed', {
         scope: `${m.id}:${r.field}`, url: `/#inquiry/${inq.id}`,
         vars: { company: m.company || inq.company },
-        body: `The ${r.field === 'soon' ? '1-hour' : 'day-before'} reminder to ${m.person || m.email} (${m.company}) did not send: ${String(err?.message || err).slice(0, 200)}`,
+        body: `The ${r.field === 'now' ? '5-minute' : r.field === 'soon' ? '1-hour' : 'day-before'} reminder to ${m.person || m.email} (${m.company}) did not send: ${String(err?.message || err).slice(0, 200)}`,
         did: 'Nothing was sent. Write to them yourself if the call is soon.',
       }).catch(() => {});
     }
@@ -220,7 +225,7 @@ export async function afterCalendarAction(m, action, { now = io.now() } = {}) {
       const fresh = await cal.patchMeeting(m.id, { reminders: {} }, { now });
       try {
         await sendSales(fresh, 'sales_call_moved', await cal.salesVars(fresh), { icalEvent: await cal.salesInvite(fresh, { now }), dedupe: `moved:${fresh.start}`, now });
-        await patchInquiry(inq.id, { slotStart: fresh.start, slotEnd: new Date(Date.parse(fresh.start) + (fresh.minutes || 15) * MIN).toISOString(), reminded_tomorrow: null, reminded_soon: null });
+        await patchInquiry(inq.id, { slotStart: fresh.start, slotEnd: new Date(Date.parse(fresh.start) + (fresh.minutes || 15) * MIN).toISOString(), reminded_tomorrow: null, reminded_soon: null, reminded_now: null });
       } catch (err) {
         await io.alertOwner('sales_reminder_failed', { scope: `${m.id}:moved:${fresh.start}`, url: `/#inquiry/${inq.id}`, vars: { company: m.company }, body: `The new-time email to ${m.person || m.email} did not send: ${String(err?.message || err).slice(0, 200)}`, did: 'The Calendar has the new time. Tell them yourself.' }).catch(() => {});
       }

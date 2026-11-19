@@ -60,6 +60,20 @@ See you shortly.
 {ownerName}`,
   },
 
+  sales_call_now: {
+    from: 'onboard',
+    subject: 'Starting in 5 minutes',
+    body: `Hi {firstName},
+
+Just a quick heads-up: our call starts in 5 minutes.
+
+{linkLine}
+
+See you soon.
+
+{ownerName}`,
+  },
+
   sales_call_moved: {
     from: 'onboard',
     subject: 'New time: {whenShort}',
