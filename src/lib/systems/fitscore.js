@@ -328,8 +328,11 @@ export function scoreFit(x = {}, opts = {}) {
     return { key: k, label: p.label, points: Math.round(pts * 10) / 10, checked: Math.round(known * 10) / 10, max: W[k], pct: known ? Math.round((pts / known) * 100) : null, items: p.items };
   });
   const weightSum = Object.values(W).reduce((s, v) => s + v, 0) || 100;
-  const score = checkable ? Math.max(0, Math.min(100, Math.round((earned / checkable) * 100))) : null;
   const confidence = Math.round((checkable / weightSum) * 100);
+  // Too little checked to be a number at all: 3 of 3 checked points is not "100/100". Below this the
+  // score is left out (the owner sees "too little to score" and the questions), never a grade.
+  const minScored = Number.isFinite(Number(opts.minScoredConfidence)) ? Number(opts.minScoredConfidence) : 25;
+  const score = checkable && confidence >= minScored ? Math.max(0, Math.min(100, Math.round((earned / checkable) * 100))) : null;
   let grade = score === null ? null : score >= G.A ? 'A' : score >= G.B ? 'B' : score >= G.C ? 'C' : 'D';
   if (dealbreakers.length) grade = 'D';
   // A company we cannot see (no website, or one that says almost nothing) is not graded on its answers alone.
@@ -337,10 +340,10 @@ export function scoreFit(x = {}, opts = {}) {
   const thin = !dealbreakers.length && (score === null || confidence < minConfidence || blankSite);
   const label = dealbreakers.length ? 'Not a fit' : thin ? 'Needs a look' : { A: 'Strong fit', B: 'Good fit', C: 'Borderline', D: 'Poor fit' }[grade];
   const ranked = out.filter((p) => p.pct !== null).sort((p, q) => q.pct - p.pct);
-  const scoreText = score === null ? 'no score' : `${score}/100`;
+  const scoreText = score === null ? (checkable ? 'too little to score' : 'no score') : `${score}/100`;
   let summary;
   if (dealbreakers.length) summary = `${scoreText} — not a fit: ${dealbreakers[0].text}${dealbreakers.length > 1 ? ` (+${dealbreakers.length - 1} more)` : ''}.`;
-  else if (thin && blankSite) summary = `${scoreText} — needs a look: ${siteRead ? `their website says almost nothing (${words} words)` : 'their website could not be read'}, so the score rests on their answers. Check them before approving.`;
+  else if (thin && blankSite) summary = `${scoreText} — needs a look: ${siteRead ? `their website says almost nothing (${words} words)` : 'their website could not be read'}, so ${score === null ? `only ${confidence} of 100 points could be checked` : 'the score rests on their answers'}. Check them before approving.`;
   else if (thin) summary = `${scoreText} — needs a look: only ${confidence} of 100 points could be checked. Ask the questions below.`;
   else summary = `${scoreText} — ${label.toLowerCase()} (${confidence} of 100 points checked).${ranked.length > 1 ? ` Strongest: ${ranked[0].label.toLowerCase()}; weakest: ${ranked[ranked.length - 1].label.toLowerCase()}.` : ''}`;
   return { score, grade, label, confidence, summary, parts: out, dealbreakers, warnings, questions: [...new Set(questions)].slice(0, 8) };

@@ -467,3 +467,12 @@ test('the whole run without the Places key: no competitors, no Places call; a br
   assert.ok(!v.brief.sentences.some((s) => /Nearby on Google|In the news|Latest news/.test(s.text)));
   assert.equal(log.news, 1);
 });
+
+test('the brief does not call a dead website "online since": it says an archived copy exists and the site does not load', () => {
+  const live = buildBrief(FULL()).sentences.map((s) => s.text).join(' ');
+  const dead = buildBrief({ ...FULL(), homeError: 'getaddrinfo ENOTFOUND x.com' }).sentences.map((s) => s.text).join(' ');
+  if (/online since/.test(live)) {
+    assert.ok(!/online since/.test(dead));
+    assert.match(dead, /archived copy of their website goes back to \d{4}, but the site does not load now/);
+  }
+});

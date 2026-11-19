@@ -123,3 +123,13 @@ test('company name: the website\'s own spelling replaces the one made from the d
   assert.equal(nameFromSite('ab.com', { title: 'AB' }), null);
   assert.equal(nameFromSite('fernit.com', { orgName: 'Fern IT', title: 'Welcome' }), 'Fern IT');
 });
+
+test('almost nothing checked (a website that does not load, no answers): no number, "too little to score", the questions instead', () => {
+  const f = scoreFit({ homeError: 'getaddrinfo ENOTFOUND harbourlinelogistics.com', registeredAt: '2025-03-01', now: new Date('2026-11-19T00:00:00Z') });
+  assert.ok(f.confidence < 25, `confidence ${f.confidence}`);
+  assert.equal(f.score, null);
+  assert.equal(f.grade, null);
+  assert.equal(f.label, 'Needs a look');
+  assert.match(f.summary, /^too little to score — needs a look: their website could not be read, so only \d+ of 100 points could be checked/);
+  assert.ok(f.questions.length > 0);
+});

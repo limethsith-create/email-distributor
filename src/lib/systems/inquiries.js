@@ -34,6 +34,36 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PLANS = ['starter', 'growth', 'scale'];
 
 const s = (v, n = 300) => String(v ?? '').trim().slice(0, n);
+
+/**
+ * The plan behind a request: the plan card they came from, else the calls a month they said they could
+ * take ("Around 10" → growth). The website's confirmation page and email already read it this way, so the
+ * hub, the application and the email all name the same plan. Null when neither says.
+ */
+export function inferPlan(inq = {}) {
+  if (inq.plan && PLANS.includes(inq.plan)) return inq.plan;
+  const c = String(inq.capacity || '').toLowerCase();
+  return /15/.test(c) ? 'scale' : /10/.test(c) ? 'growth' : /\b5\b/.test(c) ? 'starter' : null;
+}
+
+/**
+ * Their quick answers in the application's own fields, so the fit score reads them instead of listing
+ * them as "not checked". Only what an answer really says: a deal-size band gives its lower bound; inbound,
+ * their own outbound or an agency means they already win strangers; referrals / "not consistently" stay
+ * unknown (a question for the call, never a dealbreaker).
+ */
+export function applicationExtras(inq = {}) {
+  const out = {};
+  if (inq.sells) out.web_sellsTo = inq.sells;
+  const d = String(inq.dealSize || '');
+  if (d) out.web_valueBand = d;
+  if (!/^under/i.test(d)) {
+    const lo = d.match(/\$\s*([\d,]+)/);
+    if (lo) out.dealValue = Number(lo[1].replace(/,/g, ''));
+  }
+  if (/inbound|own outbound|agency/i.test(String(inq.channel || ''))) out.soldToStrangers = 'yes';
+  return out;
+}
 const isoOrNull = (v) => { const t = Date.parse(v); return Number.isFinite(t) ? new Date(t).toISOString() : null; };
 
 /** Website body → inquiry fields, or { errors }. */
@@ -101,7 +131,7 @@ export async function saveInquiry(raw, { source = 'website', now = new Date() } 
   const app = await inquiryToApplication(id, rec, { now });
   if (app?.clientId) {
     if (booked?.meeting) { try { await (await import('@/lib/systems/calendar')).patchMeeting(booked.meeting.id, { linkedClientId: app.clientId }, { now }); } catch {} }
-    return { ok: true, id, clientId: app.clientId };
+    return { ok: true, id, clientId: app.clientId, emailed: !inq.slotStart ? null : Boolean(booked?.emailed) };
   }
 
   const when = inq.whenHost ? `${inq.whenHost} (your time)` : 'no time picked';
@@ -112,7 +142,7 @@ export async function saveInquiry(raw, { source = 'website', now = new Date() } 
     body: `${inq.name} <${inq.email}> from ${inq.company}${inq.plan ? ` asked about ${inq.plan[0].toUpperCase()}${inq.plan.slice(1)}` : ' asked about a plan'}.\nCall: ${when}${inq.whenTheirs ? ` — their time ${inq.whenTheirs}` : ''}\nThey sell: ${inq.sells}${inq.website ? `\nWebsite: ${inq.website}` : ''}${answersText(inq)}${bookedLine}`,
     did: booked?.emailed ? 'Saved under Inquiries in the hub (stage: Booked) and sent them the confirmation.' : 'Saved under Inquiries in the hub (stage: Booked).',
   }).catch(() => {});
-  return { ok: true, id };
+  return { ok: true, id, emailed: !inq.slotStart ? null : Boolean(booked?.emailed) };
 }
 
 /** Their five answers as alert lines ('' when the form had none). */
@@ -123,7 +153,8 @@ export function answersText(inq) {
 
 /** The questions a paid request answers, as the application shows them. */
 export function inquiryAnswers(inq) {
-  const plan = inq.plan ? inq.plan[0].toUpperCase() + inq.plan.slice(1) : 'Not picked (Starter assumed)';
+  const p = inferPlan(inq);
+  const plan = !p ? 'Not picked (Starter assumed)' : `${p[0].toUpperCase()}${p.slice(1)}${inq.plan ? '' : ` (from “${inq.capacity}” calls a month)`}`;
   return [
     { q: 'Plan they asked for', a: plan },
     { q: 'What they sell', a: inq.sells || '—' },
@@ -148,9 +179,11 @@ export async function inquiryToApplication(id, inq, { now = new Date() } = {}) {
     const { applyForTrial } = await import('@/lib/systems/gatekeeper');
     const r = await applyForTrial(
       { companyName: inq.company, contactName: inq.name, contactEmail: inq.email, website: inq.website, notes: inq.sells },
-      { source: 'inquiry', plan: inq.plan || 'starter', now, review: { answers: inquiryAnswers(inq), fit: { verdict: 'unknown', summary: 'A paid-plan request: read the fit score and the research, then say yes or no.', lines: [] } } },
+      { source: 'inquiry', plan: inferPlan(inq) || 'starter', now, review: { answers: inquiryAnswers(inq), fit: { verdict: 'unknown', summary: 'A paid-plan request: read the fit score and the research, then say yes or no.', lines: [] } } },
     );
     if (!r.ok || !r.clientId) return null;
+    const extras = applicationExtras(inq);
+    if (!r.duplicate && Object.keys(extras).length) { try { await kv.hset(K.application(r.clientId), extras); } catch { /* the score just asks instead */ } }
     await patch(id, { clientId: r.clientId, trialOutcome: r.outcome || null, paid: true });
     await logEvent(null, 'inquiries', 'to_application', { id, clientId: r.clientId, outcome: r.outcome });
     return r;

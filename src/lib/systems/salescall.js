@@ -31,7 +31,7 @@ import { onboardSender } from '@/lib/notify';
 import { sendEmail, newMessageId } from '@/lib/mailer';
 import { renderTemplate } from '@/lib/templates/client';
 import * as cal from '@/lib/systems/calendar';
-import { getInquiry, patchInquiry, setInquiryStatus } from '@/lib/systems/inquiries';
+import { getInquiry, patchInquiry, setInquiryStatus, inferPlan } from '@/lib/systems/inquiries';
 
 const SYSTEM = 'sales';
 const H = 3600e3;
@@ -56,11 +56,7 @@ const cap = (w) => String(w || '')[0].toUpperCase() + String(w || '').slice(1);
 
 /** The plan line of the confirmation, from the plan card they came from, else the calls a month they said they could take. */
 export function planLineFor(inq = {}) {
-  let plan = inq.plan || null;
-  if (!plan) {
-    const c = String(inq.capacity || '').toLowerCase();
-    plan = /15/.test(c) ? 'scale' : /10/.test(c) ? 'growth' : /5/.test(c) ? 'starter' : null;
-  }
+  const plan = inferPlan(inq);
   return plan
     ? `Your guaranteed number (${cap(plan)} is ${PLAN_CALLS[plan]} booked calls a month) and what it would cost`
     : 'Your guaranteed number (5, 10 or 15 booked calls a month) and what it would cost';
@@ -176,7 +172,38 @@ export async function runSalesReminders({ now = io.now() } = {}) {
       }).catch(() => {});
     }
   }
-  return { checked, sent, failed };
+  const retried = await retryHeldConfirmations({ now });
+  return { checked, sent, failed, retried };
+}
+
+/**
+ * A confirmation that could not go when they booked (no signer name yet, no inbox, the inbox refused)
+ * goes on a later tick once the cause is fixed — at most every 15 minutes per call, only while the
+ * call is still ahead and the inquiry still at Booked. Never throws. → how many went.
+ */
+export async function retryHeldConfirmations({ now = io.now() } = {}) {
+  let sent = 0;
+  try {
+    const meetings = await cal.meetingsBetween(now.getTime() + 10 * MIN, now.getTime() + 60 * 24 * H);
+    for (const m of meetings) {
+      if (m.kind !== 'sales' || m.status !== 'confirmed' || !m.inquiryId) continue;
+      const inq = await getInquiry(m.inquiryId);
+      if (!inq || inq.status !== 'new' || inq.confirmationSentAt || !inq.confirmationError) continue;
+      if ((await kv.set(`sales:retry:${m.id}`, now.toISOString(), { nx: true, ex: 900 })) !== 'OK') continue;
+      try {
+        const v = await cal.salesVars(m);
+        const r = await sendSales(m, 'sales_call_confirmed', { ...v, planLine: planLineFor(inq), guaranteeLine: GUARANTEE_LINE },
+          { icalEvent: await cal.salesInvite(m, { now }), dedupe: `confirmed:${m.start}`, now });
+        if (r.sent || r.deduped) {
+          await patchInquiry(inq.id, { confirmationSentAt: now.toISOString(), confirmationError: null });
+          if (r.sent) sent++;
+        }
+      } catch (err) {
+        await patchInquiry(inq.id, { confirmationError: String(err?.message || err).slice(0, 200) }).catch(() => {});
+      }
+    }
+  } catch { /* the next tick tries again */ }
+  return sent;
 }
 
 /** The owner changed the sales call in the Calendar: the inquiry follows; a new time is emailed. Never throws. */

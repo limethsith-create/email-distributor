@@ -29,5 +29,6 @@ export async function POST(request) {
   if (!r.ok) return Response.json({ ok: false, errors: r.errors }, { status: 400 });
   // A paid application: finish its research (and fit score) after the answer, like /api/apply.
   if (r.clientId) { try { after(() => researchToEnd(r.clientId, 52_000)); } catch { /* not inside a request (tests): the research job finishes it */ } }
-  return Response.json({ ok: true, id: r.id || null });
+  // emailed: did the confirmation with the calendar invite actually go? (null = no time picked). The website says so honestly.
+  return Response.json({ ok: true, id: r.id || null, emailed: r.duplicate ? null : (r.emailed ?? null) });
 }
