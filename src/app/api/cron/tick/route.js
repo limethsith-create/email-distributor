@@ -17,9 +17,10 @@ export const maxDuration = 30;
  * changed without touching CRON_SECRET, which also signs the links in our emails (lib/tokens.js).
  */
 function authorized(request) {
-  const header = request.headers.get('authorization') || '';
-  const tick = process.env.TICK_SECRET;
-  const secrets = [process.env.CRON_SECRET, tick && tick.length >= 16 ? tick : null].filter(Boolean);
+  const header = (request.headers.get('authorization') || '').trim();
+  // A pasted TICK_SECRET often carries a stray space or line break, or "Bearer " typed in front: ignore those.
+  const tick = String(process.env.TICK_SECRET || '').trim().replace(/^Bearer\s+/i, '');
+  const secrets = [process.env.CRON_SECRET, tick.length >= 16 ? tick : null].filter(Boolean);
   if (!secrets.length) return false; // fail closed: the tick never runs open
   return secrets.some((s) => safeEqual(header, `Bearer ${s}`));
 }

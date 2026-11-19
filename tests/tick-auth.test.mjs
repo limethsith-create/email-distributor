@@ -18,3 +18,13 @@ test('the tick takes CRON_SECRET or the separate TICK_SECRET, and nothing else',
   assert.equal((await GET(req('Bearer short'))).status, 401);
   delete process.env.TICK_SECRET;
 });
+
+test('a TICK_SECRET pasted with a stray space, line break or "Bearer " in front still works', async () => {
+  process.env.CRON_SECRET = 'cron-secret-value';
+  for (const pasted of ['  a-long-pinger-only-key-123\n', 'Bearer a-long-pinger-only-key-123', 'a-long-pinger-only-key-123\r\n']) {
+    process.env.TICK_SECRET = pasted;
+    assert.notEqual((await GET(req('Bearer a-long-pinger-only-key-123'))).status, 401, JSON.stringify(pasted));
+    assert.equal((await GET(req('Bearer something-else-entirely-xyz'))).status, 401);
+  }
+  delete process.env.TICK_SECRET;
+});
