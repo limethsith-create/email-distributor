@@ -13,7 +13,7 @@ import { runDayJobs } from '@/lib/systems/trialmanager';
 const site = (over = {}) => ({
   name: 'Bob Stone', email: 'Bob@StoneRoofing.com', company: 'Stone Roofing', website: 'stoneroofing.com',
   sells: 'Commercial roofing for property managers in Texas', plan: 'growth',
-  slotStart: '2026-10-01T14:00:00.000Z', slotEnd: '2026-10-01T14:15:00.000Z', theirTz: 'America/Chicago',
+  slotStart: '2027-09-30T14:00:00.000Z', slotEnd: '2027-09-30T14:15:00.000Z', theirTz: 'America/Chicago',
   whenTheirs: 'Thursday, October 1, 2026 at 9:00 AM CDT', whenHost: 'Thursday, October 1, 2026 at 7:30 PM', ...over,
 });
 let pushed = [];
@@ -47,10 +47,11 @@ test('an inquiry from the website (no website given) lands in the hub and pops u
   // Double-click on the form: merged, no second alert.
   assert.equal((await saveInquiry(site({ website: '' }))).duplicate, true);
   assert.equal(pushed.length, 1);
-  // The board shows it as an urgent to-do.
+  // The board shows it as a to-do: calm while the booked call is still ahead (the server refuses times that have passed).
   const board = await hubBoard();
   const todo = board.todos.find((t) => t.id === `inquiry:${r.id}`);
-  assert.equal(todo.urgent, true);
+  assert.equal(todo.urgent, false);
+  assert.match(todo.text, /is booked/);
   assert.deepEqual(todo.action, { type: 'view', view: 'inquiry', inquiryId: r.id });
   assert.equal(board.inquiries.counts.new, 1);
 });
