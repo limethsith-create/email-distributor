@@ -71,7 +71,7 @@ const STATUS_WORDS = { requested: 'waiting for your yes', confirmed: 'confirmed'
 
 /** A mistake in what was asked (routes answer with `status` and the plain message). */
 export class CalendarError extends Error {
-  constructor(message, status = 400) { super(message); this.status = status; }
+  constructor(message, status = 400, code = null) { super(message); this.status = status; if (code) this.code = code; }
 }
 
 // ─── settings ────────────────────────────────────────────────────────────────
@@ -302,6 +302,38 @@ export function bookingWindow(s, now) {
 export function clashWith(meetings, startMs, minutes, exceptId = null) {
   const end = startMs + minutes * 60e3;
   return meetings.find((m) => m && m.id !== exceptId && BUSY.has(m.status) && (() => { const h = heldInterval(m); return h && startMs < h.end && h.start < end; })()) || null;
+}
+
+/** Is [start, start + minutes) inside the call hours: an open day (US Eastern), not a US holiday, from open to close? Pure. */
+export function inCallHours(startMs, minutes, s = normaliseCalendar()) {
+  const t = msOf(startMs);
+  if (t == null) return false;
+  const p = partsIn(s.usZone, new Date(t));
+  if (!s.days.includes(WD[p.weekday]) || isUsHoliday(p.dayKey)) return false;
+  const [open, close] = s.hours.map(hhmmToMin);
+  return p.minuteOfDay >= open && p.minuteOfDay + (Number(minutes) || 15) <= close;
+}
+
+/** The plain words the website shows when a picked time cannot be booked. */
+export const SLOT_PROBLEMS = {
+  slot_taken: 'Sorry, someone just booked that time. Please pick another one.',
+  outside_hours: 'That time is outside our call hours. Please pick another one.',
+  slot_in_past: 'That time has already passed. Please pick another one.',
+};
+
+/**
+ * Why a website sales call at `startMs` cannot be booked, or null when it can: it has passed, it is outside the
+ * call hours, or it overlaps a requested / confirmed meeting or a busy block (no buffer). `inquiryId`'s own
+ * meeting never counts against it. Pure. → { code, message } | null
+ */
+export function salesSlotProblem({ startMs, minutes = 15, meetings = [], settings = null, now = new Date(), inquiryId = null }) {
+  const s = settings || normaliseCalendar();
+  const t = msOf(startMs);
+  const code = t == null || t <= now.getTime() ? 'slot_in_past'
+    : !inCallHours(t, minutes, s) ? 'outside_hours'
+    : clashWith(meetings.filter((m) => !(inquiryId && m?.inquiryId === inquiryId)), t, Number(minutes) || 15) ? 'slot_taken'
+    : null;
+  return code ? { code, message: SLOT_PROBLEMS[code] } : null;
 }
 
 // ─── .ics (pure) ─────────────────────────────────────────────────────────────
@@ -940,7 +972,7 @@ export async function calendarAction(body = {}, { now = io.now() } = {}) {
  * it is returned so the owner's alert can say so.
  * → { meeting, clash: { id, title, start } | null, same? }
  */
-export async function bookSalesCall({ inquiryId, company, person = null, email = null, start, minutes = 15, theirZone = null, note = '', linkedClientId = null } = {}, { now = io.now() } = {}) {
+export async function bookSalesCall({ inquiryId, company, person = null, email = null, start, minutes = 15, theirZone = null, note = '', linkedClientId = null } = {}, { now = io.now(), strict = false } = {}) {
   const t = msOf(start);
   if (t == null) throw new CalendarError('No time was picked.');
   if (!inquiryId) throw new CalendarError('A sales call needs its inquiry.');
@@ -950,6 +982,12 @@ export async function bookSalesCall({ inquiryId, company, person = null, email =
     const around = await meetingsBetween(t - DAY_MS, t + DAY_MS);
     const same = around.find((m) => m.kind === 'sales' && m.inquiryId === inquiryId && m.status !== 'cancelled');
     if (same) return { meeting: same, clash: null, same: true };
+    // The website's own bookings (strict): a time outside the call hours or one already held is refused here,
+    // under the lock, so two people booking the same time at once can never both get it.
+    if (strict) {
+      const problem = salesSlotProblem({ startMs: t, minutes: mins, meetings: around, settings: s, now, inquiryId });
+      if (problem) throw new CalendarError(problem.message, 409, problem.code);
+    }
     const clash = clashWith(around, t, mins);
     let m = newMeeting({
       client: null, kind: 'sales', title: `Sales call — ${company || person || email || 'website booking'}`, start: iso(t), minutes: mins,
@@ -960,6 +998,31 @@ export async function bookSalesCall({ inquiryId, company, person = null, email =
     await logEvent(null, SYSTEM, 'sales_booked', { meetingId: m.id, inquiryId, start: m.start, clash: clash?.id || undefined });
     return { meeting: m, clash: clash ? { id: clash.id, title: clash.title, start: clash.start } : null };
   });
+}
+
+/**
+ * What the public website needs to offer only free times inside the call hours: the call hours (US zone,
+ * open days, 'HH:MM' open/close), the closed holidays and the busy intervals (requested / confirmed
+ * meetings and busy blocks) between `from` and `to`. Times only: no names, emails or titles.
+ * Window: `from` (default now) to `to` (default `days` = 31 days later), at most 62 days.
+ */
+export async function publicAvailability({ from = null, to = null, days = null, now = io.now() } = {}) {
+  const s = await calendarSettings();
+  const fromMs = Math.max(msOf(from) ?? now.getTime(), now.getTime() - DAY_MS);
+  const span = Math.min(62, Math.max(1, Math.round(Number(days)) || 31)) * DAY_MS;
+  const toMs = Math.min(msOf(to) ?? fromMs + span, fromMs + 62 * DAY_MS);
+  if (!(toMs > fromMs)) throw new CalendarError('"to" must be after "from".');
+  const meetings = await meetingsBetween(fromMs - DAY_MS, toMs);
+  const busy = meetings.filter((m) => BUSY.has(m.status)).map(heldInterval)
+    .filter((h) => h && h.end > fromMs && h.start < toMs)
+    .sort((a, b) => a.start - b.start)
+    .map((h) => ({ start: iso(h.start), end: iso(h.end) }));
+  const closed = [];
+  for (let d = dayKeyOf(fromMs, s.usZone), i = 0, last = dayKeyOf(toMs, s.usZone); d <= last && i < 70; d = addDays(d, 1), i++) if (isUsHoliday(d)) closed.push(d);
+  return {
+    zone: s.usZone, days: s.days, hours: s.hours, closed, busy,
+    from: iso(fromMs), to: iso(toMs), generatedAt: now.toISOString(),
+  };
 }
 
 /** The .ics for a sales call (REQUEST, or CANCEL), organised by the inbox that sends it. */

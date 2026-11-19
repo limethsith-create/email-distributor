@@ -101,8 +101,19 @@ export function normaliseInquiry(raw = {}) {
 
 const newId = (now) => `q${now.getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-/** Save a website inquiry, alert the owner (phone + email). Duplicate submits within 10 minutes are merged. */
-export async function saveInquiry(raw, { source = 'website', now = new Date() } = {}) {
+/**
+ * Save a website inquiry, alert the owner (phone + email). Duplicate submits within 10 minutes are merged.
+ *
+ * With a time: the time is held in the Calendar FIRST (under the calendar lock, systems/calendar.js
+ * bookSalesCall strict), so a time outside the call hours or one someone else already holds is refused
+ * with `{ ok: false, code: 'slot_taken' | 'outside_hours' | 'slot_in_past', error }` and nothing is saved.
+ * Then the inquiry is saved and the confirmation email goes (its result is `emailed`).
+ *
+ * The slow rest (the paid application with its research and fit score, the owner's alerts) runs in
+ * `defer(job)` when given (the route passes Next's `after`, so the visitor is answered as soon as the
+ * booking is saved and emailed); without it, it runs here before returning, as before.
+ */
+export async function saveInquiry(raw, { source = 'website', now = new Date(), defer = null } = {}) {
   const r = normaliseInquiry(raw);
   if (r.errors) return { ok: false, errors: r.errors };
   const inq = r.inquiry;
@@ -111,6 +122,15 @@ export async function saveInquiry(raw, { source = 'website', now = new Date() } 
   if (first !== 'OK') return { ok: true, duplicate: true };
 
   const id = newId(now);
+  if (inq.slotStart) {
+    const refused = await holdSlot(id, inq, now);
+    if (refused) {
+      await kv.del(dupKey).catch(() => {});
+      await logEvent(null, 'inquiries', 'slot_refused', { code: refused.code, slotStart: inq.slotStart }).catch(() => {});
+      return { ok: false, code: refused.code, error: refused.message };
+    }
+  }
+
   const rec = { id, at: now.toISOString(), source, status: 'new', statusAt: now.toISOString(), notes: [], ...inq };
   const p = kv.pipeline();
   p.hset(K.inquiries(), { [id]: rec });
@@ -119,33 +139,71 @@ export async function saveInquiry(raw, { source = 'website', now = new Date() } 
   await p.exec();
   await logEvent(null, 'inquiries', 'received', { id, company: inq.company, plan: inq.plan, slotStart: inq.slotStart });
 
-  // A time was picked: it goes in the Calendar as a confirmed sales call and they get the confirmation email.
+  // A time was picked: it is in the Calendar as a confirmed sales call; they get the confirmation email now.
   let booked = null;
   if (inq.slotStart) {
     try { booked = await (await import('@/lib/systems/salescall')).bookAndConfirm(rec, { now }); } catch { booked = null; }
   }
-  const bookedLine = !inq.slotStart ? '' : booked?.emailed
-    ? `\n\nIn your Calendar as a sales call. They were sent a confirmation email with a calendar invite; reminders go the day before and an hour before.${booked.clash ? `\nHeads up: it overlaps "${booked.clash.title}".` : ''}`
-    : `\n\n${booked?.meeting ? 'In your Calendar as a sales call, but the' : 'The'} confirmation email did NOT go: ${booked?.error || 'unknown error'}. Write to them yourself.`;
-
-  // With a website, the request becomes a paid application the owner answers in the hub's Paying
-  // clients tab: the same research and fit score as a trial application, held until "Say yes"
-  // (which emails them the onboarding call) or "Say no". That application's alert replaces the one below.
-  const app = await inquiryToApplication(id, rec, { now });
-  if (app?.clientId) {
-    if (booked?.meeting) { try { await (await import('@/lib/systems/calendar')).patchMeeting(booked.meeting.id, { linkedClientId: app.clientId }, { now }); } catch {} }
-    return { ok: true, id, clientId: app.clientId, emailed: !inq.slotStart ? null : Boolean(booked?.emailed) };
+  const emailed = !inq.slotStart ? null : Boolean(booked?.emailed);
+  const rest = () => afterSaved(id, rec, booked, { now });
+  if (typeof defer === 'function') {
+    try { await defer(rest); return { ok: true, id, emailed, deferred: true }; } catch { /* could not defer: do it now */ }
   }
+  const done = await rest();
+  return { ok: true, id, ...(done?.clientId ? { clientId: done.clientId } : {}), emailed };
+}
 
-  const when = inq.whenHost ? `${inq.whenHost} (your time)` : 'no time picked';
-  await alertOwner('new_inquiry', {
-    scope: id,
-    url: `/#inquiry/${id}`,
-    vars: { company: inq.company, when },
-    body: `${inq.name} <${inq.email}> from ${inq.company}${inq.plan ? ` asked about ${inq.plan[0].toUpperCase()}${inq.plan.slice(1)}` : ' asked about a plan'}.\nCall: ${when}${inq.whenTheirs ? ` — their time ${inq.whenTheirs}` : ''}\nThey sell: ${inq.sells}${inq.website ? `\nWebsite: ${inq.website}` : ''}${answersText(inq)}${bookedLine}`,
-    did: booked?.emailed ? 'Saved under Inquiries in the hub (stage: Booked) and sent them the confirmation.' : 'Saved under Inquiries in the hub (stage: Booked).',
-  }).catch(() => {});
-  return { ok: true, id, emailed: !inq.slotStart ? null : Boolean(booked?.emailed) };
+/**
+ * Hold the picked time in the Calendar before anything else (strict: call hours, no overlap, under the lock).
+ * → { code, message } when the time cannot be had; null when it is held — or when the Calendar itself failed,
+ * in which case bookAndConfirm tries again and writes the error on the inquiry, as before.
+ */
+async function holdSlot(id, inq, now) {
+  const minutes = inq.slotEnd ? Math.round((Date.parse(inq.slotEnd) - Date.parse(inq.slotStart)) / 60e3) : 15;
+  try {
+    const cal = await import('@/lib/systems/calendar');
+    await cal.bookSalesCall({
+      inquiryId: id, company: inq.company, person: inq.name, email: inq.email, start: inq.slotStart, minutes,
+      theirZone: inq.theirTz, note: inq.sells, linkedClientId: null,
+    }, { now, strict: true });
+    return null;
+  } catch (err) {
+    return err?.code ? { code: err.code, message: err.message } : null;
+  }
+}
+
+/**
+ * Everything after the visitor's answer: with a website the request becomes a paid application (research +
+ * fit score, its own alert); otherwise the owner's new_inquiry alert. Never throws. → { clientId } | {}
+ */
+async function afterSaved(id, rec, booked, { now = new Date() } = {}) {
+  const inq = rec;
+  try {
+    const bookedLine = !inq.slotStart ? '' : booked?.emailed
+      ? `\n\nIn your Calendar as a sales call. They were sent a confirmation email with a calendar invite; reminders go the day before and an hour before.${booked.clash ? `\nHeads up: it overlaps "${booked.clash.title}".` : ''}`
+      : `\n\n${booked?.meeting ? 'In your Calendar as a sales call, but the' : 'The'} confirmation email did NOT go: ${booked?.error || 'unknown error'}. Write to them yourself.`;
+
+    // With a website, the request becomes a paid application the owner answers in the hub's Paying
+    // clients tab: the same research and fit score as a trial application, held until "Say yes"
+    // (which emails them the onboarding call) or "Say no". That application's alert replaces the one below.
+    const app = await inquiryToApplication(id, rec, { now });
+    if (app?.clientId) {
+      if (booked?.meeting) { try { await (await import('@/lib/systems/calendar')).patchMeeting(booked.meeting.id, { linkedClientId: app.clientId }, { now }); } catch {} }
+      return { clientId: app.clientId };
+    }
+
+    const when = inq.whenHost ? `${inq.whenHost} (your time)` : 'no time picked';
+    await alertOwner('new_inquiry', {
+      scope: id,
+      url: `/#inquiry/${id}`,
+      vars: { company: inq.company, when },
+      body: `${inq.name} <${inq.email}> from ${inq.company}${inq.plan ? ` asked about ${inq.plan[0].toUpperCase()}${inq.plan.slice(1)}` : ' asked about a plan'}.\nCall: ${when}${inq.whenTheirs ? ` — their time ${inq.whenTheirs}` : ''}\nThey sell: ${inq.sells}${inq.website ? `\nWebsite: ${inq.website}` : ''}${answersText(inq)}${bookedLine}`,
+      did: booked?.emailed ? 'Saved under Inquiries in the hub (stage: Booked) and sent them the confirmation.' : 'Saved under Inquiries in the hub (stage: Booked).',
+    }).catch(() => {});
+  } catch (err) {
+    await logEvent(null, 'inquiries', 'after_save_failed', { id, error: String(err?.message || err).slice(0, 200) }).catch(() => {});
+  }
+  return {};
 }
 
 /** Their five answers as alert lines ('' when the form had none). */
