@@ -87,6 +87,9 @@ export function normaliseInquiry(raw = {}) {
     channel: s(raw.channel, 80) || null,
     capacity: s(raw.capacity, 80) || null,
     timing: s(raw.timing, 80) || null,
+    // Two more quick answers from the booking form: outbound tried before, and what they want from the call.
+    tried: s(raw.tried, 80) || null,
+    goal: s(raw.goal, 300) || null,
   };
   const errors = {};
   if (!inq.name) errors.name = 'Your name is required.';
@@ -147,7 +150,7 @@ export async function saveInquiry(raw, { source = 'website', now = new Date() } 
 
 /** Their five answers as alert lines ('' when the form had none). */
 export function answersText(inq) {
-  const rows = [['Role', inq.role], ['Deal size', inq.dealSize], ['Wins customers today', inq.channel], ['Calls a month they can take', inq.capacity], ['Wants to start', inq.timing]].filter(([, v]) => v);
+  const rows = [['Role', inq.role], ['Deal size', inq.dealSize], ['Wins customers today', inq.channel], ['Calls a month they can take', inq.capacity], ['Wants to start', inq.timing], ['Tried outbound before', inq.tried], ['Wants from the call', inq.goal]].filter(([, v]) => v);
   return rows.length ? `\n${rows.map(([k, v]) => `${k}: ${v}`).join('\n')}` : '';
 }
 
@@ -165,6 +168,8 @@ export function inquiryAnswers(inq) {
     ...(inq.channel ? [{ q: 'How they win customers today', a: inq.channel }] : []),
     ...(inq.capacity ? [{ q: 'Sales calls a month they can take', a: inq.capacity }] : []),
     ...(inq.timing ? [{ q: 'When they want to start', a: inq.timing }] : []),
+    ...(inq.tried ? [{ q: 'Cold email or an outbound agency before', a: inq.tried }] : []),
+    ...(inq.goal ? [{ q: 'What they want from the call', a: inq.goal }] : []),
   ];
 }
 
