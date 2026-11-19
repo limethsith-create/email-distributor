@@ -64,6 +64,73 @@ export function applicationExtras(inq = {}) {
   if (/inbound|own outbound|agency/i.test(String(inq.channel || ''))) out.soldToStrangers = 'yes';
   return out;
 }
+/**
+ * Their website as a link: "acme.com" → "https://acme.com". Only http(s); anything that isn't a
+ * plausible host (no dot, spaces, other schemes) is dropped rather than stored, so research never
+ * gets junk. Empty stays empty: older pages and "I don't have one yet" still send none.
+ */
+export function normaliseWebsite(v) {
+  let w = s(v, 300).replace(/^[<"']+|[>"']+$/g, '');
+  if (!w) return '';
+  if (/^\/\//.test(w)) w = `https:${w}`;
+  else if (!/^[a-z][a-z0-9+.-]*:/i.test(w)) w = `https://${w}`;
+  try {
+    const u = new URL(w);
+    if (!/^https?:$/.test(u.protocol) || !/^[^.\s]+(\.[^.\s]+)+$/.test(u.hostname)) return '';
+    return u.href.replace(/\/$/, '').slice(0, 300);
+  } catch { return ''; }
+}
+
+/** Friendly words for where a lead came from (utm_source / ref). Unknown values pass through as sent. */
+const SOURCE_WORDS = {
+  cold_call: 'Cold call', coldcall: 'Cold call', call: 'Cold call', phone: 'Cold call',
+  linkedin: 'LinkedIn', li: 'LinkedIn',
+  email: 'Email', cold_email: 'Email', newsletter: 'Email',
+  google: 'Google', facebook: 'Facebook', fb: 'Facebook', instagram: 'Instagram', ig: 'Instagram', x: 'X (Twitter)', twitter: 'X (Twitter)',
+  referral: 'Referral', website: 'Website',
+};
+/** Clean one tracking value: a short plain string or null (no control characters, no markup). */
+const tag = (v, n = 100) => {
+  const t = String(v ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, n);
+  return t || null;
+};
+export function sourceWords(v) {
+  const t = tag(v);
+  if (!t) return null;
+  return SOURCE_WORDS[t.toLowerCase().replace(/[\s-]+/g, '_')] || t;
+}
+
+/**
+ * Where they came from, from the booking link (…/book?utm_source=cold_call or ?ref=…). Accepts a
+ * `utm` object or flat utm_* fields. Null when the link had nothing.
+ */
+export function normaliseSource(raw = {}) {
+  const u = raw.utm && typeof raw.utm === 'object' ? raw.utm : {};
+  const utm = {
+    source: tag(u.source ?? raw.utm_source),
+    medium: tag(u.medium ?? raw.utm_medium),
+    campaign: tag(u.campaign ?? raw.utm_campaign),
+    content: tag(u.content ?? raw.utm_content),
+  };
+  const ref = tag(raw.ref, 100);
+  const hasUtm = Object.values(utm).some(Boolean);
+  if (!hasUtm && !ref) return { utm: null, ref: null, cameFrom: null };
+  return { utm: hasUtm ? utm : null, ref, cameFrom: cameFromText({ utm, ref }) };
+}
+
+/** "Cold call", or "LinkedIn (campaign: q4-founders)"; null when unknown. */
+export function cameFromText(inq = {}) {
+  const u = inq.utm || {};
+  const main = sourceWords(u.source) || sourceWords(inq.ref) || sourceWords(u.medium);
+  if (!main) return null;
+  const bits = [];
+  if (u.medium && sourceWords(u.medium) !== main) bits.push(`via ${u.medium}`);
+  if (u.campaign) bits.push(`campaign: ${u.campaign}`);
+  if (u.content) bits.push(`content: ${u.content}`);
+  if (inq.ref && sourceWords(inq.ref) !== main) bits.push(`ref: ${inq.ref}`);
+  return bits.length ? `${main} (${bits.join(', ')})` : main;
+}
+
 const isoOrNull = (v) => { const t = Date.parse(v); return Number.isFinite(t) ? new Date(t).toISOString() : null; };
 
 /** Website body → inquiry fields, or { errors }. */
@@ -72,7 +139,9 @@ export function normaliseInquiry(raw = {}) {
     name: s(raw.name, 120),
     email: s(raw.email, 200).toLowerCase(),
     company: s(raw.company, 160),
-    website: s(raw.website, 300),
+    website: normaliseWebsite(raw.website),
+    // They ticked "I don't have one yet" on the booking form (so an empty website is on purpose).
+    noWebsite: !normaliseWebsite(raw.website) && (raw.noWebsite === true || raw.noWebsite === 'true'),
     sells: s(raw.sells ?? raw.what_you_sell ?? raw.what, 800),
     plan: PLANS.includes(s(raw.plan).toLowerCase()) ? s(raw.plan).toLowerCase() : null,
     slotStart: isoOrNull(raw.slotStart),
@@ -90,6 +159,8 @@ export function normaliseInquiry(raw = {}) {
     // Two more quick answers from the booking form: outbound tried before, and what they want from the call.
     tried: s(raw.tried, 80) || null,
     goal: s(raw.goal, 300) || null,
+    // Where they came from: the booking link's utm_* / ref (e.g. ?utm_source=cold_call after a call).
+    ...normaliseSource(raw),
   };
   const errors = {};
   if (!inq.name) errors.name = 'Your name is required.';
@@ -138,11 +209,13 @@ export async function saveInquiry(raw, { source = 'website', now = new Date() } 
   }
 
   const when = inq.whenHost ? `${inq.whenHost} (your time)` : 'no time picked';
+  // Where they came from goes near the top, so it survives the phone's short preview too.
+  const came = inq.cameFrom || cameFromText(inq);
   await alertOwner('new_inquiry', {
     scope: id,
     url: `/#inquiry/${id}`,
     vars: { company: inq.company, when },
-    body: `${inq.name} <${inq.email}> from ${inq.company}${inq.plan ? ` asked about ${inq.plan[0].toUpperCase()}${inq.plan.slice(1)}` : ' asked about a plan'}.\nCall: ${when}${inq.whenTheirs ? ` — their time ${inq.whenTheirs}` : ''}\nThey sell: ${inq.sells}${inq.website ? `\nWebsite: ${inq.website}` : ''}${answersText(inq)}${bookedLine}`,
+    body: `${inq.name} <${inq.email}> from ${inq.company}${inq.plan ? ` asked about ${inq.plan[0].toUpperCase()}${inq.plan.slice(1)}` : ' asked about a plan'}.${came ? `\nCame from: ${came}` : ''}\nCall: ${when}${inq.whenTheirs ? ` — their time ${inq.whenTheirs}` : ''}\nThey sell: ${inq.sells}${inq.website ? `\nWebsite: ${inq.website}` : inq.noWebsite ? '\nWebsite: does not have one yet' : ''}${answersText(inq)}${bookedLine}`,
     did: booked?.emailed ? 'Saved under Inquiries in the hub (stage: Booked) and sent them the confirmation.' : 'Saved under Inquiries in the hub (stage: Booked).',
   }).catch(() => {});
   return { ok: true, id, emailed: !inq.slotStart ? null : Boolean(booked?.emailed) };
@@ -161,7 +234,8 @@ export function inquiryAnswers(inq) {
   return [
     { q: 'Plan they asked for', a: plan },
     { q: 'What they sell', a: inq.sells || '—' },
-    { q: 'Website', a: inq.website || '—' },
+    { q: 'Website', a: inq.website || (inq.noWebsite ? 'Does not have one yet' : '—') },
+    ...((inq.cameFrom || cameFromText(inq)) ? [{ q: 'Came from', a: inq.cameFrom || cameFromText(inq) }] : []),
     { q: 'Call they booked', a: inq.whenTheirs ? `${inq.whenTheirs}${inq.theirTz ? ` (${inq.theirTz})` : ''}` : inq.whenHost || 'No time picked' },
     ...(inq.role ? [{ q: 'Their role', a: inq.role }] : []),
     ...(inq.dealSize ? [{ q: 'Average deal size', a: inq.dealSize }] : []),
