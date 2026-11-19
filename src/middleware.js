@@ -86,6 +86,27 @@ function withCors(res, origin) {
   return res;
 }
 
+/**
+ * Why a ping to the tick was refused, without the secrets: each value's length and the first
+ * 6 hex of its SHA-256, so the owner can see "the two keys differ" or "TICK_SECRET is not set".
+ */
+async function logTickRefusal(request) {
+  try {
+    const fp = async (s) => {
+      if (!s) return null;
+      const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+      return [...new Uint8Array(d)].slice(0, 3).map((b) => b.toString(16).padStart(2, '0')).join('');
+    };
+    const header = String(request.headers.get('authorization') || '').trim();
+    const given = header.replace(/^Bearer\s+/i, '');
+    const tick = String(process.env.TICK_SECRET || '').trim().replace(/^Bearer\s+/i, '');
+    console.warn('[tick] refused', JSON.stringify({
+      headerHasBearer: /^Bearer\s/i.test(header), givenLength: given.length, givenFp: await fp(given),
+      tickSet: Boolean(process.env.TICK_SECRET), tickLength: tick.length, tickFp: await fp(tick),
+    }));
+  } catch { /* logging only */ }
+}
+
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
   const origin = request.headers.get('origin');
@@ -129,6 +150,7 @@ export async function middleware(request) {
 
   if (MACHINE.some((re) => re.test(pathname))) {
     if (cronAuthorized(request) || (pathname === '/api/cron/tick' && tickAuthorized(request))) return NextResponse.next();
+    if (pathname === '/api/cron/tick') await logTickRefusal(request);
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
