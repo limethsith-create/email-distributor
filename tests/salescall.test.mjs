@@ -164,3 +164,28 @@ test('plan line and the reminder job is registered', () => {
   assert.match(planLineFor({}), /5, 10 or 15/);
   assert.ok(JOBS.some((j) => j.name === 'sales-reminders' && j.scope === 'global'));
 });
+
+test('a held confirmation goes on a later tick once the cause is fixed, and only once', async () => {
+  salesIo.send = async () => ({ success: false, error: 'OWNER.signerName is not set' });
+  const r = await saveInquiry(site(), { now: NOW });
+  assert.equal(r.emailed, false, 'the website is told it did not go');
+  // The owner fixes it; the next tick sends it.
+  salesIo.send = async (account, mail) => { sent.push({ from: account.email, ...mail }); return { success: true, messageId: `<m${sent.length}@x>` }; };
+  const out = await runSalesReminders({ now: NOW });
+  assert.equal(out.retried, 1);
+  assert.equal(sent.length, 1);
+  assert.ok(sent[0].icalEvent, 'with the calendar invite');
+  const q = await getInquiry(r.id);
+  assert.ok(q.confirmationSentAt);
+  assert.equal(q.confirmationError, null);
+  // No second copy later.
+  await kv.del(`sales:retry:${q.meetingId}`);
+  assert.equal((await runSalesReminders({ now: NOW })).retried, 0);
+  assert.equal(sent.length, 1);
+});
+
+test('the website is told when the confirmation did go', async () => {
+  const r = await saveInquiry(site(), { now: NOW });
+  assert.equal(r.emailed, true);
+  assert.equal((await saveInquiry(site({ slotStart: null, slotEnd: null, email: 'x@y.com' }), { now: NOW })).emailed, null);
+});

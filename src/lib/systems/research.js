@@ -1338,7 +1338,7 @@ async function finish(clientId, client, s, { now, R }) {
   try {
     brief = buildBrief({
       name, origin: s.origin, website, deep, business: s.business, businessMatched: s.businessMatched, score, application, customers,
-      registeredAt: s.registeredAt, src: s.acc?.src || {}, signals: s.acc?.signals || {}, teamText: s.acc?.teamText, teamCount: s.acc?.teamCount, max: R.briefMax || 12,
+      registeredAt: s.registeredAt, homeError: s.homeError || null, src: s.acc?.src || {}, signals: s.acc?.signals || {}, teamText: s.acc?.teamText, teamCount: s.acc?.teamCount, max: R.briefMax || 12,
     });
   } catch (err) {
     await logEvent(clientId, SYSTEM, 'brief_failed', { error: String(err?.message || err).slice(0, 200) });

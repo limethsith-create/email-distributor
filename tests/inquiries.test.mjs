@@ -150,3 +150,25 @@ test('a paying client signs the plan agreement (their plan, price and calls), ne
   assert.equal((await loadOnboarding('oak-legal')).planName, 'Growth');
   assert.equal((await loadOnboarding('elm-dental')).planName, null);
 });
+
+test('no plan card: the plan comes from the calls a month they can take, and their answers feed the fit score', async () => {
+  const { inferPlan, applicationExtras } = await import('@/lib/systems/inquiries');
+  assert.equal(inferPlan({ capacity: 'Around 10' }), 'growth');
+  assert.equal(inferPlan({ capacity: '15 or more' }), 'scale');
+  assert.equal(inferPlan({ capacity: 'Around 5' }), 'starter');
+  assert.equal(inferPlan({ capacity: 'Not sure yet' }), null);
+  assert.equal(inferPlan({ plan: 'scale', capacity: 'Around 5' }), 'scale');
+  assert.deepEqual(applicationExtras({ sells: 'Dispatch software for trucking fleets', dealSize: '$5,000 – $25,000', channel: 'Inbound (ads, SEO, content)' }),
+    { web_sellsTo: 'Dispatch software for trucking fleets', web_valueBand: '$5,000 – $25,000', dealValue: 5000, soldToStrangers: 'yes' });
+  assert.equal(applicationExtras({ dealSize: 'Under $5,000' }).dealValue, undefined, 'a band with no floor stays a question');
+  assert.equal(applicationExtras({ channel: 'Mostly referrals' }).soldToStrangers, undefined, 'referrals is not "never sold to strangers"');
+
+  await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith') });
+  const r = await saveInquiry(site({ plan: null, capacity: 'Around 10', dealSize: '$5,000 – $25,000', channel: 'Our own outbound' }));
+  assert.equal((await getClient(r.clientId)).plan, 'growth');
+  const app = await kv.hgetall(`client:${r.clientId}:application`);
+  assert.match(app.answers, /Growth \(from “Around 10” calls a month\)/);
+  assert.equal(Number(app.dealValue), 5000);
+  assert.equal(app.soldToStrangers, 'yes');
+  assert.equal(app.web_sellsTo, 'Commercial roofing for property managers in Texas');
+});

@@ -98,7 +98,8 @@ export function buildBrief(x = {}) {
   else if (yearOf(d?.company?.founded)) { since.push(`${name} was founded in ${yearOf(d.company.founded)}`); sinceSrc.push(d.orgPage || '/'); }
   else if (web.yearsHint) { since.push(`Their website says “${clip(web.yearsHint, 60)}”`); sinceSrc.push(src.years || '/'); }
   const seen = d?.history?.firstSeen ? String(d.history.firstSeen).slice(0, 4) : null;
-  if (seen) { since.push(`${since.length ? 'their' : 'Their'} website has been online since ${seen}`); sinceSrc.push(`https://web.archive.org/web/*/${String(web.url || origin).replace(/^https?:\/\//, '').replace(/\/+$/, '')}`); }
+  // A site that does not load now only proves an old copy existed: say exactly that, not "online since".
+  if (seen) { since.push(x.homeError ? `${since.length ? 'an' : 'An'} archived copy of their website goes back to ${seen}, but the site does not load now` : `${since.length ? 'their' : 'Their'} website has been online since ${seen}`); sinceSrc.push(`https://web.archive.org/web/*/${String(web.url || origin).replace(/^https?:\/\//, '').replace(/\/+$/, '')}`); }
   if (!since.length && x.registeredAt && Number.isFinite(Date.parse(x.registeredAt))) { since.push(`Their domain was registered in ${String(x.registeredAt).slice(0, 4)}`); sinceSrc.push('domain registration (RDAP)'); }
   if (since.length) say('since', since.join(', and '), sinceSrc);
 
