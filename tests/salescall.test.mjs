@@ -225,3 +225,44 @@ test('ten calls at once: each gets its own 5-minute reminder, once', async () =>
   assert.equal(fiveMin.length, 10);
   assert.deepEqual(new Set(fiveMin.map((s) => s.to)).size, 10, 'one each, nobody twice');
 });
+
+test('designed emails: the confirmation and all three reminders go out branded, each with its own big button', async () => {
+  const r = await saveInquiry(site({ company: 'Acme <Roofing>' }), { now: NOW });
+  const q = await getInquiry(r.id);
+  const start = Date.parse((await getMeeting(q.meetingId)).start);
+  await runSalesReminders({ now: new Date(start - 23 * 3600e3) });
+  await runSalesReminders({ now: new Date(start - 50 * 60e3) });
+  await runSalesReminders({ now: new Date(start - 5 * 60e3 + 20e3) });
+  const [confirmed, tomorrow, soon, now] = sent.slice(-4);
+  for (const m of [confirmed, tomorrow, soon, now]) {
+    assert.match(m.html, /logo-180\.png/, 'the cube logo');
+    assert.match(m.html, /#E0290F/i, 'the brand red');
+    assert.ok(m.text && !/</.test(m.text.slice(0, 5)), 'the plain-text part is still there');
+  }
+  assert.match(confirmed.html, /You’re booked\./);
+  assert.match(confirmed.html, /calendar\.google\.com\/calendar\/render\?action=TEMPLATE/, 'Add-to-calendar opens Google Calendar with the call filled in');
+  assert.match(confirmed.html, /Acme &lt;Roofing&gt;/, 'their text is escaped, never raw HTML');
+  assert.ok(!/Acme <Roofing>/.test(confirmed.html));
+  assert.ok(confirmed.icalEvent, 'the .ics invite is still attached');
+  assert.match(tomorrow.html, /See you <span[^>]*>tomorrow\./);
+  assert.match(tomorrow.html, /I’ll be there/);
+  assert.match(tomorrow.html, /href="mailto:[^"]+\?subject=See%20you%20tomorrow"/, 'the button replies to our inbox');
+  assert.match(soon.html, />1h</);
+  assert.match(now.html, />5:00</);
+  // No video link yet: the join buttons ask for it by reply instead of pointing nowhere.
+  assert.match(soon.html, /Send me the video link/);
+  assert.match(now.html, /href="mailto:[^"]+\?subject=Video%20link%20for%20our%20call"/);
+});
+
+test('designed emails: with a video link, the reminders\' big button joins the call', async () => {
+  const { designedSalesHtml, googleCalendarUrl } = await import('@/lib/templates/client/salesDesigned');
+  const ctx = { firstName: 'Bob', when: 'Tuesday 24 November at 10:00 am ET', whenShort: 'Tue 24 Nov 10:00 am ET', minutes: 15, link: 'https://meet.google.com/abc-defg-hij', replyTo: 'x@y.com', start: '2026-11-24T15:00:00.000Z', end: '2026-11-24T15:15:00.000Z' };
+  for (const k of ['sales_call_soon', 'sales_call_now']) {
+    const h = designedSalesHtml(k, ctx);
+    assert.match(h, /href="https:\/\/meet\.google\.com\/abc-defg-hij"/);
+    assert.ok(!/Send me the video link/.test(h));
+  }
+  assert.equal(designedSalesHtml('sales_call_moved', ctx), null, 'other emails keep the plain design');
+  const u = new URL(googleCalendarUrl({ start: ctx.start, end: ctx.end, title: 'Aviance call' }));
+  assert.equal(u.searchParams.get('dates'), '20261124T150000Z/20261124T151500Z');
+});
