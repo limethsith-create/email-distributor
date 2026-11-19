@@ -175,22 +175,77 @@ export function peopleOn(html) {
   return out;
 }
 
-/** Named clients: logo alt texts in client/partner areas and "clients include A, B and C". */
+// ── site furniture: never a client, never a service ───────────────────────────
+
+/** Menu words and buttons ("Home", "Login", "Get started"): the same on every site, never a fact about this one. */
+export const NAV_WORDS = new Set(['home', 'homepage', 'about', 'about us', 'contact', 'contact us', 'login', 'log in', 'sign in', 'sign up', 'register', 'get started', 'start now',
+  'start free trial', 'free trial', 'try it free', 'try for free', 'request a demo', 'book a demo', 'get a demo', 'demo', 'pricing', 'plans', 'blog', 'careers', 'jobs', 'resources', 'support', 'help',
+  'faq', 'faqs', 'menu', 'search', 'features', 'integrations', 'customers', 'clients', 'our clients', 'our customers', 'partners', 'case studies', 'testimonials', 'reviews', 'privacy',
+  'privacy policy', 'terms', 'terms of service', 'cookie policy', 'learn more', 'read more', 'see all', 'view all', 'more', 'logo', 'logos', 'image', 'icon', 'photo', 'company', 'products',
+  'product', 'solutions', 'services', 'our services', 'what we do', 'industries', 'team', 'our team', 'news', 'press', 'trusted by', 'next', 'previous', 'close', 'play', 'banner', 'hero',
+  'slide', 'placeholder', 'background', 'untitled', 'default', 'client', 'partner', 'customer', 'brand', 'brands', 'quote', 'get a quote', 'call now', 'book now', 'schedule now', 'apply now']);
+/** Review sites, awards and store badges ("G2 Leader Winter 2025", "Capterra", "BBB A+", "Download on the App Store"). */
+export const BADGE = /\b(g2(?: crowd)?|capterra|getapp|software advice|trustpilot|trustradius|bbb|better business bureau|clutch(?:\.co)?|yelp|angi|angie'?s list|homeadvisor|thumbtack|houzz|nextdoor|google (?:reviews?|rating|guaranteed)|5[- ]star|five[- ]star|top[- ]rated|awards?|award[- ]winning|badge|winner|high performer|momentum leader|users love us|best of \w+|best places? to work|inc\.? ?5000|app store|google play|download on|get it on|(?:spring|summer|fall|autumn|winter) 20\d{2}|as seen (?:on|in)|featured (?:in|on))\b/i;
+/** Logos that are never a client: payment cards, social networks, security seals, partner and rating marks. */
+const NOT_CLIENT = /\b(visa|mastercard|amex|american express|discover card|paypal|stripe|apple pay|google pay|facebook|instagram|linkedin|twitter|youtube|tiktok|pinterest|ssl|norton|mcafee|secured by|verified|accredited|certified|certification|seal|partner|rated|rating|reviews?|member)\b/i;
+
+/** Site furniture (menu word, button, badge): true when the text says nothing about the company. */
+export function isSiteJunk(t) {
+  const s = squash(t).toLowerCase().replace(/^(the|a)\s+/, '').replace(/[.:!|]+$/, '').replace(/\s*\b(logo|icon|image|img|badge|picture|photo)s?$/, '').trim();
+  if (s.length < 2 || NAV_WORDS.has(s) || BADGE.test(s)) return true;
+  if (/\.(png|jpe?g|svg|webp|gif)$/.test(s) || /^[\d\s.,+%$-]+$/.test(s) || /^(img|image|logo|dsc|screenshot)[-_ ]?\d+/.test(s)) return true;
+  return false;
+}
+
+/** Could this text be a client's name? Not furniture, not a vendor badge, not a sentence. */
+export function isClientName(t) {
+  const s = squash(t);
+  if (isSiteJunk(s) || NOT_CLIENT.test(s)) return false;
+  if (s.length > 50 || s.split(' ').length > 6 || /[.!?]$/.test(s) || /^(we|our|you|your|they|and|or|with|for|more)\b/i.test(s)) return false;
+  return /[A-Za-z]/.test(s);
+}
+
+const clientKey = (n) => String(n).toLowerCase().replace(/&/g, 'and').replace(/\b(inc|llc|ltd|co|corp|corporation|company|pllc|pc|llp|group)\b\.?/g, '').replace(/[^a-z0-9]+/g, '');
+
+/** A heading that opens a list of clients ("Our clients", "Trusted by", "Who we work with"). */
+const CLIENT_HEADING = /\b(our (?:clients|customers)|trusted by|clients include|customers include|(?:who|companies|brands|businesses|organizations) we (?:work|partner) with|proud to (?:work with|serve)|clients we serve|some of our (?:clients|customers)|selected clients|loved by|used by|join(?:ed by)? [\d,]+\+? (?:companies|businesses|teams|customers))\b/i;
+/** Areas whose class names a badge, award, partner or rating strip (not clients). */
+const NOT_CLIENT_AREA = /(badge|award|review|rating|partner|certif|accredit|footer|nav|menu|social|payment|seal|press|media|featured|as-seen|trust-?badge|integrations?)/i;
+
+/**
+ * Named clients, from real client sections only: an area whose class names clients /
+ * customers / logos (not a badge, partner or award strip), the part of the page under a
+ * heading like "Our clients" or "Trusted by", and "clients include A, B and C" — with
+ * menu words, badges and store / payment / social logos dropped and names deduped.
+ * Nothing solid → [] (never padded).
+ */
 export function clientsOn(html) {
-  const out = new Set();
-  const h = String(html || '');
-  const areas = [...h.matchAll(/<(section|div|ul)\b[^>]*(?:class|id)\s*=\s*["'][^"']*(client|customer|logo|trusted|partner|brand)[^"']*["'][^>]*>([\s\S]{0,20000}?)<\/\1>/gi)].map((m) => m[3]);
+  const out = new Map();
+  const add = (raw) => {
+    const name = squash(decode(raw)).replace(/\s*[-–|]?\s*\b(logo|icon|image|img)s?\s*$/i, '').replace(/^(?:logo(?: of)?|client)[:\s-]+/i, '').trim();
+    if (!isClientName(name)) return;
+    const k = clientKey(name);
+    if (k.length >= 2 && !out.has(k)) out.set(k, name);
+  };
+  const h = String(html || '').replace(/<(script|style|noscript|template)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<(nav|footer)\b[\s\S]*?<\/\1>/gi, ' ');
+  const areas = [...h.matchAll(/<(section|div|ul)\b([^>]*(?:class|id)\s*=\s*["']([^"']*(?:client|customer|logo|trusted|brand)[^"']*)["'][^>]*)>([\s\S]{0,20000}?)<\/\1>/gi)]
+    .filter((m) => !NOT_CLIENT_AREA.test(m[3])).map((m) => m[4]);
+  // The part of the page under a client heading, up to the next heading of any rank (or 8 kB).
+  for (const m of h.matchAll(/<(h[1-6]|p|strong)\b[^>]*>([\s\S]{0,200}?)<\/\1>/gi)) {
+    if (!CLIENT_HEADING.test(textOf(m[2]))) continue;
+    const rest = h.slice(m.index + m[0].length, m.index + m[0].length + 8000);
+    const next = rest.search(/<h[1-6]\b/i);
+    areas.push(next >= 0 ? rest.slice(0, next) : rest);
+  }
   for (const area of areas) {
-    for (const m of area.matchAll(/<img\b[^>]*\balt\s*=\s*["']([^"']{2,60})["']/gi)) {
-      const name = squash(decode(m[1])).replace(/\s*(logo|icon|image|img)\s*$/i, '').trim();
-      if (name.length >= 2 && !/^(logo|client|partner|image|icon|photo|picture|home|menu|search|close|back|next|previous|arrow|play|placeholder|banner|slide|hero|background|img|untitled|default)s?\b/i.test(name) && !/\.(png|jpe?g|svg|webp)$/i.test(name) && !/^\d+$/.test(name)) out.add(name);
-    }
+    for (const m of area.matchAll(/<img\b[^>]*\balt\s*=\s*["']([^"']{2,60})["']/gi)) add(m[1]);
+    for (const m of area.matchAll(/<li\b[^>]*>([\s\S]{0,200}?)<\/li>/gi)) { const t = textOf(m[1]); if (t && !/<img/i.test(m[1])) add(t); }
   }
   const text = textOf(h);
   for (const m of text.matchAll(/\b(?:clients|customers) (?:include|such as|like)\s+([^.:;]{5,220})/gi)) {
-    for (const part of m[1].split(/,\s*|\s+and\s+/)) { const p = squash(part).replace(/^(and|the)\s+/i, ''); if (/^[A-Z0-9]/.test(p) && p.length <= 50 && p.split(' ').length <= 6) out.add(p); }
+    for (const part of m[1].split(/,\s*|\s+and\s+/)) { const p = squash(part).replace(/^(and|the)\s+/i, '').replace(/\s+(?:and )?(?:many )?(?:more|others)\b.*$/i, ''); if (/^[A-Z0-9]/.test(p)) add(p); }
   }
-  return [...out];
+  return [...out.values()];
 }
 
 /** Testimonials: quote blocks with who said it. */

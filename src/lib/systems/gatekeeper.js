@@ -21,6 +21,7 @@ import { dayKeyIn, daysBetween, addDays, ET } from '@/lib/time';
 import { io, truthy, asArray, firstNameOf, ownerName, sendClient, formatDay, nextUsBusinessDay, isPublicUrl } from '@/lib/systems/intake-io';
 import { sendAcceptance, readCall, onboardPageClock } from '@/lib/systems/onboardcall';
 import { ackAlerts } from '@/lib/notify';
+import { outreachOffer } from '@/lib/systems/fitscore';
 
 const SYSTEM = 'gatekeeper';
 /** Earlier records in these states do not block a new application (no trial was ever run). */
@@ -116,12 +117,33 @@ export const FIT_RULES = [
   },
 ];
 
-/** First matching agency keyword in `text`, else null. */
+/** A keyword that names an agency or a product by itself ("SDR agency", "cold email software"). */
+const SELF_NAMING = /\b(agency|agencies|as a service|as-a-service|setters|software|platform|tool|database)\b/;
+/** Words before a hit that turn it around ("we tried lead gen agencies", "not an outbound agency"). */
+const NEGATED_BEFORE = /\b(?:tried|used|using|hired|worked with|burned by|than|unlike|not|no|never|instead of|replac\w*|other|previous|bad experience with|without)\b[^.\n|]{0,30}$/;
+
+/**
+ * First agency keyword in `text` that shows they SELL outreach, else null.
+ * A keyword that names an agency or product ("SDR agency", "cold email platform") counts
+ * where it stands (unless negated: "we tried an SDR agency"); a bare trade word ("lead
+ * generation", "appointment setting") counts only as their offer — "lead generation agency",
+ * "B2B lead generation services", a line that opens with it — never inside a feature list
+ * ("scheduling, invoicing and lead generation for HVAC contractors").
+ */
 export function detectAgency(text, keywords) {
-  const t = ` ${String(text || '').toLowerCase().replace(/\s+/g, ' ')} `;
+  const raw = String(text || '').toLowerCase().replace(/[ \t]+/g, ' ');
+  const t = ` ${raw} `;
+  const offer = outreachOffer(raw);
   for (const k of keywords) {
-    const re = new RegExp(`(^|[^a-z])${String(k).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z]|$)`);
-    if (re.test(t)) return k;
+    const kw = String(k).toLowerCase();
+    const re = new RegExp(`(^|[^a-z])${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=[^a-z]|$)`, 'g');
+    let m;
+    while ((m = re.exec(t))) {
+      const at = m.index + m[1].length;
+      if (NEGATED_BEFORE.test(t.slice(Math.max(0, at - 40), at))) continue;
+      if (SELF_NAMING.test(kw)) return k;
+      if (offer && offer.includes(kw)) return k;
+    }
   }
   return null;
 }

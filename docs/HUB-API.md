@@ -416,7 +416,9 @@ Places + a quick market count). No AI: extracted facts only. Re-run:
   "flags": [ { "level": "warn|info", "text": "Website mentions 'appointment setting' — could be an agency" } ],
   "brief": { "text": "…", "sentences": [ { "text": "…", "sources": ["…"] } ], "sources": ["…"] } | null,   // Research v4 — see below
   "score": {                                          // Fit Score (systems/fitscore.js), null until research is done
-    "score": 82 | null,                               // points earned out of the points that could be checked, 0–100
+    "score": 82 | null,                               // points earned out of the points that could be checked, 0–100; capped at FITSCORE.dealbreakerCap (40) when there is a dealbreaker
+    "pointsScore": 100 | null,                        // the uncapped points (shown beside a capped score, never as the headline)
+    "capped": false,                                  // true when a dealbreaker capped the score
     "grade": "A|B|C|D" | null,                        // A ≥ 80, B ≥ 65, C ≥ 50 (FITSCORE.grades); any dealbreaker → D
     "label": "Strong fit|Good fit|Borderline|Poor fit|Not a fit|Needs a look",
     "confidence": 74,                                 // how many of the 100 points could be checked
@@ -425,6 +427,7 @@ Places + a quick market count). No AI: extracted facts only. Re-run:
                  "items": [ { "text": "Website talks to businesses (9 mentions)", "status": "good|ok|bad|unknown", "max": 12, "points": 12 | null,
                               "evidence": { "quote": "sentence from their site", "page": "/services" } | null, "known": true } ] } ],
     "dealbreakers": [ { "text": "Sells cold outreach themselves (“cold email”) — a competitor", "evidence": { "quote": "…", "page": "/" } | null } ],
+    "warnings": [ { "text": "Mentions “lead generation” (…) but does not seem to sell outreach — check they are not a competitor", "evidence": … | null } ],   // never a dealbreaker
     "questions": [ "How many people work at the company?" ]   // one per unknown, for the call
   }
 }
@@ -455,7 +458,8 @@ webintel.js, bizintel.js), null when the deep pass did not run:
                  "contracts": [ { "amount": 250000, "agency": "…", "date": "…", "what": "…" } ] | null, "grants": [ … ] | null, "federalTotal": 250000 | null, "errors": [] } | null,
     "sec": { "total": 0, "filings": [ { "form": "D", "date": "…", "entity": "…", "url": "…" } ], "raisedMoney": false } | null,
     "revenue": [ { "low": 2520000, "high": 4500000, "basis": "18 people × $140,000–$250,000 revenue per employee …", "floor": false, "year": 2019 } ] | null,
-    "benchmark": "IT services / MSPs" | null
+    "benchmark": "IT services / MSPs" | null,
+    "estimate": { "sure": "about|at least|unknown", "low": 1470000 | null, "high": 4500000 | null, "text": "at least $1.5M a year", "basis": ["…"] }   // the one answer the brief gives; floors (team page, PPP payroll, customer count × cheapest plan) read "at least"
   },
   "orgPage": "/" | null,                              // the page their schema.org company data came from
   // ── Research v4 (2026-09-27) ──

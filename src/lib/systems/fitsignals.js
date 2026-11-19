@@ -90,6 +90,8 @@ export function pageSignals(text, { hrefs = [], page = '/' } = {}) {
   }
   const year = copyrightYear(text);
   if (year) out.copyrightYear = year;
+  const from = copyrightFrom(text);
+  if (from) out.copyrightFrom = from;
   out.words = (low.match(/[a-z]{2,}/g) || []).length;
   return out;
 }
@@ -103,11 +105,21 @@ export function copyrightYear(text) {
   return best;
 }
 
+/** "© 1998–2026 Acme" → 1998 (the earliest year in a copyright line: the site existed then), else null. */
+export function copyrightFrom(text) {
+  let best = null;
+  const re = /(?:©|&copy;|\(c\)|copyright)\s*(\d{4})(?:\s*[-–—]\s*(\d{4}))?/gi;
+  let m;
+  while ((m = re.exec(String(text || '')))) { const y = Number(m[1]); if (y >= 1990 && y <= 2100 && (!best || y < best)) best = y; }
+  return best;
+}
+
 /** Add one page's signals into the running total. */
 export function mergeSignals(acc = {}, page = {}) {
   const out = { ...acc };
   for (const [key, v] of Object.entries(page)) {
     if (key === 'copyrightYear') { if (!out.copyrightYear || v > out.copyrightYear) out.copyrightYear = v; continue; }
+    if (key === 'copyrightFrom') { if (!out.copyrightFrom || v < out.copyrightFrom) out.copyrightFrom = v; continue; }
     if (key === 'words') { out.words = (out.words || 0) + (Number(v) || 0); continue; }
     const cur = out[key] || { n: 0, ev: [] };
     const ev = [...cur.ev];
