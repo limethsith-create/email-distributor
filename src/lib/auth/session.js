@@ -63,6 +63,17 @@ export function cronAuthorized(request, secret = process.env.CRON_SECRET) {
   return secretMatches(header, `Bearer ${secret}`);
 }
 
+/**
+ * The pinger's own key for /api/cron/tick only (cron-job.org): TICK_SECRET, 16+ characters,
+ * pasted whitespace or a leading "Bearer " ignored. CRON_SECRET still works everywhere.
+ */
+export function tickAuthorized(request, secret = process.env.TICK_SECRET) {
+  const tick = String(secret || '').trim().replace(/^Bearer\s+/i, '');
+  if (tick.length < 16) return false;
+  const header = String(request.headers.get('authorization') || '').trim();
+  return secretMatches(header, `Bearer ${tick}`);
+}
+
 /** Where to go after sign-in: only a Mission Control page on this site ("//evil.com" and "/\\evil.com" are other sites to a browser). */
 export function safeNext(next) {
   const n = String(next || '/mc');

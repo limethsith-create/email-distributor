@@ -23,7 +23,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { SESSION_COOKIE, verifySession, cronAuthorized } from '@/lib/auth/session';
+import { SESSION_COOKIE, verifySession, cronAuthorized, tickAuthorized } from '@/lib/auth/session';
 import { verifyHubToken, bearerOf, isAllowedOrigin, isSiteOrigin, corsHeaders } from '@/lib/auth/supabase';
 
 const PUBLIC = [
@@ -128,7 +128,7 @@ export async function middleware(request) {
   }
 
   if (MACHINE.some((re) => re.test(pathname))) {
-    if (cronAuthorized(request)) return NextResponse.next();
+    if (cronAuthorized(request) || (pathname === '/api/cron/tick' && tickAuthorized(request))) return NextResponse.next();
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
