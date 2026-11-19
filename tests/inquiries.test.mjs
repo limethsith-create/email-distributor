@@ -172,3 +172,15 @@ test('no plan card: the plan comes from the calls a month they can take, and the
   assert.equal(app.soldToStrangers, 'yes');
   assert.equal(app.web_sellsTo, 'Commercial roofing for property managers in Texas');
 });
+
+test('the two new booking answers (tried outbound before, what they want from the call) are kept and shown', async () => {
+  await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith') });
+  const r = await saveInquiry(site({ tried: 'Used an agency, it did not work', goal: 'Does this work for roofing? <b>' + 'x'.repeat(400) }));
+  const { getInquiry: getInq } = await import('@/lib/systems/inquiries');
+  const q = await getInq(r.id);
+  assert.equal(q.tried, 'Used an agency, it did not work');
+  assert.equal(q.goal.length, 300, 'capped');
+  const app = await kv.hgetall(`client:${r.clientId}:application`);
+  assert.match(app.answers, /Cold email or an outbound agency before/);
+  assert.match(app.answers, /What they want from the call/);
+});
