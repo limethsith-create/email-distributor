@@ -32,6 +32,7 @@ import { sendEmail, newMessageId } from '@/lib/mailer';
 import { renderTemplate } from '@/lib/templates/client';
 import * as cal from '@/lib/systems/calendar';
 import { getInquiry, patchInquiry, setInquiryStatus, inferPlan } from '@/lib/systems/inquiries';
+import { designedSalesHtml } from '@/lib/templates/client/salesDesigned';
 
 const SYSTEM = 'sales';
 const H = 3600e3;
@@ -74,9 +75,14 @@ async function sendSales(m, key, vars, { icalEvent = null, dedupe, now = io.now(
   try {
     const account = await salesIo.sender();
     if (!account) throw new Error('no inbox to send from — set the onboarding inbox in Settings');
-    const msg = renderTemplate(key, { firstName: firstNameOf(m.person) || 'there', ownerName: await ownerName(null), company: m.company || 'your business', ...vars });
+    const full = { firstName: firstNameOf(m.person) || 'there', ownerName: await ownerName(null), company: m.company || 'your business', ...vars };
+    const msg = renderTemplate(key, full);
     const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;white-space:pre-wrap">${esc(msg.text).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>')}</div>`;
+    // The branded design for the confirmation and the three reminders; the plain version for everything else.
+    const link = (/^Join here:\s*(\S+)/.exec(String(full.linkLine || '')) || [])[1] || null;
+    const end = new Date(Date.parse(m.start) + (Number(m.minutes) || 15) * MIN).toISOString();
+    const html = designedSalesHtml(key, { ...full, link, replyTo: account.email, start: m.start, end })
+      || `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6;white-space:pre-wrap">${esc(msg.text).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>')}</div>`;
     const res = await salesIo.send(account, {
       to: m.email, subject: msg.subject, text: msg.text, html,
       transactional: true, noTrack: true, messageId: newMessageId(account.email),
