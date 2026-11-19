@@ -28,3 +28,17 @@ test('a TICK_SECRET pasted with a stray space, line break or "Bearer " in front 
   }
   delete process.env.TICK_SECRET;
 });
+
+test('through the middleware too (the real request path): TICK_SECRET gets to the tick, nowhere else', async () => {
+  const { middleware } = await import('@/middleware');
+  process.env.CRON_SECRET = 'cron-secret-value';
+  process.env.TICK_SECRET = 'a-long-pinger-only-key-123\n';
+  const mw = (path, auth) => { const url = `https://email-distributor.vercel.app${path}`; return middleware({ url, method: 'GET', nextUrl: new URL(url), headers: new Headers(auth ? { authorization: auth } : {}), cookies: { get: () => undefined } }); };
+  const through = (r) => r.headers.get('x-middleware-next') === '1';
+  assert.ok(through(await mw('/api/cron/tick?source=cronjob', 'Bearer a-long-pinger-only-key-123')), 'the pinger gets through');
+  assert.equal((await mw('/api/cron/tick', 'Bearer wrong-wrong-wrong-wrong')).status, 401);
+  assert.equal((await mw('/api/cron/tick', null)).status, 401);
+  assert.equal((await mw('/api/admin/export', 'Bearer a-long-pinger-only-key-123')).status, 401, 'TICK_SECRET opens nothing but the tick');
+  assert.ok(through(await mw('/api/admin/export', 'Bearer cron-secret-value')), 'CRON_SECRET unchanged');
+  delete process.env.TICK_SECRET;
+});

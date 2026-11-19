@@ -7,7 +7,7 @@
 
 import { runTick } from '@/lib/scheduler';
 import { pingHealthcheck } from '@/lib/systems/watchdog';
-import { safeEqual } from '@/lib/crypto';
+import { cronAuthorized, tickAuthorized } from '@/lib/auth/session';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -17,12 +17,7 @@ export const maxDuration = 30;
  * changed without touching CRON_SECRET, which also signs the links in our emails (lib/tokens.js).
  */
 function authorized(request) {
-  const header = (request.headers.get('authorization') || '').trim();
-  // A pasted TICK_SECRET often carries a stray space or line break, or "Bearer " typed in front: ignore those.
-  const tick = String(process.env.TICK_SECRET || '').trim().replace(/^Bearer\s+/i, '');
-  const secrets = [process.env.CRON_SECRET, tick.length >= 16 ? tick : null].filter(Boolean);
-  if (!secrets.length) return false; // fail closed: the tick never runs open
-  return secrets.some((s) => safeEqual(header, `Bearer ${s}`));
+  return cronAuthorized(request) || tickAuthorized(request);
 }
 
 export async function GET(request) {
