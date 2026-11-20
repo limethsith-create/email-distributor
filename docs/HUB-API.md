@@ -6,6 +6,31 @@ centre. The trial machine (this repo, `email-distributor`) keeps running where
 its database is. The hub's **Trials** section talks to the machine through
 the endpoints below.
 
+## Changes on 2026-11-20 — agreement and invoice after the yes
+
+New order: sales call → agreement + invoice → payment → onboarding call.
+
+- Stage `proposal` is now **`agreement_sent`** ("Agreement and invoice sent")
+  in `status`, `counts` and `OPEN_STAGES`.
+- **The yes** is `POST /api/mc/inquiries {action:'status', id,
+  status:'agreement_sent'}`: the machine writes the service agreement for the
+  plan (price and calls from config `PLANS`) and the month-one invoice
+  (payment lines from `PAYMENT`) and emails both at once from the
+  onboarding-call inbox (the agreement in the email and attached as a page;
+  paying the invoice counts as accepting it). Nothing else starts: no client,
+  no onboarding email. `400 {error}` and no stage change when they cannot go
+  (no signer name, no PayPal / Wise, the inbox refused); a retry sends only
+  what did not go. The record gains `agreement: {number, version, hash, plan,
+  sentAt}` and `invoice: {number, plan, amount, calls, status:
+  sent|paid, issuedAt, sentAt, paidAt}`.
+- **Payment received** → `startOnboardingAfterPayment(inquiryId)`
+  (systems/agreementsend.js): the old Won behaviour (paying client, the one
+  `accepted_call` email), the booking moves to `won`, and the invoice is
+  stored on the client as paid (`GET` client `invoice.status: 'paid'`), so no
+  second month-one invoice goes. `status:'won'` still does the onboarding
+  part, and is meant for after payment.
+- "Add a paying client" is unchanged.
+
 ## Changes on 2026-11-20 — no free trial, one way in, no own outreach
 
 This file grew as an append log; where an older section below disagrees, this
@@ -603,7 +628,7 @@ and, for each `new` one, a to-do `{ id: "inquiry:{id}", clientName: company, urg
 
 `GET /api/mc/inquiries` → `{ inquiries: [record…] (newest first), counts }` where a record is
 `{ id, at, source, status (stage above), statusAt, stageHistory: [{at, from, to}], notes: [{at, text}], name, email, company, website, sells, plan: starter|growth|scale|null, slotStart, slotEnd (ISO), theirTz, whenTheirs, whenHost (text, owner's time), role, dealSize, channel, capacity, timing (the website's five questions, text|null), meetingId, meetLink, confirmationSentAt | confirmationError, reminded_tomorrow, reminded_soon (ISO), calendarError?, clientId?, trialOutcome? }`.
-`POST /api/mc/inquiries` `{action:'status', id, status, note?}` · `{action:'note', id, text}`. `status:'won'` makes them a paying client first (the accepted_call email; an error and no change when it cannot, e.g. no website); `status:'lost'` declines the held record (no email).
+`POST /api/mc/inquiries` `{action:'status', id, status, note?}` · `{action:'note', id, text}`. `status:'agreement_sent'` (the yes) emails the agreement and the invoice (see Changes on 2026-11-20). `status:'won'` (after payment) makes them a paying client first (the accepted_call email; an error and no change when it cannot, e.g. no website); `status:'lost'` declines the held record (no email).
 
 ---
 

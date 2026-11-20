@@ -123,12 +123,13 @@ test('no reminders once the owner moved them on, and a booking made the same day
 
 test('stages: Calendar buttons move the inquiry, and Inquiries moves the Calendar', async () => {
   assert.deepEqual(STATUSES, ['new', 'held', 'no_show', 'contacted', 'agreement_sent', 'won', 'lost']);
+  await kv.hset('system:config', { 'PAYMENT.paypalMe': JSON.stringify('https://paypal.me/aviance') });
   // Won needs their website (it makes them a client).
   const r = await saveInquiry(site({ website: 'stoneroofing.com' }), { now: NOW });
   const q = await getInquiry(r.id);
   await calendarAction({ action: 'held', id: q.meetingId }, { now: new Date('2026-11-18T15:20:00.000Z') });
   assert.equal((await getInquiry(r.id)).status, 'held');
-  await setInquiryStatus(r.id, 'agreement_sent', 'Sent the Growth proposal', { now: NOW });
+  await setInquiryStatus(r.id, 'agreement_sent', 'Said yes on the call', { now: NOW });
   await setInquiryStatus(r.id, 'won', '', { now: NOW });
   const done = await getInquiry(r.id);
   assert.equal(done.status, 'won');
