@@ -52,8 +52,7 @@ export function installWorld({ seed = 20261005 } = {}) {
   process.env.PLACES_API_KEY = 'places-key';
   process.env.GITHUB_TOKEN = 'gh-token';
   process.env.PUBLIC_BASE_URL = 'https://sim.test';
-  delete process.env.TELEGRAM_BOT_TOKEN;
-  delete process.env.HC_PING_URL;
+    delete process.env.HC_PING_URL;
   delete process.env.PORKBUN_API_KEY;
 
   // Belt and braces: any code path that still reaches for real DNS or a real

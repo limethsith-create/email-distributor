@@ -6,13 +6,16 @@
  *
  * Stages (the owner's pipeline, in order): new = Booked (the call is on the
  * calendar) → held = Call done / no_show = No-show → contacted = Following up →
- * proposal = Proposal sent → won / lost. Moving one to Call done / No-show
+ * agreement_sent = Agreement and invoice sent → won (paid, onboarding) / lost. Moving one to Call done / No-show
  * marks its Calendar meeting too, and the Calendar's buttons move it back here.
  *
  * A booking with a website also gets a client record held for the sales call
  * (holdForSalesCall): researched and scored so the owner sees "What we found"
- * before the call, but not a client yet and never emailed. **Won** makes them
- * a paying client and starts onboarding; **Lost** closes the record.
+ * before the call, but not a client yet and never emailed. The yes after the
+ * call is **Agreement and invoice sent**: both are emailed straight away
+ * (systems/agreementsend.js) and nothing starts yet. **Won** (payment received,
+ * startOnboardingAfterPayment) makes them a paying client and starts
+ * onboarding; **Lost** closes the record.
  *
  * Storage: `inquiries` hash (id → record) + `inquiries:order` list (newest
  * first, capped).
@@ -23,11 +26,18 @@ import { K } from '@/lib/db/keys';
 import { logEvent } from '@/lib/db/events';
 import { alertOwner } from '@/lib/notify';
 
-export const STATUSES = ['new', 'held', 'no_show', 'contacted', 'proposal', 'won', 'lost'];
+export const STATUSES = ['new', 'held', 'no_show', 'contacted', 'agreement_sent', 'won', 'lost'];
 /** The owner's words for each stage (the hub shows these). */
-export const STAGE_WORDS = { new: 'Booked', held: 'Call done', no_show: 'No-show', contacted: 'Following up', proposal: 'Proposal sent', won: 'Won', lost: 'Lost' };
+export const STAGE_WORDS = { new: 'Booked', held: 'Call done', no_show: 'No-show', contacted: 'Following up', agreement_sent: 'Agreement and invoice sent', won: 'Won', lost: 'Lost' };
 /** Stages still in play (not won or lost). */
-export const OPEN_STAGES = ['new', 'held', 'no_show', 'contacted', 'proposal'];
+export const OPEN_STAGES = ['new', 'held', 'no_show', 'contacted', 'agreement_sent'];
+/** Older records (and old callers) say 'proposal' / 'proposal_sent': the same stage as agreement_sent. */
+export const stageKey = (v) => (v === 'proposal' || v === 'proposal_sent' ? 'agreement_sent' : v);
+const fixStage = (r) => {
+  if (!r || typeof r !== 'object') return r;
+  const hist = Array.isArray(r.stageHistory) && r.stageHistory.some((h) => stageKey(h?.to) !== h?.to) ? r.stageHistory.map((h) => ({ ...h, to: stageKey(h?.to) })) : r.stageHistory;
+  return stageKey(r.status) === r.status && hist === r.stageHistory ? r : { ...r, status: stageKey(r.status), ...(hist ? { stageHistory: hist } : {}) };
+};
 const CAP = 2000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PLANS = ['starter', 'growth', 'scale'];
@@ -275,7 +285,7 @@ async function afterSaved(id, rec, booked, { now = new Date() } = {}) {
       url: `/#inquiry/${id}`,
       vars: { company: inq.company, when },
       body: `${inq.name} <${inq.email}> from ${inq.company}${inq.plan ? ` asked about ${inq.plan[0].toUpperCase()}${inq.plan.slice(1)}` : ' asked about a plan'}.${came ? `\nCame from: ${came}` : ''}\nCall: ${when}${inq.whenTheirs ? ` — their time ${inq.whenTheirs}` : ''}\nThey sell: ${inq.sells}${inq.website ? `\nWebsite: ${inq.website}` : inq.noWebsite ? '\nWebsite: does not have one yet' : ''}${answersText(inq)}${bookedLine}`,
-      did: booked?.emailed ? 'Saved under Plan call requests in the hub (stage: Booked) and sent them the confirmation. Press Won after the call to start onboarding.' : 'Saved under Plan call requests in the hub (stage: Booked). Press Won after the call to start onboarding.',
+      did: booked?.emailed ? 'Saved under Plan call requests in the hub (stage: Booked) and sent them the confirmation. After a yes on the call, press Send the agreement and invoice.' : 'Saved under Plan call requests in the hub (stage: Booked). After a yes on the call, press Send the agreement and invoice.',
     }).catch(() => {});
     return app?.clientId ? { clientId: app.clientId } : {};
   } catch (err) {
@@ -322,7 +332,7 @@ export async function holdForSalesCall(id, inq, { now = new Date() } = {}) {
     const { addClient } = await import('@/lib/systems/gatekeeper');
     const r = await addClient(
       { companyName: inq.company, contactName: inq.name, contactEmail: inq.email, website: inq.website, notes: inq.sells },
-      { source: 'inquiry', plan: inferPlan(inq) || 'starter', now, review: { answers: inquiryAnswers(inq), fit: { verdict: 'unknown', summary: 'A booked sales call: read the fit score and the research before the call. Press Won on the booking to start onboarding.', lines: [] } } },
+      { source: 'inquiry', plan: inferPlan(inq) || 'starter', now, review: { answers: inquiryAnswers(inq), fit: { verdict: 'unknown', summary: 'A booked sales call: read the fit score and the research before the call. After a yes, send the agreement and invoice from the booking; onboarding starts once they pay.', lines: [] } } },
     );
     if (!r.ok || !r.clientId) return null;
     const extras = applicationExtras(inq);
@@ -359,14 +369,14 @@ export async function startClientFrom(inq, { now = new Date() } = {}) {
 
 export async function getInquiry(id) {
   const rec = await kv.hget(K.inquiries(), String(id));
-  return rec && typeof rec === 'object' ? rec : null;
+  return rec && typeof rec === 'object' ? fixStage(rec) : null;
 }
 
 /** Newest first, with counts per status. */
 export async function listInquiries({ limit = 200 } = {}) {
   const ids = (await kv.lrange(K.inquiryOrder(), 0, Math.max(0, limit - 1))) || [];
   const all = ids.length ? await kv.hmget(K.inquiries(), ...ids) : {};
-  const rows = ids.map((id) => (all && all[id]) || null).filter(Boolean);
+  const rows = ids.map((id) => (all && all[id]) || null).filter(Boolean).map(fixStage);
   const counts = Object.fromEntries(STATUSES.map((x) => [x, 0]));
   for (const r of rows) if (counts[r.status] !== undefined) counts[r.status]++;
   return { inquiries: rows, counts };
@@ -384,12 +394,16 @@ async function patch(id, fields) {
 }
 
 export async function setInquiryStatus(id, status, note = '', { now = new Date(), fromCalendar = false } = {}) {
+  status = stageKey(status);
   if (!STATUSES.includes(status)) throw new Error(`status must be one of ${STATUSES.join(', ')}`);
   const cur = await getInquiry(id);
   if (!cur) throw new Error('inquiry not found');
   // Won starts their onboarding first: if that fails, the booking stays where it was and the error goes back.
   let started = null;
   if (status === 'won' && cur.status !== 'won') started = await startClientFrom(cur, { now });
+  // The yes after the call: the agreement and the invoice are emailed first (nothing else starts); if they
+  // cannot go (a setting missing, the inbox refused), the booking stays where it was and the error goes back.
+  if (status === 'agreement_sent' && !['agreement_sent', 'won'].includes(cur.status)) await (await import('@/lib/systems/agreementsend')).sendAgreementAndInvoice(cur, { now });
   if (status === 'lost' && cur.status !== 'lost' && cur.clientId) {
     try {
       const { getClient } = await import('@/lib/db/client');
@@ -403,8 +417,8 @@ export async function setInquiryStatus(id, status, note = '', { now = new Date()
   if (!fromCalendar && (status === 'held' || status === 'no_show') && rec.meetingId) {
     try { await (await import('@/lib/systems/salescall')).meetingForStage(rec, status, { now }); } catch {}
   }
-  // Won: the sales call clearly happened — a call still "confirmed" in the Calendar is marked done, so it never asks.
-  if (!fromCalendar && status === 'won' && rec.meetingId) {
+  // Won / the yes: the sales call clearly happened — a call still "confirmed" in the Calendar is marked done, so it never asks.
+  if (!fromCalendar && (status === 'won' || status === 'agreement_sent') && rec.meetingId) {
     try {
       const sc = await import('@/lib/systems/salescall');
       const m = await (await import('@/lib/systems/calendar')).getMeeting(rec.meetingId);

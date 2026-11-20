@@ -50,7 +50,6 @@ function stubIo() {
     return { sent: true };
   };
   io.alertOwner = async (key, o = {}) => { alerts.push({ key, ...o }); return { sent: true }; };
-  io.sendOwnerEmail = async () => ({ ok: true });
   io.fetchExt = async () => ({ ok: true, status: 200, url: 'https://example.com/', text: async () => '<title>Acme Plumbing</title>' });
 }
 

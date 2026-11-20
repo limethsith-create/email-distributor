@@ -87,4 +87,53 @@ I've attached an updated calendar invite. If the new time doesn't work, reply to
 
 {ownerName}`,
   },
+  // After a yes on the sales call (systems/agreementsend.js): the service agreement, then the month-one invoice.
+  service_agreement: {
+    from: 'onboard',
+    subject: 'Your Aviance agreement',
+    body: `Hi {firstName},
+
+Thanks for the call. Here's our agreement for {company} on the {planName} plan: {calls} booked calls a month for {priceText} a month. It's below and attached as a page you can keep.
+
+To accept, reply "I agree", or just pay the invoice. It comes in a separate email, and paying it counts as accepting.
+
+{agreementText}
+
+{ownerName}`,
+  },
+
+  agreement_invoice: {
+    from: 'onboard',
+    subject: 'Invoice {invoiceNo}',
+    body: `Hi {firstName},
+
+Here's the invoice for your first month.
+
+Invoice {invoiceNo} · issued {issuedDate} · due now
+{planName} plan: {calls} booked calls a month
+Month one: {priceText}
+Setup: $0
+Total due: {priceText}
+
+Pay by:
+{paymentLines}
+
+Once it's paid, I'll email you a link to book our onboarding call.
+
+{ownerName}`,
+  },
+  agreement_invoice_chase: {
+    from: 'onboard',
+    subject: 'Quick note about invoice {invoiceNo}',
+    body: `Hi {firstName},
+
+Just a friendly note: I sent your agreement and invoice {invoiceNo} ({priceText}, {planName} plan) yesterday, and I haven't seen the payment yet.
+
+Pay by:
+{paymentLines}
+
+If it's already on its way, ignore this, and thank you. Once it's in, I'll email you a link to book our onboarding call.
+
+{ownerName}`,
+  },
 };

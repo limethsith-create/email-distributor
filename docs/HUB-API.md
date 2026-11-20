@@ -6,6 +6,31 @@ centre. The trial machine (this repo, `email-distributor`) keeps running where
 its database is. The hub's **Trials** section talks to the machine through
 the endpoints below.
 
+## Changes on 2026-11-20 — agreement and invoice after the yes
+
+New order: sales call → agreement + invoice → payment → onboarding call.
+
+- Stage `proposal` is now **`agreement_sent`** ("Agreement and invoice sent")
+  in `status`, `counts` and `OPEN_STAGES`.
+- **The yes** is `POST /api/mc/inquiries {action:'status', id,
+  status:'agreement_sent'}`: the machine writes the service agreement for the
+  plan (price and calls from config `PLANS`) and the month-one invoice
+  (payment lines from `PAYMENT`) and emails both at once from the
+  onboarding-call inbox (the agreement in the email and attached as a page;
+  paying the invoice counts as accepting it). Nothing else starts: no client,
+  no onboarding email. `400 {error}` and no stage change when they cannot go
+  (no signer name, no PayPal / Wise, the inbox refused); a retry sends only
+  what did not go. The record gains `agreement: {number, version, hash, plan,
+  sentAt}` and `invoice: {number, plan, amount, calls, status:
+  sent|paid, issuedAt, sentAt, paidAt}`.
+- **Payment received** → `startOnboardingAfterPayment(inquiryId)`
+  (systems/agreementsend.js): the old Won behaviour (paying client, the one
+  `accepted_call` email), the booking moves to `won`, and the invoice is
+  stored on the client as paid (`GET` client `invoice.status: 'paid'`), so no
+  second month-one invoice goes. `status:'won'` still does the onboarding
+  part, and is meant for after payment.
+- "Add a paying client" is unchanged.
+
 ## Changes on 2026-11-20 — no free trial, one way in, no own outreach
 
 This file grew as an append log; where an older section below disagrees, this
@@ -100,7 +125,7 @@ expiry checks) is:
   `/api/mc/people`, `/api/mc/google`, `/api/mc/cheapinboxes`,
   `/api/mc/login`, `/api/mc/logout`, `/api/mc/test`, `/api/mc/push`,
   `/api/mc/warmup`, `/api/mc/archive` (service keys, Google / CheapInboxes / helper-inbox
-  credentials and status, machine settings, Test Mode, push devices, the
+  credentials and status, machine settings, Test Mode, the
   activity log, the outreach archive);
 - `POST /api/mc/presence`, `POST /api/mc/team` (their own status), `POST /api/mc/ava/chat`,
   `POST /api/mc/ava/hear` (speech to text) and `POST /api/mc/ava/requests` (`add` only) — the only
@@ -176,7 +201,7 @@ Admins only (employees get 403). The owner appears too.
     "activeClients": 1,
     "openAlerts": 2,
     "usage": { "redis": {"used":123,"limit":500000,"pct":0}, "places": {...}, "reoon": {..., "remaining": 12} },
-    "setup": { "migrated": true, "encKey": true, "cronSecret": true, "telegram": false, "healthchecks": false, "ownerInbox": true }
+    "setup": { "migrated": true, "encKey": true, "cronSecret": true, "healthchecks": false, "ownerInbox": true }
   },
   "stages": [
     { "key": "intake",   "label": "Waiting for the sales call", "states": ["applied"],                 "clients": [ /* row */ ] },
@@ -575,14 +600,13 @@ out (`inboxes[].warmupStartedAt` then moves to that day), so the trial's
 }
 ```
 
-## Phone alerts (Web Push)
+## Owner alerts (in the hub only)
 
-Every owner alert is also pushed to the owner's phones (the hub installed on
-the home screen; iOS 16.4+). Under `/api/mc/push/*`, same auth as the rest:
-`GET key` → `{publicKey}` (503 without VAPID keys) · `POST subscribe {subscription, device}` →
-`{ok, count}` · `POST unsubscribe {endpoint}` · `GET status?endpoint=` → `{subscribed, count}` ·
-`POST test {endpoint?}` → `{ok, sent, failed}`. Payload: `{title, body, url, tag, urgent, at}`;
-`url` is `/#trial/{id}` or `/#alerts`; the same `tag` replaces the previous notification.
+Owner alerts are not sent anywhere outside the hub: no email, phone push or Telegram.
+Each alert is recorded and listed in the hub's bell and alert list (`alerts` in
+`GET /api/mc/hub`: `{id, at, key, clientId, title, urgent, delivered, body, did}`;
+`delivered` is always true). `/api/mc/push/*` no longer exists. Wherever an alert
+below says "phone", "push", "email" or "Telegram", read it as "hub alert only".
 
 ## Plan inquiries (the website's "Book a call")
 
@@ -594,16 +618,16 @@ email (+ .ics), then reminders the day before and an hour before
 (systems/salescall.js, docs/CALENDAR.md "Sales calls").
 
 Stages (`status`, in pipeline order): `new` (Booked) · `held` (Call done) ·
-`no_show` (No-show) · `contacted` (Following up) · `proposal` (Proposal sent) ·
+`no_show` (No-show) · `contacted` (Following up) · `agreement_sent` (Agreement and invoice sent) ·
 `won` · `lost`. Call done / No-show set here also mark the Calendar meeting; the
 Calendar's Call done / No-show / Cancel move the inquiry (cancel → lost).
 
-`GET /api/mc/hub` adds `inquiries: { counts: {new, held, no_show, contacted, proposal, won, lost}, open, latest: [ {id, at, name, company, plan, status, slotStart, whenHost} ] }`
+`GET /api/mc/hub` adds `inquiries: { counts: {new, held, no_show, contacted, agreement_sent, won, lost}, open, latest: [ {id, at, name, company, plan, status, slotStart, whenHost} ] }`
 and, for each `new` one, a to-do `{ id: "inquiry:{id}", clientName: company, urgent: (false while the call is ahead, true once it has passed or with no time), action: { type: "view", view: "inquiry", inquiryId } }`.
 
 `GET /api/mc/inquiries` → `{ inquiries: [record…] (newest first), counts }` where a record is
 `{ id, at, source, status (stage above), statusAt, stageHistory: [{at, from, to}], notes: [{at, text}], name, email, company, website, sells, plan: starter|growth|scale|null, slotStart, slotEnd (ISO), theirTz, whenTheirs, whenHost (text, owner's time), role, dealSize, channel, capacity, timing (the website's five questions, text|null), meetingId, meetLink, confirmationSentAt | confirmationError, reminded_tomorrow, reminded_soon (ISO), calendarError?, clientId?, trialOutcome? }`.
-`POST /api/mc/inquiries` `{action:'status', id, status, note?}` · `{action:'note', id, text}`. `status:'won'` makes them a paying client first (the accepted_call email; an error and no change when it cannot, e.g. no website); `status:'lost'` declines the held record (no email).
+`POST /api/mc/inquiries` `{action:'status', id, status, note?}` · `{action:'note', id, text}`. `status:'agreement_sent'` (the yes) emails the agreement and the invoice (see Changes on 2026-11-20). `status:'won'` (after payment) makes them a paying client first (the accepted_call email; an error and no change when it cannot, e.g. no website); `status:'lost'` declines the held record (no email).
 
 ---
 
@@ -2284,3 +2308,23 @@ brain and model, the buttons, the follow-ups and the time. Not part of `npm test
 
 Config: `AVA_DAILY_CAP` (default 300; 0 = no cap), `AVA_MODELS` (model
 overrides), `/mc/config`.
+
+## Changes on 2026-11-20 (Gmail sign-in)
+
+- A failed send login (SMTP 534/535 / EAUTH) now stores a plain sentence as the inbox's `disabledReason` and in the `inbox_auth_fail` alert body (Gmail: "Gmail won't let us sign in — make a new app password …"). No new fields; the hub already shows `disabledReason`.
+- Env: `GMAIL_ADDRESS` + `GMAIL_APP_PASSWORD` add one Gmail inbox (spaces in the 16-letter app password are dropped). `SMTP_ACCOUNT_n` / `GMAIL_ACCOUNT_n` still work, and spaces are dropped there too.
+## Changes on 2026-11-20 (stage rename)
+
+The booking stage `proposal` ("Proposal sent") is now `agreement_sent` ("Agreement and invoice sent"). Records still saying `proposal` or `proposal_sent` are read as `agreement_sent`, and POST `status` accepts the old keys too. Counts use the new key.
+### Changes on 2026-11-20 (unpaid invoice chase)
+New alert key `invoice_not_paid_yet` (not urgent, title in plain words: "Not paid yet: {client} has not paid their invoice (24 hours). A reminder was sent."). It appears in `/api/mc/alerts` like any other alert; no hub change needed. The invoice record gains `remindedAt` (set once, when the 24-hour reminder email goes out) and `sentAt` is filled from `issuedAt` when missing.
+### Changes on 2026-11-20 (payment alert)
+Marking an invoice paid (`POST /api/mc/clients/{id} {action:'markPaid'}`, unchanged) now also adds one plain "paid" alert to the owner's alert list (key `client_paid`, e.g. "Sam from Acme paid the Growth invoice — $1,500") and moves the client's booking to Won. A second "Mark paid" does nothing new.
+## Changes on 2026-11-20 (owner alerts)
+
+Removed the owner's outside alert channels: email, phone (Web Push) and Telegram.
+Gone: `/api/mc/push/*`, `setup.telegram` in `GET /api/mc/board` and `GET /api/mc/hub`,
+the `channels` field of alert records and of `POST /api/mc/setup {action:'test-alert'}`,
+the "Agreement signed" copy email to the owner, and the env names `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_CHAT_ID`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `OWNER_EMAIL`,
+`DAILY_REPORT_TO`. Alert records now also carry `body` and `did`. Emails to clients are unchanged.

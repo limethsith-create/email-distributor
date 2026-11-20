@@ -218,8 +218,8 @@ decided as follows. Items marked **(+)** go slightly beyond the text above.
 
 **Alerts** — `onboard_reply` (one per message), `onboard_booked` (one per
 booked time, not when the owner marked it himself), `onboard_overdue` (once
-per acceptance email), `onboard_cancelled`. All go by phone push + email and
-are not "urgent" (no Telegram): the hub's own to-dos for the trial
+per acceptance email), `onboard_cancelled`. All show in the hub's alert list only and
+are not "urgent": the hub's own to-dos for the trial
 (`onboard-reply`, `onboard-overdue`, `onboard-mark`, urgent) carry the red
 dot and clear themselves once handled, where an urgent alert would linger
 until acknowledged.

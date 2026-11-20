@@ -20,7 +20,7 @@ and `npm run build` pass.
 | Phase | Code | Acceptance |
 | --- | --- | --- |
 | 0 — accounts & secrets | n/a | **Owner to do** — the list below |
-| 1 — foundation (clients, scheduler, heartbeat, backups, Mission Control) | done | waits on Phase 0 (real tick, Telegram alert, backup commit) |
+| 1 — foundation (clients, scheduler, heartbeat, backups, Mission Control) | done | waits on Phase 0 (real tick, hub alert, backup commit) |
 | 2 — intake (Gatekeeper, onboarding + agreement, Market Counter, Price Scout, purchase page, Setup Checker, Auth Guard, Booking Link Tester) | done | simulated end to end (`tests/full-run.test.mjs`); real DNS/SMTP/IMAP check waits on Phase 0 |
 | 3 — warm-up, canary, ramp | done | simulated; real 14-day warm-up on owned inboxes = Phase 7 |
 | 4 — Lead Finder, blocklist, sanity, copy engine + checker, approval page | done | simulated (webhook batches); a real workflow run needs the Places/Reoon keys |
@@ -36,8 +36,7 @@ Per-stage decisions: `docs/assumptions/stage-a.md` … `stage-d.md`.
 ### 1. Accounts (one-time)
 
 1. **Vercel** project for this repo (Hobby is non-commercial — SPEC §16 #10; a $5 VPS is the drop-in alternative). Link an **Upstash Redis** (Vercel KV) store → `KV_REST_API_URL` / `KV_REST_API_TOKEN` appear by themselves.
-2. **Owner Workspace inbox** with 2-Step on and an app password → `OWNER_INBOX` (`email:app-password:Name`); where alerts go → `OWNER_EMAIL`.
-3. **Telegram bot** via @BotFather + your chat id → `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+2. **Owner Workspace inbox** with 2-Step on and an app password → `OWNER_INBOX` (`email:app-password:Name`).
 4. **Healthchecks.io**: check 1 "tick" (period 5 min, grace 15 min) → `HC_PING_URL`; check 2 "backup" (period 1 day) → GitHub secret `HC_BACKUP_PING_URL`. Alerts to email + Telegram.
 5. **cron-job.org**: one job, every minute (every 2 minutes if you want the Redis headroom — see integration.md), `GET https://<app>/api/cron/tick?source=cronjob`, header `Authorization: Bearer <CRON_SECRET>`.
 6. **Google Cloud**: Places API (New) enabled, billing card on file (free monthly allowance), an API key restricted to the Places API → `PLACES_API_KEY` (Vercel **and** GitHub secret).
@@ -64,8 +63,8 @@ Per-stage decisions: `docs/assumptions/stage-a.md` … `stage-d.md`.
 
 Everything in `.env.example`, grouped there with one line each. The required
 ones: `CRON_SECRET`, `ADMIN_SECRET`, `ENC_KEY` (32 random bytes, base64),
-`PUBLIC_BASE_URL`, `OWNER_INBOX`, `OWNER_EMAIL`, `TELEGRAM_BOT_TOKEN`,
-`TELEGRAM_CHAT_ID`, `HC_PING_URL`, `PLACES_API_KEY`, `GITHUB_TOKEN`,
+`PUBLIC_BASE_URL`, `OWNER_INBOX`,
+`HC_PING_URL`, `PLACES_API_KEY`, `GITHUB_TOKEN`,
 `LEADFINDER_TOKEN`, `GITHUB_WEBHOOK_SECRET`, `REOON_API_KEY`. Never change
 `ENC_KEY` after inboxes are stored (passwords would no longer decrypt), nor
 `TRACKING_SECRET`/`CRON_SECRET` lightly (old unsubscribe links stop working).

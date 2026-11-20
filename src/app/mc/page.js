@@ -54,7 +54,7 @@ export default function Board() {
     setMsg('Working…');
     try {
       const r = await api('/api/mc/setup', { action });
-      setMsg(action === 'migrate' ? `Done: ${r.done.join('; ') || 'nothing to do'}` : `Test alert: ${JSON.stringify(r.channels)}`);
+      setMsg(action === 'migrate' ? `Done: ${r.done.join('; ') || 'nothing to do'}` : 'Test alert added to the alert list.');
       load();
     } catch (e) { setMsg(e.message); }
   }
@@ -69,7 +69,7 @@ export default function Board() {
   const hb = data.heartbeat;
   const hbColor = hb.ageSec == null ? 'var(--fg-dim)' : hb.ageSec < 180 ? 'var(--success)' : hb.ageSec < 900 ? 'var(--warning)' : 'var(--danger)';
   const s = data.setup;
-  const missing = Object.entries({ 'ENC_KEY': s.encKey, 'CRON_SECRET': s.cronSecret, 'Telegram bot': s.telegram, 'Healthchecks URL': s.healthchecks, 'OWNER_INBOX': s.ownerInbox }).filter(([, ok]) => !ok).map(([k]) => k);
+  const missing = Object.entries({ 'ENC_KEY': s.encKey, 'CRON_SECRET': s.cronSecret, 'Healthchecks URL': s.healthchecks, 'OWNER_INBOX': s.ownerInbox }).filter(([, ok]) => !ok).map(([k]) => k);
   const u = data.usage;
 
   return (

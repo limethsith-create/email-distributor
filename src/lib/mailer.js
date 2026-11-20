@@ -133,6 +133,20 @@ const TRANSIENT_CODES = new Set(['ECONNECTION', 'ETIMEDOUT', 'ESOCKET', 'ECONNRE
  *  - content:   5xx at DATA → our message was refused (reputation signal)
  *  - other
  */
+export const GMAIL_AUTH_PLAIN = "Gmail won't let us sign in — make a new app password (Google Account › Security › 2-Step Verification › App passwords) and paste it in the hub (Inboxes tab › Add inbox), or in Vercel as GMAIL_APP_PASSWORD";
+
+/** Plain-words reason for a failed login, for the owner (the hub shows it as is). Null when it is not a login failure. */
+export function plainAuthError(failure, account) {
+  const f = failure || {};
+  const text = `${f.message || f.error || ''} ${f.response || ''}`;
+  const isAuth = f.kind === 'auth' || f.code === 'EAUTH' || [534, 535].includes(Number(f.responseCode));
+  if (!isAuth) return null;
+  const host = String((account && account.smtp && account.smtp.host) || '');
+  const gmail = account?.provider === 'google' || /gmail|google/i.test(host) || /@(gmail|googlemail)\.com$/i.test(String(account?.email || '')) || /5\.7\.9|log in with your web browser|application-specific password|BadCredentials/i.test(text);
+  if (gmail) return GMAIL_AUTH_PLAIN;
+  return 'The mail server refused the login — make a new app password for this inbox and paste it in the hub (Inboxes tab › Add inbox)';
+}
+
 export function classifySmtpError(error) {
   const code = error && error.code ? String(error.code) : null;
   const responseCode = error && Number(error.responseCode) ? Number(error.responseCode) : null;
@@ -262,6 +276,7 @@ export async function sendEmail(account, mailOptions) {
     responseCode: lastError ? lastError.responseCode : null,
     command: lastError ? lastError.command : null,
     response: lastError ? lastError.response : null,
+    plain: plainAuthError(lastError, account),
     ms: Date.now() - started,
     attempts,
   };

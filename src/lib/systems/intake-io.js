@@ -11,7 +11,7 @@
 
 import dnsp from 'node:dns/promises';
 import { ImapFlow } from 'imapflow';
-import { alertOwner, notifyClient, sendOwnerEmail, sendTelegram } from '@/lib/notify';
+import { alertOwner, notifyClient } from '@/lib/notify';
 import { fetchExt, fetchJson } from '@/lib/ext/http';
 import { sendEmail, testConnection } from '@/lib/mailer';
 import { cfg, isUsHoliday } from '@/lib/config';
@@ -136,8 +136,6 @@ export const io = {
   now: () => new Date(),
   alertOwner,
   notifyClient,
-  sendOwnerEmail,
-  sendTelegram,
   fetchExt,
   fetchJson,
   sendEmail,

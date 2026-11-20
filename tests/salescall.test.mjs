@@ -1,13 +1,13 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { __reset, kv } from '@vercel/kv';
-import { saveInquiry, getInquiry, setInquiryStatus, listInquiries, STATUSES, answersText } from '@/lib/systems/inquiries';
+import { saveInquiry, getInquiry, setInquiryStatus, listInquiries, STATUSES, STAGE_WORDS, answersText } from '@/lib/systems/inquiries';
 import { salesIo, dueSalesReminder, runSalesReminders, planLineFor } from '@/lib/systems/salescall';
 import { getMeeting, calendarAction, calendarView } from '@/lib/systems/calendar';
 import { hubBoard } from '@/lib/systems/hubview';
 import { io } from '@/lib/systems/intake-io';
 import { JOBS } from '@/lib/jobs';
-import { pushIo, savePushSub } from '@/lib/push';
+import { getAlertLog } from '@/lib/notify';
 
 // What the website's "Book a call" form sends now (with the five quick questions).
 const NOW = new Date('2026-11-16T08:00:00.000Z');
@@ -21,14 +21,12 @@ const site = (over = {}) => ({
 });
 let sent = [];
 let alerts = [];
-let pushed = [];
+// Owner alerts are recorded for the hub only: read them from the alert log, oldest first.
+const pushedNow = async () => (await getAlertLog()).reverse();
 
 beforeEach(async () => {
   __reset();
-  sent = []; alerts = []; pushed = [];
-  process.env.VAPID_PUBLIC_KEY = 'BPUB'; process.env.VAPID_PRIVATE_KEY = 'priv';
-  pushIo.send = async (sub, payload) => { pushed.push(JSON.parse(payload)); return { statusCode: 201 }; };
-  await savePushSub({ endpoint: 'https://web.push.apple.com/x', keys: { p256dh: 'p', auth: 'a' } }, 'iPhone');
+  sent = []; alerts = [];
   await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth') });
   salesIo.sender = async () => ({ email: 'calls@aviance.test' });
   salesIo.send = async (account, mail) => { sent.push({ from: account.email, ...mail }); return { success: true, messageId: `<m${sent.length}@x>` }; };
@@ -69,7 +67,7 @@ test('a website booking lands in the Calendar as a confirmed sales call and they
   assert.ok(sent[0].icalEvent && /BEGIN:VCALENDAR/.test(sent[0].icalEvent.content));
   assert.ok(q.confirmationSentAt);
   // The owner's alert carries the answers and says the email went.
-  assert.ok(pushed.find((x) => /New plan inquiry: Stone Roofing/.test(x.title)), 'the owner is alerted');
+  assert.ok((await pushedNow()).find((x) => /New plan inquiry: Stone Roofing/.test(x.title)), 'the owner is alerted');
   assert.match(answersText(q), /Deal size: \$5,000 – \$25,000/);
   assert.match(answersText(q), /Calls a month they can take: Around 10/);
   // A double submit: no second meeting, no second email.
@@ -83,7 +81,7 @@ test('when the email cannot go, the inquiry says why and the owner is told', asy
   const q = await getInquiry(r.id);
   assert.ok(q.meetingId, 'still in the Calendar');
   assert.match(q.confirmationError, /auth failed/);
-  assert.ok(pushed.find((x) => /New plan inquiry/.test(x.title)));
+  assert.ok((await pushedNow()).find((x) => /New plan inquiry/.test(x.title)));
   assert.equal(q.confirmationSentAt, undefined);
 });
 
@@ -122,18 +120,19 @@ test('no reminders once the owner moved them on, and a booking made the same day
 });
 
 test('stages: Calendar buttons move the inquiry, and Inquiries moves the Calendar', async () => {
-  assert.deepEqual(STATUSES, ['new', 'held', 'no_show', 'contacted', 'proposal', 'won', 'lost']);
+  assert.deepEqual(STATUSES, ['new', 'held', 'no_show', 'contacted', 'agreement_sent', 'won', 'lost']);
+  await kv.hset('system:config', { 'PAYMENT.paypalMe': JSON.stringify('https://paypal.me/aviance') });
   // Won needs their website (it makes them a client).
   const r = await saveInquiry(site({ website: 'stoneroofing.com' }), { now: NOW });
   const q = await getInquiry(r.id);
   await calendarAction({ action: 'held', id: q.meetingId }, { now: new Date('2026-11-18T15:20:00.000Z') });
   assert.equal((await getInquiry(r.id)).status, 'held');
-  await setInquiryStatus(r.id, 'proposal', 'Sent the Growth proposal', { now: NOW });
+  await setInquiryStatus(r.id, 'agreement_sent', 'Said yes on the call', { now: NOW });
   await setInquiryStatus(r.id, 'won', '', { now: NOW });
   const done = await getInquiry(r.id);
   assert.equal(done.status, 'won');
   assert.equal((await getMeeting(q.meetingId)).status, 'held', 'the call was held (Call done before Won)');
-  assert.deepEqual(done.stageHistory.map((h) => h.to), ['held', 'proposal', 'won']);
+  assert.deepEqual(done.stageHistory.map((h) => h.to), ['held', 'agreement_sent', 'won']);
   // The other way: No-show in Inquiries marks the meeting.
   const r2 = await saveInquiry(site({ email: 'cy@x.com', slotStart: '2026-11-19T15:00:00.000Z', slotEnd: '2026-11-19T15:15:00.000Z' }), { now: NOW });
   const q2 = await getInquiry(r2.id);
@@ -228,6 +227,26 @@ test('ten calls at once: each gets its own 5-minute reminder, once', async () =>
   assert.deepEqual(new Set(fiveMin.map((s) => s.to)).size, 10, 'one each, nobody twice');
 });
 
+test('a run every minute for the whole hour before the call: each of the three reminders goes exactly once', async () => {
+  const r = await saveInquiry(site(), { now: NOW });
+  const q = await getInquiry(r.id);
+  const start = Date.parse((await getMeeting(q.meetingId)).start);
+  const before = sent.length;
+  // The job is due every minute (a new period each minute), like the heartbeat tick.
+  const job = JOBS.find((j) => j.name === 'sales-reminders');
+  const p1 = await job.due({ now: new Date(start - 30 * 60e3) });
+  const p2 = await job.due({ now: new Date(start - 29 * 60e3) });
+  assert.notEqual(p1, p2, 'a new period every minute while a call is near');
+  assert.equal(await job.due({ now: new Date(start - 6 * 3600e3 + 60e3) }), await job.due({ now: new Date(start - 6 * 3600e3 + 120e3) }), 'every 15 minutes when no call is near');
+  // Day-before window (opens 24 h out) through the call itself, once a minute.
+  for (let t = start - 24 * 3600e3; t <= start + 5 * 60e3; t += 60e3) await runSalesReminders({ now: new Date(t) });
+  const mails = sent.slice(before);
+  assert.deepEqual(mails.map((s) => s.subject), ['Our call tomorrow', 'Our call in 1 hour', 'Starting in 5 minutes'], 'each once, in order');
+  // And once more through the last hour on its own, every minute, nothing repeats.
+  for (let t = start - 60 * 60e3; t <= start; t += 60e3) await runSalesReminders({ now: new Date(t) });
+  assert.equal(sent.slice(before).length, 3);
+});
+
 test('designed emails: the confirmation and all three reminders go out branded, each with its own big button', async () => {
   const r = await saveInquiry(site({ company: 'Acme <Roofing>' }), { now: NOW });
   const q = await getInquiry(r.id);
@@ -267,4 +286,16 @@ test('designed emails: with a video link, the reminders\' big button joins the c
   assert.equal(designedSalesHtml('sales_call_moved', ctx), null, 'other emails keep the plain design');
   const u = new URL(googleCalendarUrl({ start: ctx.start, end: ctx.end, title: 'Aviance call' }));
   assert.equal(u.searchParams.get('dates'), '20261124T150000Z/20261124T151500Z');
+});
+
+test('old "proposal" / "proposal_sent" records read as agreement_sent', async () => {
+  assert.equal(STAGE_WORDS.agreement_sent, 'Agreement and invoice sent');
+  const r = await saveInquiry(site({ email: 'old@x.com' }), { now: NOW });
+  await kv.hset('inquiries', { [r.id]: { ...(await getInquiry(r.id)), status: 'proposal_sent', stageHistory: [{ at: NOW.toISOString(), to: 'proposal' }] } });
+  assert.equal((await getInquiry(r.id)).status, 'agreement_sent');
+  assert.equal((await getInquiry(r.id)).stageHistory[0].to, 'agreement_sent');
+  const list = await listInquiries();
+  assert.equal(list.counts.agreement_sent, 1);
+  const moved = await setInquiryStatus(r.id, 'proposal', '', { now: NOW });
+  assert.equal(moved.status, 'agreement_sent');
 });

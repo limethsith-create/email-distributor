@@ -506,7 +506,7 @@ async function onSendFailure(member, res, now) {
     } else if (member.isAviance) {
       await alertOwner('helper_unhealthy', { scope: member.email, vars: { email: member.email }, body: `The aviance inbox ${member.email} refused the warm-up login (${res.error}).`, did: 'It is out of the warm-up circle (your own sending is not touched) until you press Retry on /mc/warmup or re-save its app password.' });
     } else {
-      await alertOwner('inbox_auth_fail', { clientId: member.clientId, scope: `${member.clientId}:${member.email}`, vars: { email: member.email }, body: `Warm-up could not log in to ${member.email}: ${res.error}`, did: 'Warm-up for this inbox keeps retrying; nothing else changed.' });
+      await alertOwner('inbox_auth_fail', { clientId: member.clientId, scope: `${member.clientId}:${member.email}`, vars: { email: member.email }, body: `Warm-up could not log in to ${member.email}: ${res.plain || res.error}`, did: 'Warm-up for this inbox keeps retrying; nothing else changed.' });
     }
     return;
   }
