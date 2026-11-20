@@ -17,13 +17,18 @@ begin
   set local role authenticated;
 end $$;
 create or replace function t_h.fails(q text, expect text default null) returns boolean language plpgsql as $$
+declare n bigint;
 begin
   execute q;
-  return false;
+  get diagnostics n = row_count;
+  return expect is null and n = 0;   -- row security hid the row: nothing changed, which is a refusal too
 exception when others then
   return expect is null or sqlerrm ilike '%' || expect || '%';
 end $$;
-grant execute on function t_h.act_as(uuid, text), t_h.fails(text, text) to public;
+-- run a statement that must not succeed: an error and "0 rows changed" both count as refused (checked afterwards)
+create or replace function t_h.try(q text) returns void language plpgsql as $$
+begin execute q; exception when others then null; end $$;
+grant execute on function t_h.act_as(uuid, text), t_h.fails(text, text), t_h.try(text) to public;
 
 -- people: owner (admin), a team member, two would-be clients, a stranger
 insert into auth.users (id, email, raw_user_meta_data) values
@@ -54,14 +59,14 @@ do $$ begin
   reset role;
 end $$;
 
--- a self sign-up cannot promote itself
+-- a self sign-up cannot promote itself (refused: either an error or nothing changes)
 do $$ begin
   perform t_h.act_as('00000000-0000-0000-0000-0000000000d1', 'nobody@t.test');
-  assert t_h.fails($q$update public.profiles set role = 'admin' where id = '00000000-0000-0000-0000-0000000000d1'$q$), 'self -> admin must fail';
-  assert t_h.fails($q$update public.profiles set approved = true where id = '00000000-0000-0000-0000-0000000000d1'$q$), 'self approve must fail';
-  assert t_h.fails($q$update public.profiles set role = 'client', client_id = 'stone-roofing' where id = '00000000-0000-0000-0000-0000000000d1'$q$), 'self -> client must fail';
+  perform t_h.try($q$update public.profiles set role = 'admin' where id = '00000000-0000-0000-0000-0000000000d1'$q$);
+  perform t_h.try($q$update public.profiles set approved = true where id = '00000000-0000-0000-0000-0000000000d1'$q$);
+  perform t_h.try($q$update public.profiles set role = 'client', client_id = 'stone-roofing' where id = '00000000-0000-0000-0000-0000000000d1'$q$);
   reset role;
-  assert (select role from public.profiles where id = '00000000-0000-0000-0000-0000000000d1') = 'employee';
+  assert (select role = 'employee' and approved is false and client_id is null from public.profiles where id = '00000000-0000-0000-0000-0000000000d1'), 'self -> admin / approve / client must all be refused';
 end $$;
 
 -- invites: only the owner can read or write them

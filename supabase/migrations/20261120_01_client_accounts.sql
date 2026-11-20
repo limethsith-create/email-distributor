@@ -80,11 +80,20 @@ grant execute on function public.is_admin(), public.is_approved(), public.is_sta
 -- ── sign-up: always an unapproved employee, whatever the sign-up form says ────────────────────────
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
-declare v_name text;
+-- Exactly today's live behaviour (copied from the live database on 2026-11-20): the owner's address becomes the approved
+-- admin, everyone else an unapproved employee. Sign-up metadata only ever gives the name: never a role, approval or client id.
+declare v_owner boolean := lower(coalesce(new.email, '')) = lower('limethsith@gmail.com');
 begin
-  v_name := coalesce(nullif(trim(new.raw_user_meta_data ->> 'name'), ''), nullif(trim(new.raw_user_meta_data ->> 'full_name'), ''), split_part(coalesce(new.email, ''), '@', 1));
-  insert into public.profiles (id, email, name, role, approved, client_id)
-  values (new.id, new.email, left(v_name, 80), 'employee', false, null)
+  insert into public.profiles (id, email, name, role, approved, init, emp_no, client_id)
+  values (
+    new.id, new.email,
+    coalesce(new.raw_user_meta_data->>'name', split_part(new.email,'@',1)),
+    case when v_owner then 'admin' else 'employee' end,
+    v_owner,
+    upper(substr(coalesce(new.raw_user_meta_data->>'name', new.email),1,2)),
+    case when v_owner then 0 else null end,
+    null
+  )
   on conflict (id) do nothing;
   return new;
 end $$;
