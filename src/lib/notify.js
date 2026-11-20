@@ -8,7 +8,6 @@
  * (format `email:app-password:Name`, falling back to the first aviance sending inbox).
  */
 
-import { isDemoId } from '@/lib/db/client';
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { logEvent } from '@/lib/db/events';
@@ -75,8 +74,6 @@ function esc(s) {
 export async function alertOwner(key, { clientId = null, vars = {}, body = '', did = '', scope = null, force = false, url = null } = {}) {
   const spec = ALERTS[key];
   if (!spec) throw new Error(`unknown alert ${key}`);
-  // A Test run client (systems/demo.js) never raises an alert: no log entry.
-  if (clientId && isDemoId(clientId)) return { sent: false, skipped: 'demo' };
   const now = new Date();
   const day = dayKeyIn(OWNER_TZ, now);
   const dedupeScope = scope || clientId || 'global';
@@ -107,12 +104,24 @@ export async function alertOwner(key, { clientId = null, vars = {}, body = '', d
   }
   // Recorded for the hub: the bell and the alert list read system:alerts:log.
   const record = { at: now.toISOString(), key, clientId, title, urgent: Boolean(spec.urgent), body: String(body || '').slice(0, 2000), did: String(did || '').slice(0, 500), delivered: true, acknowledged: false, id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}` };
-  try {
-    const p = kv.pipeline();
-    p.lpush(K.alertLog(), record);
-    p.ltrim(K.alertLog(), 0, LOG_CAP - 1);
-    await p.exec();
-  } catch {}
+  // The hub is the only place an alert shows, so a failed write must not look like a sent alert: try twice, and if it
+  // still fails, free the day's dedupe slot (the next run raises it again) and say so.
+  let written = false;
+  for (let attempt = 0; attempt < 2 && !written; attempt++) {
+    try {
+      const p = kv.pipeline();
+      p.lpush(K.alertLog(), record);
+      p.ltrim(K.alertLog(), 0, LOG_CAP - 1);
+      await p.exec();
+      written = true;
+    } catch (err) {
+      if (attempt === 1) console.error(`[alert] ${key} could not be saved: ${err?.message || err}`);
+    }
+  }
+  if (!written) {
+    if (!force) { try { await kv.srem(K.alertsDay(day), dedupeKey); } catch { /* the next run is deduped for today */ } }
+    return { sent: false, failed: true };
+  }
   await logEvent(clientId, 'notify', 'alert_sent', { key, title });
   return { sent: true, id: record.id };
 }
@@ -187,10 +196,8 @@ export async function ackAlerts(clientId, keys, { reason = 'handled', now = new 
 export async function notifyClient(clientId, key, vars = {}, opts = {}) {
   const { to = null, from = null, dedupe = key, attachments = null, pixelUrl = null, pixel = 'mail', linkify = false, inReplyTo = null, references = null, icalEvent = null, thread = true, now = null } = opts || {};
   const { renderTemplate } = await import('@/lib/templates/client');
-  const { getClient, isDemo } = await import('@/lib/db/client');
+  const { getClient } = await import('@/lib/db/client');
   const client = await getClient(clientId);
-  // A Test run client (systems/demo.js) is never emailed.
-  if (isDemo(client) || isDemoId(clientId)) return { sent: false, skipped: 'demo' };
   // Every client is on a plan (Starter / Growth / Scale): {planName} is there for the emails ("the Growth plan").
   // A record from before plans were required (plan 'trial' or none) reads as Starter.
   if (!vars.planName) vars = { ...vars, planName: planNameOf(client?.plan) };

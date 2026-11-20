@@ -406,7 +406,7 @@ export default function SharedDashboard() {
     <div className="cd">
       <style>{CSS}</style>
       <header style={{ minWidth: 0 }}>
-        <div className="mono cd-dim" style={{ fontSize: 12, letterSpacing: '0.08em' }}>Aviance — {d.plan}{d.demo ? ' · example' : ''}</div>
+        <div className="mono cd-dim" style={{ fontSize: 12, letterSpacing: '0.08em' }}>Aviance — {d.plan}</div>
         <h1 style={{ fontSize: 'clamp(22px, 6vw, 28px)', fontWeight: 800, margin: '4px 0', overflowWrap: 'anywhere' }}>{d.company}</h1>
         <p style={{ margin: 0, fontSize: 15 }}>{d.status}</p>
         <p className="cd-dim" style={{ margin: '4px 0 0', fontSize: 12.5 }}>Updated {when(d.updatedAt)} · refreshes on its own{err ? ' · could not refresh just now' : ''}</p>

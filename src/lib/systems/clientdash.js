@@ -20,7 +20,7 @@
 
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
-import { getClient, getTrial, isDemoId } from '@/lib/db/client';
+import { getClient, getTrial } from '@/lib/db/client';
 import { mintToken, readToken, pageUrl } from '@/lib/pagetokens';
 
 export const DASHBOARD_PURPOSE = 'dashboard';
@@ -216,7 +216,6 @@ export async function dashboardView(raw, { now = new Date() } = {}) {
     company: client.name || id,
     plan: PAID_LABEL(plan),
     paid,
-    demo: isDemoId(id),
     status,
     day: paid ? null : day ?? null,
     five,

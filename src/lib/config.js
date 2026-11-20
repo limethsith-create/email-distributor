@@ -18,8 +18,6 @@ export const HARD_COLD_CAP = 25;
 export const HARD_WARMUP_CAP = 15;
 
 export const DEFAULTS = {
-  // The hub's Test run loads itself once, the first time the hub opens in production (systems/demo.js).
-  DEMO_AUTOLOAD: true,
   MIN_MARKET: 1000,
   FIT: { employeesMin: 5, employeesMax: 50, dealValueMin: 2000, slotsPerWeekMin: 5 },
   ONBOARD: { reminderDays: [2, 4], closeDay: 7 },
@@ -42,7 +40,6 @@ export const DEFAULTS = {
   },
   LIST: { need: 400, refillBelow: 50, startMin: 200, sanitySample: 20, maxFail: 2 },
   PLACES: { monthlyEnterprise: 1000 },
-  REOON: { dailyFree: 20 },
   COPY: { maxWords: 80 },
   SEQUENCE: { gaps: [0, 3, 4, 3], compressedGaps: [0, 3, 2, 3] },
   APPROVAL: { reminderDays: [-5, -3], silenceHours: 48 },
@@ -82,7 +79,6 @@ export const DEFAULTS = {
     perCallAfter: 150,
     payPerShow: 250,
   },
-  CAPACITY: { starterMax: 3, growthMax: 7 },
   WATCHDOG: { sendStallMin: 30, hcGraceMin: 15, jobFailStreak: 3 },
   USAGE: { warn: 0.80, stop: 0.95 },
   // "to set" values (SPEC §12): null means not set yet. Anything that needs one
@@ -448,7 +444,6 @@ export const DEFAULTS = {
   PLAN_SHOPPING: { starter: { domains: 13, inboxes: 26 }, growth: null, scale: null },
   DIGEST: { morningAt: '08:00', mondayAt: '08:00' },
   DAYJOBS: { at: '09:00', stopRetireDays: 7 },
-  TESTMODE: { clockScale: 24 },
   // ── end Stage D ──
   // ── Onboarding call (docs/ONBOARD-CALL.md) ── one machine-wide block (no per-client overrides)
   ONBOARDCALL: {
@@ -577,13 +572,6 @@ export const DEFAULTS = {
     jobEveryMinutes: 10,
   },
   // ── end CheapInboxes ──
-  // Ava (the hub's AI helper, lib/ava/): questions a day for everyone together (0 = no cap). Each question is
-  // up to 4 calls to a free, no-training AI service (Groq / Cerebras first).
-  AVA_DAILY_CAP: 300,
-  // Ava's models: normally picked live from each service's model list (lib/ava/models.js). Set one here to force it,
-  // e.g. { groq: 'openai/gpt-oss-120b', groqSmart: 'qwen/qwen3-32b', cloudflare: '@cf/openai/gpt-oss-120b' }.
-  // Env AVA_{BRAIN}_MODEL / AVA_{BRAIN}_SMART_MODEL win over this.
-  AVA_MODELS: {},
   // US federal holidays, observed dates. Update once a year (one line per year).
   US_HOLIDAYS: [
     '2026-01-01', '2026-01-19', '2026-02-16', '2026-05-25', '2026-06-19', '2026-07-03',

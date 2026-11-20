@@ -11,10 +11,8 @@ const NAV = [
 
 // Mission Control sub-navigation, shown under the top bar on /mc pages only.
 const MC_NAV = [
-  { href: '/mc', label: 'Board' },
   { href: '/mc/warmup', label: 'Warm-up' },
   { href: '/mc/learning', label: 'Learning' },
-  { href: '/mc/alerts', label: 'Alerts' },
   { href: '/mc/config', label: 'Config' },
 ];
 
@@ -26,7 +24,7 @@ function McNav({ pathname }) {
   return (
     <nav className="mono" style={{ maxWidth: 1280, margin: '0 auto', padding: '0 24px', display: 'flex', gap: 16, overflowX: 'auto', height: 36, alignItems: 'center', fontSize: 11.5, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
       {MC_NAV.map((l) => {
-        const active = l.href === '/mc' ? pathname === '/mc' || pathname.startsWith('/mc/clients') : pathname.startsWith(l.href);
+        const active = pathname.startsWith(l.href);
         return <Link key={l.href} href={l.href} style={{ textDecoration: 'none', whiteSpace: 'nowrap', color: active ? 'var(--fg)' : 'var(--fg-muted)', borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent', paddingBottom: 2 }}>{l.label}</Link>;
       })}
     </nav>

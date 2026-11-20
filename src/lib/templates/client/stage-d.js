@@ -48,6 +48,12 @@ export const TEMPLATES = {
     body: 'Hi {firstName},\n\nHere’s the dashboard for {clientName}: {dashboardLink}\n\nYou can see the sending as it happens: emails sent, replies and booked calls. It updates by itself, so keep the link.\n\n{ownerName}',
   },
 
+  // The owner invites someone to the client portal (POST /api/mc/clients/{id} {action:'invitePortal', email, link}).
+  portal_invite: {
+    subject: 'Your Aviance portal',
+    body: 'Hi {firstName},\n\nYou can now see the numbers for {clientName} and message us in one place. Open this link to set up your account: {portalLink}\n\nThe link works for 14 days, and only with this email address.\n\n{ownerName}',
+  },
+
   friday_update: { subject: '{title}', body: 'Hi {firstName},\n\n{body}\n\n{ownerName}' },
 
   // Sent when a client stops: everything we gathered is theirs.

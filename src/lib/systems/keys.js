@@ -24,14 +24,7 @@
  *   ZeroBounce  → GET /v2/getcredits
  *   Hunter      → GET /v2/account
  *   GitHub      → GET /repos/{repo} and `permissions.push` (never a dispatch)
- *   Groq / Cerebras / Gemini / OpenRouter (Ava's brains) → GET {api}/models
- *                 (lists the models; no tokens spent)
- *   Cloudflare  → GET /accounts/{id}/ai/models/search (proves the account id AND the token; no Neurons spent)
- *   Tavily      → GET /usage (no search spent)
- *   Exa         → one 1-result search (a fraction of a cent of the free credit)
  * CheapInboxes and Google Meet have their own settings cards (ext/cheapinboxes.js, ext/google.js).
- *
- * The AI and search keys are only for Ava (lib/ava/); no other system uses AI.
  */
 
 import { logEvent } from '@/lib/db/events';
@@ -55,18 +48,6 @@ export const REOON_BALANCE_URL = 'https://emailverifier.reoon.com/api/v1/check-a
 export const ZEROBOUNCE_CREDITS_URL = 'https://api.zerobounce.net/v2/getcredits';
 export const HUNTER_ACCOUNT_URL = 'https://api.hunter.io/v2/account';
 export const GITHUB_API = 'https://api.github.com';
-/** Ava's brains: each one's OpenAI-compatible model list (lib/ava/brains.js has the same bases). */
-export const AI_MODELS_URLS = {
-  GROQ_API_KEY: 'https://api.groq.com/openai/v1/models',
-  CEREBRAS_API_KEY: 'https://api.cerebras.ai/v1/models',
-  MISTRAL_API_KEY: 'https://api.mistral.ai/v1/models',
-  OLLAMA_API_KEY: 'https://ollama.com/v1/models',
-  GEMINI_API_KEY: 'https://generativelanguage.googleapis.com/v1beta/openai/models',
-  OPENROUTER_API_KEY: 'https://openrouter.ai/api/v1/key',
-};
-export const CLOUDFLARE_API = 'https://api.cloudflare.com/client/v4/accounts';
-export const TAVILY_USAGE_URL = 'https://api.tavily.com/usage';
-export const EXA_SEARCH_URL = 'https://api.exa.ai/search';
 const NOT_TESTED = 'not tested yet';
 
 // ─── one call ────────────────────────────────────────────────────────────────
@@ -200,67 +181,7 @@ async function checkGitHub({ GITHUB_TOKEN: token, GITHUB_REPO: repo }) {
   return good(`Can start the lead finder on ${repo}`);
 }
 
-/** Ava's brains: one model-list call (no tokens). OpenRouter's /key also says the credit left. */
-function aiCheck(name, who) {
-  return async (values) => {
-    const r = await call(AI_MODELS_URLS[name], { headers: { authorization: `Bearer ${values[name]}`, accept: 'application/json' } });
-    if (r.status === 401 || r.status === 403 || (r.status === 400 && /key/i.test(JSON.stringify(r.json || '')))) return bad(`${who} said the key is invalid`);
-    if (r.status === 429) return warn(`${who} says this key is busy or out of free use for now — it comes back by itself`);
-    if (!r.ok) return bad(`${who} said ${r.status || 'nothing'}`);
-    if (name === 'OPENROUTER_API_KEY') {
-      const d = asObject(r.json?.data) || {};
-      const left = d.limit_remaining ?? null;
-      return good(left !== null ? `The key works · $${Number(left).toFixed(2)} credit left` : 'The key works');
-    }
-    const n = Array.isArray(r.json?.data) ? r.json.data.length : null;
-    return good(n ? `The key works · ${plural(n, 'model')} available` : 'The key works');
-  };
-}
-
-/** Cloudflare Workers AI: the account id and the token together, one model search (no Neurons). */
-async function checkCloudflare({ CLOUDFLARE_ACCOUNT_ID: id, CLOUDFLARE_API_TOKEN: token }) {
-  if (!/^[a-f0-9]{32}$/i.test(String(id || ''))) return bad('The account ID is 32 letters and numbers — copy it from the right side of the Cloudflare dashboard (Workers & Pages, or Account home)');
-  const r = await call(`${CLOUDFLARE_API}/${id}/ai/models/search?per_page=1`, { headers: { authorization: `Bearer ${token}`, accept: 'application/json' } });
-  const msg = String(r.json?.errors?.[0]?.message || '');
-  if (r.status === 401 || r.status === 403 || /auth/i.test(msg)) return bad('Cloudflare refused the token — make it with the "Workers AI" template (Account › Workers AI › Read and Edit) for this account');
-  if (r.status === 404 || /account/i.test(msg)) return bad('Cloudflare does not know that account ID — check it on the dashboard');
-  if (r.status === 429) return warn('Cloudflare says to slow down — it comes back by itself');
-  if (!r.ok || r.json?.success === false) return bad(`Cloudflare said ${r.status || 'nothing'}${msg ? `: ${msg.slice(0, 140)}` : ''}`);
-  return good('The account ID and token work · Workers AI is ready (10,000 free Neurons a day)');
-}
-
-/** Tavily: the usage page (no search spent). */
-async function checkTavily({ TAVILY_API_KEY: key }) {
-  const r = await call(TAVILY_USAGE_URL, { headers: { authorization: `Bearer ${key}`, accept: 'application/json' } });
-  if (r.status === 401 || r.status === 403) return bad('Tavily said the key is invalid');
-  if (r.status === 429) return warn('Tavily says this key is busy or out of searches for now');
-  if (!r.ok) return warn(`Tavily answered ${r.status || 'nothing'} — saved; Ava tries it on her first search`);
-  const k = asObject(r.json?.key) || asObject(r.json?.account) || {};
-  const used = num(k.usage ?? k.plan_usage); const limit = num(k.limit ?? k.plan_limit);
-  const left = used !== null && limit ? Math.max(0, limit - used) : null;
-  return good(left !== null ? `The key works · ${left} search${left === 1 ? '' : 'es'} left this month` : 'The key works');
-}
-
-/** Exa: one 1-result search (no page text). */
-async function checkExa({ EXA_API_KEY: key }) {
-  const r = await call(EXA_SEARCH_URL, { method: 'POST', headers: { 'x-api-key': key, 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ query: 'weather', numResults: 1 }) });
-  if (r.status === 401 || r.status === 403) return bad('Exa said the key is invalid');
-  if (r.status === 402) return warn('Exa says the free credit is used up for now — it comes back next month');
-  if (r.status === 429) return warn('Exa says to slow down — it comes back by itself');
-  if (!r.ok) return bad(`Exa said ${r.status || 'nothing'}`);
-  return good('The key works');
-}
-
 const CHECKS = {
-  CLOUDFLARE: checkCloudflare,
-  TAVILY_API_KEY: checkTavily,
-  EXA_API_KEY: checkExa,
-  GROQ_API_KEY: aiCheck('GROQ_API_KEY', 'Groq'),
-  CEREBRAS_API_KEY: aiCheck('CEREBRAS_API_KEY', 'Cerebras'),
-  MISTRAL_API_KEY: aiCheck('MISTRAL_API_KEY', 'Mistral'),
-  OLLAMA_API_KEY: aiCheck('OLLAMA_API_KEY', 'Ollama'),
-  GEMINI_API_KEY: aiCheck('GEMINI_API_KEY', 'Google'),
-  OPENROUTER_API_KEY: aiCheck('OPENROUTER_API_KEY', 'OpenRouter'),
   PLACES_API_KEY: checkPlaces,
   QUICKEMAILVERIFICATION_API_KEY: checkQuickEmail,
   VERIFALIA: checkVerifalia,
@@ -369,99 +290,6 @@ export const GUIDES = {
       'Generate token → copy it (GitHub shows it once) → paste it here.',
     ],
     note: CHECKED,
-  },
-  GROQ_API_KEY: {
-    url: 'https://console.groq.com/keys',
-    free: 'Free, no card: each model allows about 30 questions a minute and 1,000 a day, and Ava uses several models. It also turns speech into text for Ava. Groq\'s terms say it does not train on what is sent to the API.',
-    steps: [
-      'Go to console.groq.com and sign up (Google, GitHub or email).',
-      'Left menu → API Keys → Create API Key → name it "Aviance Ava" → Submit.',
-      'Copy the key (it starts with gsk_) and paste it here.',
-      'Recommended: Settings → Data controls → turn Zero Data Retention on, so nothing is kept even for a day.',
-    ],
-    note: UNCHECKED,
-  },
-  CLOUDFLARE: {
-    url: 'https://dash.cloudflare.com/profile/api-tokens',
-    free: 'Free: 10,000 "Neurons" a day (roughly 150,000–300,000 words of answers), reset at midnight UTC; no card. Cloudflare\'s terms say it does not use your content to train any AI model.',
-    steps: [
-      'Go to dash.cloudflare.com and sign up (free plan).',
-      'Copy your Account ID: on Account home (or Workers & Pages) it is on the right side, under "Account ID". Paste it in the first box.',
-      'Top right: your profile → My Profile → API Tokens → Create Token → use the "Workers AI" template → Continue to summary → Create Token.',
-      'Copy the token (Cloudflare shows it once) and paste it in the second box.',
-    ],
-    note: UNCHECKED,
-  },
-  TAVILY_API_KEY: {
-    url: 'https://app.tavily.com',
-    free: 'Free: 1,000 searches a month, no card. Ava only sends the words of the question (never names, emails or phone numbers). Tavily says it does not keep what is searched.',
-    steps: [
-      'Go to app.tavily.com and sign up (Google, GitHub or email).',
-      'On the Overview page your API key is shown (it starts with tvly-) — press copy.',
-      'Paste it here.',
-    ],
-    note: UNCHECKED,
-  },
-  EXA_API_KEY: {
-    url: 'https://dashboard.exa.ai/api-keys',
-    free: 'Free monthly credit (about 1,000 searches). Used only when Tavily is missing or fails. Only the words of the question are sent.',
-    steps: [
-      'Go to dashboard.exa.ai and sign up.',
-      'Left menu → API Keys → Create key (or copy the default one).',
-      'Paste it here.',
-    ],
-    note: UNCHECKED,
-  },
-  MISTRAL_API_KEY: {
-    url: 'https://console.mistral.ai/api-keys',
-    free: 'Free — only after you switch off training. The free "Experiment" plan lets Mistral use what is sent to the API to train its models UNLESS you turn that off, so do step 3 before you paste the key. No card needed (a phone number check). Mistral still keeps requests for 30 days to catch abuse. Roughly 1 question a second — a backup brain for when Groq and Cloudflare are busy.',
-    steps: [
-      'Go to console.mistral.ai and sign up (email, Google or Microsoft). Choose the free "Experiment" plan and confirm your phone number.',
-      'API Keys (console.mistral.ai/api-keys) → Create new key → name it "Aviance Ava" → copy it (Mistral shows it once).',
-      'Switch off training FIRST: open Admin (the admin console, admin.mistral.ai) → Privacy in the left menu → under "Anonymous improvement data" turn the switch OFF for the API. (The Vibe switch is separate — turning one off does not turn off the other.)',
-      'Paste the key here.',
-    ],
-    note: UNCHECKED,
-  },
-  OLLAMA_API_KEY: {
-    url: 'https://ollama.com/settings/keys',
-    free: 'Free plan: a small allowance of cloud use each month and one question at a time — a last backup brain. Ollama says it never logs or trains on prompts and answers sent to its cloud. No card needed.',
-    steps: [
-      'Go to ollama.com and sign up (free).',
-      'Top right: your profile → Settings → Keys (ollama.com/settings/keys) → Add API key → name it "Aviance Ava".',
-      'Copy the key and paste it here.',
-    ],
-    note: UNCHECKED,
-  },
-  CEREBRAS_API_KEY: {
-    url: 'https://cloud.cerebras.ai/',
-    free: 'No longer free: new accounts get a small one-time credit and need a card. Optional — Groq and Cloudflare are enough. Cerebras says it does not keep or train on API inputs and outputs.',
-    steps: [
-      'Go to cloud.cerebras.ai and sign up.',
-      'Open API Keys in the left menu → Generate API key (or copy the one made for you).',
-      'Copy the key (it starts with csk-) and paste it here.',
-    ],
-    note: UNCHECKED,
-  },
-  GEMINI_API_KEY: {
-    url: 'https://aistudio.google.com/apikey',
-    free: 'PAID KEY ONLY. A free Gemini key (no billing) lets Google use what is sent to improve its products, with people reading it — do not paste one. With billing on it is pay-as-you-go (Flash costs cents) and nothing is used for training.',
-    steps: [
-      'Go to aistudio.google.com/apikey → Create API key, in a Google Cloud project.',
-      'Turn on billing for that project: console.cloud.google.com/billing → link a billing account. Without billing the key is a free key and must not be used.',
-      'Copy the key (it starts with AIza) and paste it here.',
-    ],
-    note: UNCHECKED,
-  },
-  OPENROUTER_API_KEY: {
-    url: 'https://openrouter.ai/settings/keys',
-    free: 'Paid credits (a few dollars last a long time). Ava asks OpenRouter on every question for providers that neither train on nor keep the data, so its free models (which train) are never used.',
-    steps: [
-      'Sign in at openrouter.ai → Settings › Privacy: turn OFF every "may train on inputs" / "may publish prompts" switch.',
-      'Credits → add a few dollars.',
-      'Settings › API Keys → Create key → copy it (it starts with sk-or-) and paste it here.',
-    ],
-    note: UNCHECKED,
   },
   GITHUB_REPO: {
     url: 'https://github.com/limethsith-create/email-distributor',

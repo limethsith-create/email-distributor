@@ -6,6 +6,20 @@ centre. The trial machine (this repo, `email-distributor`) keeps running where
 its database is. The hub's **Trials** section talks to the machine through
 the endpoints below.
 
+## Changes on 2026-11-20 (Ava removed)
+
+Ava, the hub's AI helper, is gone from both sides. Nothing else used her.
+
+- Removed routes (they now answer 404): `GET /api/mc/ava/status`, `GET /api/mc/ava/warm`,
+  `POST /api/mc/ava/chat`, `POST /api/mc/ava/hear`, `GET/POST /api/mc/ava/facts`,
+  `GET/POST /api/mc/ava/requests`. Employees' extra POST allowance for the three chat/hear/requests
+  routes is gone too: they may only `POST /api/mc/presence` and `POST /api/mc/team`.
+- Removed `/api/mc/keys` cards (names are no longer accepted): `GROQ_API_KEY`, `CLOUDFLARE`
+  (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`), `MISTRAL_API_KEY`, `OLLAMA_API_KEY`,
+  `CEREBRAS_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, `TAVILY_API_KEY`, `EXA_API_KEY`.
+- Removed config: `AVA_DAILY_CAP`, `AVA_MODELS`. Removed env: `AVA_*_MODEL`, `AVA_WHISPER_MODEL`.
+- Removed Redis keys (safe to delete): `ava:requests`, `ava:facts`, `ava:day:*`, `ava:models:*`.
+
 ## Changes on 2026-11-20 — agreement and invoice after the yes
 
 New order: sales call → agreement + invoice → payment → onboarding call.
@@ -127,9 +141,8 @@ expiry checks) is:
   `/api/mc/warmup`, `/api/mc/archive` (service keys, Google / CheapInboxes / helper-inbox
   credentials and status, machine settings, Test Mode, the
   activity log, the outreach archive);
-- `POST /api/mc/presence`, `POST /api/mc/team` (their own status), `POST /api/mc/ava/chat`,
-  `POST /api/mc/ava/hear` (speech to text) and `POST /api/mc/ava/requests` (`add` only) — the only
-  writes (see "Ava (AI helper)"; `POST /api/mc/ava/facts` is the owner's).
+- `POST /api/mc/presence` and `POST /api/mc/team` (their own status) — the only
+  writes.
 - Anything else → `403 {error:'Read-only: ask the owner to do this.'}` (with
   the usual CORS headers, so the hub can show the text). Hide the buttons for
   employees; the machine refuses them anyway.
@@ -1998,316 +2011,6 @@ left out (the Messages tab). Unknown / broken id → 404.
   returns the link too. Every other write on a demo client stays 409 (the
   middleware reads the body's `action` only on that one path). The preview
   links' lookups are removed with the Test run.
-
-# Ava (AI helper) (2026-09-29, v3 same day)
-
-Ava, the hub's helper, gets her answers through the machine. The owner's rules:
-**$0**, **only AI and search services whose terms say they do not train on API
-inputs**, and **no personal data of prospects or of the clients' contacts
-leaves the machine**. She answers **any** question — the hub, its clients and
-the process, and general things (facts, how-tos, advice, writing) — and uses
-web search for current things when a search key exists.
-
-## The keys (Settings › Keys)
-
-Cards in `GET /api/mc/keys` (same save / test / forget as every key; the env
-var of the same name wins; values never returned):
-
-| card | used for | why it is allowed | cost | how to get it |
-| --- | --- | --- | --- | --- |
-| `GROQ_API_KEY` | brain `groq` (main) + `/hear` (Whisper) | Groq does not train on inputs/outputs; not retained by default (turn on Zero Data Retention) | free: per model ≈30 req/min, 1 000/day, 8 000 tokens/min | console.groq.com/keys → API Keys → Create API Key |
-| `CLOUDFLARE` (two boxes: `accountId` → `CLOUDFLARE_ACCOUNT_ID`, `apiToken` → `CLOUDFLARE_API_TOKEN`) | brain `cloudflare` (second) | Cloudflare does not use customer content to train | free: 10 000 Neurons/day | dash.cloudflare.com → copy the Account ID → My Profile › API Tokens › Create Token › "Workers AI" template |
-| `MISTRAL_API_KEY` | brain `mistral` (third) | **only after the owner switches training off**: the free "Experiment" plan trains on API data by default — Admin console (admin.mistral.ai) › Privacy › "Anonymous improvement data" → off (the API switch; the Vibe one is separate). Kept 30 days for abuse checks | free — only after you switch off training (~1 req/s) | console.mistral.ai/api-keys → Create new key |
-| `OLLAMA_API_KEY` | brain `ollama` (fourth) | Ollama Cloud never logs or trains on prompts/answers | free: a small monthly allowance, 1 request at a time | ollama.com/settings/keys → Add API key |
-| `TAVILY_API_KEY` | `web_search` (first) | no retention per Tavily | free: 1 000 searches/month | app.tavily.com → copy the key (tvly-…) |
-| `EXA_API_KEY` | `web_search` (second) | — only the question's words are sent | free monthly credit | dashboard.exa.ai → API Keys |
-| `CEREBRAS_API_KEY` | brain `cerebras` | not retained or trained on | **no longer free** (card + credit) | cloud.cerebras.ai |
-| `GEMINI_API_KEY` | brain `gemini` | **paid key only** (free keys train) | pay as you go | aistudio.google.com/apikey + billing |
-| `OPENROUTER_API_KEY` | brain `openrouter` | every request carries `provider: {data_collection:'deny', zdr:true}` | paid credits | openrouter.ai/settings/keys |
-
-Save body for the two-box card: `{ action:'save', name:'CLOUDFLARE', accountId, apiToken }`
-(`username` / `password` are accepted for the first / second box, like
-Verifalia). Its status carries `parts: ['accountId','apiToken']` and
-`partLabels: {accountId:'Account ID', apiToken:'API token'}`. Checks (no
-tokens or Neurons spent): Groq/Cerebras/Gemini/Mistral (`api.mistral.ai/v1/models`)/Ollama (`ollama.com/v1/models`) → `GET /models`; OpenRouter →
-`GET /key`; Cloudflare → `GET /accounts/{id}/ai/models/search?per_page=1`
-(proves the id and the token together; the id must be 32 hex characters);
-Tavily → `GET /usage`; Exa → one 1-result search.
-
-## Models: picked live, never a dead id
-
-On first use (then every 6 h; memory + Redis `ava:models:{brain}`, kept a week),
-each brain's own model list is read — OpenAI-compatible `GET /models` (Groq,
-Mistral, Ollama Cloud, Cerebras) or
-Cloudflare's `/ai/models/search?task=Text Generation` — and the best models are
-chosen from a preference list, skipping speech, TTS, guard, embedding and
-"compound" models (and Kimi on Cloudflare, which needs the paid plan):
-
-| brain | everyday ("fast") first choice, then … | "smart" first choice |
-| --- | --- | --- |
-| groq | `openai/gpt-oss-120b`, newest `qwen/qwen3*`, `moonshotai/kimi*`, `meta-llama/llama-4*`, `llama-3.3-70b-versatile`, `openai/gpt-oss-20b` | newest `qwen/qwen3*`, then Kimi, then gpt-oss-120b |
-| cloudflare | `@cf/openai/gpt-oss-120b`, `@cf/zai-org/glm*`, `@cf/qwen/qwen3*`, `@cf/meta/llama-4*`, Mistral Small, Llama 3.3 70B, `@cf/openai/gpt-oss-20b` | same order |
-| mistral | `mistral-medium-latest`, `mistral-large-latest`, other `mistral-medium*` / `mistral-large*`, `mistral-small-latest`, `mistral-small*` (models without chat + function calling in the list's `capabilities`, and embed/moderation/OCR/Codestral/Pixtral… are skipped) | `mistral-large-latest` |
-| ollama | `gpt-oss:120b`, then the biggest model listed (by size; coder/vision models skipped) | same |
-| cerebras | `gpt-oss-120b`, `zai-glm*`, `qwen-3*`, `llama*` | `zai-glm*` |
-| gemini / openrouter | no list read: `gemini-2.5-flash` / `openai/gpt-oss-120b` | — |
-
-Within a pattern the newer version wins (qwen3.8 before qwen3), then the bigger
-size. A third pick, **quick** (Groq `openai/gpt-oss-20b`, Cloudflare
-`@cf/openai/gpt-oss-20b`; elsewhere the fast one), answers short and spoken
-questions first. The choice is logged (`[ava] groq models: fast=… smart=… quick=…`).
-Overrides win: env `AVA_{BRAIN}_MODEL` / `AVA_{BRAIN}_SMART_MODEL` /
-`AVA_{BRAIN}_QUICK_MODEL`, then config `AVA_MODELS` (`{ groq, groqSmart,
-groqQuick, cloudflare, … }`); a forced fast model is also used as the quick one.
-
-**A question never waits on a model list it has:** a list older than 6 h (in
-memory or Redis) is used at once and read again in the background (finished
-after the answer via `next/server` `after()`); only a list nobody has read yet
-waits, at most 800 ms, before the defaults. `GET /api/mc/ava/warm` loads them
-ahead of time. A chat call that answers
-model_not_found / decommissioned / "does not exist" drops that model from the
-list (memory and Redis) and the next model is tried at once. If a list cannot
-be read the defaults are used and the list is read again in 10 minutes.
-
-## `GET /api/mc/ava/status` (owner and team)
-
-```jsonc
-{ "brains": [ { "id": "groq|cloudflare|mistral|ollama|cerebras|gemini|openrouter", "name": "Groq", "ready": true,
-                "model": "openai/gpt-oss-120b",                          // the everyday pick
-                "models": ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"],   // every usable one, best first
-                "lastError": "No key yet — add GROQ_API_KEY in Settings › Keys|… (resting until ISO)|null",
-                "lastOkAt": "ISO|null" } ],
-  "ready": true,            // at least one brain can answer now
-  "search": ["tavily", "exa"],   // web search services with a key
-  "hear": true }            // /hear works (a Groq key)
-```
-`lastError` / `lastOkAt` / resting are per server instance (memory).
-
-## `GET /api/mc/ava/warm` (owner and team)
-
-The hub calls it when the Ava panel opens so the first question skips the cold
-start. Cheap: loads the guide and its search index, the Business facts, the
-search keys and every keyed brain's model list (waits ≤ 4 s for them); **no AI
-call**. Never a key.
-
-```jsonc
-{ "ok": true, "ready": true,
-  "brains": [ { "id": "groq", "model": "openai/gpt-oss-120b", "quick": "openai/gpt-oss-20b", "source": "live|cache|default|override|loading" } ],
-  "guide": 72,              // guide chunks loaded
-  "search": ["tavily"],
-  "ms": 180 }
-```
-
-## `POST /api/mc/ava/chat` (owner and team)
-
-```jsonc
-// request
-{ "messages": [ { "role": "user|assistant", "content": "…" } ],   // the talk so far, last one the user's (≤ 40 read, ≤ 4 000 chars each)
-  "page": { "view": "trials", "clientId": "acme|null", "clientName": "Acme Plumbing|null", "tab": "overview|null" },
-  "voice": true,            // optional: the answer will be spoken → 1–3 short sentences, no markdown
-  "stream": true,           // optional: stream (also ?stream=1 or accept: text/event-stream)
-  "user": { "firstName": "Nimal", "role": "…" } }   // optional; only fills a missing first name — the ROLE comes from the verified request only
-// → 200 (JSON)
-{ "reply": "Lakeview is on day 13 of 30 with one call booked.",
-  "actions": [ /* below, at most 4 */ ],
-  "suggestions": ["What should I do next for them?", "How many replies so far?", "Open their email system"],   // 3 short follow-ups
-  "brain": "groq", "model": "openai/gpt-oss-120b", "ms": 1840,
-  "tried": [ { "brain": "groq", "model": "openai/gpt-oss-120b", "ok": true, "ms": 820, "error": null } ],
-  "plan": { "mode": "direct|tools", "why": "general|plain|navigate|live|client|current", "prefetch": ["get_client"], "quick": true },
-  "timing": { "firstTokenMs": 610, "toolMs": 40, "modelMs": 820, "totalMs": 1840 } }   // ms from the request's start; firstTokenMs = the first streamed word (JSON: when the answer was ready)
-// → 503 { "error": "Ava has no AI key yet. …", "needsKeys": true }
-// → 429 { "error": "…" }   20 questions a minute per person, or AVA_DAILY_CAP (config, default 300 a day for everyone)
-// → 502 { "error": "…", "tried": [...] }   no brain answered in time · 400 { error } bad body
-```
-
-**Streaming (SSE).** With `accept: text/event-stream`, `?stream=1` or body
-`stream: true` the answer is always `200 text/event-stream; charset=utf-8`
-(`cache-control: no-cache, no-transform`, `x-accel-buffering: no`; a first
-`: ava` comment line), and a failure is an `error` event:
-
-```
-event: delta
-data: {"text":"You have two calls "}
-
-event: delta
-data: {"text":"tomorrow."}
-
-event: actions
-data: {"actions":[{"type":"navigate","view":"calendar"}],"suggestions":["What time?","Who with?","Open the calendar"]}
-
-event: done
-data: {"brain":"groq","model":"openai/gpt-oss-20b","ms":2140,"tried":[…],"suggestions":[…],
-       "timing":{"firstTokenMs":610,"toolMs":40,"modelMs":820,"totalMs":2140},"plan":{"mode":"tools","why":"live","prefetch":["get_calendar"],"quick":true}}
-
-event: error
-data: {"error":"Ava has no AI key yet. …","status":503,"needsKeys":true}
-```
-`delta` pieces concatenate to the reply (the first has no leading space). A
-general question streams from the first call; a live one has its obvious
-look-ups done first (side by side, before the first call); any tool round the
-model still asks for is not streamed; the final answer streams as it is written. `<think>` blocks and the follow-up line are never sent. An answer
-that broke off after some text ends with `done` carrying `cut: true`. `error`
-may carry `tried`. The route's `maxDuration` is 30 s.
-
-**Actions** (the hub runs `navigate` and `read` at once; everything else is a button the user presses — Ava never does a write):
-
-| action | fields |
-| --- | --- |
-| `navigate` | `view` ∈ `trials, paying, calendar, team, mystats, activity*, inquiries, behind, settings*, client`; for `client`: `id` (required) and `tab`? ∈ shared `overview, conversations, sent, calls, messages` · only-you `money*, health*, leads*, setup*`; for `settings`: `section`? ∈ `alerts, phone, details, keys, ava, google, inboxes, warmup, replybot, demo, status, behind, advanced, look, account` (the hub's `TK_SETTINGS`). No other fields. |
-| `read` | `what: 'page'` — the hub reads out what is on the screen now (after the `navigate` before it, if any). It reads its own screen on the device: **no page data comes to the machine**. At most one, always last. |
-| `confirm` | `label` (button text), `name`, `args`: `open_add_trial` · `open_add_paid` · `open_client {id}` · `mark_todo_seen {id, todoId}` · `give_access {id}` (opens the place; never an email) · `load_test_run` · `remove_test_run` · `set_my_status {text ≤140}` · `add_change_request {text ≤1000}` |
-| `draft` | `title`, `text` (for the user to copy, e.g. an email) |
-
-`*` = owner only. The machine cleans every action: an unknown view is dropped;
-an unknown tab or section is dropped (the navigate stays); old names are mapped
-(`emails`→`sent`, `history`/`timeline`/`access`→`setup`,
-`deliverability`/`warmup`/`growth`→`health`, `invoice`/`plan`→`money`;
-`theme`→`look`, `warm-up`→`warmup`, `meet`→`google`; a settings section sent
-in `tab` becomes `section`). For a team member the machine drops Settings and
-Activity entirely, drops an only-you tab (they get the client's overview), and
-every `confirm` except `open_client`, `set_my_status`, `add_change_request`.
-The hub still checks before running anything.
-
-**Where things are.** The system prompt (tools mode) carries a one-line map of
-every view, client tab and Settings section (`PLACES` in
-`src/lib/ava/actions.js`; the same map is in `kb.md` "Where things are"), so
-"open Lakeview's money", "take me to the keys", "show the warm-up settings" and
-"open my stats and read it" all land. Client names are fuzzy (typos and
-"Lakeview's" match).
-
-**The planner** (`src/lib/ava/plan.js`, no AI call) looks at the question first:
-
-- **direct** — greetings, general knowledge, how-tos, "what does X mean",
-  writing, and a plain "open X (and read it)": one streamed call with the guide
-  chunks and **no tools** (smaller prompt, no tool round).
-- **tools** — live data (numbers, clients, calls, money, the team, "what needs
-  me"), a named client, a place it could not work out, or a current-events
-  question with a search key. The obvious look-ups are run **before** the first
-  call, side by side, and go in with it as tool results (a client named →
-  `get_client`; "needs me / to-do" → `list_clients needs_you`; calendar/calls →
-  `get_calendar`; money (owner) → `get_numbers money`; my stats →
-  `get_numbers my_outreach`; team → `search_hub team`; trials/clients counts →
-  `list_clients`; ≤ 3). The model can still call more tools.
-- **navigation** is placed by the planner too (`client` + tab from words like
-  money/health/calls…; Settings sections from keys/warm-up settings/theme…;
-  views from calendar/my stats/plan call requests…) and sent as the
-  `navigate` action — the model's own `propose_action navigate` wins if it
-  makes one. "…and read it", "read this out", "what's on this tab" add `read`.
-  For "what is on this tab" questions the numbers come from the tools (no
-  personal data); names and details are read out by the hub locally.
-
-**Router.** The keyed brains in this order: Groq, Cloudflare, Mistral, Ollama
-Cloud, Cerebras, Gemini, OpenRouter. Groq gets 3 model slots (every Groq model
-has its own rate limit), the others 2. A **smart** question (why / how do… /
-plan / compare / explain / steps / write / draft / summarise…, over 25 words or
-160 characters; a spoken one only when long) starts on the brain's smart model
-(Groq: Qwen 3.x with hidden reasoning); a **short (≤ 12 words) or spoken** one
-that needs no tool round starts on the **quick** model (Groq gpt-oss-20b);
-everything else on the fast one (gpt-oss with `reasoning_effort: low`; `medium` for a
-smart question on gpt-oss). A 429 / 5xx / timeout / network error falls
-through to the next slot; each call ≤ 8 s (for a stream: to the first byte and
-between pieces), the whole question ≤ 22 s. A 429 rests that model for its
-`retry-after` (default 60 s, ≤ 5 min); a refused key rests the whole brain
-10 min. A brain that refuses tools gets them described in its prompt (JSON
-fallback); one that refuses the reasoning setting is asked again without it.
-
-**Grounding.** Every question gets the best 4–6 chunks (≤ ~1,000 tokens; voice: ≤ 4 chunks, ≤ ~600 tokens) of the
-written guide (`src/lib/ava/kb.md`: every hub page and button, the whole client
-process, plans and prices from config `PLANS`, FAQs, how-tos) and of the owner's
-Business facts, found by BM25 (chunks for the current page ×1.6), in a
-`<guide>` block of the system prompt.
-
-**Tools** (tools mode only; run on the machine; ≤ 4 rounds of OpenAI-compatible
-function calling, the tools of one round run side by side; the last round has
-no tools and must answer; tool-call ids are 9 letters/digits, as Mistral needs):
-
-| tool | what it returns |
-| --- | --- |
-| `search_hub {query}` | clients and applications by fuzzy name or by step ("warming up", "needs me"…), calls by company or type, the team (first names, online, status line, clients they look after), the waiting list, and the matching guide parts |
-| `get_client {name?, id?}` | one client (no name = the one on screen): stage, day, status, next step, emails sent / replies / bounced / interested / booked / qualified, reply types, calls (total, qualified, by status, upcoming), onboarding and launch call status, warm-up and inbox rate, leads by status, to-do types; `money` (plan, amount, paid) **owner only** |
-| `list_clients {filter}` | `all · needs_you · trials · paying · applied · onboarding · setting_up · warming_up · sending · deciding · done · waiting_list · test_run`; counts; for `all`/`needs_you` what needs the owner (as types), open alerts, new inquiries |
-| `get_numbers {scope}` | `my_outreach` (My stats totals) · `all_clients` (totals and per client) · `money` (**owner only**: received all time / this month, unpaid, each invoice, plan prices) |
-| `get_calendar {from?, to?}` | calls and meetings (Sri Lanka + Eastern), call times waiting for a yes |
-| `web_search {query}` | only offered with a Tavily or Exa key: `{query, via, answer, results: [{title, site, snippet, date}]}` (no links) |
-| `propose_action {name, args, label}` | offers an action: `navigate` (`args {view, id?, tab?, section?}`), `read` (`args {what:'page'}`), `draft` (`args {title, text}`) or a `confirm` name above — same whitelist; the answer's `actions` |
-
-Outputs are compact (lists ≤ 20, each result ≤ 3,200 characters, older results
-cut shorter as the talk grows). Old tool names (`hub_summary`,
-`client_overview`, `calendar_summary`, `team_summary`, `my_outreach`,
-`money_summary`, `search_kb`) still work as aliases.
-
-**Keeping requests small** (Groq's free plan: ~8,000 tokens a minute per
-model): a request aims at ≲ 2,500 tokens — the last 8 messages word for word
-(long ones cut), older turns (after 10 messages) as a short running summary in
-the prompt, the guide capped, compact tool results; `max_tokens` 900 (250 for
-voice). The guide's search index is built once per Business facts text; the
-facts are kept 30 s in memory (read again in the background after that).
-
-**Privacy.** Every tool output is built from structured fields (to-dos become
-their type, never their text) and then passes a net that removes email
-addresses, phone numbers and links and turns the clients' contact names into
-"the client" (the owner's Business facts and the brain's own tool arguments go
-through it too). Web searches send only the question's words — emails,
-phones, links, contact names **and every prospect's name** (from the leads)
-taken out. So no prospect name, email address, phone number, message body,
-contact person's email, credential, token or link reaches an AI or search
-service from the machine; a team member gets no money at all. The user's own
-words are sent to the AI as typed or spoken (their choice).
-`tests/ava-privacy.test.mjs` checks every tool, every search request and every
-AI request body against the Test run's prospects.
-
-**System prompt:** Ava answers any question (never "only the hub"); today's
-date and time in Sri Lanka; the user's first name and role; the page (and the
-client's name); look up numbers with tools, never guess; the guide for
-how-tos; `web_search` for current things (without a search key: answer from
-knowledge and say it may be out of date); ask one short question when unclear;
-never claims to have done a write (`propose_action`); code changes →
-`add_change_request`; team members get no money; text style (brief, plain, no
-tables) or voice style (1–3 spoken sentences); ends with a
-`<<next: a | b | c>>` line that becomes `suggestions`.
-
-## `POST /api/mc/ava/hear` (owner and team) — speech to text
-
-The recording as the **raw body** with its content type (`audio/webm`,
-`audio/ogg`, `audio/wav`, `audio/mp4`, `audio/mpeg`…; ≤ 2 MB), or multipart
-form-data field `file`; optional `?language=en`.
-→ `200 { text, model, ms }` · `404 { error, needsKey: true }` no Groq key (keep
-the browser's own recognition) · `400` empty · `413` over 2 MB · `415` not
-audio · `429` / `502` Groq busy or failed. Goes to Groq's Whisper (the best
-`whisper*` model in Groq's list: large-v3-turbo first; env `AVA_WHISPER_MODEL`
-wins) with a prompt of product words; nothing is stored. CORS allows
-`content-type: audio/*` and `accept` from the hub.
-
-## `GET/POST /api/mc/ava/facts` — Business facts
-
-```jsonc
-// GET (owner and team) → { "text": "…", "updatedAt": "ISO|null", "by": "Limeth|null", "maxBytes": 4096 }
-// POST { "text": "…" }  the owner only (403 team member) → { ok, text, updatedAt, by }   (empty clears; over 4 KB → 400)
-```
-Redis `ava:facts`. Ava gets the parts that fit each question (after the
-personal-data net).
-
-## `GET/POST /api/mc/ava/requests` — change requests
-
-```jsonc
-// GET (owner and team) → newest first, at most 200 kept (Redis list ava:requests)
-{ "requests": [ { "id": "3f1c…", "at": "ISO", "by": "Nimal", "text": "Show the warm-up day on the list", "status": "open|done", "doneAt": "ISO?" } ] }
-// POST { "action": "add", "text": "…" }   any signed-in user → { ok, request }   (400 empty text)
-// POST { "action": "done", "id": "…" }    the owner only     → { ok, request }   (403 team member, 404 unknown id)
-```
-The hub posts `add` when the user presses Ava's `add_change_request` button.
-
-## Checking quality
-
-`tests/ava-eval.json` holds ~40 real owner questions (how-tos, "what needs
-me", client numbers, calendar, writing, general knowledge, current events,
-voice) with what a good answer does. `node scripts/ava-eval.mjs` asks them
-against the live machine (`AVA_URL`, and `AVA_TOKEN` or `AVA_COOKIE`;
-`--only how,web`, `--stream`, `--out file.json`) and prints each answer, the
-brain and model, the buttons, the follow-ups and the time. Not part of `npm test`.
-
-Config: `AVA_DAILY_CAP` (default 300; 0 = no cap), `AVA_MODELS` (model
-overrides), `/mc/config`.
 
 ## Changes on 2026-11-20 (Gmail sign-in)
 

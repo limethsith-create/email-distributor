@@ -12,7 +12,6 @@
  */
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { box, btn, btnGhost, input, api, Eyebrow, Dot } from '@/app/mc/_ui/ui';
 
 const COLORS = { pass: 'var(--success)', fail: 'var(--danger)', warn: 'var(--warning)', pending: 'var(--fg-dim)' };
@@ -79,7 +78,7 @@ export default function Purchase({ params }) {
   return (
     <div style={{ display: 'grid', gap: 20, maxWidth: 1000 }}>
       <div>
-        <Eyebrow><Link href={`/mc/clients/${id}`}>← {data.client.name || id}</Link></Eyebrow>
+        <Eyebrow>{data.client.name || id}</Eyebrow>
         <h1 style={{ fontSize: 26, fontWeight: 800, margin: 0 }}>Buy and paste</h1>
         <p className="mono" style={{ fontSize: 12 }}>{data.client.state} · main domain {data.client.mainDomain}</p>
       </div>
