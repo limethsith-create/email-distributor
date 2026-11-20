@@ -335,22 +335,7 @@ export const K = {
   hubPresenceRate: (uid, bucket) => `hub:presence:rate:${hubUid(uid)}:${bucket}`,
   // ── end hub people ──
 
-  // ── Outreach archive (systems/archive.js, docs/HUB-API.md "Outreach archive") ──
-  /** Saved archives (list, newest first): JSON {id, createdAt, totals, bytes, chunks, cleared?}. */
-  archiveIndex: () => 'archive:outreach:index',
-  /** One piece of one archive's JSON text (string, ≤ 400 KB each, stored as {i, d}); i = 0 … chunks − 1. */
-  archiveChunk: (id, i) => `archive:outreach:${archiveId(id)}:${Number(i) || 0}`,
-  /** Why an address joined the legacy `suppression` set at a clear (hash): email → `archived_outreach:{archiveId}`. */
-  archiveSuppressed: () => 'archive:outreach:suppressed',
-  // ── end outreach archive ──
 };
-
-const ARCHIVE_ID_RE = /^arc-[0-9]{8}-[0-9]{6}-[a-z0-9]{4,8}$/;
-/** An archive id (`arc-YYYYMMDD-HHMMSS-xxxx`); anything else throws. */
-export function archiveId(id) {
-  if (typeof id !== 'string' || !ARCHIVE_ID_RE.test(id)) throw new Error(`invalid archive id: ${JSON.stringify(id)}`);
-  return id;
-}
 
 /**
  * Keys the pre-trial single-client engine still reads for clientId `aviance`.

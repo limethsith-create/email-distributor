@@ -6,7 +6,7 @@
  *   search_hub {query}      clients / applications / calls / team by name or state, + the guide
  *   get_client {name|id}    one client's whole picture (money only for the owner)
  *   list_clients {filter}   clients by step, what needs the owner, the waiting list
- *   get_numbers {scope}     my_outreach | all_clients | money (owner only)
+ *   get_numbers {scope}     all_clients | money (owner only)
  *   get_calendar {from,to}  calls and meetings
  *   web_search {query}      current / outside facts (Tavily, then Exa) — only with a search key
  *   propose_action {name, args, label}  a button for the user (navigate, read, draft, or a confirm)
@@ -345,16 +345,6 @@ async function list_clients(args, ctx) {
 
 // ─── get_numbers ─────────────────────────────────────────────────────────────
 
-async function my_outreach() {
-  const { GET } = await import('@/app/api/mc/outreach/route');
-  const res = await GET();
-  const j = await res.json().catch(() => ({}));
-  if (!res.ok) return { error: 'The sending history could not be read just now.' };
-  const t = j.totals || {};
-  const keep = ['sent', 'newSends', 'followUps', 'opens', 'uniqueOpens', 'replies', 'bounces', 'days', 'firstDay', 'lastDay'];
-  return { scope: 'my_outreach', about: "Aviance's own cold emails (My stats)", totals: Object.fromEntries(keep.map((k) => [k, t[k] ?? null])), inboxCount: Array.isArray(j.inboxes) ? j.inboxes.length : null };
-}
-
 async function all_clients(ctx) {
   const board = await ctx.board();
   const rows = rowsWithKeys(board);
@@ -405,7 +395,6 @@ async function money(ctx) {
 
 async function get_numbers(args, ctx) {
   const scope = String(args?.scope || 'all_clients');
-  if (scope === 'my_outreach') return my_outreach();
   if (scope === 'money') return money(ctx);
   return all_clients(ctx);
 }
@@ -442,7 +431,7 @@ const DEFS = {
   search_hub: { description: 'Search the hub: clients and applications by (fuzzy) name or by step (applied, onboarding, setting up, warming up, sending, deciding, done, needs me), calls by company or type, the team (who is online, what they work on, who looks after whom), the waiting list, plus the matching parts of the guide.', parameters: obj({ query: { type: 'string' } }, ['query']) },
   get_client: { description: "One client's whole picture: stage, day, status, next step, emails sent/replies/bounced/interested/booked, reply types, calls (booked, qualified, upcoming), onboarding and launch call, warm-up and inbox rate, leads, things to do; money for the owner. No name = the client on screen.", parameters: obj({ name: { type: 'string', description: 'Company name as said' }, id: { type: 'string' } }) },
   list_clients: { description: 'Clients by filter, with counts. "needs_you" and "all" also list what needs the owner now (as types, e.g. "1 reply to read and answer at Ridgeline IT"), open alerts and new plan inquiries.', parameters: obj({ filter: { type: 'string', enum: FILTERS } }, ['filter']) },
-  get_numbers: { description: 'Numbers. my_outreach = Aviance\'s own cold emails (My stats: sent, opens, replies, bounces). all_clients = totals and per-client emails, replies, interested, calls booked. money = OWNER ONLY: money received (all time, this month), unpaid invoices, plan prices.', parameters: obj({ scope: { type: 'string', enum: ['my_outreach', 'all_clients', 'money'] } }, ['scope']) },
+  get_numbers: { description: 'Numbers. all_clients = totals and per-client emails, replies, interested, calls booked. money = OWNER ONLY: money received (all time, this month), unpaid invoices, plan prices.', parameters: obj({ scope: { type: 'string', enum: ['all_clients', 'money'] } }, ['scope']) },
   get_calendar: { description: 'Calls and meetings between two ISO dates (default: yesterday to two weeks ahead): Sri Lanka time with US Eastern, company, call type, status; plus call times waiting for the owner\'s yes.', parameters: obj({ from: { type: 'string' }, to: { type: 'string' } }) },
   web_search: { description: 'Search the web for current or outside facts (news, prices, laws, other companies, anything after your training). Send only a short topic query — never a person\'s name, email address or phone number.', parameters: obj({ query: { type: 'string' } }, ['query']) },
   propose_action: { description: `Offer the user a button (you cannot change anything yourself). name: "navigate" opens a page at once — args {view: ${VIEWS.join('|')}; for view client also id (client id from get_client/search_hub; fuzzy names are fine there) and tab? ${CLIENT_TABS.join('|')}; for view settings section? ${SETTINGS_SECTIONS.join('|')}}. "read" (args {what:"page"}) has the hub read out what is on the screen (after a navigate when they said "open X and read it"). "draft" (args {title, text}) gives text to copy, e.g. an email. Or a confirm button: ${CONFIRMS.join(', ')} (open_client/give_access {id}; mark_todo_seen {id, todoId}; set_my_status {text}; add_change_request {text} for a wish to change how the hub works).`, parameters: obj({ name: { type: 'string' }, args: { type: 'object' }, label: { type: 'string', description: 'Button text' } }, ['name']) },
@@ -456,7 +445,6 @@ const ALIASES = {
   client_overview: (a) => ['get_client', a],
   calendar_summary: (a) => ['get_calendar', a],
   team_summary: () => ['search_hub', { query: 'team' }],
-  my_outreach: () => ['get_numbers', { scope: 'my_outreach' }],
   money_summary: () => ['get_numbers', { scope: 'money' }],
   search_kb: (a) => ['search_hub', a],
 };
@@ -469,7 +457,7 @@ export function toolDefs(role, opts = {}) {
   const owner = role === 'admin';
   return toolsFor(role, opts).map((name) => {
     let { description, parameters } = DEFS[name];
-    if (name === 'get_numbers' && !owner) parameters = obj({ scope: { type: 'string', enum: ['my_outreach', 'all_clients'] } }, ['scope']);
+    if (name === 'get_numbers' && !owner) parameters = obj({ scope: { type: 'string', enum: ['all_clients'] } }, ['scope']);
     if (name === 'get_numbers' && !owner) description = description.replace(/ money = OWNER ONLY.*$/, '');
     return { type: 'function', function: { name, description, parameters } };
   });

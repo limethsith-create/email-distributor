@@ -226,12 +226,6 @@ Everyone who uses the hub: who is in the hub now, where they are, what they are 
 write yours under "What are you working on"), and which clients each person looks after. The owner picks each
 person's clients with Choose clients. Team members can see everything but change nothing, and never see money.
 
-## My stats and Saved history
-<!-- pages: mystats -->
-My stats is the owner's own outreach (Aviance's own cold emails looking for clients): emails sent, opened, replies,
-bounced, emails per day, by inbox, and every reply. Saved history keeps full copies as spreadsheets. Save and start
-fresh saves a copy, then clears the numbers so My stats starts from zero — people already emailed are never emailed again.
-
 ## Activity page
 <!-- pages: activity -->
 The owner's page: who signed in and out, for how long, what they opened, and new accounts waiting for approval.

@@ -10,7 +10,7 @@
  * tabs or buttons.
  */
 
-export const VIEWS = ['trials', 'paying', 'calendar', 'team', 'mystats', 'activity', 'inquiries', 'behind', 'settings', 'client'];
+export const VIEWS = ['trials', 'paying', 'calendar', 'team', 'activity', 'inquiries', 'behind', 'settings', 'client'];
 export const OWNER_VIEWS = new Set(['activity', 'settings']);
 /** A client's email system: five shared tabs (the client sees them too) and four "Only you" tabs (the owner's). */
 export const SHARED_TABS = ['overview', 'conversations', 'sent', 'calls', 'messages'];
@@ -40,7 +40,6 @@ export const PLACES = {
     paying: 'Paying clients — Starter/Growth/Scale clients, new paid applications, money received (owner)',
     calendar: 'Calendar — every call (Sri Lanka + US Eastern), call times waiting for a yes',
     team: 'Team — who is in the hub, their status line, who looks after which clients',
-    mystats: "My stats — Aviance's own outreach: sent, opens, replies, bounces, per inbox; Saved history",
     activity: 'Activity (owner) — sign-ins, what people opened, accounts waiting for approval',
     inquiries: 'Plan call requests — people who booked a call for a paid plan (Open, Won, Lost)',
     behind: 'Behind the scenes — every to-do, every trial by stage, the waiting list',

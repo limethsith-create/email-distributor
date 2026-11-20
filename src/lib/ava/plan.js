@@ -33,7 +33,6 @@ export const NAV_RE = /\b(?:open|show(?! me how)(?: me)?|take me|go to|goto|brin
 const MONEY_RE = /\b(?:money|revenue|income|earn(?:ed|ings)?|made this|we made|did we make|invoices?|unpaid|owed?|paid)\b/i;
 const CAL_RE = /\b(?:calendar|calls?|meetings?|schedule|appointments?)\b/i;
 const NEEDS_RE = /\bneeds? (?:me|my|you|attention)\b|\bto-?dos?\b|\bwhat should i do\b|\banything (?:urgent|new)\b|\bwhat'?s (?:new|up)\b|\bwaiting (?:on|for) me\b|\bwhat needs\b/i;
-const MYSTATS_RE = /\bmy stats\b|\bmy (?:own )?outreach\b|\bour (?:own )?(?:outreach|cold emails)\b/i;
 const TEAM_RE = /\bteam\b|\bwho(?:'s| is) (?:online|in the hub|working)\b|\bwho looks after\b/i;
 const TOTALS_RE = /\b(?:replies|sent|bounces?|interested|booked)\b/i;
 const PRONOUN_RE = /\b(?:this client|this one|they|them|their|theirs|it|here)\b/i;
@@ -68,7 +67,6 @@ const SECTION_WORDS = [
   ['account', /\bmy account\b|\byour account\b|\blog ?out\b|\bsign ?out\b/i],
 ];
 const VIEW_WORDS = [
-  ['mystats', /\bmy stats\b|\bmy outreach\b/i],
   ['behind', /\bbehind the scenes\b|\bthe board\b/i],
   ['inquiries', /\binquir(?:y|ies)\b|\bplan call requests?\b/i],
   ['activity', /\bactivity\b|\bwho signed in\b/i],
@@ -136,7 +134,6 @@ export function planQuestion(text, { page = {}, role = 'employee', voice = false
     if (owner && MONEY_RE.test(t) && (live || /\bhow much\b|\bmoney\b|\brevenue\b|\bunpaid\b/i.test(t))) add('get_numbers', { scope: 'money' });
     if (NEEDS_RE.test(t)) add('list_clients', { filter: 'needs_you' });
     if (CAL_RE.test(t) && (live || /\bcalendar\b/i.test(t)) && !general) add('get_calendar', {});
-    if (MYSTATS_RE.test(t) && (live || read || !general)) add('get_numbers', { scope: 'my_outreach' });
     if (TEAM_RE.test(t) && (live || !general)) add('search_hub', { query: 'team' });
     if (live && /\b(?:trials?|clients?|paying)\b/i.test(t) && !prefetch.some((p) => p.name === 'list_clients')) add('list_clients', { filter: /\bpaying\b/i.test(t) ? 'paying' : /\btrials?\b/i.test(t) ? 'trials' : 'all' });
     if (live && TOTALS_RE.test(t) && !prefetch.length) add('get_numbers', { scope: 'all_clients' });
@@ -153,8 +150,6 @@ export function planQuestion(text, { page = {}, role = 'employee', voice = false
   else if (current) { mode = 'tools'; why = 'current'; }
   else if (nav) why = 'navigate';
   if (mode === 'direct' && !(client || aboutThisClient)) prefetch.length = 0;
-  // Data the answer needs for "open my stats and read it" (the numbers, PII-free) still come along.
-  if (mode === 'direct' && read && nav?.view === 'mystats') prefetch.push({ name: 'get_numbers', args: { scope: 'my_outreach' } });
 
   const short = words <= 12;
   const quick = !smart && (voice || short) && (mode === 'direct' || prefetch.length > 0) && !(navAsked && !nav);

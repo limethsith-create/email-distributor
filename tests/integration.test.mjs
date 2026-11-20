@@ -16,14 +16,10 @@ process.env.CRON_SECRET = process.env.CRON_SECRET || 'integration-secret';
 
 beforeEach(() => { __reset(); resetDeps(); });
 
-test('job names are unique across every stage file; aviance jobs refuse any other client', async () => {
+test('job names are unique across every stage file; the old outreach engine has no jobs', async () => {
   const { JOBS, duplicateJobNames } = await import('@/lib/jobs');
   assert.deepEqual(duplicateJobNames(), []);
-  for (const name of ['aviance-send', 'aviance-replies', 'aviance-eod-report']) {
-    const job = JOBS.find((j) => j.name === name);
-    assert.ok(job, name);
-    assert.deepEqual(await job.run({ clientId: 'acme', client: { id: 'acme', state: 'sending' }, now: new Date(), deadline: Date.now() + 1000 }), { skipped: 'aviance engine only' });
-  }
+  for (const name of ['aviance-send', 'aviance-replies', 'aviance-eod-report']) assert.equal(JOBS.find((j) => j.name === name), undefined, name);
 });
 
 test('every client job of Stages A–C sees the Test Mode clock; others see real time', async () => {
