@@ -13,7 +13,7 @@ import { runDayJobs } from '@/lib/systems/trialmanager';
 const site = (over = {}) => ({
   name: 'Bob Stone', email: 'Bob@StoneRoofing.com', company: 'Stone Roofing', website: 'stoneroofing.com',
   sells: 'Commercial roofing for property managers in Texas', plan: 'growth',
-  slotStart: '2026-10-01T14:00:00.000Z', slotEnd: '2026-10-01T14:15:00.000Z', theirTz: 'America/Chicago',
+  slotStart: '2027-09-30T14:00:00.000Z', slotEnd: '2027-09-30T14:15:00.000Z', theirTz: 'America/Chicago',
   whenTheirs: 'Thursday, October 1, 2026 at 9:00 AM CDT', whenHost: 'Thursday, October 1, 2026 at 7:30 PM', ...over,
 });
 let pushed = [];
@@ -47,10 +47,11 @@ test('an inquiry from the website (no website given) lands in the hub and pops u
   // Double-click on the form: merged, no second alert.
   assert.equal((await saveInquiry(site({ website: '' }))).duplicate, true);
   assert.equal(pushed.length, 1);
-  // The board shows it as an urgent to-do.
+  // The board shows it as a to-do: calm while the booked call is still ahead (the server refuses times that have passed).
   const board = await hubBoard();
   const todo = board.todos.find((t) => t.id === `inquiry:${r.id}`);
-  assert.equal(todo.urgent, true);
+  assert.equal(todo.urgent, false);
+  assert.match(todo.text, /is booked/);
   assert.deepEqual(todo.action, { type: 'view', view: 'inquiry', inquiryId: r.id });
   assert.equal(board.inquiries.counts.new, 1);
 });
@@ -183,4 +184,78 @@ test('the two new booking answers (tried outbound before, what they want from th
   const app = await kv.hgetall(`client:${r.clientId}:application`);
   assert.match(app.answers, /Cold email or an outbound agency before/);
   assert.match(app.answers, /What they want from the call/);
+});
+
+test('website: "acme.com" is stored as https://acme.com; missing or junk stays empty (older pages, "I don\'t have one yet")', async () => {
+  const { normaliseWebsite } = await import('@/lib/systems/inquiries');
+  assert.equal(normaliseWebsite('acme.com'), 'https://acme.com');
+  assert.equal(normaliseWebsite(' www.acme.co.uk/ '), 'https://www.acme.co.uk');
+  assert.equal(normaliseWebsite('https://acme.com/about/'), 'https://acme.com/about');
+  assert.equal(normaliseWebsite('http://acme.com'), 'http://acme.com');
+  assert.equal(normaliseWebsite('//acme.com'), 'https://acme.com');
+  for (const junk of ['', null, undefined, '   ', 'n/a', 'acme', 'javascript:alert(1)', 'ftp://acme.com']) assert.equal(normaliseWebsite(junk), '', String(junk));
+  assert.equal(normaliseInquiry(site({ website: 'stoneroofing.com' })).inquiry.website, 'https://stoneroofing.com');
+  assert.equal(normaliseInquiry(site({ website: undefined })).inquiry.website, '', 'a missing website is still accepted');
+  assert.equal(normaliseInquiry(site({ website: undefined })).errors, undefined);
+  assert.equal(normaliseInquiry(site({ website: undefined })).inquiry.noWebsite, false);
+  assert.equal(normaliseInquiry(site({ website: '', noWebsite: true })).inquiry.noWebsite, true, '"I don\'t have one yet" ticked');
+  assert.equal(normaliseInquiry(site({ website: 'acme.com', noWebsite: true })).inquiry.noWebsite, false, 'a real website wins');
+  const r = await saveInquiry(site({ website: '', noWebsite: true }));
+  assert.equal(r.ok, true); assert.equal(r.clientId, undefined, 'no website: a plain inquiry, as before');
+  const { getInquiry: getInq, inquiryAnswers } = await import('@/lib/systems/inquiries');
+  assert.equal((await getInq(r.id)).noWebsite, true);
+  assert.deepEqual(inquiryAnswers({ website: '', noWebsite: true }).find((x) => x.q === 'Website'), { q: 'Website', a: 'Does not have one yet' });
+});
+
+test('where they came from (?utm_source=cold_call / ref): stored length-limited, in the owner alert and the application answers', async () => {
+  const { normaliseSource, sourceWords } = await import('@/lib/systems/inquiries');
+  assert.equal(sourceWords('cold_call'), 'Cold call');
+  assert.equal(sourceWords('Cold-Call'), 'Cold call');
+  assert.equal(sourceWords('linkedin'), 'LinkedIn');
+  assert.equal(sourceWords('email'), 'Email');
+  assert.equal(sourceWords('podcast_x'), 'podcast_x', 'unknown sources pass through as sent');
+  assert.deepEqual(normaliseSource({}), { utm: null, ref: null, cameFrom: null });
+  const long = normaliseSource({ utm: { source: '<script>' + 'x'.repeat(500), medium: { evil: 1 } } });
+  assert.equal(long.utm.source.length, 100); assert.ok(!/[<>]/.test(long.utm.source));
+  assert.equal(normaliseSource({ utm_source: 'linkedin', utm_campaign: 'q4-founders' }).cameFrom, 'LinkedIn (campaign: q4-founders)');
+  assert.equal(normaliseSource({ ref: 'email' }).cameFrom, 'Email');
+
+  // No website: a plain inquiry; the owner's alert says "Came from: Cold call".
+  const r = await saveInquiry(site({ website: '', utm: { source: 'cold_call', medium: 'phone', campaign: 'nov-roofers' }, ref: 'rehan' }));
+  const { getInquiry: getInq } = await import('@/lib/systems/inquiries');
+  const q = await getInq(r.id);
+  assert.deepEqual(q.utm, { source: 'cold_call', medium: 'phone', campaign: 'nov-roofers', content: null });
+  assert.equal(q.ref, 'rehan');
+  assert.equal(q.cameFrom, 'Cold call (campaign: nov-roofers, ref: rehan)');
+  assert.match(pushed[0].body, /asked about Growth\. Came from: Cold call \(campaign: nov-roofers, ref: rehan\) Call:/, 'on the phone preview too');
+
+  // With a website: a paid application whose answers (and so its owner email) say where they came from.
+  await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith') });
+  const r2 = await saveInquiry(site({ email: 'amy@oakroof.com', website: 'oakroof.com', utm_source: 'cold_call', slotStart: '2027-09-30T14:30:00.000Z', slotEnd: '2027-09-30T14:45:00.000Z' }));
+  const app = await kv.hgetall(`client:${r2.clientId}:application`);
+  assert.ok(JSON.parse(app.answers).some((a) => a.q === 'Came from' && a.a === 'Cold call'));
+  assert.equal((await getInq(r2.id)).website, 'https://oakroof.com');
+
+  // An older page with no tracking: nothing added.
+  const r3 = await saveInquiry(site({ email: 'cy@elm.com', website: '', slotStart: '2027-09-30T15:00:00.000Z', slotEnd: '2027-09-30T15:15:00.000Z' }));
+  const q3 = await getInq(r3.id);
+  assert.equal(q3.utm, null); assert.equal(q3.ref, null); assert.equal(q3.cameFrom, null);
+  assert.ok(!/Came from/.test(pushed.at(-1).body));
+});
+
+test('phone number: optional, kept only when it looks like one, shown in the alert and the application answers', async () => {
+  const { normalisePhone, inquiryAnswers, answersText } = await import('@/lib/systems/inquiries');
+  assert.equal(normalisePhone('+1 (512) 555-0142'), '+1 (512) 555-0142');
+  assert.equal(normalisePhone('512 555 0142 ext 12'), '512 555 0142 ext 12');
+  assert.equal(normalisePhone('12345'), null, 'too short');
+  assert.equal(normalisePhone('<b>call me</b>'), null, 'not a number');
+  assert.equal(normalisePhone(''), null);
+  const r = await saveInquiry(site({ website: '', phone: ' +1 512 555 0142 ', slotStart: '2027-09-30T16:00:00.000Z', slotEnd: '2027-09-30T16:15:00.000Z' }));
+  const { getInquiry: getInq } = await import('@/lib/systems/inquiries');
+  assert.equal((await getInq(r.id)).phone, '+1 512 555 0142');
+  assert.match(answersText({ phone: '+1 512 555 0142' }), /Phone: \+1 512 555 0142/);
+  assert.ok(inquiryAnswers({ phone: '+1 512 555 0142' }).some((a) => a.q === 'Phone' && a.a === '+1 512 555 0142'));
+  const r2 = await saveInquiry(site({ email: 'np@elm.com', website: '', slotStart: '2027-09-30T16:30:00.000Z', slotEnd: '2027-09-30T16:45:00.000Z' }));
+  assert.equal((await getInq(r2.id)).phone, null);
+  assert.ok(!inquiryAnswers({}).some((a) => a.q === 'Phone'));
 });

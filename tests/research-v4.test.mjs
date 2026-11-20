@@ -281,7 +281,7 @@ test('brief: 8–12 plain sentences from the facts, each with its sources; order
   assert.ok(t.includes('Offers they run: their main call to action is “Book a free network assessment”; they promise no long-term contracts; published plans: Essentials ($99 per user / month); a free download (“Download the IT buyer guide”).'), 'the free assessment the button already says is not repeated');
   assert.ok(t.includes('On the 22 pages read, their website has no booking link.'), 'only what is missing: they have case studies, pricing and a testimonial');
   assert.ok(t.includes('In the news: “Acme IT opens its Raleigh office” (CBJ, 15 Jun 2026) — it mentions a new office.'));
-  const moneyLine = b.sentences.find((s) => s.text.startsWith('Revenue is likely'));
+  const moneyLine = b.sentences.find((s) => s.text.startsWith('Revenue is about $2.2M–$4M a year'));
   assert.deepEqual(moneyLine.sources, ['https://www.census.gov/programs-surveys/susb.html', 'USAspending.gov'], 'the Census survey page, not its table codes');
   assert.ok(t.includes('Two angles for the call: they already sell to strangers (“yes”); and website talks to businesses (9 mentions).'));
   const angles = b.sentences.find((s) => s.text.startsWith('Two angles'));
@@ -313,7 +313,8 @@ test('brief: a sentence only when its fact exists — never made up', () => {
   assert.equal(buildBrief({ name: 'Nobody Co' }), null, 'no facts at all: no brief');
   // A site that was read but shows nothing: the missing sentence names every gap, and nothing else is claimed.
   const bare = buildBrief({ name: 'Bare Co', origin: SITE, website: { url: `${SITE}/`, pagesRead: 3 }, deep: { pagesRead: 3, offers: {}, tech: [] } });
-  assert.deepEqual(bare.sentences.map((s) => s.text), ['On the 3 pages read, their website has no booking link, case studies, pricing or testimonials.']);
+  // Nothing solid about what they sell: said so, never padded with menu words.
+  assert.deepEqual(bare.sentences.map((s) => s.text), ['Their website does not clearly list what Bare Co sells — ask on the call.', 'On the 3 pages read, their website has no booking link, case studies, pricing or testimonials.']);
   // A news warning is the risk when the fit score has none; a news story that does not name them is not "their" news.
   const nf = FULL();
   nf.score.parts = [];

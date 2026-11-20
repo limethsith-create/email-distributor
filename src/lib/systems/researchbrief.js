@@ -83,6 +83,8 @@ export function buildBrief(x = {}) {
   const services = (web.services || []).filter(Boolean).slice(0, 4);
   if (services.length) say('sells', `${name} sells ${listText(services)}`, [src.services || '/']);
   else if (web.description || web.headline) say('sells', `${name} describes itself as “${clip(web.description || web.headline, 150)}”`, ['/']);
+  // Nothing solid: say so (never padded with menu words).
+  else if ((Number(web.pagesRead) || 0) > 0) say('sells', `Their website does not clearly list what ${name === 'They' ? 'they sell' : `${name} sells`} — ask on the call`, [home]);
 
   // 2. To whom: the site's own customers first, else their answer on the form.
   const cu = d?.customers;
@@ -97,6 +99,9 @@ export function buildBrief(x = {}) {
   if (hintYear) { since.push(`${name} has been in business since ${hintYear}`); sinceSrc.push(src.years || '/'); }
   else if (yearOf(d?.company?.founded)) { since.push(`${name} was founded in ${yearOf(d.company.founded)}`); sinceSrc.push(d.orgPage || '/'); }
   else if (web.yearsHint) { since.push(`Their website says “${clip(web.yearsHint, 60)}”`); sinceSrc.push(src.years || '/'); }
+  // No stated year: the oldest © year on their site is a floor ("at least since").
+  const cFrom = Number(sig.copyrightFrom) || null;
+  if (!since.length && cFrom && cFrom < (x.now ? new Date(x.now) : new Date()).getUTCFullYear() - 1) { since.push(`${name} has been around since at least ${cFrom} (the © line on their website)`); sinceSrc.push(home); }
   const seen = d?.history?.firstSeen ? String(d.history.firstSeen).slice(0, 4) : null;
   // A site that does not load now only proves an old copy existed: say exactly that, not "online since".
   if (seen) { since.push(x.homeError ? `${since.length ? 'an' : 'An'} archived copy of their website goes back to ${seen}, but the site does not load now` : `${since.length ? 'their' : 'Their'} website has been online since ${seen}`); sinceSrc.push(`https://web.archive.org/web/*/${String(web.url || origin).replace(/^https?:\/\//, '').replace(/\/+$/, '')}`); }
@@ -121,7 +126,13 @@ export function buildBrief(x = {}) {
   const mon = [];
   const monSrc = [];
   const rev = (m?.revenue || [])[0];
-  if (rev && rev.low && rev.high) { mon.push(`Revenue is likely ${rev.floor ? 'at least ' : ''}${money(rev.low)}–${money(rev.high)} a year (${clip(String(rev.basis || '').replace(/\s*\([^)]*\)\s*$/, ''), 110)})`); monSrc.push(...basisSources(rev.basis)); }
+  const est = m?.estimate || null;
+  const basisText = (b) => clip(String(b || '').replace(/\s*\([^)]*\)\s*$/, ''), 110);
+  // How sure the number is, in words: "about" a range, "at least" a floor, or plainly unknown — never a floor read as the size.
+  if (est?.sure === 'about') { mon.push(`Revenue is about ${money(est.low)}–${money(est.high)} a year (${basisText(est.basis[0])})`); monSrc.push(...basisSources(est.basis[0])); }
+  else if (est?.sure === 'at least') { mon.push(`Revenue is at least ${money(est.low)} a year (${basisText(est.basis[0])}; the real figure may be well above)`); monSrc.push(...(/census|SUSB|NAICS/i.test(est.basis[0]) ? basisSources(est.basis[0]) : [(est.basis[0] || '').includes('plan') ? (d?.offers?.plans?.[0]?.page || home) : home])); }
+  else if (est?.sure === 'unknown') { mon.push(`Revenue is unknown (${clip(est.basis[0], 80)}) — ask them`); monSrc.push('research (no public figure)'); }
+  else if (rev && rev.low && rev.high) { mon.push(rev.floor ? `Revenue is at least ${money(rev.low)} a year (${basisText(rev.basis)})` : `Revenue is about ${money(rev.low)}–${money(rev.high)} a year (${basisText(rev.basis)})`); monSrc.push(...basisSources(rev.basis)); }
   const ppp = (m?.federal?.ppp || []).filter((l) => l.amount > 0).sort((p, q) => String(p.date).localeCompare(String(q.date)))[0];
   if (ppp) { mon.push(`${mon.length ? 'the' : 'The'} public record shows a $${Math.round(ppp.amount).toLocaleString('en-US')} PPP loan${monthYear(ppp.date) ? ` from ${monthYear(ppp.date)}` : ''}`); monSrc.push('USAspending.gov'); }
   const contracts = (m?.federal?.contracts || []).filter((c) => c.amount > 0);

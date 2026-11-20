@@ -46,8 +46,68 @@ export const PARTS = [
 const B2B_BUYERS = /\b(firms?|practices|offices|compan(?:y|ies)|businesses|owners|managers|contractors|manufacturers|distributors|clinics|agencies|brands|retailers|dealers|developers|builders|schools|districts|municipalit\w*|hospitals|providers|operators|restaurants|hotels|shops|stores|b2b|msps?|cpas?|attorneys|lawyers|dentists|architects|engineers|landlords|investors|nonprofits|organizations|enterprises|startups|plants|warehouses|fleets)\b/;
 const B2C_BUYERS = /\b(homeowners?|families|individuals|consumers|people|parents|seniors|patients|students|couples|kids|women|men|athletes|pet owners|renters|home ?buyers)\b/;
 const GENERIC_BUYERS = /^(?:(?:small |local |all |any )?(?:businesses|companies|clients|customers|organizations|b2b companies)|anyone|everyone|people)$/;
-/** They sell cold outreach themselves (Aviance's own service): "not a competitor" in the fit gate. */
-const COMPETITOR = /\b(cold (?:email|outreach|calling)|outbound (?:sales|agency|prospecting)|lead gen\w*|appointment setting|sdrs?(?: as a service)?|email (?:outreach|deliverability|warm-?up)|sales engagement)\b/;
+/** Words of Aviance's own trade (cold outreach). A MENTION only: software, cleaning and IT firms say "leads" and "lead generation" too. */
+const OUTREACH_WORDS = /\b(cold (?:email|outreach|calling)|outbound (?:sales|agency|prospecting|lead generation)|lead gen(?:eration)?|leadgen|appointment[- ]setting|appointment setters?|sdrs?(?:[- ]as[- ]a[- ]service)?|sales development (?:agency|services?|reps?)|email (?:outreach|warm-?up)|sales engagement)\b/;
+const OUTREACH_CORE = String.raw`(?:b2b |outbound |outsourced |done[- ]for[- ]you |full[- ]service )?(?:lead gen(?:eration)?|leadgen|appointment[- ]setting|cold (?:email|calling|outreach)(?: outreach)?|outbound (?:sales|prospecting|lead generation)|sales development|sdrs?|bdrs?|email outreach)`;
+/**
+ * Strong evidence that cold outreach is what they SELL (the fit gate's "not a competitor"):
+ * the offer named as a business ("lead generation agency", "appointment setting services",
+ * "SDR as a service", "cold email software"), "we book meetings for …", or a line that opens
+ * with it ("Lead generation for roofers", a title "B2B Appointment Setting | Acme").
+ * A keyword inside a feature list ("scheduling, invoicing and lead generation") is not.
+ */
+const OFFER_RULES = [
+  new RegExp(String.raw`\b${OUTREACH_CORE}[ -](?:agency|agencies|company|companies|firm|firms|services?|experts?|specialists?|partners?|consultants?|consultancy|outsourcing|as[- ]a[- ]service|team for hire)\b`),
+  /\b(?:cold (?:email|outreach|calling)|sales engagement|email (?:outreach|warm-?up)|outbound (?:sales|prospecting|email)) (?:software|platform|tool)s?\b/,
+  /\boutsourced (?:sdrs?|bdrs?|sales development|appointment setting|lead generation|cold calling|prospecting)\b/,
+  /\bwe (?:book|set|schedule|land|deliver|generate) (?:\w+ ){0,3}?(?:meetings|appointments|sales calls|demos|leads) (?:for|with)\b/,
+  new RegExp(String.raw`(?:^|[\n|•·:;]|\.\s)\s*${OUTREACH_CORE}(?=\s+(?:for|to|that)\b|\s*(?:$|[\n|•·;]|\s[-–—]\s|\.(?:\s|$)))`),
+];
+/** Earlier words that turn a hit around: "we tried lead generation agencies", "not an outbound agency". */
+const NEGATED = /\b(?:tried|used|using|hired|worked with|burned by|from|than|unlike|not|no|never|instead of|replac\w*|other|previous|bad experience with|without)\b[^.\n|]{0,30}$/;
+
+/** The phrase that shows outreach is their main offer, else null. Pure (gatekeeper.js uses it too). */
+export function outreachOffer(text) {
+  const t = String(text || '').toLowerCase().replace(/[ \t]+/g, ' ');
+  for (const re of OFFER_RULES) {
+    const g = new RegExp(re.source, 'g');
+    let m;
+    while ((m = g.exec(t))) {
+      if (!NEGATED.test(t.slice(Math.max(0, m.index - 40), m.index))) return m[0].replace(/^[\s\n|•·:;.]+/, '').trim();
+      if (g.lastIndex === m.index) g.lastIndex += 1;
+    }
+  }
+  return null;
+}
+
+/** The outreach word a text mentions (weak: a reason to ask, never to say no), else null. */
+export function outreachMention(text) {
+  const m = OUTREACH_WORDS.exec(String(text || '').toLowerCase());
+  return m ? m[0] : null;
+}
+
+/**
+ * Is the applicant a competitor? `hard` only on strong evidence (their own answer, their
+ * site's title / description / headline naming the offer, or most of their services being
+ * outreach); `soft` — a warning and a question, no effect on the score — when the words only
+ * appear (a feature, a blog post, "more leads for your business").
+ */
+export function competitorCheck({ agencyHit = null, sells = '', website = {}, signals = {} } = {}) {
+  const identity = [website.title, website.description, website.headline].filter(Boolean).join('\n');
+  const services = (website.services || []).filter(Boolean);
+  const outreachServices = services.filter((s) => OUTREACH_WORDS.test(String(s).toLowerCase()));
+  const answerOffer = outreachOffer(sells);
+  const siteOffer = outreachOffer(identity);
+  if (answerOffer) return { hard: { text: `Sells cold outreach themselves (“${answerOffer}” in their answer) — a competitor`, evidence: { quote: clip(sells, 140), page: null } } };
+  if (siteOffer) return { hard: { text: `Sells cold outreach themselves (“${siteOffer}” on their website) — a competitor`, evidence: { quote: clip(identity.replace(/\n/g, ' · '), 140), page: '/' } } };
+  if (agencyHit && outreachOffer(agencyHit)) return { hard: { text: `Looks like a lead-gen or outbound agency (“${agencyHit}”) — a competitor`, evidence: null } };
+  if (outreachServices.length >= 2 && outreachServices.length * 2 >= services.length) return { hard: { text: `Most of the services they list are outreach (${outreachServices.slice(0, 3).join(', ')}) — a competitor`, evidence: { quote: services.slice(0, 6).join(' · '), page: null } } };
+  const n = signals.outbound?.n || 0;
+  const word = agencyHit || outreachMention(sells) || outreachMention(identity) || outreachServices[0] || (n >= 3 ? outreachMention((signals.outbound?.ev || [])[0]?.quote) || 'outreach words' : null);
+  if (!word) return {};
+  const where = [agencyHit || outreachMention(sells) ? 'their answer' : null, outreachMention(identity) ? 'their website’s title or description' : null, outreachServices.length ? 'their services list' : null, n ? `their pages (${n} mention${n === 1 ? '' : 's'})` : null].filter(Boolean);
+  return { soft: { text: `Mentions “${clip(word, 40)}” (${where.join(', ') || 'their website'}) but does not seem to sell outreach — check they are not a competitor`, evidence: (signals.outbound?.ev || [])[0] || null } };
+}
 const HAMMERED = /\b(saas (?:founders|companies|startups)|vc-backed|venture-backed|startups?|startup founders|marketing agencies|digital agencies|agency owners|lead gen\w*|coaches|course creators)\b/;
 
 /** "Founded in 2009" | "Since 2009" | "25+ years in business" → years, else null. */
@@ -57,6 +117,36 @@ export function yearsFrom(hint, now = new Date()) {
   if (y) return Math.max(0, now.getUTCFullYear() - Number(y[1]));
   const n = t.match(/\b(\d{1,3})\+?\s+years?/i);
   return n ? Number(n[1]) : null;
+}
+
+/**
+ * How long they have been in business, and how sure that is. A year the company states
+ * ("founded in 2005", "since 1998", "25+ years in business", its schema foundingDate) is
+ * "about"; the rest only prove a floor — the first © year, the oldest Wayback copy, the
+ * domain's registration — so they read "at least". The oldest fact wins: a company is never
+ * younger than its own website (the old rule took the first number found and came out low).
+ * → { years, sure: 'about' | 'at least', source, year } | null
+ */
+export function ageFrom({ yearsHint = null, founded = null, firstSeen = null, seenYears = null, registeredAt = null, copyrightFrom = null, homeError = null, now = new Date() } = {}) {
+  const thisYear = now.getUTCFullYear();
+  const cands = [];
+  const hintFloor = /©|copyright/i.test(String(yearsHint || ''));
+  const stated = yearsFrom(yearsHint, now);
+  if (stated !== null) cands.push({ years: stated, sure: hintFloor || /\+|over|more than|at least/i.test(String(yearsHint)) ? 'at least' : 'about', source: `website: ${clip(yearsHint, 40)}`, stated: !hintFloor });
+  const f = founded ? yearsFrom(founded, now) : null;
+  if (f !== null) cands.push({ years: f, sure: 'about', source: `founded ${String(founded).slice(0, 4)} (their website’s company data)`, stated: true });
+  const cy = numOr(copyrightFrom);
+  if (cy && cy >= 1990 && cy <= thisYear) cands.push({ years: thisYear - cy, sure: 'at least', source: `© ${cy} on their website` });
+  if (firstSeen) {
+    const y = numOr(seenYears) ?? Math.max(0, thisYear - Number(String(firstSeen).slice(0, 4)));
+    cands.push({ years: y, sure: 'at least', source: homeError ? `an archived copy of their website from ${String(firstSeen).slice(0, 4)} (Wayback Machine)` : `website online since ${String(firstSeen).slice(0, 4)} (Wayback Machine)` });
+  }
+  if (registeredAt && Number.isFinite(Date.parse(registeredAt))) cands.push({ years: Math.floor((now.getTime() - Date.parse(registeredAt)) / (365.25 * 86400e3)), sure: 'at least', source: `domain registered ${String(registeredAt).slice(0, 10)}` });
+  const ok = cands.filter((c) => Number.isFinite(c.years) && c.years >= 0 && c.years <= 200);
+  if (!ok.length) return null;
+  const best = ok.reduce((p, q) => (q.years > p.years || (q.years === p.years && q.stated && !p.stated) ? q : p));
+  // A stated year that the floors do not beat is "about"; a floor that beats the stated year is still only "at least".
+  return { years: best.years, sure: best.sure, source: best.source, year: thisYear - best.years };
 }
 
 /** "Website says a team of 16" → "website says a team of 16" inside a sentence. */
@@ -121,18 +211,19 @@ export function scoreFit(x = {}, opts = {}) {
   };
 
   const sells = a.web_sellsTo || a.sellsTo || '';
-  // A competitor is the first thing the owner needs to know.
-  const competitorAnswer = COMPETITOR.exec(low(sells));
-  if (x.agencyHit) breaker(`Looks like a lead-gen or outbound agency (“${x.agencyHit}”)`);
-  else if (competitorAnswer) breaker(`Sells cold outreach themselves (“${competitorAnswer[0]}”) — a competitor`);
-  else if ((sig.outbound?.n || 0) >= 5) breaker(`Website is about cold outreach (${sig.outbound.n} mentions) — a competitor`, ev(sig.outbound));
+  // A competitor is the first thing the owner needs to know — but only on strong evidence
+  // (what they sell), never on the word "leads" or "lead generation" appearing somewhere.
+  const rival = competitorCheck({ agencyHit: x.agencyHit, sells, website: web, signals: sig });
+  if (rival.hard) breaker(rival.hard.text, rival.hard.evidence);
+  else if (rival.soft) { warnings.push(rival.soft); questions.push('Do you sell lead generation, cold email or appointment setting to your own clients?'); }
 
   // ── 1. Sells to businesses ────────────────────────────────────────────────
   const buyers = low(x.customers || '');
   // The whole "… for / to …" part of their answer (the short phrase can drop the noun: "law and accounting [firms]").
   const buyerText = low((String(sells).match(/\b(?:for|to)\s+(.+)$/i) || [])[1] || buyers).replace(/\s*\(.*$/, '').replace(/[.;].*$/, '').trim();
   const buyerShow = clip(buyerText || x.customers, 60);
-  const hammeredAnswer = HAMMERED.exec(low(`${sells} ${buyers}`)) || (/^(?:\w+ )?agencies\b/.test(buyerText) && !/\b(insurance|staffing|travel|real estate|government|state|federal)\b/.test(buyerText) ? ['agencies'] : null);
+  // Judged on WHO they sell to (the buyer words), not what they sell: "lead generation software for HVAC contractors" sells to HVAC contractors.
+  const hammeredAnswer = HAMMERED.exec(`${buyerText} ${buyers}`) || (/^(?:\w+ )?agencies\b/.test(buyerText) && !/\b(insurance|staffing|travel|real estate|government|state|federal)\b/.test(buyerText) ? ['agencies'] : null);
   if (buyerText) {
     const b2b = B2B_BUYERS.test(buyerText.replace(/\b(pet|home ?)owners\b|\bhome ?buyers\b/g, ' '));
     const b2c = B2C_BUYERS.test(buyerText) && !b2b;
@@ -175,16 +266,12 @@ export function scoreFit(x = {}, opts = {}) {
   else if (!team.exact) item('size', { max: 7, status: 'unknown', text: `${team.source} — the page may not list everyone`, ask: 'How many people work at the company?' });
   else item('size', { max: 7, share: team.n >= 3 ? 0.4 : 0, status: 'bad', text: `About ${team.n} people (${lowerSource(team.source)}) — smaller than ${eMin}` });
 
-  const founded = deep?.company?.founded ? yearsFrom(deep.company.founded, now) : null;
-  const years = yearsFrom(web.yearsHint, now) ?? founded;
-  const seenYears = deep?.history?.firstSeen ? numOr(deep.history.years) : null;
-  const domainYears = x.registeredAt && Number.isFinite(Date.parse(x.registeredAt)) ? (now.getTime() - Date.parse(x.registeredAt)) / (365.25 * 86400e3) : null;
-  const age = years ?? seenYears ?? (domainYears !== null ? Math.floor(domainYears) : null);
-  const ageSrc = years !== null ? (web.yearsHint ? `website: ${clip(web.yearsHint, 40)}` : `founded ${deep.company.founded}`) : seenYears !== null ? `website online since ${deep.history.firstSeen.slice(0, 4)} (Wayback Machine)` : domainYears !== null ? `domain registered ${String(x.registeredAt).slice(0, 10)}` : '';
-  if (age === null) item('size', { max: 5, status: 'unknown', text: 'How long in business: not found', ask: 'How long has the company been selling?' });
-  else if (age >= 3) item('size', { max: 5, share: 1, status: 'good', text: `In business about ${age} year${age === 1 ? '' : 's'} (${ageSrc})` });
-  else if (age >= 1) item('size', { max: 5, share: 0.6, status: 'ok', text: `In business about ${age} year${age === 1 ? '' : 's'} (${ageSrc})` });
-  else item('size', { max: 5, share: 0, status: 'bad', text: `Very new — under a year (${ageSrc})` });
+  const age = ageFrom({ yearsHint: web.yearsHint, founded: deep?.company?.founded, firstSeen: deep?.history?.firstSeen, seenYears: deep?.history?.years, registeredAt: x.registeredAt, copyrightFrom: sig.copyrightFrom, homeError: x.homeError, now });
+  if (!age) item('size', { max: 5, status: 'unknown', text: 'How long in business: not found', ask: 'How long has the company been selling?' });
+  else if (age.years >= 3) item('size', { max: 5, share: 1, status: 'good', text: `In business ${age.sure} ${age.years} year${age.years === 1 ? '' : 's'} (${age.source})` });
+  else if (age.years >= 1) item('size', { max: 5, share: 0.6, status: 'ok', text: `In business ${age.sure} ${age.years} year${age.years === 1 ? '' : 's'} (${age.source})`, ask: age.sure === 'at least' ? 'How long has the company been selling?' : null });
+  else if (age.sure === 'at least') item('size', { max: 5, status: 'unknown', text: `Under a year on record so far (${age.source}) — may be older`, ask: 'How long has the company been selling?' });
+  else item('size', { max: 5, share: 0, status: 'bad', text: `Very new — under a year (${age.source})` });
 
   const locs = Math.max((web.locations || []).length, (deep?.addresses || []).length);
   const openJobs = deep?.jobs || [];
@@ -332,7 +419,12 @@ export function scoreFit(x = {}, opts = {}) {
   // Too little checked to be a number at all: 3 of 3 checked points is not "100/100". Below this the
   // score is left out (the owner sees "too little to score" and the questions), never a grade.
   const minScored = Number.isFinite(Number(opts.minScoredConfidence)) ? Number(opts.minScoredConfidence) : 25;
-  const score = checkable && confidence >= minScored ? Math.max(0, Math.min(100, Math.round((earned / checkable) * 100))) : null;
+  const pointsScore = checkable && confidence >= minScored ? Math.max(0, Math.min(100, Math.round((earned / checkable) * 100))) : null;
+  // A dealbreaker caps the score: "100/100 — not a fit" read as fine. The points the other checks
+  // earned are kept apart (pointsScore) so the owner still sees them, never as the headline number.
+  const cap = Number.isFinite(Number(opts.dealbreakerCap)) ? Number(opts.dealbreakerCap) : 40;
+  const capped = dealbreakers.length > 0 && pointsScore !== null && pointsScore > cap;
+  const score = capped ? cap : pointsScore;
   let grade = score === null ? null : score >= G.A ? 'A' : score >= G.B ? 'B' : score >= G.C ? 'C' : 'D';
   if (dealbreakers.length) grade = 'D';
   // A company we cannot see (no website, or one that says almost nothing) is not graded on its answers alone.
@@ -342,16 +434,16 @@ export function scoreFit(x = {}, opts = {}) {
   const ranked = out.filter((p) => p.pct !== null).sort((p, q) => q.pct - p.pct);
   const scoreText = score === null ? (checkable ? 'too little to score' : 'no score') : `${score}/100`;
   let summary;
-  if (dealbreakers.length) summary = `${scoreText} — not a fit: ${dealbreakers[0].text}${dealbreakers.length > 1 ? ` (+${dealbreakers.length - 1} more)` : ''}.`;
+  if (dealbreakers.length) summary = `${scoreText} — not a fit: ${dealbreakers[0].text}${dealbreakers.length > 1 ? ` (+${dealbreakers.length - 1} more)` : ''}.${capped ? ` Capped at ${cap} by the dealbreaker; the other checks came to ${pointsScore}/100.` : ''}`;
   else if (thin && blankSite) summary = `${scoreText} — needs a look: ${siteRead ? `their website says almost nothing (${words} words)` : 'their website could not be read'}, so ${score === null ? `only ${confidence} of 100 points could be checked` : 'the score rests on their answers'}. Check them before approving.`;
   else if (thin) summary = `${scoreText} — needs a look: only ${confidence} of 100 points could be checked. Ask the questions below.`;
   else summary = `${scoreText} — ${label.toLowerCase()} (${confidence} of 100 points checked).${ranked.length > 1 ? ` Strongest: ${ranked[0].label.toLowerCase()}; weakest: ${ranked[ranked.length - 1].label.toLowerCase()}.` : ''}`;
-  return { score, grade, label, confidence, summary, parts: out, dealbreakers, warnings, questions: [...new Set(questions)].slice(0, 8) };
+  return { score, pointsScore, capped, grade, label, confidence, summary, parts: out, dealbreakers, warnings, questions: [...new Set(questions)].slice(0, 8) };
 }
 
 /** One line for the owner's alert. */
 export function fitScoreLine(f) {
   if (!f || !f.label) return '';
   const head = typeof f.score === 'number' ? `${f.score}/100${f.grade ? ` (${f.grade})` : ''}` : 'no score';
-  return `Fit score: ${head} — ${f.label}, ${f.confidence} of 100 points checked.${f.dealbreakers?.length ? ` Dealbreaker: ${f.dealbreakers[0].text}.` : ''}`;
+  return `Fit score: ${head} — ${f.label}, ${f.confidence} of 100 points checked.${f.dealbreakers?.length ? ` Dealbreaker: ${f.dealbreakers[0].text}.${f.capped ? ` (Capped; the other checks came to ${f.pointsScore}/100.)` : ''}` : ''}`;
 }

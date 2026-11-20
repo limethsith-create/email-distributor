@@ -8,7 +8,8 @@
  *  - machine: /api/cron/* and /api/admin/export|import accept
  *             `Authorization: Bearer CRON_SECRET` (header only: a ?token= in
  *             the address would land in logs) — or an admin session.
- *  - site:    /api/apply and /api/inquiry answer the public website (SITE_ORIGINS) cross-origin.
+ *  - site:    /api/apply, /api/inquiry and GET /api/booking/availability (busy times only) answer the
+ *             public website (SITE_ORIGINS) cross-origin.
  *  - hub:     /api/mc/* also accepts `Authorization: Bearer <Supabase access
  *             token>` of an allowed hub admin, with CORS for the hub's origin.
  *             An approved employee's token (profiles.role = 'employee') is
@@ -28,13 +29,15 @@ import { verifyHubToken, bearerOf, isAllowedOrigin, isSiteOrigin, corsHeaders } 
 
 const PUBLIC = [
   /^\/mc\/login$/, /^\/api\/mc\/login$/, /^\/api\/mc\/logout$/,
-  /^\/api\/unsubscribe(\/|$)/, /^\/api\/track\//, /^\/api\/webhooks\//, /^\/api\/apply$/, /^\/api\/inquiry$/,
+  /^\/api\/unsubscribe(\/|$)/, /^\/api\/track\//, /^\/api\/webhooks\//, /^\/api\/apply$/, /^\/api\/inquiry$/, /^\/api\/booking\/availability$/,
   /^\/api\/c\//, /^\/c\//, /^\/api\/logo$/, /^\/apply$/,
   // Lead Finder job: the route checks LEADFINDER_TOKEN itself.
   /^\/api\/clients\/[^/]+\/profile$/,
   // Google sends the owner back here after "Allow": the route checks its one-use `state` itself.
   /^\/api\/google\/callback$/,
 ];
+// The public website's own calls (cross-origin from SITE_ORIGINS): applications, inquiries, and the free/busy times.
+const SITE_API = new Set(['/api/apply', '/api/inquiry', '/api/booking/availability']);
 const MACHINE = [/^\/api\/cron\//, /^\/api\/admin\/(export|import)$/];
 const HUB_API = /^\/api\/mc\//;
 // Owner-only screens: secrets, credentials, owner settings, test mode, the activity log, the outreach archive, the test run.
@@ -118,7 +121,7 @@ export async function middleware(request) {
   }
 
   // The public website posts trial applications and plan inquiries cross-origin.
-  if (pathname === '/api/apply' || pathname === '/api/inquiry') {
+  if (SITE_API.has(pathname)) {
     const site = isSiteOrigin(origin) ? String(origin).replace(/\/+$/, '') : null;
     if (request.method === 'OPTIONS') return site ? withCors(new NextResponse(null, { status: 204 }), site) : new NextResponse(null, { status: 403 });
     return withCors(NextResponse.next(), site);

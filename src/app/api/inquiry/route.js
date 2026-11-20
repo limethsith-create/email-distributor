@@ -25,10 +25,17 @@ export async function POST(request) {
     if (n === 1) await kv.expire(key, 3700);
     if (n > PER_HOUR) return Response.json({ ok: false, error: 'Too many requests from this address. Please try again later.' }, { status: 429 });
   } catch {}
-  const r = await saveInquiry(body, { source: 'website' });
+  // The visitor is answered as soon as the time is held, the inquiry saved and the confirmation email sent;
+  // the paid application (research + fit score) and the owner's alerts run after the answer.
+  const started = Date.now();
+  const defer = (job) => after(async () => {
+    const out = await job();
+    // A paid application: finish its research (and fit score) within this function's time, like /api/apply.
+    if (out?.clientId) await researchToEnd(out.clientId, Math.max(5_000, 55_000 - (Date.now() - started)));
+  });
+  const r = await saveInquiry(body, { source: 'website', defer });
+  if (!r.ok && r.code) return Response.json({ ok: false, code: r.code, error: r.error }, { status: 409 });
   if (!r.ok) return Response.json({ ok: false, errors: r.errors }, { status: 400 });
-  // A paid application: finish its research (and fit score) after the answer, like /api/apply.
-  if (r.clientId) { try { after(() => researchToEnd(r.clientId, 52_000)); } catch { /* not inside a request (tests): the research job finishes it */ } }
   // emailed: did the confirmation with the calendar invite actually go? (null = no time picked). The website says so honestly.
   return Response.json({ ok: true, id: r.id || null, emailed: r.duplicate ? null : (r.emailed ?? null) });
 }

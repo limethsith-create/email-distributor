@@ -54,7 +54,7 @@ import { pageSignals, mergeSignals } from '@/lib/systems/fitsignals';
 import { scoreFit, fitScoreLine, teamFrom } from '@/lib/systems/fitscore';
 import { nicheOf } from '@/lib/systems/copy';
 import zlib from 'node:zlib';
-import { parseSitemap, robotsSitemaps, pickPages, normUrl, pageLinks, deepFactsOf, mergeDeep, emptyDeep, pdfText, docFacts, countFacts, CAPS, crawlConcurrency, customersFrom, topPairs, postingRhythm, POST_PATH } from '@/lib/systems/deepsite';
+import { parseSitemap, robotsSitemaps, pickPages, normUrl, pageLinks, deepFactsOf, mergeDeep, emptyDeep, pdfText, docFacts, countFacts, CAPS, crawlConcurrency, customersFrom, topPairs, postingRhythm, POST_PATH, isSiteJunk } from '@/lib/systems/deepsite';
 import { emailSetup, webHistory, lookalikes, outboundSignal, newsFor, newsFlagLine } from '@/lib/systems/webintel';
 import { buildBrief } from '@/lib/systems/researchbrief';
 import { federalMoney, secFilings, captureList, yearlyCaptures, timeline, benchmarkFor, revenueRange, nameCandidates } from '@/lib/systems/bizintel';
@@ -206,6 +206,8 @@ export function isServiceLike(t) {
   if (words.length > 6) return false;
   const lower = s.toLowerCase().replace(/[.:]+$/, '');
   if (GENERIC.has(lower)) return false;
+  // Menu words, buttons and badges ("Login", "Pricing", "G2 Leader", "Capterra", "BBB A+") are site furniture.
+  if (isSiteJunk(s)) return false;
   if (/[?!@]|https?:|www\.|©|\|/.test(s) || /\.\s*$/.test(s)) return false;
   if (PRONOUN.test(s)) return false;
   if ((s.match(/\d/g) || []).length > 2) return false;
@@ -341,7 +343,8 @@ export function teamFacts(html, text, kind, schema) {
   // Their own staff only ("our 25 technicians", "a team of 25", "we employ 25 people") — not "2,000 professionals served".
   const m = ['home', 'about', 'team', 'careers'].includes(kind) || kind === undefined
     ? (String(text).match(/\b(?:our|we have|we employ|employs|with|staff of|over|more than)\s+(?:a\s+)?(?:team of\s+)?(\d{1,4})\+?\s+(?:full[- ]time\s+)?(employees|staff members|team members|professionals|technicians|engineers|specialists|experts|people)\b/i)
-      || String(text).match(/\bteam of (\d{1,4})\+?\b/i))
+      || String(text).match(/\bteam of (\d{1,4})\+?\b/i)
+      || String(text).match(/\b(\d{1,4})[- ](?:person|people|member) team\b/i))
     : null;
   if (m) {
     const n = Number(m[1]);
@@ -363,18 +366,49 @@ export function teamFacts(html, text, kind, schema) {
   return { teamCount, teamText };
 }
 
-/** "Since 2009" | "Founded in 2009" | "25+ years in business" | null. */
+/**
+ * "Founded in 2009" | "Since 2009" | "25+ years in business" | null. Every statement on the
+ * page is read and the OLDEST wins ("Since 2020 we have added HVAC" next to "founded in 1998"
+ * is 1998: a company is never younger than what it says about itself). A year beats a count
+ * of years ("30 years of experience" may be the founder's career).
+ */
 export function yearsFacts(text, schema, { year = new Date().getUTCFullYear() } = {}) {
   const ok = (y) => y >= 1850 && y <= year;
   const t = String(text || '');
-  let m = t.match(/\b(founded|established|est\.)\s*(?:in\s+)?((?:18|19|20)\d{2})\b/i);
-  if (m && ok(Number(m[2]))) return `Founded in ${m[2]}`;
-  m = t.match(/\b(?:since|in business since|serving [^.]{0,40}?since)\s+((?:18|19|20)\d{2})\b/i);
-  if (m && ok(Number(m[1]))) return `Since ${m[1]}`;
-  if (schema?.founding && ok(schema.founding)) return `Founded in ${schema.founding}`;
-  m = t.match(/\b(\d{1,3})\+?\s+years?\s+(?:of\s+)?(experience|in business|serving)/i);
-  if (m && Number(m[1]) >= 1 && Number(m[1]) <= 150) return `${m[0].replace(/\s+/g, ' ').trim()}`;
-  return null;
+  const dated = [];
+  for (const m of t.matchAll(/\b(founded|established|est\.|incorporated|opened (?:our|its) doors|started (?:the company|the business|out)?)\s*(?:in\s+|back in\s+)?((?:18|19|20)\d{2})\b/gi)) if (ok(Number(m[2]))) dated.push([Number(m[2]), `Founded in ${m[2]}`]);
+  for (const m of t.matchAll(/\b(?:since|in business since|serving [^.]{0,40}?since)\s+((?:18|19|20)\d{2})\b/gi)) if (ok(Number(m[1]))) dated.push([Number(m[1]), `Since ${m[1]}`]);
+  if (schema?.founding && ok(schema.founding)) dated.push([Number(schema.founding), `Founded in ${schema.founding}`]);
+  if (dated.length) return dated.sort((a, b) => a[0] - b[0] || (/^Founded/.test(a[1]) ? -1 : 1))[0][1];
+  let best = null;
+  for (const m of t.matchAll(/\b(?:(?:for|celebrating)\s+(?:over\s+|more than\s+|nearly\s+|almost\s+)?)?(\d{1,3})\+?\s+years?\s+(?:of\s+)?(experience|in business|serving|of service|strong)|\b(?:for|celebrating)\s+(?:over\s+|more than\s+|nearly\s+|almost\s+)?(\d{1,3})\+?\s+years\b/gi)) {
+    const n = Number(m[1] || m[3]);
+    if (n >= 1 && n <= 150 && (!best || n > best.n)) best = { n, text: m[0].replace(/\s+/g, ' ').trim() };
+  }
+  return best ? best.text : null;
+}
+
+/** The year a years hint points to ("Since 1998" → 1998, "25+ years in business" → now − 25), else null. */
+export function hintYear(hint, year = new Date().getUTCFullYear()) {
+  const t = String(hint || '');
+  const y = t.match(/\b((?:18|19|20)\d{2})\b/);
+  if (y) return Number(y[1]);
+  const n = t.match(/\b(\d{1,3})\+?\s+years?/i);
+  return n ? year - Number(n[1]) : null;
+}
+
+/** "Trusted by 500+ customers", "over 2,000 businesses use …" → { n, quote } (the largest), else null. */
+export function customerCountFacts(text) {
+  let best = null;
+  const t = String(text || '');
+  const re = /\b(?:trusted by|used by|loved by|chosen by|serving|served|serves|over|more than|join(?:ed by)?|helped|working with)\s+(?:over\s+|more than\s+)?(\d{1,3}(?:,\d{3})+|\d{2,6})\s*(\+|k\+?)?\s+(?:happy\s+|satisfied\s+|active\s+|paying\s+|loyal\s+)?(customers|clients|businesses|companies|contractors|firms|organizations|teams|practices|brands)\b|\b(\d{1,3}(?:,\d{3})+|\d{2,6})\s*(\+|k\+?)\s+(?:happy\s+|satisfied\s+|active\s+|paying\s+|loyal\s+)?(customers|clients|businesses|companies|contractors|firms|organizations|teams|practices|brands)\b/gi;
+  for (const m of t.matchAll(re)) {
+    const num = m[1] || m[4];
+    const suffix = (m[2] || m[5] || '').toLowerCase();
+    const n = Number(String(num).replace(/,/g, '')) * (suffix.startsWith('k') ? 1000 : 1);
+    if (n >= 10 && n <= 5_000_000 && (!best || n > best.n)) best = { n, quote: m[0].replace(/\s+/g, ' ').trim() };
+  }
+  return best;
 }
 
 const LINK_PATTERNS = {
@@ -420,6 +454,21 @@ export function brandPhrases(text, hostname) {
   return [...trimmed.entries()].filter(([p, n]) => p.split(/\s+/).length >= 2 || n >= 3).sort((a, b) => b[1] - a[1] || b[0].length - a[0].length).slice(0, 3).map(([p]) => p);
 }
 
+/** A heading that opens the list of what they sell. */
+const SERVICE_HEADING = /^(?:our\s+)?(services|what we do|solutions|our solutions|how we help|capabilities|our expertise|expertise|practice areas|specialties|what we offer|services we offer)\b/i;
+
+/** The home page's services section (from its heading to the next H2), else null. */
+function homeServiceSection(html) {
+  const h = String(html || '').replace(/<(nav|header|footer)\b[\s\S]*?<\/\1>/gi, ' ');
+  for (const m of h.matchAll(/<h2\b[^>]*>([\s\S]*?)<\/h2>/gi)) {
+    if (!SERVICE_HEADING.test(tidy(decodeEntities(m[1].replace(/<[^>]+>/g, ' '))))) continue;
+    const rest = h.slice(m.index + m[0].length, m.index + m[0].length + 15000);
+    const next = rest.search(/<h2\b/i);
+    return next >= 0 ? rest.slice(0, next) : rest;
+  }
+  return null;
+}
+
 /** Everything one page gives. `url` is the page's final URL. */
 export function extractPage(html, { url, kind = 'home' } = {}) {
   const base = new URL(url);
@@ -457,7 +506,10 @@ export function extractPage(html, { url, kind = 'home' } = {}) {
     const main = (html.match(/<main\b[\s\S]*?<\/main>/i) || [html])[0].replace(/<(nav|header|footer)\b[\s\S]*?<\/\1>/gi, ' ');
     services.items.push(...tagTexts(main, 'li').map(tidy).filter(isServiceLike));
   } else if (kind === 'home') {
-    services.headings.push(...tagTexts(html, 'h3').map(tidy).filter(isServiceLike));
+    // A "Services" / "What we do" section on the home page is the real list: take its H3s and items.
+    // No such section: the page's H3s (filtered), as before.
+    const sec = homeServiceSection(html);
+    services.headings.push(...(sec ? [...tagTexts(sec, 'h3'), ...tagTexts(sec, 'h4'), ...tagTexts(sec, 'li')] : tagTexts(html, 'h3')).map(tidy).filter(isServiceLike));
   }
 
   for (const line of lines) {
@@ -487,6 +539,7 @@ export function extractPage(html, { url, kind = 'home' } = {}) {
     teamCount,
     teamText,
     yearsHint: yearsFacts(text, schema),
+    customerCount: customerCountFacts(text),
     signals,
     copyright: (lines.find((l) => /(©|&copy;|copyright)\s*\d{4}/i.test(l)) || '').slice(0, 200) || null,
     brand: brandPhrases(`${text} ${[...html.matchAll(/<img\b[^>]*\balt\s*=\s*["']([^"']{3,80})["']/gi)].map((m) => m[1]).join(' . ')}`, base.hostname),
@@ -505,7 +558,9 @@ export function mergeFacts(acc, page, kind) {
   const path = page.path || (kind === 'home' ? '/' : null);
   if (path) {
     if (!src.services && (page.services?.child?.length || (kind === 'services' && (page.services.headings.length || page.services.items.length)) || (kind === 'home' && page.services?.headings?.length))) src.services = path;
-    if (!src.years && page.yearsHint && !a.yearsHint) src.years = path;
+    // The oldest years fact wins over the pages (home "since 2020" vs about "founded in 1998").
+    if (page.yearsHint && (!a.yearsHint || (hintYear(page.yearsHint) ?? 9999) < (hintYear(a.yearsHint) ?? 9999))) src.years = path;
+    if (page.customerCount && (!a.customerCount || page.customerCount.n > a.customerCount.n)) src.customers = path;
     if (!src.team && ((page.teamText && !a.teamText) || (page.teamCount && !a.teamCount))) src.team = path;
     if (!src.locations && page.locations?.length) src.locations = path;
   }
@@ -520,7 +575,8 @@ export function mergeFacts(acc, page, kind) {
   for (const [k, v] of Object.entries(page.socials || {})) if (!a.socials[k]) a.socials[k] = v;
   if (page.teamCount && !a.teamCount) a.teamCount = page.teamCount;
   a.teamText = a.teamText || page.teamText;
-  a.yearsHint = a.yearsHint || page.yearsHint;
+  if (page.yearsHint && (!a.yearsHint || (hintYear(page.yearsHint) ?? 9999) < (hintYear(a.yearsHint) ?? 9999))) a.yearsHint = page.yearsHint;
+  if (page.customerCount && (!a.customerCount || page.customerCount.n > a.customerCount.n)) a.customerCount = { ...page.customerCount, page: path };
   a.signals = mergeSignals(a.signals || {}, page.signals || {});
   a.siteLinks = [...new Set([...(a.siteLinks || []), ...(page.siteLinks || [])])].slice(0, 500);
   a.docs = [...(a.docs || []), ...(page.docs || []).filter((d) => !(a.docs || []).some((x) => x.url === d.url))].slice(0, 20);
@@ -1005,7 +1061,7 @@ export async function runResearch(clientId, { now = io.now(), deadline = Date.no
         const page = extractPage(res.html, { url: res.url, kind });
         const facts = deepFactsOf(res.html, { url: res.url });
         // A blog post is about the industry: its words must not count as what they sell (or their headcount).
-        if (facts.isPost) { page.signals = { words: page.signals?.words || 0 }; page.teamText = null; page.teamCount = null; page.yearsHint = null; }
+        if (facts.isPost) { page.signals = { words: page.signals?.words || 0 }; page.teamText = null; page.teamCount = null; page.yearsHint = null; page.customerCount = null; }
         s.acc = mergeFacts(s.acc, page, kind);
         s.deepAcc = mergeDeep(s.deepAcc, facts);
         // No sitemap: follow the links each page gives, best first, inside the page budget.
@@ -1290,7 +1346,9 @@ async function finish(clientId, client, s, { now, R }) {
   const application = (await kv.hgetall(K.application(clientId)).catch(() => null)) || {};
   const keywords = await cfg(clientId, 'INTAKE.agencyKeywords');
   const website = websiteOut(s.acc, { url: s.origin ? `${s.origin}/` : client.mainDomain ? `https://${client.mainDomain}/` : null, pagesRead: s.pagesRead, limits: R });
-  const agencyHit = detectAgency([website.title, website.description, website.headline, ...website.services, application.web_sellsTo, application.notes].filter(Boolean).join(' '), keywords);
+  // Judged on what they say they sell (title, description, headline, their answer), one line each:
+  // the services list and the pages are weighed in the Fit Score (a "Lead generation" feature is not an agency).
+  const agencyHit = detectAgency([website.title, website.description, website.headline, application.web_sellsTo].filter(Boolean).join('\n'), keywords);
   // A website application has no company field: the name was made from the
   // domain ("Pivitstrategy"). The site's own spelling wins ("PivIT Strategy").
   let name = client.name || client.mainDomain || clientId;
@@ -1306,12 +1364,16 @@ async function finish(clientId, client, s, { now, R }) {
     registeredAt: s.registeredAt, agencyHit, now, newSiteDays: R.newSiteDays,
   });
   const deep = deepOut(s, website, { now, names: [name, ...(s.money?.names || [])], domain: client.mainDomain });
+  // Revenue is answered for every deep record (an honest "unknown" too), not only when the public-record lookup ran.
+  if (deep && !deep.money) deep.money = { federal: null, sec: null };
   if (deep?.money) {
     // Revenue: a range from public facts only (headcount and/or PPP payroll), with its basis — never a single guessed number.
     const team = teamFrom({ employees: application.employees, teamText: s.acc?.teamText, teamCount: s.acc?.teamCount, people: deep.people.length, schemaEmployees: deep.company?.employees });
     const bench = benchmarkFor({ niche: nicheOf({ ...(await getProfile(clientId)), sellsTo: application.web_sellsTo }), text: [application.web_sellsTo, website.title, website.description].filter(Boolean).join('. ') });
     deep.money.revenue = revenueRange({ headcount: team?.n || null, headcountExact: Boolean(team?.exact), payroll: deep.money.federal?.payroll || null, bench });
     deep.money.benchmark = bench ? bench.label : null;
+    // One answer with how sure it is ("about", "at least", "unknown") — a floor never reads as the size.
+    deep.money.estimate = revenueEstimate({ ranges: deep.money.revenue, customers: s.acc?.customerCount || null, plans: deep.offers?.plans || [] });
   }
   const outbound = outboundSignal(s.intel?.lookalikes || []);
   if (outbound) flags.push(outbound);
@@ -1361,6 +1423,43 @@ async function finish(clientId, client, s, { now, R }) {
     }).catch(() => {});
   }
   return { status: 'done', summary, flags, score, brief };
+}
+
+/** "$49/mo" → 588, "$1,200 per year" → 1200, "$29/user/month" → 348 a year (one user: a floor); else null. */
+export function yearlyPrice(text) {
+  const t = String(text || '').toLowerCase();
+  const m = t.match(/\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{2})?\s*(k)?/);
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, '')) * (m[2] ? 1000 : 1);
+  if (!n) return null;
+  if (/\/\s*(?:\w+\s*\/\s*)?(?:mo|month)\b|per (?:\w+ )?month|monthly|a month/.test(t)) return n * 12;
+  if (/\/\s*(?:\w+\s*\/\s*)?(?:yr|year)\b|per (?:\w+ )?year|annually|yearly|a year/.test(t)) return n;
+  return null;
+}
+
+/**
+ * The revenue answer the owner reads, with how sure it is:
+ *   about     a headcount range (an exact headcount × the industry's revenue per employee)
+ *   at least  a floor: a team page that may not list everyone, PPP payroll, or their
+ *             published customer count × their cheapest yearly plan price
+ *   unknown   nothing to go on — said so, never a guessed low number
+ * The highest floor wins over a lower range ("500+ customers" on a $99/mo plan beats 4 named people).
+ * → { sure, low, high, text, basis: string[] }
+ */
+export function revenueEstimate({ ranges = null, customers = null, plans = [] } = {}) {
+  const money = (n) => (n >= 1e6 ? `$${(Math.round(n / 1e5) / 10).toString().replace(/\.0$/, '')}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}k` : `$${n}`);
+  const exact = (ranges || []).filter((r) => !r.floor && r.low && r.high);
+  const floors = (ranges || []).filter((r) => r.floor && r.low).map((r) => ({ low: r.low, basis: r.basis }));
+  const yearly = (plans || []).map((p) => ({ p, y: yearlyPrice(p.price) })).filter((x) => x.y).sort((a, b) => a.y - b.y)[0];
+  if (customers?.n && yearly) floors.push({ low: Math.round((customers.n * yearly.y) / 1000) * 1000, basis: `“${customers.quote}” × their cheapest plan ${yearly.p.name ? `(${yearly.p.name}, ` : '('}${yearly.p.price}) = ${money(yearly.y)} a year each` });
+  const floor = floors.sort((a, b) => b.low - a.low)[0] || null;
+  const range = exact.sort((a, b) => b.high - a.high)[0] || null;
+  if (range && (!floor || floor.low <= range.high)) {
+    const low = Math.max(range.low, floor?.low || 0);
+    return { sure: 'about', low, high: range.high, text: `about ${money(low)}–${money(range.high)} a year`, basis: [range.basis, ...(floor && floor.low > range.low ? [floor.basis] : [])] };
+  }
+  if (floor) return { sure: 'at least', low: floor.low, high: null, text: `at least ${money(floor.low)} a year`, basis: [floor.basis] };
+  return { sure: 'unknown', low: null, high: null, text: 'unknown', basis: [customers?.n ? `“${customers.quote}” but no published price` : 'no headcount, payroll or customer count found'] };
 }
 
 /** The brief's first two sentences (the end of the owner's application_scored alert), '' without a brief. */
