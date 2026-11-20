@@ -303,7 +303,7 @@ async function sendHotLead(clientId, { lead, reply, id, kind, ctx, now = new Dat
   }
   let first = null;
   for (const [i, addr] of to.entries()) {
-    const r = await notifyClientSafe(clientId, 'hot_lead', vars, { to: addr, from: 'trial', dedupe: `hot_lead:${id}:${i}` }, { onFailAlert: 'hot_lead_failed', failBody });
+    const r = await notifyClientSafe(clientId, 'hot_lead', vars, { to: addr, from: 'sender', dedupe: `hot_lead:${id}:${i}` }, { onFailAlert: 'hot_lead_failed', failBody });
     if (!first && r.sent) first = r;
   }
   const at = now.toISOString();
@@ -656,7 +656,7 @@ export async function runHotChaser(clientId, now = new Date()) {
     if (age >= nudgeH && !h.nudgedAt && !zone) zone = await (await import('@/lib/systems/calendar')).zoneOfClient(clientId).catch(() => ET);
     if (age >= nudgeH && !h.nudgedAt && inClientDay(now, zone || ET)) {
       const verbatim = String((await kv.hget(K.replies(clientId), id))?.text || '').slice(0, 600) || '(see the earlier email)';
-      const r = await notifyClientSafe(clientId, 'hot_lead_nudge', { Company: lead.company || hostOf(lead.email), Name: lead.name || lead.first_name || lead.email, hours: Math.floor(age), verbatim, quote: quoteOf(verbatim), holdingLine: h.holdingAt ? 'They’ve had a short holding note from me in your name, so they know you’ll be in touch.' : `At ${holdH} hours I send them a short holding note in your name.` }, { from: 'trial', dedupe: `hot_nudge:${id}` });
+      const r = await notifyClientSafe(clientId, 'hot_lead_nudge', { Company: lead.company || hostOf(lead.email), Name: lead.name || lead.first_name || lead.email, hours: Math.floor(age), verbatim, quote: quoteOf(verbatim), holdingLine: h.holdingAt ? 'They’ve had a short holding note from me in your name, so they know you’ll be in touch.' : `At ${holdH} hours I send them a short holding note in your name.` }, { from: 'sender', dedupe: `hot_nudge:${id}` });
       await kv.hset(K.hot(clientId), { [id]: { ...h, nudgedAt: now.toISOString(), nudgeSent: Boolean(r.sent) } });
       h.nudgedAt = now.toISOString();
       out.nudged++;

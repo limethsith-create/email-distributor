@@ -47,7 +47,7 @@ export async function teamView(now = new Date()) {
   for (const p of people) {
     const st = (await kv.hgetall(K.hubStatus(p.uid)).catch(() => null)) || {};
     const mine = Object.entries(owners).filter(([, u]) => u.includes(p.uid)).map(([id]) => byId.get(id)).filter(Boolean)
-      .map((c) => ({ id: c.id, name: c.name || c.id, state: c.state, plan: c.plan || 'trial' }));
+      .map((c) => ({ id: c.id, name: c.name || c.id, state: c.state, plan: c.plan || 'starter' }));
     team.push({
       uid: p.uid, name: p.name, email: p.email, role: p.role, online: p.online, lastSeen: p.lastSeen, lastView: p.lastView,
       activeSecondsToday: p.activeSecondsToday,

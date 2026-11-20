@@ -28,7 +28,7 @@
  * suffixes and shouting.
  *
  * Stored in client:{id}:sequence as `variantA` / `variantB` JSON strings with
- * the SAME shape as templates/sequence/default.json ({name, version, footer,
+ * the shape renderTouch (systems/sequence.js) reads ({name, version, footer,
  * touches:[{touch, day, thread, subject?, body}]}) plus `variantId`,
  * `firstLineSet` and `framework`.
  */

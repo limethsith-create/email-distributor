@@ -40,14 +40,14 @@ function assertClean(label, text, names) {
   for (const n of names) assert.ok(!new RegExp(`\\b${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(text), `${label}: has the name "${n}"`);
 }
 
-test('every tool, owner and team member, with the Test run loaded: no personal data; no money for the team', { timeout: 180_000 }, async () => {
+test('every tool, owner and team member, with example clients loaded: no personal data; no money for the team', { timeout: 180_000 }, async () => {
   installJourney({ seed: 7 });
   process.env.ENC_KEY = process.env.ENC_KEY || Buffer.alloc(32, 7).toString('base64');
   clock.set(et('2026-12-09', '10:00'));
-  const loaded = await call('api/mc/demo/route', 'POST', { path: '/api/mc/demo', body: { action: 'load' } });
-  assert.equal(loaded.status, 200, JSON.stringify(loaded.json));
+  const { loadDemo } = await import('./helpers/demo-fixture.mjs');
+  await loadDemo({ now: new Date(clock.iso()) });
   // A real client too (the Test run's clients are left out of some views), and a team member who looks after it.
-  await kv.hset(K.client('acme'), { name: 'Acme Plumbing', state: 'onboarding', plan: 'trial', contactName: 'Annabel Leeworth', contactEmail: 'annabel@acmeplumbing.example', createdAt: '2026-12-01T12:00:00Z' });
+  await kv.hset(K.client('acme'), { name: 'Acme Plumbing', state: 'onboarding', plan: 'starter', contactName: 'Annabel Leeworth', contactEmail: 'annabel@acmeplumbing.example', createdAt: '2026-12-01T12:00:00Z' });
   await kv.sadd(K.clients(), 'acme');
   await kv.hset(K.hubPerson('emp-1'), { uid: 'emp-1', email: 'nimal@aviance.store', name: 'Nimal Perera', role: 'employee', lastSeen: clock.iso(), firstSeen: clock.iso() });
   await kv.sadd(K.hubPeople(), 'emp-1').catch(async () => kv.zadd(K.hubPeople(), { member: 'emp-1', score: Date.now() }));
@@ -88,7 +88,7 @@ test('every tool, owner and team member, with the Test run loaded: no personal d
         assert.ok(!/amountUsd|receivedAllTime|priceUsdPerMonth|2,?497|3,?997|8,?497/.test(text), `employee ${name}: money`);
       }
     }
-    for (const other of ['Harbor', 'Lakeview']) {
+    for (const other of ['Lakeview']) {
       const o = await runTool('get_client', { name: other }, ctx);
       assert.equal(o.found, true, other);
       assertClean(`${role} get_client ${other}`, JSON.stringify(o), names);

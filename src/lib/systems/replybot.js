@@ -58,6 +58,7 @@ import { partsIn, addDays, ET } from '@/lib/time';
 import * as call from '@/lib/systems/onboardcall';
 import * as conv from '@/lib/systems/conversation';
 import * as cal from '@/lib/systems/calendar';
+import { planNameOf } from '@/lib/notify';
 
 const SYSTEM = 'replybot';
 const DAY_MS = 864e5;
@@ -82,7 +83,6 @@ const SLOTS = ['bookingLink', 'times', 'firstName', 'onboardingLink', 'ownerName
  * leaves the question to the owner.
  */
 export const HOW_LINES = {
-  website: "You applied for our free 30-day trial on our website, and that's where your email came from.",
   inquiry: "You sent us a note through the form on our website, and that's where your email came from.",
 };
 
@@ -655,11 +655,8 @@ async function answerFor(client, raw, p, s, onboard, now) {
       return { text: fillAnswer(s.answers.wants_time, { ...base, bookingLink: await bookingLinkFor(client.id, onboard, p), times: timesList(times, tz) }), did: times.length ? 'sent the booking link and the next open times' : 'sent the booking link' };
     }
     case 'price': {
-      const plan = String(client.plan || '').toLowerCase();
-      if (['starter', 'growth', 'scale'].includes(plan) && s.answers.price_paid) {
-        return { text: fillAnswer(s.answers.price_paid, { ...base, planName: plan[0].toUpperCase() + plan.slice(1) }), did: `answered the price question: they're on the ${plan} plan, the details on the call` };
-      }
-      return { text: fillAnswer(s.answers.price, base), did: 'answered the price question: the trial is free, no card, an honest review' };
+      const planName = planNameOf(client.plan);
+      return { text: fillAnswer(s.answers.price, { ...base, planName }), did: `answered the price question: they're on the ${planName} plan, the details on the call` };
     }
     case 'what_needed': {
       const token = await mintToken(client.id, `onboarding:bot${shortHash(p.id, 8)}`, { ttl: TTL.long });

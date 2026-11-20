@@ -26,7 +26,7 @@ import { getInboxRecords } from '@/lib/db/inboxes';
 import { logEvent } from '@/lib/db/events';
 import { io, sendClient, firstNameOf, ownerName, formatDay } from '@/lib/systems/intake-io';
 import { zonedToUtc } from '@/lib/systems/stagec-common';
-import { partsIn, addDays, ET } from '@/lib/time';
+import { partsIn, ET } from '@/lib/time';
 
 const SYSTEM = 'startemail';
 /** Client states in which Day 1 is fixed (the gate was green). */
@@ -55,10 +55,10 @@ const andList = (xs) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(
  * SEND.windowLeadTz (in each prospect's own zone); the first send is Day 1 at
  * its start, US Eastern (the Sender's clock), written in their zone by `when`
  * ({ zoneName, text(t), clock(t) } — the Calendar's words; without it, Eastern).
- * → { day1Date, day30Date, startWhen, startTime, theirZoneName, sendWindow,
+ * → { day1Date, startWhen, startTime, theirZoneName, sendWindow,
  *     windowStart, windowEnd, senderName, inboxName, inboxAddress, inboxes }
  */
-export function startFacts({ day1Date, day30Date = null, window = ['09:00', '17:00'], senderName = '', inboxes = [], when = null }) {
+export function startFacts({ day1Date, window = ['09:00', '17:00'], senderName = '', inboxes = [], when = null }) {
   const [y, m, d] = String(day1Date).split('-').map(Number);
   const [h, mi] = String(window[0] || '09:00').split(':').map(Number);
   const first = zonedToUtc(y, m, d, h || 9, mi || 0, 0, ET);
@@ -67,7 +67,6 @@ export function startFacts({ day1Date, day30Date = null, window = ['09:00', '17:
   const zoneName = when ? when.zoneName : 'Eastern Time';
   return {
     day1Date: formatDay(day1Date),
-    day30Date: formatDay(day30Date || addDays(day1Date, 29)),
     startWhen: when ? when.text(first) : `${formatDay(day1Date)} at ${clockWord(window[0])} Eastern Time`,
     startTime: when ? when.clock(first) : clockWord(window[0]),
     theirZoneName: zoneName,
@@ -86,7 +85,7 @@ export function startFacts({ day1Date, day30Date = null, window = ['09:00', '17:
  * and inboxes the prospects will see) — the vars `welcome_two_dates` and
  * `day1_moved` both get.
  */
-export async function startVars(clientId, day1Date, { day30Date = null } = {}) {
+export async function startVars(clientId, day1Date) {
   const cal = await import('@/lib/systems/calendar');
   const [profile, recs, window, calS, theirZone] = await Promise.all([
     getProfile(clientId).catch(() => ({})), getInboxRecords(clientId).catch(() => []), cfg(clientId, 'SEND.windowLeadTz'), cal.calendarSettings(), cal.zoneOfClient(clientId),
@@ -95,7 +94,7 @@ export async function startVars(clientId, day1Date, { day30Date = null } = {}) {
   const inboxes = (on.length ? on : recs).map((r) => r.email).sort();
   const shown = recs.find((r) => r.email === inboxes[0])?.displayName;
   return startFacts({
-    day1Date, day30Date, window: Array.isArray(window) && window.length === 2 ? window : ['09:00', '17:00'],
+    day1Date, window: Array.isArray(window) && window.length === 2 ? window : ['09:00', '17:00'],
     senderName: profile?.senderName || shown || '', inboxes,
     when: { zoneName: cal.zoneInfo(theirZone).name, text: (t) => cal.theirWhen(t, theirZone, calS), clock: (t) => cal.clockIn(t, theirZone) },
   });
@@ -128,7 +127,7 @@ export async function sendStartEmail(clientId, { now = io.now(), notify = null, 
   }
   const vars = {
     firstName: firstNameOf(client.contactName), ownerName: await ownerName(clientId), callMinutes: await cfg(clientId, 'LAUNCH.callMinutes'),
-    ...(await startVars(clientId, trial.day1Date, { day30Date: trial.day30Date || null })),
+    ...(await startVars(clientId, trial.day1Date)),
   };
   const resends = resend ? (Number(trial.startEmailResends) || 0) + 1 : 0;
   const opts = { dedupe: resend ? `welcome_two_dates:${trial.day1Date}:again${resends}` : `welcome_two_dates:${trial.day1Date}`, now };

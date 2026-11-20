@@ -16,7 +16,7 @@
  *    actually emailed and have not replied / unsubscribed are marked.
  *  - Accounts run 3 at a time, each under a 30s deadline; every outcome is
  *    written to `inbox_health` and the handler never throws.
- *  - A hard bounce whose address is a trial client's contact is matched to
+ *  - A hard bounce whose address is a client's contact is matched to
  *    the email it is about (the returned headers' Message-ID, else the
  *    address and the time) in that client's delivery tracking
  *    (systems/mailwatch.js, docs/IMPROVE-PASS.md C.1): `clientEmails` counts them.

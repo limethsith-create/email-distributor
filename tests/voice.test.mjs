@@ -12,26 +12,24 @@ import { TEMPLATES as A } from '@/lib/templates/client/stage-a';
 import { TEMPLATES as B } from '@/lib/templates/client/stage-b';
 import { TEMPLATES as C } from '@/lib/templates/client/stage-c';
 import { TEMPLATES as S } from '@/lib/templates/client/sales';
-import { TEMPLATES as D, FRIDAY_TRIAL_LINES, FRIDAY_BUILD_LINES, REPORT_LINES, REPORT_ZERO_LINES } from '@/lib/templates/client/stage-d';
+import { TEMPLATES as D, FRIDAY_LINES, FRIDAY_BUILD_LINES } from '@/lib/templates/client/stage-d';
 import { slotsOf } from '@/lib/templates/render';
 import { DEFAULTS } from '@/lib/config';
 import { fillAnswer } from '@/lib/systems/replybot';
 import { NICHE_TEMPLATES, frameworkTemplate, buildVariant, clientVars, renderVariant, firstLineFor } from '@/lib/systems/copy';
-import { getSequence, varsFor, renderTouch } from '@/lib/systems/sequence';
 import { checkEmail, ticks, RULES, wordCount, readingGrade, syllables, templateTells, bannedIn, uncontracted, VOICE_BANNED } from '@/lib/systems/copycheck';
-import { __reset } from '@vercel/kv';
 
 // ── sample values (the ones the stage tests use; realistic ones where those were x-tokens) ──
 
 // notifyClient fills these three on every client email (client name, full contact name, first name).
-const AUTO = { clientName: 'Acme IT', contactName: 'Ann Lee', firstName: 'Ann' };
+const AUTO = { clientName: 'Acme IT', contactName: 'Ann Lee', firstName: 'Ann', planName: 'Growth' }; // notifyClient's own (it always names the plan)
 const OWNER = 'Limeth Sith';
 // tests/stage-a.test.mjs "every Stage A template renders with sample data".
 const SAMPLE_A = {
   ownerName: OWNER, link: 'https://x/c/t/onboard', closeDate: 'Monday 12 October', position: 2,
   expectedLine: 'Soon.', reason: 'because.', minMarket: '1,000', estimate: '500', widenedLine: ' in the areas you gave me', mainDomain: 'acme.com',
   agreementText: 'TEXT', agreementName: 'Ann Lee', agreementTitle: 'CEO', companyName: 'Acme', acceptedAt: '2026-10-05 14:00', agreementIp: '1.2.3.4',
-  day1Date: 'Monday 19 October', day30Date: 'Tuesday 17 November', calendarUrl: 'https://cal', problem: 'broken.',
+  day1Date: 'Monday 19 October', calendarUrl: 'https://cal', problem: 'broken.',
   startWhen: 'Monday 19 October at 8:00 am Central Time (9:00 am Eastern)', senderName: 'Dana Whitfield', inboxes: 'dana@ridgeline-team.com and dana.w@ridgeline-team.com', sendWindow: "between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone",
   callMinutes: 30, bookingLine: 'Book a time that suits you: https://cal.com/limeth/onboarding', onboardingLink: 'https://x/c/t/onboard',
   threadSubject: "Let's book your onboarding call", when: 'Tuesday, October 13 at 11:00 AM EDT', callDay: 'tomorrow', text: 'Tuesday works.\n\nLimeth', joinLine: 'Join here: https://meet.google.com/abc-defg-hij',
@@ -53,12 +51,11 @@ const SAMPLE_C = {
   month: 'January', Referrer: 'Bob', Greeting: 'Hi Ann,', oneLiner: 'We fix IT.', SenderName: 'Jane', missedWhen: 'Tuesday', ClientCompany: 'Acme IT',
   ownerName: OWNER,
 };
-// Stage D (trialmanager, decision, ladder, handover, invoice callers).
+// Stage D (trialmanager, friday, handover, invoice callers).
 const SAMPLE_D = {
-  ownerName: OWNER, senderAddress: 'dana@ridgeline-team.com', day30Date: 'Tuesday 17 November', buttons: 'Pause sending: https://x/c/t/pause',
-  title: 'Acme IT — trial week 3 of 4', body: 'A reply came in from Bolt IT on Tue.\nSent this week: 180 · to date: 1040, to 412 companies',
-  rows: '• Bolt IT, Tue 13 Oct: showed', decisionUrl: 'https://x/c/t/decide', recommendationLine: 'I recommend Growth.', bonusLine: '22 calls for the price of 20',
-  bonusExpires: 'Friday 20 November', day: 60, companies: 412, replies: 31, positive: 12, slots: '• Tue 10:00 am\n• Wed 2:00 pm', capDay: 60,
+  ownerName: OWNER, senderAddress: 'dana@ridgeline-team.com', buttons: 'Pause sending: https://x/c/t/pause',
+  title: 'Acme IT — week 3 of sending', body: 'A reply came in from Bolt IT on Tue.\nSent this week: 180 · to date: 1040, to 412 companies',
+  rows: '• Bolt IT, Tue 13 Oct: showed', day: 60, companies: 412, replies: 31, positive: 12, slots: '• Tue 10:00 am\n• Wed 2:00 pm', capDay: 60,
   clutchUrl: 'https://clutch.co/profile/aviance', quoteDate: 'Tue 3 Nov', draft: 'They were quick and honest.', openList: '• bo@bolt.test (asked for a quote)',
   leadCount: 400, invoiceNo: 'INV-001', planName: 'Growth', issuedDate: '2 December', priceText: '$3,997', calls: 20,
   paymentLines: 'PayPal: https://paypal.me/aviance/3997USD', whatsNew: 'call notes',
@@ -90,12 +87,12 @@ const subjectWords = (subject) => String(subject || '').replace(/^\s*re:\s*/i, '
 const questions = (text) => (String(text).replace(/https?:\/\/\S+/g, 'link').match(/\?/g) || []).length;
 
 /** Templates whose body carries a report, a list or a document (no 120-word or grade limit on the data they carry). */
-const CARRIES_A_REPORT = new Set(['agreement_copy', 'friday_update', 'trial_report', 'trial_report_zero', 'disposition_sheet', 'handover', 'invoice_month1', 'invoice_plan_start', 'ladder_37', 'call_handoff', 'call_tap', 'call_tap_reminder']);
+const CARRIES_A_REPORT = new Set(['agreement_copy', 'friday_update', 'handover', 'invoice_plan_start', 'call_handoff', 'call_tap', 'call_tap_reminder']);
 /** Passed through as they are: the owner's own words, and the reply bot's answer (tested below). */
 const PASSTHROUGH = new Set(['onboard_owner_reply', 'bot_reply']);
 
-const letters = () => Object.entries(TEMPLATES).filter(([k, t]) => !PASSTHROUGH.has(k) && !t.prospect && t.from !== 'trial');
-const notices = () => Object.entries(TEMPLATES).filter(([, t]) => !t.prospect && t.from === 'trial');
+const letters = () => Object.entries(TEMPLATES).filter(([k, t]) => !PASSTHROUGH.has(k) && !t.prospect && t.from !== 'sender');
+const notices = () => Object.entries(TEMPLATES).filter(([, t]) => !t.prospect && t.from === 'sender');
 const prospects = () => Object.entries(TEMPLATES).filter(([, t]) => t.prospect);
 
 /** Rules every email of ours keeps; → the broken ones as strings. */
@@ -138,20 +135,20 @@ test('every client email: "Hi {firstName}," and the owner\'s name as the sign-of
     if (subjectWords(t.subject) > 5) bad.push(`subject "${t.subject}" is ${subjectWords(t.subject)} words`);
     if (bad.length) problems.push(`${key}: ${bad.join('; ')}`);
   }
-  assert.ok(n >= 50, `${n} client emails`);
+  assert.ok(n >= 40, `${n} client emails`);
   assert.deepEqual(problems, []);
 });
 
 test('the fact that makes it theirs: company, exact dates, the count — in the emails that carry them', () => {
   const has = (key, re) => assert.match(renderTemplate(key, varsFor1(key)).text, re, key);
-  has('accepted_call', /30-day trial for Acme\./);
+  has('accepted_call', /work with Acme on the Growth plan\./);
   has('onboarding_link', /from Acme IT/);
-  has('welcome_two_dates', /we start on Monday 19 October at 8:00 am Central Time \(9:00 am Eastern\)\.[\s\S]*That's Day 1 of your 30\. Day 30 is Tuesday 17 November\./);
+  has('welcome_two_dates', /we start on Monday 19 October at 8:00 am Central Time \(9:00 am Eastern\)\./);
   has('next_steps', /your list of about 400 companies/);
   has('launch_invite', /in Dana Whitfield's name/);
   has('launch_invite', /the first emails go out about Wednesday 21 October\./);
-  has('day1_moved', /moves to Monday 19 October at 8:00 am Central Time \(9:00 am Eastern\), and Day 30 moves to Tuesday 17 November/);
-  has('day1_started', /The first emails for Acme IT went out this morning from dana@ridgeline-team\.com\. Day 30 is Tuesday 17 November\./);
+  has('day1_moved', /the first send moves to Monday 19 October at 8:00 am Central Time \(9:00 am Eastern\)\./);
+  has('day1_started', /The first emails for Acme IT went out this morning from dana@ridgeline-team\.com\./);
   has('onboard_call_tomorrow', /is Tuesday, October 13 at 11:00 AM EDT\./);
   has('meeting_confirmed', /is Tuesday, October 13 at 11:00 AM EDT\./);
   assert.equal(renderTemplate('welcome_two_dates', varsFor1('welcome_two_dates')).subject, 'We start on Monday 19 October');
@@ -165,7 +162,7 @@ test('the owner\'s words and the bot\'s answer pass through untouched', () => {
   }
 });
 
-test('trial-inbox notices to the client and replies to prospects: short, one question, contractions, no banned phrase, no "!"', () => {
+test('sending-inbox notices to the client and replies to prospects: short, one question, contractions, no banned phrase, no "!"', () => {
   const problems = [];
   for (const [key] of notices()) {
     const m = renderTemplate(key, varsFor1(key));
@@ -186,9 +183,9 @@ test('trial-inbox notices to the client and replies to prospects: short, one que
   assert.deepEqual(problems, []);
 });
 
-test('the Friday update and Trial Report lines: no banned phrase, no "!", contractions', () => {
+test('the Friday update lines: no banned phrase, no "!", contractions', () => {
   const problems = [];
-  for (const [name, lines] of Object.entries({ FRIDAY_TRIAL_LINES, FRIDAY_BUILD_LINES, REPORT_LINES, REPORT_ZERO_LINES })) {
+  for (const [name, lines] of Object.entries({ FRIDAY_LINES, FRIDAY_BUILD_LINES })) {
     const text = lines.join('\n');
     const bad = [];
     if (/!/.test(text)) bad.push('has "!"');
@@ -205,7 +202,7 @@ test('every reply bot answer: "Hi {firstName},", signed, < 120 words, one questi
   const vars = {
     firstName: 'Sam', ownerName: OWNER, bookingLink: 'https://app.test/c/t/book', times: '• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET',
     when: 'Tuesday 6 October at 2:00 pm', onboardingLink: 'https://app.test/c/t/onboard', callMinutes: 30,
-    howLine: "You applied for our free 30-day trial on our website, and that's where your email came from.",
+    howLine: "You sent us a note through the form on our website, and that's where your email came from.", planName: 'Growth',
   };
   const problems = [];
   const answers = DEFAULTS.REPLYBOT.answers;
@@ -277,23 +274,6 @@ test('every cold touch (all niches × frameworks × variants × sample leads): <
   }
   assert.ok(n >= 900, `${n} renders`);
   assert.deepEqual(problems.slice(0, 15), [], `${problems.length} problems`);
-});
-
-test('Sequence T (Aviance\'s own, default.json) keeps the same voice', async () => {
-  __reset();
-  const seq = await getSequence('aviance');
-  const lead = { email: 'ann@acme.com', first_name: 'Ann', company: 'Acme IT', city: 'Dallas', marketCount: 612, sizeBand: '10-50', dealValue: '5,000' };
-  const vars = varsFor(lead, { profile: { senderName: 'Limethsith', postalAddress: '1 Main St, Dover, DE 19901', defaultNiche: 'IT service companies', defaultIcp: 'small offices near you' } });
-  const problems = [];
-  for (const t of seq.touches) {
-    const r = { touch: t.touch, ...renderTouch(seq, t.touch, vars) };
-    const bad = coldRules(r, lead);
-    if (t.touch === 'd0' && !/Acme IT/.test(r.body)) bad.push('touch 1 does not name the company');
-    if (subjectWords(r.subject || '') > 6) bad.push('subject too long');
-    if (bad.length) problems.push(`${t.touch}: ${bad.join('; ')}`);
-  }
-  assert.deepEqual(problems, []);
-  assert.match(renderTouch(seq, 'd3', vars).body, /seven dollars a month/, 'the $7 line stays (SPEC decision 3)');
 });
 
 test('a first line in long words falls back to a plainer fact, so the email keeps its grade', () => {

@@ -1,7 +1,8 @@
 /**
- * Client records and the trial state machine (SPEC §3, §4).
+ * Client records and the client state machine (SPEC §3, §4). Every client is
+ * a paying client; there is no trial.
  *
- * `client.state` is the single source of truth for where a trial is. Only the
+ * `client.state` is the single source of truth for where a client is. Only the
  * transitions in TRANSITIONS are legal; `setState` refuses anything else and
  * writes every change to the client's event log.
  */
@@ -11,53 +12,39 @@ import { K, assertClientId } from '@/lib/db/keys';
 import { logEvent } from '@/lib/db/events';
 
 export const STATES = [
-  'applied', 'declined', 'queued', 'onboarding', 'closed_silent', 'awaiting_purchase',
-  'setup_check', 'warming', 'ready', 'sending', 'paused', 'extension', 'deciding',
-  'converted', 'not_now', 'retired', 'deleted',
+  'applied', 'declined', 'onboarding', 'closed_silent', 'awaiting_purchase',
+  'setup_check', 'warming', 'ready', 'sending', 'paused', 'retired', 'deleted',
 ];
 
 export const TRANSITIONS = {
-  applied: ['declined', 'queued', 'onboarding'],
-  queued: ['onboarding', 'declined'],
+  applied: ['declined', 'onboarding'],
   onboarding: ['closed_silent', 'awaiting_purchase', 'declined'],
   awaiting_purchase: ['setup_check'],
   setup_check: ['awaiting_purchase', 'warming'],
   warming: ['ready'],
   ready: ['sending'],
-  sending: ['paused', 'extension', 'deciding'],
-  paused: ['sending', 'extension', 'deciding'],
-  extension: ['deciding', 'paused'],
-  deciding: ['converted', 'not_now'],
-  not_now: ['retired', 'converted'],
+  sending: ['paused', 'retired'],
+  paused: ['sending', 'retired'],
   retired: ['deleted'],
-  converted: [],
   declined: [],
   closed_silent: [],
   deleted: [],
 };
 
-/** States where the client counts toward MAX_ACTIVE_TRIALS (SPEC §4). */
-export const ACTIVE_TRIAL_STATES = new Set([
-  'onboarding', 'awaiting_purchase', 'setup_check', 'warming', 'ready', 'sending', 'paused', 'extension',
+/** States of a client being set up or sending (the hub counts these as active). */
+export const ACTIVE_STATES = new Set([
+  'onboarding', 'awaiting_purchase', 'setup_check', 'warming', 'ready', 'sending', 'paused',
 ]);
-/**
- * States where a cold email may ever go out. `converted` is included: the
- * trial pair keeps sending after Start plan until the plan fleet is added
- * (SPEC §9.8). Every state in the §4 "never sends" guard is absent.
- */
-export const SENDING_STATES = new Set(['sending', 'extension', 'converted']);
-/**
- * Sending states that stop by moving to `paused` (trial clock keeps running).
- * A converted client is a paying plan, not a trial, so it is never moved to
- * `paused`; it is held with a flag instead (`holdSending`).
- */
-export const PAUSABLE_STATES = new Set(['sending', 'extension']);
-/** States where warm-up keeps running (converted: the trial pair still sends, SPEC §9.8). */
-export const WARMUP_STATES = new Set(['warming', 'ready', 'sending', 'paused', 'extension', 'converted']);
+/** States where a cold email may ever go out. */
+export const SENDING_STATES = new Set(['sending']);
+/** Sending states that stop by moving to `paused`. */
+export const PAUSABLE_STATES = new Set(['sending']);
+/** States where warm-up keeps running. */
+export const WARMUP_STATES = new Set(['warming', 'ready', 'sending', 'paused']);
 /** States in which the scheduler runs per-client jobs at all. */
 export const LIVE_STATES = new Set([
-  'applied', 'queued', 'onboarding', 'awaiting_purchase', 'setup_check', 'warming', 'ready',
-  'sending', 'paused', 'extension', 'deciding', 'converted', 'not_now', 'retired',
+  'applied', 'onboarding', 'awaiting_purchase', 'setup_check', 'warming', 'ready',
+  'sending', 'paused', 'retired',
 ]);
 
 /** Terminal states no job ever acts on; the tick does not load these clients. */
@@ -134,7 +121,7 @@ export async function createClient(id, fields = {}) {
   assertClientId(id);
   if (isDemoId(id)) throw new Error(`client ${id} already exists`); // the Test run's ids are never a real client's
   const now = new Date().toISOString();
-  const rec = { plan: 'trial', state: 'applied', createdAt: now, ...fields };
+  const rec = { plan: 'starter', state: 'applied', createdAt: now, ...fields };
   const created = await kv.hsetnx(K.client(id), 'createdAt', now);
   if (!(created === 1 || created === true)) throw new Error(`client ${id} already exists`);
   await kv.hset(K.client(id), rec);
@@ -178,19 +165,13 @@ export async function setState(id, to, reason = null, { force = false } = {}) {
 }
 
 /**
- * Stop cold sending for a reason: `paused` for a trial state, a `sendHold`
- * flag on a converted client (cleared by the owner in Mission Control).
- * Returns 'paused' | 'held' | null (nothing was sending).
+ * Stop cold sending for a reason: `sending` → `paused`.
+ * Returns 'paused' | null (nothing was sending).
  */
 export async function holdSending(id, reason, { now = new Date() } = {}) {
   const client = await getClient(id);
   if (!client) return null;
   if (PAUSABLE_STATES.has(client.state)) return (await setState(id, 'paused', reason)) ? 'paused' : null;
-  if (client.state === 'converted') {
-    await kv.hset(K.client(id), { sendHold: String(reason).slice(0, 200), sendHoldAt: now.toISOString() });
-    await logEvent(id, 'state', 'send_hold', { reason });
-    return 'held';
-  }
   return null;
 }
 

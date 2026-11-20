@@ -82,8 +82,7 @@ async function setTrial(clientId, fields) {
 }
 
 async function announceMove(clientId, trial, newDay1, gate, { held = false, deps = {} } = {}) {
-  const newDay30 = addDays(newDay1, 29);
-  await setTrial(clientId, { day1Date: newDay1, day30Date: newDay30, day1Original: trial.day1Original || trial.day1Date || '', day1MovedAt: new Date().toISOString() });
+  await setTrial(clientId, { day1Date: newDay1, day1Original: trial.day1Original || trial.day1Date || '', day1MovedAt: new Date().toISOString() });
   const reason = reasonsText(gate.checks);
   const asks = [];
   if (!gate.checks.approval.ok) asks.push(`approve the emails here: ${await approvalUrl(clientId)}`);
@@ -92,9 +91,9 @@ async function announceMove(clientId, trial, newDay1, gate, { held = false, deps
   const ownerName = (await cfg(clientId, 'OWNER.signerName')) || 'The Aviance team';
   // The same facts as the "we start on …" email (docs/IMPROVE-PASS.md C.3): the start in their zone, the window, the inbox.
   let facts = {};
-  try { facts = await startVars(clientId, newDay1, { day30Date: newDay30 }); } catch { facts = {}; }
+  try { facts = await startVars(clientId, newDay1); } catch { facts = {}; }
   try {
-    await (deps.notify || notifyClient)(clientId, 'day1_moved', { day1Date: fmtDay(newDay1), day30Date: fmtDay(newDay30), startWhen: fmtDay(newDay1), ...facts, reason: held ? 'everything is now ready' : reason, waitingLine, ownerName }, { dedupe: `day1_moved:${newDay1}` });
+    await (deps.notify || notifyClient)(clientId, 'day1_moved', { day1Date: fmtDay(newDay1), startWhen: fmtDay(newDay1), ...facts, reason: held ? 'everything is now ready' : reason, waitingLine, ownerName }, { dedupe: `day1_moved:${newDay1}` });
     // Moved as the gate turned green: this email is the "we start on …" email for the new Day 1.
     if (held) await setTrial(clientId, { startEmailFor: newDay1 });
   } catch (err) {

@@ -20,7 +20,7 @@ export default function CustomerHit({ params }) {
   }
   if (error && !info) return <div style={card}><p>{error}</p></div>;
   if (!info) return <div style={card}><p>Loading…</p></div>;
-  if (done) return <div style={card}><h2 style={{ marginTop: 0 }}>Sorry about that — handled.</h2><p>{done.apologySent ? 'They have had a short apology from the trial inbox. ' : ''}They will never be emailed again, and {done.blocklisted} address/domain entr{done.blocklisted === 1 ? 'y was' : 'ies were'} added to your do-not-contact list.</p></div>;
+  if (done) return <div style={card}><h2 style={{ marginTop: 0 }}>Sorry about that — handled.</h2><p>{done.apologySent ? 'They have had a short apology from your sending inbox. ' : ''}They will never be emailed again, and {done.blocklisted} address/domain entr{done.blocklisted === 1 ? 'y was' : 'ies were'} added to your do-not-contact list.</p></div>;
   return (
     <div style={card}>
       <h2 style={{ marginTop: 0 }}>You emailed my customer</h2>

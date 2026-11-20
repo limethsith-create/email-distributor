@@ -20,7 +20,7 @@ import { getClient, getProfile, getTrial, setState, PAUSABLE_STATES } from '@/li
 import { getLead, saveLead, addToBlocklist, hostOf } from '@/lib/db/leads';
 import { logEvent } from '@/lib/db/events';
 import { mintToken, readToken, pageUrl, TTL } from '@/lib/pagetokens';
-import { addDays } from '@/lib/time';
+
 import { isFreeMailDomain } from '@/lib/metrics';
 import { sendToProspect, notifyClientSafe } from '@/lib/systems/outbound';
 import { alert, isTrialClient, lower, parseJson, truthy, businessDaysBetween, ccfg } from '@/lib/systems/stagec-common';
@@ -48,7 +48,7 @@ export async function runClientWatch(clientId, { now = new Date() } = {}) {
 
   // Resume after a quiet pause as soon as the client has written again.
   if (client.state === 'paused' && client.pausedReason === 'client_quiet' && lastActivity > Date.parse(client.pausedAt || 0) && client.emergencyActive !== '1') {
-    const to = client.pausedFrom === 'extension' ? 'extension' : 'sending';
+    const to = 'sending';
     await setState(clientId, to, 'client replied — quiet pause lifted');
     await kv.hset(K.client(clientId), { pausedReason: '', pausedAt: '' });
     out.resumed = to;
@@ -64,7 +64,7 @@ export async function runClientWatch(clientId, { now = new Date() } = {}) {
     const from = client.state;
     if (await setState(clientId, 'paused', 'client quiet')) {
       await kv.hset(K.client(clientId), { pausedReason: 'client_quiet', pausedAt: now.toISOString(), pausedFrom: from });
-      await notifyClientSafe(clientId, 'paused_quiet', { pending: pending.length, days: quietDays }, { from: 'trial', dedupe: `paused_quiet:${now.toISOString().slice(0, 10)}` });
+      await notifyClientSafe(clientId, 'paused_quiet', { pending: pending.length, days: quietDays }, { from: 'sender', dedupe: `paused_quiet:${now.toISOString().slice(0, 10)}` });
       await alert('paused_quiet', { clientId, vars: { clientId }, body: `${clientId} has ${pending.length} hot lead(s) waiting and has been quiet for ${quietDays} business days.`, did: 'Sending is paused (warm-up continues). The client got paused_quiet; sending restarts when they write back.' });
       out.paused = true;
     }
@@ -73,7 +73,7 @@ export async function runClientWatch(clientId, { now = new Date() } = {}) {
   if (client.state === 'paused' && client.pausedReason === 'client_quiet' && quietDays >= endDays && !trial.endedAt) {
     await kv.hset(K.trial(clientId), { endedAt: now.toISOString(), endReason: 'client_quiet' });
     await logEvent(clientId, 'clientwatch', 'trial_ended', { reason: 'client_quiet', quietDays });
-    await alert('trial_ended_quiet', { clientId, vars: { clientId }, body: `${clientId} has been quiet for ${quietDays} business days with hot leads waiting. Per the agreement the trial ends.`, did: 'trial.endReason = client_quiet, endedAt set. Stage D sends the final report and handover.' });
+    await alert('trial_ended_quiet', { clientId, vars: { clientId }, body: `${clientId} has been quiet for ${quietDays} business days with hot leads waiting. Per the agreement sending ends.`, did: 'trial.endReason = client_quiet, endedAt set. The handover goes out and the domain retires on schedule.' });
     out.ended = true;
   }
   return out;
@@ -81,18 +81,16 @@ export async function runClientWatch(clientId, { now = new Date() } = {}) {
 
 // ─── Client page buttons ─────────────────────────────────────────────────────
 
-/** One token for the three client buttons (customer hit / stop / away), 14 days. */
+/** One token for the two client buttons (customer hit / away), 14 days. A client stops by writing to the owner (the plan's notice period). */
 export async function clientButtonLinks(clientId) {
   const token = await mintToken(clientId, 'buttons', { ttl: TTL.long });
-  return { customerUrl: pageUrl(token, 'customer'), stopUrl: pageUrl(token, 'stop'), awayUrl: pageUrl(token, 'away') };
+  return { customerUrl: pageUrl(token, 'customer'), awayUrl: pageUrl(token, 'away') };
 }
 
-/** The three client buttons as a short block for the Day 1 notice and the Friday update. */
+/** The two client buttons as a short block for the Day 1 notice and the Friday update. */
 export async function clientButtonsText(clientId) {
   const l = await clientButtonLinks(clientId);
-  // "Stop the trial" is a trial's button; a paying client stops by writing to the owner (the plan's notice period).
-  const paid = ['starter', 'growth', 'scale'].includes(String((await getClient(clientId))?.plan || '').toLowerCase());
-  return `If you ever need them:\n• We emailed one of your customers: ${l.customerUrl}\n• You're away (we halve the volume those days): ${l.awayUrl}${paid ? '' : `\n• Stop the trial: ${l.stopUrl}`}`;
+  return `If you ever need them:\n• We emailed one of your customers: ${l.customerUrl}\n• You're away (we halve the volume those days): ${l.awayUrl}`;
 }
 
 /** "You emailed my customer": apology, blocklist, alert with how it slipped. */
@@ -112,23 +110,8 @@ export async function customerHit(clientId, { email, list = '', now = new Date()
   await kv.hset(K.trial(clientId), { lastClientActivityAt: now.toISOString() });
   const how = lead ? `source: ${lead.source || 'unknown'}${lead.sourceUrl || lead.crawlPage ? `, found on ${lead.sourceUrl || lead.crawlPage}` : ''}; first touch ${lead.sent_at || 'never'}` : 'not on our list';
   await logEvent(clientId, 'clientwatch', 'customer_hit', { email: addr, how, blocklisted: added });
-  await alert('customer_hit', { clientId, scope: `${clientId}:${addr}`, vars: { clientId }, body: `The client says ${addr} is one of their customers.\nHow it slipped: ${how}.\nBlocklist entries added: ${added}.`, did: `${apology.sent ? 'Apology sent from the trial inbox. ' : ''}Address, domain and the pasted list are on the blocklist.` });
+  await alert('customer_hit', { clientId, scope: `${clientId}:${addr}`, vars: { clientId }, body: `The client says ${addr} is one of their customers.\nHow it slipped: ${how}.\nBlocklist entries added: ${added}.`, did: `${apology.sent ? 'Apology sent from their sending inbox. ' : ''}Address, domain and the pasted list are on the blocklist.` });
   return { ok: true, apologySent: Boolean(apology.sent), blocklisted: added };
-}
-
-/** "Stop the trial": same-day stop; Stage D sends report + list; domain retired in 7 days. */
-export async function stopTrial(clientId, { now = new Date() } = {}) {
-  const [client, trial] = await Promise.all([getClient(clientId), getTrial(clientId)]);
-  if (!client) return { ok: false, error: 'no client' };
-  if (trial.stoppedAt) return { ok: true, already: true };
-  const at = now.toISOString();
-  await kv.hset(K.trial(clientId), { stoppedAt: at, endedAt: trial.endedAt || at, endReason: 'client_stopped', retireAt: addDays(at.slice(0, 10), 7) });
-  if (PAUSABLE_STATES.has(client.state)) {
-    if (await setState(clientId, 'paused', 'client pressed Stop the trial')) await kv.hset(K.client(clientId), { pausedReason: 'client_stopped', pausedAt: at, pausedFrom: client.state });
-  }
-  await logEvent(clientId, 'clientwatch', 'trial_stopped_by_client', { at });
-  await alert('trial_stopped_by_client', { clientId, vars: { clientId }, body: `${client.name || clientId} pressed "Stop the trial".`, did: 'Cold sending stopped now. trial.endReason = client_stopped, retireAt in 7 days; the report + list go out with the handover.' });
-  return { ok: true };
 }
 
 /** "I'm away": store a date range; the Sender halves volume on those days. */
@@ -147,7 +130,7 @@ export async function setAway(clientId, { from, to, now = new Date() }) {
 
 /**
  * Shared handler for the client-button APIs (/api/c/buttons, /api/c/customer,
- * /api/c/stop, /api/c/away) → { status, body }.
+ * /api/c/away) → { status, body }.
  */
 export async function handleButtons(body = {}, forced = null) {
   const tok = await readToken(body.t, { purpose: 'buttons' });
@@ -156,10 +139,7 @@ export async function handleButtons(body = {}, forced = null) {
   const action = forced || body.action;
   let res;
   if (action === 'customer') res = await customerHit(clientId, { email: body.email, list: body.list || '' });
-  else if (action === 'stop') {
-    if (body.confirm !== true) return { status: 400, body: { ok: false, error: 'Please confirm.' } };
-    res = await stopTrial(clientId);
-  } else if (action === 'away') res = await setAway(clientId, { from: body.from, to: body.to });
+  else if (action === 'away') res = await setAway(clientId, { from: body.from, to: body.to });
   else return { status: 400, body: { ok: false, error: 'unknown action' } };
   return { status: res.ok ? 200 : 400, body: res };
 }

@@ -1,5 +1,5 @@
 /**
- * Every threshold the trial machine uses (SPEC §12). Systems read values
+ * Every threshold the machine uses (SPEC §12). Systems read values
  * through `cfg(clientId, 'DOTTED.KEY')`; nothing hard-codes a number.
  *
  * Resolution order: client override (client:{id}:config) → global override
@@ -18,7 +18,6 @@ export const HARD_COLD_CAP = 25;
 export const HARD_WARMUP_CAP = 15;
 
 export const DEFAULTS = {
-  MAX_ACTIVE_TRIALS: 3,
   // The hub's Test run loads itself once, the first time the hub opens in production (systems/demo.js).
   DEMO_AUTOLOAD: true,
   MIN_MARKET: 1000,
@@ -73,12 +72,9 @@ export const DEFAULTS = {
   PACE: { days: [3, 7, 12, 15, 20, 25], replyMin: 0.01, positiveMin: 0.01, bookedMin: 0.0025 },
   // noReplyMinExpected: the no-reply trigger needs this many replies to have been expected over the
   // silent days (sends since the last reply × the campaign's reply rate); fewer is normal silence.
-  // 5 → a healthy campaign stays that silent under 1 % of the time (the check runs all trial long).
+  // 5 → a healthy campaign stays that silent under 1 % of the time (the check runs all the time a client sends).
   EMERGENCY: { noReplyDays: 2, noReplyMinExpected: 5, placementMin: 0.70, dmarcMin: 0.80, greenDays: 3 },
-  TRIAL: { buildDays: 14, reportDay: 29, decisionDay: 30, ladderDays: [33, 37, 44], retireDay: 45, bonusHours: 24 },
-  EXTENSION_CAP: 60,
   DELETE: { afterEndDays: 30 },
-  WINBACK: { days: 90 },
   PLANS: {
     starter: { price: 2497, calls: 10, reach: 2000 },
     growth: { price: 3997, calls: 20, reach: 4000 },
@@ -86,7 +82,6 @@ export const DEFAULTS = {
     perCallAfter: 150,
     payPerShow: 250,
   },
-  BONUS: { starter: [12, 10], growth: [22, 20], scale: [55, 50] },
   CAPACITY: { starterMax: 3, growthMax: 7 },
   WATCHDOG: { sendStallMin: 30, hcGraceMin: 15, jobFailStreak: 3 },
   USAGE: { warn: 0.80, stop: 0.95 },
@@ -111,7 +106,6 @@ export const DEFAULTS = {
     applyPerHourPerIp: 5,
     applyClaimSeconds: 600,
   },
-  QUEUE: { expectedExtraDays: 16 },
   MARKET: { queriesMin: 3, queriesMax: 5, maxPerQuery: 60, pageSize: 20, coverageFactor: 3, overpassFactor: 1, retryHours: 1 },
   PRICE: {
     candidatePatterns: ['{b}-team', 'get{b}', '{b}hq', 'try{b}', '{b}-co', '{b}mail', 'hello-{b}', '{b}-us'],
@@ -167,7 +161,7 @@ export const DEFAULTS = {
     pageTimeoutMs: 10_000,        // per page
     maxBytes: 1_000_000,          // per page; the rest is not read
     pages: ['home', 'about', 'services', 'team', 'contact', 'locations', 'industries', 'proof', 'pricing', 'careers'], // the last four only when the home page links to them
-    inRequestMs: 5_000,           // how long POST /api/apply waits for research before alerting the owner without it (the rest runs right after the answer; the score follows in application_scored)
+    inRequestMs: 5_000,           // how long POST /api/inquiry waits for research before answering (the rest runs right after the answer; the score follows in application_scored)
     maxServices: 12,
     maxLocations: 10,
     maxPhones: 5,
@@ -307,6 +301,7 @@ export const DEFAULTS = {
   // ── end Stage A ──
   // ── Stage B additions ──
   BUILD: {
+    days: 14,                          // build days from the signed agreement to Day 1 (the first send)
     // Warm-up Engine
     warmupHours: ['07:00', '22:00'],   // in the sending inbox's tz
     warmupPairsPerTick: 5,             // 5 pairs every 20 min = 225/day of capacity (Redis budget, integration.md)
@@ -447,16 +442,14 @@ export const DEFAULTS = {
   // ── end Stage C ──
   // ── Stage D additions ──
   REVIEW: { clutchUrl: null }, // "to set": review requests block + config_missing until filled
-  FRIDAY: { maxWords: 120, personalUpdates: 4, trialWeeks: 4 },
+  FRIDAY: { maxWords: 120, personalUpdates: 4 },
   DIAGNOSIS: { bounceMax: 0.02, placementMin: 0.85, replyMin: 0.015, positiveMin: 0.01, bookedShareMin: 0.5 },
   TARGET: { promise: 1, target: 3 },
   INVOICE: { reminderDays: [3, 7] },
   PLAN_SHOPPING: { starter: { domains: 13, inboxes: 26 }, growth: null, scale: null },
-  KPI: { bookedShare: 0.7, reviewShare: 0.7, paidShare: 0.3, maxExtensions: 1, hoursPerTrial: 9 },
   DIGEST: { morningAt: '08:00', mondayAt: '08:00' },
   DAYJOBS: { at: '09:00', stopRetireDays: 7 },
   TESTMODE: { clockScale: 24 },
-  WINBACK_TEXT: { whatsNew: null }, // "to set": what's new since they left (Offboarding SOP [X])
   // ── end Stage D ──
   // ── Onboarding call (docs/ONBOARD-CALL.md) ── one machine-wide block (no per-client overrides)
   ONBOARDCALL: {
@@ -525,9 +518,7 @@ export const DEFAULTS = {
       proposes_time_ok: "Hi {firstName},\n\n{when} your time works on my side. I'll confirm it shortly.\n\n{ownerName}",
       proposes_time_busy: "Hi {firstName},\n\nSorry, {when} your time is taken on my side. The nearest times I have (your time):\n{times}\n\nOr pick any time that suits you here: {bookingLink}\n\n{ownerName}",
       wants_time: "Hi {firstName},\n\nHappy to. Pick any time that suits you here: {bookingLink}\n\nThe next open times (your time):\n{times}\nOr reply with the one that suits you.\n\n{ownerName}",
-      price: "Hi {firstName},\n\nGood question. The 30-day trial is free: no card, nothing to pay. The one thing I ask in return is an honest review at the end.\n\nIf you'd like to keep going after the trial, we'll go through the plans together on the call.\n\n{ownerName}",
-      // a paying client (Starter / Growth / Scale) asking about price: no trial wording
-      price_paid: "Hi {firstName},\n\nGood question. You're on the {planName} plan, and we'll go through exactly what's included and how billing works on the call.\n\n{ownerName}",
+      price: "Hi {firstName},\n\nGood question. You're on the {planName} plan, and we'll go through exactly what's included and how billing works on the call.\n\n{ownerName}",
       what_needed: "Hi {firstName},\n\nNothing to prepare. The call is {callMinutes} minutes, and we go through who you sell to and who you'd like to reach.\n\nIf you have a moment before it, here's the one page with your details and the agreement: {onboardingLink}\n\n{ownerName}",
       who_are_you: "Hi {firstName},\n\nFair question. I'm {ownerName} from Aviance. {howLine}\n\nMore about us: https://www.aviance.online\n\n{ownerName}",
       later: "Hi {firstName},\n\nNo problem. I'll check back {when}, and you won't get any more reminders from me before then.\n\nIf it suits you sooner, reply to this email any time.\n\n{ownerName}",
@@ -587,10 +578,6 @@ export const DEFAULTS = {
     jobEveryMinutes: 10,
   },
   // ── end CheapInboxes ──
-  // The owner's own outreach (the legacy engine, /api/cron/auto-send): false = one email per person,
-  // no follow-ups (due day-3 / day-7 / day-10 touches are skipped, not sent and not expired).
-  // true = the old day-0 → 3 → 7 → 10 sequence. Set in /mc/config (or the hub's Config).
-  OUTREACH_FOLLOWUPS: false,
   // Ava (the hub's AI helper, lib/ava/): questions a day for everyone together (0 = no cap). Each question is
   // up to 4 calls to a free, no-training AI service (Groq / Cerebras first).
   AVA_DAILY_CAP: 300,

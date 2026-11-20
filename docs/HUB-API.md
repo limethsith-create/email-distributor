@@ -6,6 +6,50 @@ centre. The trial machine (this repo, `email-distributor`) keeps running where
 its database is. The hub's **Trials** section talks to the machine through
 the endpoints below.
 
+## Changes on 2026-11-20 — no free trial, one way in, no own outreach
+
+This file grew as an append log; where an older section below disagrees, this
+section wins.
+
+- **No trial.** Every client is on a plan (`starter|growth|scale`; an old
+  record without one reads as Starter). States now: `applied` (a booking held
+  for its sales call), `declined`, `onboarding`, `closed_silent`,
+  `awaiting_purchase`, `setup_check`, `warming`, `ready`, `sending`, `paused`,
+  `retired`, `deleted`. Gone: `queued`, `extension`, `deciding`, `converted`,
+  `not_now` (and the Day 20 / Day 29 / Day 30 steps, the decision page and
+  its link, the ladder, win-back and the trial agreement).
+- **One way in: `POST /api/inquiry`.** A booking with a website holds a client
+  record (`applied`, `source: 'inquiry'`, researched, no email, no alert of its
+  own — the booking's `new_inquiry` covers it, and the fit score follows as
+  `application_scored`). `POST /api/mc/inquiries {action:'status', id,
+  status:'won'}` makes them a paying client (the one `accepted_call` email;
+  `400 {error}` and no change when it cannot — e.g. the booking has no
+  website: add them with "Add a paying client" instead); `status:'lost'` declines the record and
+  emails nothing. `{action:'toTrial'}` is gone. `POST /api/mc/clients/{id}/intake
+  {action:'approveApplication'|'declineApplication'}` are the same Won / Lost
+  from the client's page: the booking behind the record moves to `won` /
+  `lost` with it (decline needs no reason and emails nothing).
+- **Add a paying client:** `POST /api/mc/clients/new {companyName,
+  contactName, contactEmail, website, plan?}` → onboarding at once (plan
+  defaults to Starter).
+- **Gone endpoints:** `/api/apply`, `/apply`, `/api/c/decide`,
+  `/c/{token}/decide`, `/api/c/stop`, `/c/{token}/stop`, `/api/mc/queue`,
+  `/api/mc/test`, `/api/mc/demo`, `/api/mc/outreach`, `/api/mc/archive`,
+  `/api/cron/auto-send`, `/api/cron/check-replies`, `/api/daily-log`,
+  `/api/leads/*`, `/api/replies/*`, `/api/inboxes-control`, and the old
+  dashboard pages (`/activity`, `/inboxes`, `/leads`, `/replies`; `/` now
+  opens `/mc`).
+- **`GET /api/mc/hub`:** `machine.activeClients` replaces `activeTrials`,
+  `maxActiveTrials`, `extensions` and `queue`. Stages: `intake` "Waiting for
+  the sales call" [applied] · `onboard` · `setup` · `build` · `live`
+  [sending, paused] · `closing` "Stopped & closing" [retired] · `ended`. Rows
+  lose `day30Date` and the extension flag; labels read "Sending — day N" (no
+  "of 30"); `simple` for `applied` is "Booked a sales call — not a client
+  yet" (not a to-do — the booking is). Every `new` booking is a to-do, with
+  or without a `clientId`. `links` keeps `onboarding`, `approval`,
+  `dashboard` (no `decision`). The invoice view has no `bonus`.
+- **Client buttons:** customer hit and away only (no Stop).
+
 ## Auth
 
 Every `/api/mc/*` request from the hub carries the hub user's Supabase access
@@ -121,7 +165,7 @@ Admins only (employees get 403). The owner appears too.
 }
 ```
 
-## `GET /api/mc/hub` — everything the Trials board needs (one call)
+## `GET /api/mc/hub` — everything the Clients board needs (one call)
 
 ```jsonc
 {
@@ -129,21 +173,18 @@ Admins only (employees get 403). The owner appears too.
     "ok": true,
     "baseUrl": "https://email-distributor.vercel.app",
     "heartbeat": { "lastTickAt": "ISO|null", "ageSec": 42, "source": "cronjob|github|null", "lastSendAt": "ISO|null" },
-    "activeTrials": 1, "maxActiveTrials": 3, "extensions": 0,
+    "activeClients": 1,
     "openAlerts": 2,
     "usage": { "redis": {"used":123,"limit":500000,"pct":0}, "places": {...}, "reoon": {..., "remaining": 12} },
-    "setup": { "migrated": true, "encKey": true, "cronSecret": true, "telegram": false, "healthchecks": false, "ownerInbox": true },
-    "queue": [ { "id": "acme", "name": "Acme", "position": 1, "expectedDate": "2026-10-20" } ]
+    "setup": { "migrated": true, "encKey": true, "cronSecret": true, "telegram": false, "healthchecks": false, "ownerInbox": true }
   },
   "stages": [
-    { "key": "intake",   "label": "Applied & queued",  "states": ["applied","queued"],                 "clients": [ /* row */ ] },
+    { "key": "intake",   "label": "Waiting for the sales call", "states": ["applied"],                 "clients": [ /* row */ ] },
     { "key": "onboard",  "label": "Onboarding",        "states": ["onboarding"],                       "clients": [] },
     { "key": "setup",    "label": "Buying & setup",    "states": ["awaiting_purchase","setup_check"],   "clients": [] },
     { "key": "build",    "label": "Warm-up & build",   "states": ["warming","ready"],                  "clients": [] },
-    { "key": "live",     "label": "Sending",           "states": ["sending","paused","extension"],     "clients": [] },
-    { "key": "decide",   "label": "Deciding",          "states": ["deciding"],                         "clients": [] },
-    { "key": "won",      "label": "Converted",         "states": ["converted"],                        "clients": [] },
-    { "key": "closing",  "label": "Not now & closing", "states": ["not_now","retired"],                "clients": [] },
+    { "key": "live",     "label": "Sending",           "states": ["sending","paused"],                 "clients": [] },
+    { "key": "closing",  "label": "Stopped & closing", "states": ["retired"],                          "clients": [] },
     { "key": "ended",    "label": "Ended",             "states": ["declined","closed_silent","deleted"], "clients": [] }
   ],
   "todos": [ /* every row.todo item, flattened, with clientId + clientName, urgent first */ ],
@@ -151,8 +192,8 @@ Admins only (employees get 403). The owner appears too.
 }
 ```
 
-`aviance` (the owner's own outreach) and `_test` (Test Mode) are returned
-under `machine.others: [row]`, not inside `stages`.
+`aviance` and `_test` (old records, if any) are returned under
+`machine.others: [row]`, not inside `stages`.
 
 ### Client row (board card)
 
@@ -207,7 +248,7 @@ yet at this stage). Keys, in order: `intake`, `market`, `purchase`, `setup`,
 `warmup`, `list`, `copy`, `canary`, `sending`, `replies`, `calls`, `reports`,
 `closing`.
 
-## `GET /api/mc/hub/[id]` — one trial in full
+## `GET /api/mc/hub/[id]` — one client in full
 
 Everything in the row above plus:
 
@@ -247,25 +288,19 @@ report and the Day 30 email) on the trial hash (`onboardingLink`,
 token still works. A link whose token expired, was replaced or used up drops
 out; a purpose with no link sent yet is absent.
 
-## Paying clients (paid-plan applications)
+## Paying clients (from a booking)
 
-A paid-plan request from the website (`POST /api/inquiry`) that carries a
-website also becomes an **application**: a client with `plan` =
-`starter|growth|scale` (the plan they picked; Starter when none), `state:
-'applied'`, `source: 'inquiry'`, held for review with the same research and
-fit score as a trial application (`row.fitScore`, `application.research`).
-The inquiry record gets `clientId`, and its "call them back" to-do is dropped
-(the application's own to-do replaces it). Without a website it stays a plain
-inquiry.
+A booking from the website (`POST /api/inquiry`) that carries a website holds
+a client record for the sales call: `plan` = `starter|growth|scale` (the plan
+they picked; Starter when none), `state: 'applied'`, `source: 'inquiry'`,
+researched with a fit score (`row.fitScore`, `application.research`). The
+booking gets `clientId`. Without a website it stays a booking only (Won then
+asks for "Add a paying client" with their website).
 
-The hub lists rows by `plan`: `trial` → Trials; `starter|growth|scale` →
-Paying clients (a converted trial shows in both). "Say yes" is the usual
-`POST /api/mc/clients/{id}/intake {action:'approveApplication'}`. For a paid
-plan it skips the one-trial-per-company rule and the trial cap, sends
-`accepted_call_paid` (no trial wording) and starts the same per-client system
-(onboarding → setup → warm-up → sending). A paying client keeps sending: no
-Day 20 check-in, Day 29 report or Day 30 decision, and no "of 30" in its
-labels.
+Won on the booking (or `POST /api/mc/clients/{id}/intake
+{action:'approveApplication'}`) sends `accepted_call` and starts the
+per-client system (onboarding → setup → warm-up → sending). A client keeps
+sending until they stop: there is no Day 30.
 
 ## The client's dashboard
 
@@ -301,26 +336,11 @@ clears it). `POST /api/mc/team {action:'assign', clientId, uids}` (the owner onl
 (an empty list clears it). Stored in `hub:status:{uid}` and `hub:clientowners` (systems/team.js). Team members may
 POST here (middleware); the route allows them only their own status.
 
-## `GET /api/mc/outreach` — your own sending so far (My stats)
-
-The pre-trial engine's sends (the lead records, `sent_log`), which the
-`aviance` row's counters do not include: the `/api/daily-log` report without
-the per-open rows, plus `totals` {sent, newSends, followUps, opens,
-uniqueOpens, replies, bounces, days, firstDay, lastDay}, `inboxes`
-[{email, sent}] (most first), `byTouch`, `byCampaign`. `days` is newest first,
-each with `summary`, `accountBreakdown`, `byTouch`, `sent`, `replies`,
-`bounces`.
-
-After an archive + clear (`POST /api/mc/archive {action:'clear'}`, below) this
-starts again from zero: the old history lives in the saved archive
-(`GET /api/mc/archive/{id}`). With follow-ups off (`OUTREACH_FOLLOWUPS`, the
-default) every new day is `newSends` only; `followUps` stays 0.
-
 ## Actions the hub calls (all existing; JSON bodies)
 
 | What | Call |
 | --- | --- |
-| New client (pre-approved) | `POST /api/mc/clients/new` `{companyName, contactName, contactEmail, website, override?}` → `{ok, clientId, outcome}` or `400 {ok:false, errors:{field: message, _form?: message}}` |
+| Add a paying client | `POST /api/mc/clients/new` `{companyName, contactName, contactEmail, website, plan?}` → `{ok, clientId, outcome}` or `400 {ok:false, errors:{field: message, _form?: message}}` |
 | Profile edit | `POST /api/mc/clients/{id}` `{action:'profile', fields:{senderName, senderTitle, senderPrefix, postalAddress, calendarUrl, defaultNiche, defaultIcp, sellsTo, industry, capacityPerWeek, winCondition}}` |
 | Add / remove / switch inbox | `POST /api/mc/clients/{id}` `{action:'addInbox', email, password, displayName, provider}` · `{action:'removeInbox', email}` · `{action:'inboxEnabled', email, enabled}` |
 | Pause / resume / any state move | `POST /api/mc/clients/{id}` `{action:'setState', to, reason}` |
@@ -329,51 +349,30 @@ default) every new day is `newSends` only; `followUps` stays 0.
 | Mark inboxes cancelled | `{action:'inboxesCancelled'}` |
 | Mark paid | `{action:'markPaid'}` |
 | Clear legal hold / send hold | `{action:'clearLegalHold'}` · `{action:'clearSendHold'}` |
-| Review captured / log owner time | `{action:'reviewCaptured'}` · `{action:'logTime', minutes}` |
+| Log owner time | `{action:'logTime', minutes}` |
 | Purchase page data / paste logins | `GET /api/mc/clients/{id}/purchase` · `POST` `{domain, registrar?, price?, autoRenewOff:true, inboxes:[{email,password,displayName}]}` |
 | Intake actions | `POST /api/mc/clients/{id}/intake` `{action:'marketOverride'|'rerunMarket'|'rerunPriceScout'|'rerunSetup'|'rerunBookingTest'|'resendWelcome'}` |
 | Copy / build | `GET /api/mc/clients/{id}/sequence` · `POST` `{action:'save'|'rebuild'|'setActive'|'sendLink'|'resend'|'blocklist'|'dispatch', ...}` |
 | Disputes | `GET /api/mc/clients/{id}/bookings` → `{bookings, pacelog, hot}` · `POST` `{bookingId, action:'uphold'|'overturn'}` |
-| Queue | `GET /api/mc/queue` · `POST` `{action:'promote'|'decline', clientId, reason?}` |
 | Alerts | `GET /api/mc/alerts` → `{alerts}` · `POST` `{action:'ack', id}` |
 | Setup (first-time) | `POST /api/mc/setup` `{action:'migrate'|'test-alert'}` |
 | Config | `GET /api/mc/config` → `{settings:[{key, default, value, overridden, toSet}]}` · `POST` `{action:'set', key, value}` / `{action:'reset', key}` |
 | Warm-up circle | `GET /api/mc/warmup` · `POST` `{action:'addHelper'|'testHelper'|'removeHelper'|'helperEnabled', ...}` (see "Warm-up in the hub" below) |
-| Test Mode | `GET /api/mc/test` · `POST` `{action:'start', from}` / `reset` / `{action:'jump', day}` / `{action:'simulate', kind}` / `tick` |
 
-Every state name → plain label (for the hub): applied "Applied", queued
-"In the queue", onboarding "Onboarding", awaiting_purchase "Waiting for you to
-buy", setup_check "Checking the setup", warming "Warming up", ready "Ready for
-Day 1", sending "Sending", paused "Paused", extension "Free extension",
-deciding "Deciding", converted "Converted", not_now "Not now", retired
-"Retired", deleted "Deleted", declined "Declined", closed_silent "Never
-finished onboarding".
+Every state name → plain label (for the hub): applied "Booked a sales
+call", onboarding "Onboarding", awaiting_purchase "Waiting for you to buy",
+setup_check "Checking the setup", warming "Warming up", ready "Ready for
+Day 1", sending "Sending", paused "Paused", retired "Stopped", deleted
+"Deleted", declined "Declined", closed_silent "Never finished onboarding".
 
-## Trial applications from the website
-
-aviance.online/trial.html posts its form to `POST /api/apply` (CORS for
-`SITE_ORIGINS`, default `https://www.aviance.online,https://aviance.online`).
-The site asks different questions from the Gatekeeper's, so a website
-application is saved in state `applied` and **held for the owner**
-(`systems/webapply.js`): the owner gets `new_application` (email + Telegram),
-the hub gets a to-do `review:{id}` → detail section `application`, and
-nothing reaches the applicant until the owner decides.
+## The record held for the sales call — `application`
 
 `GET /api/mc/hub/{id}` → `application` (null when none):
 ```jsonc
-{ "receivedAt": "ISO", "source": "website|form|owner", "review": "pending|approved|declined|null",
-  "decidedAt": "ISO|null", "decision": "approve|decline|null", "declineReason": "text|null",
-  "answers": [ { "q": "What do you sell, and who to?", "a": "…" } ],
-  "fit": { "verdict": "fit|fails", "summary": "Looks like a fit — 3 checks unknown",
-           "lines": [ { "rule": "deal_value", "label": "Customer worth ≥ $2,000 in year one", "status": "pass|fail|unknown", "note": "They said $5,000–$20,000" } ] } }
+{ "receivedAt": "ISO", "source": "inquiry|owner", "review": "pending|approved|declined|null",
+  "decidedAt": "ISO|null", "decision": "approve|decline|null",
+  "answers": [ { "q": "What do you sell, and who to?", "a": "…" } ] }
 ```
-Owner actions: `POST /api/mc/clients/{id}/intake` `{action:'approveApplication'}`
-→ `{ok, outcome:'onboarding'|'queued'|'declined'}` (the repeat rule and the
-3-trial cap still apply; `onboarding` = the one `accepted_call` email went out,
-see "Onboarding call" below; if that email cannot go, the answer is a 500 with
-the reason and the application is waiting again) · `{action:'declineApplication', reason}` →
-`{ok, outcome:'declined'}`; the reason is emailed to the applicant
-(`decline_fit`), 400 when empty.
 
 ---
 
@@ -585,7 +584,7 @@ the home screen; iOS 16.4+). Under `/api/mc/push/*`, same auth as the rest:
 `POST test {endpoint?}` → `{ok, sent, failed}`. Payload: `{title, body, url, tag, urgent, at}`;
 `url` is `/#trial/{id}` or `/#alerts`; the same `tag` replaces the previous notification.
 
-## Plan inquiries (paid plans, no trial)
+## Plan inquiries (the website's "Book a call")
 
 The website's "Book a call" form posts to public `POST /api/inquiry` (CORS for
 SITE_ORIGINS). Each inquiry is saved, the owner gets `new_inquiry` (phone push
@@ -604,11 +603,11 @@ and, for each `new` one, a to-do `{ id: "inquiry:{id}", clientName: company, urg
 
 `GET /api/mc/inquiries` → `{ inquiries: [record…] (newest first), counts }` where a record is
 `{ id, at, source, status (stage above), statusAt, stageHistory: [{at, from, to}], notes: [{at, text}], name, email, company, website, sells, plan: starter|growth|scale|null, slotStart, slotEnd (ISO), theirTz, whenTheirs, whenHost (text, owner's time), role, dealSize, channel, capacity, timing (the website's five questions, text|null), meetingId, meetLink, confirmationSentAt | confirmationError, reminded_tomorrow, reminded_soon (ISO), calendarError?, clientId?, trialOutcome? }`.
-`POST /api/mc/inquiries` `{action:'status', id, status, note?}` · `{action:'note', id, text}` · `{action:'toTrial', id}` (runs the Gatekeeper pre-approved → the accepted_call email or queue; returns `{ok, clientId, outcome}`).
+`POST /api/mc/inquiries` `{action:'status', id, status, note?}` · `{action:'note', id, text}`. `status:'won'` makes them a paying client first (the accepted_call email; an error and no change when it cannot, e.g. no website); `status:'lost'` declines the held record (no email).
 
 ---
 
-# Onboarding call + the simple Trials status (2026-09-25)
+# Onboarding call + the simple status (2026-09-25)
 
 Contract: docs/ONBOARD-CALL.md. Every field is additive.
 
@@ -1642,88 +1641,7 @@ is when it went.
 
 ---
 
-# Outreach archive and dashboard access (2026-09-28)
-
-The owner's own outreach starts a new process: **one email per person, no
-follow-ups**. The old history is saved as a file-like archive in the machine and
-then cleared. Clients can be given their dashboard by email.
-
-## Follow-ups off — config `OUTREACH_FOLLOWUPS` (default `false`)
-
-The legacy sender (`/api/cron/auto-send`, the owner's own outreach) sends only
-first emails (day 0) while this is `false`: leads whose day-3 / day-7 / day-10
-would be due are skipped — not sent, not expired, left as they are. Its answer's
-`pools.followUpsOn` says which way it is. **To turn follow-ups back on:**
-`POST /api/mc/config {action:'set', key:'OUTREACH_FOLLOWUPS', value:true}` (or
-`/mc/config`); `{action:'reset', key:'OUTREACH_FOLLOWUPS'}` turns them off again.
-Applies within about a minute. Trial and paying clients' sending is not affected.
-
-## Outreach archive — `/api/mc/archive` (owner only)
-
-Employees get `403 {error:'Read-only: ask the owner to do this.'}` on every
-method (middleware `EMPLOYEE_DENY`; the routes check `x-hub-role` again).
-
-### `GET /api/mc/archive` — the saved archives, newest first
-```jsonc
-{ "archives": [
-  { "id": "arc-20260928-143012-9f2c1a", "createdAt": "ISO",
-    "totals": { "sent": 1840, "opened": 412, "replies": 37, "bounces": 22, "days": 19, "firstDay": "2026-09-01", "lastDay": "2026-09-27" },
-    "bytes": 1938211, "chunks": 5,
-    "clearedAt": "ISO",                                  // only on an archive made by a clear
-    "cleared": { "leads": 1203, "suppressed": 1260, "keys": ["sent_log", "…"] } } ] }
-```
-
-### `GET /api/mc/archive/{id}` — one archive, whole (JSON; 404 when there is none)
-```jsonc
-{ "id": "arc-…", "createdAt": "ISO",
-  "totals": { "sent", "opened", "replies", "bounces", "days", "firstDay", "lastDay" },   // opened = people who opened (unique); days = days with sends
-  "days":    [ { "date": "2026-09-01", "sent": 60, "opened": 14, "replies": 2, "bounces": 1 } ],   // oldest first (UTC days)
-  "sent":    [ { "at": "ISO", "to": "ann@acme.com", "company": "Acme", "subject": "…", "touch": "d0|d3|d7", "from": "me@…" } ],
-  "replies": [ { "at": "ISO", "from": "ann@acme.com", "company": "Acme", "subject": "Re: …", "text": "…" } ],
-  "bounces": [ { "at": "ISO", "email": "…", "reason": "550 …", "account": "me@…|null" } ],
-  "leads":   [ { "email", "company", "status", "sent_at", "d3_sent_at", "d7_sent_at", "account_used", "original_subject",
-                 "name", "first_name", "title", "industry", "city", "country", "website", "phone", "campaign", "source",
-                 "opened_at", "open_count", "replied_at", "reply_kind", "reply_intent", "reply_subject", "reply_text",
-                 "bounced_at", "bounce_reason", "unsubscribed_at", "createdAt", "…" } ] }   // every lead that was ever emailed; empty fields left out
-```
-Built from the same logic as `/api/daily-log` (lib/daily-log.js), reading the
-whole `sent_log` and `open_events`. Lead fields come from an allow-list: no
-passwords, tokens or Message-IDs. The download is sent as a file
-(`Content-Disposition: attachment; filename="{id}.json"`). A big archive can be
-fetched in parts: `?section=days|sent|replies|bounces|leads` →
-`{ id, createdAt, totals, <section> }`.
-
-### `POST /api/mc/archive`
-```jsonc
-// a snapshot now; nothing is cleared
-{ "action": "save" }                      // → { "ok": true, "id": "arc-…", "totals": { … } }
-
-// archive, then clear
-{ "action": "clear", "confirm": "CLEAR" } // → { "ok": true, "archiveId": "arc-…", "totals": { … },
-                                          //     "cleared": { "leads": 1203, "suppressed": 1260, "keys": ["sent_log", "daily_sends", …] } }
-// → 400 { error } without confirm "CLEAR" (nothing changes) · 409 { error } while an email is being sent
-// → 500 { error } when the archive could not be saved or did not read back the same (nothing is cleared)
-```
-A clear, in order (it holds the sender's lock, so nothing is sent meanwhile):
-1. builds the archive, saves it, reads it back and checks the counts match —
-   anything wrong here and **nothing is deleted**;
-2. adds every address that was ever emailed (contacted leads, every `sent` row,
-   every bounce) to the legacy `suppression` set — never emailed or imported
-   again; the reason `archived_outreach:{archiveId}` is kept in
-   `archive:outreach:suppressed`;
-3. removes the contacted leads from `leads` (leads never emailed stay);
-4. deletes the history keys `sent_log`, `daily_sends` (today's per-inbox counts
-   are put back so the daily cap stays right), `replies_v3`, `bounces`,
-   `email_opens`, `email_opens_first`, `email_opens_first_human`,
-   `email_open_counts`, `open_events`, `reply_events`, `conversations`,
-   `msgid_index`, `stats`, and the `aviance` client's own counters
-   (`client:aviance:counters:*`). `cleared.keys` lists the ones that existed.
-   `company_sent` and `suppression` stay.
-
-Storage: `archive:outreach:index` (list of the entries above) and
-`archive:outreach:{id}:{n}` (the JSON text in pieces of at most 400 KB).
-Suggested button: "Save a copy" (save) and "Archive and clear…" with a typed
-confirmation (`CLEAR`).
+# Client dashboard access (2026-09-28)
 
 ## Client dashboard by email — `POST /api/mc/clients/{id}`
 
@@ -1816,76 +1734,6 @@ The month-one invoice, on the board row and in the trial:
 - A plain thank-you from a client after onboarding ("Perfect — thanks!") is
   `rule: 'thanks'` in the conversation: no `onboard_reply` alert, no
   `needsReply`, no red dot.
-
-## Test run (demo clients) — `/api/mc/demo` (owner only)
-
-Three example clients the owner can click through in the real hub:
-
-| id | what it is | when loaded |
-| --- | --- | --- |
-| `demo-harbor-dental` | Harbor Dental Group — a 30-day trial that pressed Start | `state: 'converted'`, `plan: 'starter'`, invoice 2 497 paid; 516 cold emails, 568 emails in all, 13 conversations |
-| `demo-summit-roofing` | Summit Roofing Co — a paying client on Growth | `state: 'sending'`, `plan: 'growth'`, invoice 3 997 paid; 428 cold emails, 485 in all, 18 conversations |
-| `demo-lakeview-pt` | Lakeview Physical Therapy — a 30-day trial live mid-way | `state: 'sending'`, `plan: 'trial'`, `simple.step: 'sending'` ("Sending — day 13 of 30, 1 call booked" on the day it loads), no invoice; 118 cold emails, 146 in all, 7 conversations, the prospect call still ahead |
-
-Harbor and Summit are the final state of the two clients in the simulation;
-Lakeview is Harbor's trial snapshotted on the evening of its Day 12 with every
-name changed (company, people, trade, prospects, domains) — so the Trials list
-shows a trial at "Sending emails" with the steps before it done, its emails
-and conversations so far, its Messages with the owner, both calls
-(`onboardCall`, `launchCall`) and one booked prospect call
-(`tests/fixtures/demo-state.json`, `{ version: 2, ids, parts: [{ ids, endedAt,
-year, endsDaysAgo, keys, members }] }`; regenerate with
-`DEMO_STATE=1 node --import ./tests/register.mjs --test tests/two-clients.test.mjs`).
-Every date is moved so each part's last evening is **yesterday** (ET) — nothing
-in the hub is dated later than now: daily counters, the replies, the booked
-prospect call, the conversation (the reply bot's answers and the client ↔
-owner messages), the timeline, both calls, the inboxes (fake logins), warm-up
-done, the invoice paid, and every email's full text (see "Emails and
-conversations" below). Every domain in it is a reserved `.example` one.
-
-**It loads itself once.** The first time the hub opens in production
-(`GET /api/mc/hub`), the test run loads by itself and `demo:autoloaded` = the
-time is set in Redis. That mark is never removed: after **Remove test run**
-it never comes back (a manual Load sets it too). Config `DEMO_AUTOLOAD`
-(default `true`, `/mc/config`) turns the automatic load off. Cost: one Redis
-read per server instance until the mark is seen.
-
-```jsonc
-// GET /api/mc/demo
-{ "loaded": true, "ids": ["demo-harbor-dental", "demo-summit-roofing", "demo-lakeview-pt"], "at": "ISO|null" }   // at = when it was loaded
-// → loaded false: { "loaded": false, "ids": [], "at": null }
-
-// POST /api/mc/demo { "action": "load" }     (a second load replaces the first)
-{ "ok": true, "ids": ["demo-harbor-dental", "demo-summit-roofing", "demo-lakeview-pt"] }
-
-// POST /api/mc/demo { "action": "remove" }   (every key it wrote, and anything written under the three ids since;
-//                                              the store is exactly as before, except the `demo:autoloaded` mark)
-{ "ok": true, "removed": 512 }
-
-// → 400 { error } unknown action · 403 { error: 'Read-only: ask the owner to do this.' } for an employee · 500 { error }
-```
-
-**The flag:** `demo: true` on the board row (`GET /api/mc/hub` →
-`stages[].clients[].demo`), on `GET /api/mc/hub/{id}` → `row.demo`, and on their
-Calendar meetings (`GET /api/mc/calendar` → `meetings[].demo`). Every real row
-has `demo: false`. The client hash carries `demo: '1'`. Suggested: a "Test run"
-badge on the card and a "Load test run" / "Remove test run" pair in Settings.
-
-**Safety — a demo client is never acted on:**
-- no job runs for them (the heartbeat, the hub's check and every scan skip
-  them: `getAllClients` leaves them out unless a hub view asks);
-- no email (notify and the reply bot skip them; the mailer never sends to or
-  from a `.example` address), no owner alert or phone push, no Google /
-  CheapInboxes / Stripe call;
-- they never count against the 3-trial cap or the queue, and are not in the
-  owner's own outreach numbers or archives;
-- every `POST` under `/api/mc/clients/{demo id}/…` answers
-  `409 { error: 'This is a test-run client: nothing can be sent or changed for it. Remove the test run to clear it.' }`
-  (middleware and the routes), and so does a Calendar action on one of their
-  meetings — hide those buttons on a demo card;
-- reading them costs the Redis budget only when the hub opens them (a tick
-  reads nothing of theirs).
-- Their dashboard link (`links.dashboard`) works: a read-only page.
 
 # Emails and conversations, per client (2026-09-29)
 

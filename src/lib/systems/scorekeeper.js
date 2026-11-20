@@ -181,7 +181,7 @@ async function maybeQuoteRequest(clientId, bookingId, now) {
   if (Object.values(all).some((b) => b.quoteRequestedAt)) return;
   const b = all[bookingId];
   const lead = b.leadEmail ? await getLead(clientId, b.leadEmail) : null;
-  const r = await notifyClientSafe(clientId, 'quote_request', { Name: lead?.name || lead?.first_name || b.attendeeEmail || 'the prospect', Company: lead?.company || 'their company' }, { from: 'trial', dedupe: 'quote_request' });
+  const r = await notifyClientSafe(clientId, 'quote_request', { Name: lead?.name || lead?.first_name || b.attendeeEmail || 'the prospect', Company: lead?.company || 'their company' }, { from: 'sender', dedupe: 'quote_request' });
   if (r.sent) await saveBooking(clientId, bookingId, { quoteRequestedAt: now.toISOString(), quoteRequestMessageId: r.messageId || null });
 }
 

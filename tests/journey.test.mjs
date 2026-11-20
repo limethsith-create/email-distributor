@@ -1,10 +1,10 @@
-// The whole journey of ONE applicant, in order, through the real route
-// handlers — the website form, the hub (board + trial after every step), the
-// owner's Yes, the onboarding inbox and the reply bot, the booking page, the
+// The whole journey of ONE client, in order, through the real route
+// handlers — the website booking, the hub (board + client after every step), the
+// owner's Won, the onboarding inbox and the reply bot, the booking page, the
 // Calendar with Google Meet, the onboarding page and agreement, the market
 // count, the CheapInboxes purchase (the owner buys; the machine connects),
 // the setup check, warm-up with the owner's helpers, the Lead Finder, copy and
-// approval, and Day 1 → Day 30 → converted → paid. The world is
+// approval, and Day 1 → sending → the invoice paid. The world is
 // tests/journey-world.mjs: a simulated clock and a fake outside world; nothing
 // leaves the machine.
 //
@@ -83,7 +83,7 @@ function scrub(v) {
 const trimmed = (snap) => { const s = structuredClone(snap); if (s.detail?.events) s.detail.events = s.detail.events.slice(0, 40); return s; };
 
 // docs/HUB-API.md: the fields the hub reads, checked on every answer.
-const ROW_KEYS = ['id', 'name', 'state', 'stateLabel', 'plan', 'trialDay', 'day1Date', 'day30Date', 'contactName', 'contactEmail', 'website', 'health', 'healthReasons', 'five', 'inboxRate', 'openAlerts', 'urgentAlerts', 'todo', 'systems', 'nextUp', 'simple', 'fitScore'];
+const ROW_KEYS = ['id', 'name', 'state', 'stateLabel', 'plan', 'trialDay', 'day1Date', 'contactName', 'contactEmail', 'website', 'health', 'healthReasons', 'five', 'inboxRate', 'openAlerts', 'urgentAlerts', 'todo', 'systems', 'nextUp', 'simple', 'fitScore'];
 const SIMPLE_KEYS = ['step', 'label', 'next', 'needsYou', 'since', 'person', 'company', 'dayOf30', 'needsReply'];
 const DETAIL_KEYS = ['row', 'profile', 'trial', 'domain', 'shopping', 'inboxes', 'leadsByStatus', 'leadfinder', 'sequence', 'counters', 'repliesByKind', 'replies', 'bookings', 'pacelog', 'reports', 'invoice', 'promises', 'upcoming', 'events', 'jobs', 'holds', 'links', 'application', 'onboardCall', 'launchCall', 'autobuy', 'warmup', 'conversation', 'deliverability', 'leadQuality'];
 const ONBOARDCALL_KEYS = ['status', 'label', 'sentAt', 'openedAt', 'lastReplyAt', 'bookedFor', 'bookedAt', 'bookedBy', 'heldAt', 'dueBy', 'overdue', 'remindersSent', 'nextReminderAt', 'stopped', 'bookingUrl', 'fromInbox', 'noShowAt', 'stoppedAt', 'lastOwnerReplyAt', 'needsReply', 'callMinutes', 'requestedFor', 'requestedAt', 'proposedFor', 'meetingId', 'steps', 'thread'];
@@ -92,7 +92,7 @@ const LAUNCHCALL_KEYS = [...ONBOARDCALL_KEYS, 'kind', 'meetLink', 'approvedOnCal
 const CONVERSATION_KEYS = ['thread', 'needsReply', 'lastInAt', 'lastOutAt', 'bot', 'canReply', 'fromInbox'];
 const AUTOBUY_KEYS = ['status', 'buy', 'label', 'domain', 'steps', 'mailboxes', 'problem', 'linkedBy', 'canUnlink'];
 const WARMUP_KEYS = ['status', 'label', 'day', 'of', 'readyBy', 'inboxRate', 'inboxes', 'problem', 'helpersNeeded'];
-const MACHINE_KEYS = ['ok', 'baseUrl', 'heartbeat', 'activeTrials', 'maxActiveTrials', 'extensions', 'openAlerts', 'usage', 'setup', 'queue', 'others'];
+const MACHINE_KEYS = ['ok', 'baseUrl', 'heartbeat', 'activeClients', 'openAlerts', 'usage', 'setup', 'others'];
 const SECRETS = [CI_KEY, GOOGLE.clientSecret, GOOGLE.refresh, 'abcd efgh ijkl mnop', 'abcdefghijklmnop', 'wxyz abcd efgh ijkl', 'wxyzabcdefghijkl', 'Login-dana#9', 'app-pw-owner', 'journey-cron', 'journey-leadfinder'];
 
 function contractCheck(nn, look) {
@@ -175,7 +175,7 @@ function writeReport(dir) {
 
 // ── the run ──────────────────────────────────────────────────────────────────
 
-test('the journey: website form → Day 30 → converted, through the real routes', { timeout: 1_800_000 }, async () => {
+test('the journey: website booking → Won → onboarding → sending → paid, through the real routes', { timeout: 1_800_000 }, async () => {
   __reset();
   installJourney();
   const toDana = () => sentSince(mailMark).filter((m) => m.to === APPLICANT.email);
@@ -196,7 +196,6 @@ test('the journey: website form → Day 30 → converted, through the real route
   await setting('OWNER.address', '14 Galle Road, Colombo 03, Sri Lanka');
   await setting('REVIEW.clutchUrl', 'https://clutch.co/profile/aviance');
   await setting('PAYMENT.paypalMe', 'https://paypal.me/aviance');
-  await setting('WINBACK_TEXT.whatsNew', 'a faster list build');
   // The free Reoon tier checks 20 addresses a day; the journey lifts it so the whole list verifies in the build weeks.
   await setting('VERIFY.services.reoon.daily', 5000);
   // Google Meet: paste the OAuth client, press Connect, Allow on Google's screen.
@@ -210,25 +209,27 @@ test('the journey: website form → Day 30 → converted, through the real route
   const ci = await call('api/mc/cheapinboxes/route', 'POST', { body: { action: 'saveKey', apiKey: CI_KEY } });
   assert.equal(ci.status, 200, JSON.stringify(ci.json));
   assert.equal(ci.json.webhook, 'registered');
-  await snap('00', 'owner-setup', 'The owner connects Google Meet and CheapInboxes and fills his settings. No trial yet, and no heartbeat (cron-job.org is not set up).');
+  await snap('00', 'owner-setup', 'The owner connects Google Meet and CheapInboxes and fills his settings. No client yet, and no heartbeat (cron-job.org is not set up).');
 
-  // ── 1. The website trial form ─────────────────────────────────────────────
+  // ── 1. Dana books a sales call on the website ───────────────────────────
   clock.set(et('2026-10-01', '15:40'));
-  const form = {
-    source: 'website', name: APPLICANT.name, email: 'Dana@RidgelineIT.com', website: 'https://www.ridgelineit.com/', city: APPLICANT.city,
-    sell: 'Managed IT and cybersecurity for law firms and accounting firms with 10–75 staff in the Carolinas',
-    value: '$5,000–$20,000', capacity: '5–10 a week', strangers: 'Yes — cold buyers already', calendar: 'Yes',
-    then: 'Move to Growth — 20 calls a month', notes: 'We tried LinkedIn ads in 2024; not much came of it.', agree: true, proof: ['Intro to one peer'],
+  const booking = {
+    name: APPLICANT.name, email: APPLICANT.email, company: APPLICANT.company, website: 'https://www.ridgelineit.com/',
+    sells: 'Managed IT and cybersecurity for law firms and accounting firms with 10–75 staff in the Carolinas',
+    plan: 'starter', slotStart: '2026-10-01T20:30:00.000Z', slotEnd: '2026-10-01T20:45:00.000Z', theirTz: 'America/New_York',
+    whenTheirs: 'Thursday, October 1 at 4:30 PM', whenHost: 'Friday, October 2, 2026 at 2:00 AM',
+    role: 'Founder / CEO', dealSize: '$5,000 – $25,000', channel: 'Referrals', capacity: 'Around 10', timing: 'This month',
   };
-  const applied = await call('api/apply/route', 'POST', { path: '/api/apply', body: form, headers: { 'x-forwarded-for': '98.24.1.7', origin: 'https://www.aviance.online' } });
-  assert.equal(applied.status, 200, JSON.stringify(applied.json));
-  assert.equal(applied.json.outcome, 'review');
+  const booked = await call('api/inquiry/route', 'POST', { path: '/api/inquiry', body: booking, headers: { 'x-forwarded-for': '98.24.1.7', origin: 'https://www.aviance.online' } });
+  assert.equal(booked.status, 200, JSON.stringify(booked.json));
+  assert.equal(booked.json.emailed, true, 'the confirmation with the calendar invite went');
+  const inquiryId = booked.json.id;
   clientId = await kv.hget(K.mainDomainIndex(), APPLICANT.domain);
-  assert.ok(clientId, 'the application is saved under their domain');
-  const s1 = await snap('01', 'applied', 'Dana Whitfield of Ridgeline IT fills the trial form on aviance.online. The owner hears at once; the machine reads the whole website, the public records and Google, then scores the fit.', { check: false });
+  assert.ok(clientId, 'a record is held for the sales call under their domain');
+  const s1 = await snap('01', 'booked', 'Dana Whitfield of Ridgeline IT books a sales call on aviance.online. She gets the confirmation with a calendar invite; the owner hears at once; the machine reads the whole website, the public records and Google, then scores the fit — not a client yet.', { check: false });
   assert.equal(s1.row.state, 'applied');
-  assert.deepEqual([s1.row.simple.step, s1.row.simple.needsYou], ['new', true]);
-  assert.deepEqual(steps.at(-1).alerts.map((a) => a.key), ['new_application', 'application_scored'], 'the owner hears of it, then gets the score');
+  assert.deepEqual([s1.row.simple.step, s1.row.simple.needsYou], ['new', false]);
+  assert.ok(steps.at(-1).alerts.map((a) => a.key).includes('new_inquiry'), 'the owner hears of the booking');
   const research = s1.detail.application.research;
   assert.equal(research.status, 'done');
   assert.ok(research.deep.pagesRead >= 15, `the whole site was read (${research.deep.pagesRead} pages)`);
@@ -246,26 +247,24 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.match(research.deep.money.benchmark, /IT services/, 'what they sell (IT), not who buys it (law and accounting firms)');
   assert.ok(research.brief.sentences.length >= 8 && research.brief.sentences.length <= 12, research.brief.text);
   assert.ok(research.brief.sentences.every((x) => x.sources.length), 'every sentence cites its source');
-  const scoredMail = sim.sent.find((m) => m.to === OWNER.email && /Fit score for Ridgeline IT/.test(m.subject));
-  assert.ok(scoredMail.text.includes(`${research.brief.sentences[0].text} ${research.brief.sentences[1].text}`), 'the score email ends with the brief');
   // Journey fix: Google lists at most 60 a search, so the research's quick count is a floor — never "Market too small".
   assert.equal(research.market.capped, true);
   assert.ok(!research.score.dealbreakers.some((d) => /Market too small/.test(d.text)), JSON.stringify(research.score.dealbreakers));
   assert.notEqual(research.score.label, 'Not a fit', `${research.score.score}/100 ${research.score.label}`);
-  assert.equal(s1.row.todo[0].text, "Review Ridgeline IT's trial application", 'one to-do for the application, not also its alert');
-  // Hub screens fix: the trial's own `row` is the board row — the same alerts, the same health.
-  assert.equal(s1.row.health, 'red');
-  assert.deepEqual([s1.detail.row.health, s1.detail.row.openAlerts, s1.detail.row.urgentAlerts], [s1.row.health, s1.row.openAlerts, s1.row.urgentAlerts]);
+  assert.deepEqual(s1.row.todo, [], 'the record held for the call has no to-do of its own');
+  assert.ok(s1.board.todos.some((t) => t.id === `inquiry:${inquiryId}`), 'the booking is on the to-do list');
 
-  // ── 2. The owner reads it in the morning (Sri Lanka) and says yes ────────
+  // ── 2. The call happens; the owner marks the booking Won in the morning (Sri Lanka) ──
   clock.set(colombo('2026-10-02', '08:55'));
-  await snap('02', 'owner-reads', 'Friday morning in Colombo the owner opens the hub and reads the application, the research and the fit score.');
+  await snap('02', 'owner-reads', 'Friday morning in Colombo the owner opens the hub after the sales call and reads the research and the fit score.');
   clock.set(colombo('2026-10-02', '09:00'));
-  const yes = await call('api/mc/clients/[id]/intake/route', 'POST', { path: `/api/mc/clients/${clientId}/intake`, params: { id: clientId }, body: { action: 'approveApplication' } });
-  assert.equal(yes.status, 200, JSON.stringify(yes.json));
-  assert.equal(yes.json.outcome, 'onboarding');
+  mailMark = sim.sent.length;
+  const won = await call('api/mc/inquiries/route', 'POST', { path: '/api/mc/inquiries', body: { action: 'status', id: inquiryId, status: 'won' } });
+  assert.equal(won.status, 200, JSON.stringify(won.json));
+  assert.equal(won.json.inquiry.clientId, clientId);
+  assert.equal((await getClient(clientId)).state, 'onboarding');
   const accepted = toDana();
-  assert.equal(accepted.length, 1, 'exactly one email to them on a yes');
+  assert.equal(accepted.length, 1, 'exactly one email to them on Won');
   assert.equal(accepted[0].from, OWNER.inbox);
   assert.match(accepted[0].subject, /book your onboarding call/);
   const onboardToken = linkIn(accepted[0].text, 'onboard');
@@ -273,10 +272,8 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.ok(onboardToken, 'the one-page onboarding link is in it');
   const pixel = /src="([^"]+\/api\/track\/open\?t=[^"]+)"/.exec(accepted[0].html)?.[1]?.replace(/&amp;/g, '&');
   assert.ok(pixel, 'one tracking pixel');
-  const s3 = await snap('03', 'accepted', 'The owner presses “Say yes”: one email goes to Dana with the booking page and the onboarding page.');
-  // Journey fix: the urgent new_application alert is handled by the yes — no to-do or red dot is left behind.
+  const s3 = await snap('03', 'accepted', 'The owner presses Won on the booking: one email goes to Dana with the booking page and the onboarding page.');
   assert.equal(s3.row.simple.needsYou, false, JSON.stringify(s3.row.todo));
-  assert.ok((await allAlerts()).find((a) => a.key === 'new_application').acknowledged);
   // Hub screens fix: the onboarding link she was sent is in `links`.
   assert.ok(String(s3.detail.links.onboarding || '').endsWith(`/c/${onboardToken}/onboard`), JSON.stringify(s3.detail.links));
 
@@ -290,7 +287,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   // ── 4. Dana replies; the hub's check finds it and the reply bot answers ──
   const acceptedId = accepted[0].messageId.replace(/[<>]/g, '').toLowerCase();
   clock.set(et('2026-10-02', '09:05'));
-  const herReply = deliver(OWNER.inbox, { from: APPLICANT.email, fromName: APPLICANT.name, to: [OWNER.inbox], subject: `Re: ${accepted[0].subject}`, text: `Hi Limeth,\n\nThanks — great news! What times work for you next week?\n\nDana\n\nOn Thu, Oct 1, 2026 at 11:30 PM Limeth Sith <${OWNER.inbox}> wrote:\n> Good news: we'd like to run your free 30-day trial`, threadIds: [acceptedId], inReplyTo: [acceptedId], references: [acceptedId], date: clock.iso() });
+  const herReply = deliver(OWNER.inbox, { from: APPLICANT.email, fromName: APPLICANT.name, to: [OWNER.inbox], subject: `Re: ${accepted[0].subject}`, text: `Hi Limeth,\n\nThanks — great news! What times work for you next week?\n\nDana\n\nOn Thu, Oct 1, 2026 at 11:30 PM Limeth Sith <${OWNER.inbox}> wrote:\n> Welcome aboard`, threadIds: [acceptedId], inReplyTo: [acceptedId], references: [acceptedId], date: clock.iso() });
   clock.set(et('2026-10-02', '09:10'));
   const s4 = await snap('04', 'reply-bot', 'Dana writes back “What times work for you next week?”. When the owner opens the hub, its check reads the inbox and the reply bot answers with the booking page and three free times.');
   const botMail = sim.sent.filter((m) => m.to === APPLICANT.email).at(-1);
@@ -335,13 +332,13 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(confirmation.length, 1, 'one confirmation email');
   assert.ok(confirmation[0].icalEvent && /BEGIN:VCALENDAR/.test(confirmation[0].icalEvent.content), 'an .ics invite');
   assert.ok(confirmation[0].text.includes(meetLink) && confirmation[0].icalEvent.content.includes(meetLink), 'the Meet link in the email and the invite');
-  assert.equal(world.google.events.size, 1, 'one event on the owner\'s Google Calendar');
+  assert.equal(world.google.events.size, 2, 'two events on the owner\'s Google Calendar: the sales call and the onboarding call');
   const s6 = await snap('06', 'call-confirmed', 'The owner presses Yes in the Calendar: a Google Calendar event with a Meet link is made, and Dana gets the confirmation with the invite.', { extra: { calendar: (await call('api/mc/calendar/route', 'GET', { path: '/api/mc/calendar' })).json } });
   assert.equal(s6.detail.onboardCall.status, 'booked');
   assert.equal(s6.detail.onboardCall.bookedFor, tue11);
   assert.equal(s6.row.simple.label, 'Call booked for Tue 6 Oct, 8:30 pm your time');
   assert.equal(s6.row.simple.needsYou, false);
-  // Hub screens fix: the Meet link is on the trial's onboarding call, and the "asked for a time" alert is handled by the Yes.
+  // Hub screens fix: the Meet link is on the client's onboarding call, and the "asked for a time" alert is handled by the Yes.
   assert.equal(s6.detail.onboardCall.meetLink, meetLink);
   assert.ok((await allAlerts()).find((a) => a.key === 'meeting_requested').acknowledged, 'meeting_requested closed by the Yes');
 
@@ -368,8 +365,8 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(s8.detail.onboardCall.status, 'held');
   assert.equal(s8.row.simple.label, 'Call done — waiting for them to finish the onboarding page');
   const plan = steps.at(-1).mail.filter((m) => m.to === APPLICANT.email);
-  assert.deepEqual(plan.map((m) => m.subject), ['Your trial — what happens now'], 'exactly one email to her on Call done');
-  const planMail = sim.sent.find((m) => m.to === APPLICANT.email && m.subject === 'Your trial — what happens now');
+  assert.deepEqual(plan.map((m) => m.subject), ['What happens now'], 'exactly one email to her on Call done');
+  const planMail = sim.sent.find((m) => m.to === APPLICANT.email && m.subject === 'What happens now');
   assert.match(planMail.text, /^Hi Dana,\n\nGood to talk with you today/);
   assert.match(planMail.text, /30-minute launch call/);
   assert.match(planMail.text, /The first emails go out in about three weeks\./, 'never a made-up date');
@@ -403,7 +400,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   // "setup in progress", the owner gets the list — with the CheapInboxes wording, not "paste the logins".
   // (The plan already went after the call, so the short setup note goes as before — never two "what happens now".)
   assert.ok(toDana().some((m) => /set/i.test(m.subject || '') && !/agreement/i.test(m.subject || '')), `setup_in_progress reached Dana: ${toDana().map((m) => m.subject)}`);
-  assert.ok(!toDana().some((m) => m.subject === 'Your trial — what happens now'), 'the plan is not sent twice');
+  assert.ok(!toDana().some((m) => m.subject === 'What happens now'), 'the plan is not sent twice');
   const shopAlert = sim.sent.filter((m) => m.to === OWNER.email && /Shopping list ready/.test(m.subject)).at(-1);
   assert.ok(shopAlert, 'the owner got the shopping list');
   assert.match(shopAlert.text, /CheapInboxes/);
@@ -429,7 +426,12 @@ test('the journey: website form → Day 30 → converted, through the real route
     return r;
   };
   await hook('order.completed');
-  const s10 = await snap('10', 'purchase-found', 'The owner buys the domain and two inboxes in his CheapInboxes account. CheapInboxes tells the machine (webhook); the machine finds the purchase and links it to Ridgeline IT.', { check: false, extra: { cheapinboxes: (await call('api/mc/cheapinboxes/route', 'GET')).json } });
+  // The month-one invoice went when Dana signed the plan agreement (due that day): the money lands, the owner presses the to-do.
+  const paidTodo = (await hubLooks()).board.todos.find((t) => t.id === `invoice:${clientId}`);
+  assert.ok(paidTodo, 'a to-do to mark the invoice paid');
+  const paid = await call('api/mc/clients/[id]/route', 'POST', { path: paidTodo.action.path, params: { id: clientId }, body: paidTodo.action.body });
+  assert.equal(paid.status, 200, JSON.stringify(paid.json));
+  const s10 = await snap('10', 'purchase-found', 'The owner buys the domain and two inboxes in his CheapInboxes account. CheapInboxes tells the machine (webhook); the machine finds the purchase and links it to Ridgeline IT. The month-one payment lands too; the owner marks the invoice paid.', { check: false, extra: { cheapinboxes: (await call('api/mc/cheapinboxes/route', 'GET')).json } });
   assert.equal(s10.detail.autobuy.status, 'provisioning');
   assert.equal(s10.row.simple.label, 'Setting up their inboxes (about 2 days)');
   assert.equal(s10.row.simple.needsYou, false, JSON.stringify(s10.row.todo));
@@ -600,7 +602,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.equal(s15.detail.launchCall.approvalUrl, s15.detail.links.approval);
   assert.equal(s15.detail.sequence.approvedAt, null);
   assert.match(s15.row.simple.label, /^Warming up — day 10 of about 14.* · waiting for them to pick a launch-call time$/);
-  assert.equal(s15.row.simple.needsYou, false);
+  assert.equal(s15.row.simple.needsYou, false, JSON.stringify(s15.row.todo.map((t) => [t.id, t.urgent, t.text])));
   assert.ok(s15.detail.conversation.thread.some((e) => e.kind === 'launch_invite'), 'the invite is in the conversation under its own kind');
 
   // Dana asks for times (10 am her time); the tick's check reads it and the reply bot answers on the launch thread.
@@ -651,7 +653,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   const confirmation2 = toDana();
   assert.equal(confirmation2.length, 1, 'one confirmation email');
   assert.ok(confirmation2[0].icalEvent && confirmation2[0].icalEvent.content.includes(meetLink2), 'an .ics invite with the Meet link');
-  assert.equal(world.google.events.size, 2, 'two events on the owner\'s Google Calendar: the onboarding call and the launch call');
+  assert.equal(world.google.events.size, 3, 'three events on the owner\'s Google Calendar: the sales call, the onboarding call and the launch call');
   const sL18 = await snap('18', 'launch-call-confirmed', 'The owner presses Yes in the Calendar: a Google Calendar event with a Meet link is made, and Dana gets the confirmation with the invite. The row says when the launch call is.', { extra: { calendar: (await call('api/mc/calendar/route', 'GET', { path: '/api/mc/calendar' })).json } });
   assert.equal(sL18.detail.launchCall.status, 'booked');
   assert.equal(sL18.detail.launchCall.bookedFor, tue20);
@@ -692,7 +694,7 @@ test('the journey: website form → Day 30 → converted, through the real route
   const sL21 = await snap('21', 'day-1', 'Day 1: warm-up done, the list and the emails approved on the launch call, the booking link tested — the first emails went out at 9 am their time.');
   assert.equal(sL21.row.state, 'sending');
   assert.equal(sL21.detail.trial.day1Date, '2026-10-21');
-  assert.equal(sL21.row.simple.label, 'Sending — day 1 of 30, 0 calls booked');
+  assert.equal(sL21.row.simple.label, 'Sending — day 1, 0 calls booked');
   assert.equal(sL21.detail.launchCall.status, 'held', 'the launch call stays on the trial');
   // Delivery monitoring (docs/IMPROVE-PASS.md C.3): the "we start on" email went once, when Day 1 was fixed (the gate
   // green after the OK on the launch call) — not at the setup check — and it is tracked in the conversation.
@@ -800,11 +802,11 @@ test('the journey: website form → Day 30 → converted, through the real route
   await goTo(et('2026-10-23', '15:00'));
   const s18 = await snap('23', 'prospect-booked', "The interested prospect books a call on Dana's calendar; Dana gets the hand-off.");
   assert.equal(Object.values((await kv.hgetall(K.bookings(clientId))) || {}).length, 1);
-  assert.equal(s18.row.simple.label, 'Sending — day 3 of 30, 1 call booked');
+  assert.equal(s18.row.simple.label, 'Sending — day 3, 1 call booked');
 
   // Mid-trial Dana writes to the owner (not a hot lead: a question for him).
   await goTo(et('2026-10-26', '10:12'));
-  deliver(OWNER.inbox, { from: APPLICANT.email, subject: 'Question about the trial', text: 'Hi Limeth — could we add Columbia, SC to the cities next week?\n\nDana', date: clock.iso() });
+  deliver(OWNER.inbox, { from: APPLICANT.email, subject: 'Question about the campaign', text: 'Hi Limeth — could we add Columbia, SC to the cities next week?\n\nDana', date: clock.iso() });
   await goTo(et('2026-10-26', '10:30'));
   const s19 = await snap('24', 'client-writes', "Day 6: Dana emails the owner a question. The hub shows “Answer Dana's message”.");
   assert.equal(s19.row.simple.needsReply, true);
@@ -854,44 +856,17 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.ok(!s23.row.todo.some((t) => /LEGAL/.test(t.text)), 'the legal alert does not linger as a to-do');
 
   await goTo(et('2026-11-04', '12:00'));
-  const s24 = await snap('29', 'day-15', 'Day 15: halfway (US clocks went back on 1 November; the sends follow their 9–5).');
+  const s24 = await snap('29', 'day-15', 'Day 15 of sending (US clocks went back on 1 November; the sends follow their 9–5). Sending simply goes on: there is no Day 30.');
   assert.equal(s24.row.simple.dayOf30, 15);
-  await goTo(et('2026-11-18', '12:00'));
-  const s25 = await snap('30', 'day-29', 'Day 29: the trial report and the market report go to Dana.');
-  assert.ok(s25.detail.reports.some((r) => r.name === 'day29' && r.renderedAt));
-  await goTo(et('2026-11-19', '12:00'));
-  const s26 = await snap('31', 'day-30', 'Day 30: the handover (everything from the trial) and the decision page go to Dana.');
-  assert.equal(s26.row.state, 'deciding');
-  // Hub screens fix: its own step in plain words, the bonus deadline with its zones, the warm-up card kept, the decision link shown.
-  assert.deepEqual([s26.row.simple.step, s26.row.simple.label, s26.row.simple.next, s26.row.simple.needsYou], ['deciding', 'Trial finished — waiting for their decision', 'Nothing. Dana chooses on the decision page.', false]);
-  assert.match(s26.row.stateLabel, /^Deciding — bonus until \w{3} \d{1,2} \w{3}, [\d:]+ [ap]m Sri Lanka time \(.* Eastern\)$/);
-  assert.equal(s26.detail.warmup?.status, 'ready', 'the warm-up card stays through the decision');
-  assert.ok(s26.detail.links.decision, JSON.stringify(s26.detail.links));
-  // Dana presses Start on the decision page.
-  const decision = sim.sent.filter((m) => m.to === APPLICANT.email && linkIn(m.text, 'decide')).at(-1);
-  assert.ok(decision, 'the decision page link reached Dana');
-  await goTo(et('2026-11-19', '14:10'));
-  const dToken = linkIn(decision.text, 'decide');
-  const view = await call('api/c/decide/route', 'GET', { path: `/api/c/decide?token=${dToken}` });
-  assert.equal(view.status, 200, JSON.stringify(view.json));
-  const start = await call('api/c/decide/route', 'POST', { path: '/api/c/decide', body: { token: dToken, action: 'start' } });
-  assert.equal(start.status, 200, JSON.stringify(start.json));
-  const s27 = await snap('32', 'converted', 'Dana presses Start: Ridgeline IT becomes a client on Starter. The month-one invoice goes out.');
-  assert.equal(s27.row.state, 'converted');
-  assert.equal(s27.row.simple.label, 'Finished — became a client');
-  assert.equal(steps.at(-1).alerts.find((a) => a.key === 'converted').title, 'Converted: Ridgeline IT on Starter');
-  // Hub screens fix: the invoice in the contract's shape, and a to-do that names it.
-  assert.match(s27.detail.invoice.number, /^AV-\d{6}-ridgelineit$/);
-  assert.deepEqual([s27.detail.invoice.remindersSent, s27.detail.invoice.dueDate, s27.detail.invoice.amount], [0, '2026-11-19', 2497]);
-  assert.equal(s27.row.todo.find((t) => t.id === `invoice:${clientId}`).text, `Mark the month-one invoice paid when the money lands (${s27.detail.invoice.number})`);
-  // The money lands a few days later; the owner presses the to-do.
+  assert.equal(s24.row.state, 'sending');
+  // The month-one invoice (sent when Dana signed the plan agreement) is paid.
+  assert.match(s24.detail.invoice.number, /^AV-\d{6}-ridgelineit$/);
+  assert.equal(s24.detail.invoice.amount, 2497);
+  assert.ok(s24.detail.invoice.paidAt, 'paid in step 10');
   await goTo(colombo('2026-11-24', '09:00'));
-  const paidTodo = (await hubLooks()).board.todos.find((t) => t.id === `invoice:${clientId}`);
-  assert.ok(paidTodo, 'a to-do to mark the invoice paid');
-  const paid = await call('api/mc/clients/[id]/route', 'POST', { path: paidTodo.action.path, params: { id: clientId }, body: paidTodo.action.body });
-  assert.equal(paid.status, 200, JSON.stringify(paid.json));
-  const s28 = await snap('33', 'paid', 'The money lands; the owner marks the invoice paid. The trial pair keeps sending for the new client until the plan’s inboxes are added.');
-  assert.equal(s28.row.simple.next, 'Nothing for you');
+  const s28 = await snap('30', 'month-two', 'Into month two: sending goes on, month after month, with nothing for the owner to do.');
+  assert.equal(s28.row.state, 'sending');
+  assert.ok(!s28.row.todo.some((t) => t.id === `invoice:${clientId}`), 'no invoice to-do');
   // Hub screens fix: alerts do not pile up — one digest of each kind open at most, handled alerts closed.
   const open28 = (await allAlerts()).filter((a) => !a.acknowledged);
   assert.ok(open28.filter((a) => a.key === 'morning_digest').length <= 1 && open28.filter((a) => a.key === 'monday_digest').length <= 1, open28.map((a) => a.title).join('; '));
@@ -932,15 +907,10 @@ test('the journey: website form → Day 30 → converted, through the real route
   assert.deepEqual(allToDana.filter((m) => !/agreement/i.test(m.subject || '') && /\bUTC\b|\bGMT\b/.test(`${m.subject}\n${m.text}`)).map((m) => m.subject), [], 'no UTC in a client email');
   assert.deepEqual(allToDana.filter((m) => /\b20\d\d-\d\d-\d\d\b/.test(String(m.text).replace(/https?:\/\/\S+/g, '')) && !/agreement/i.test(m.subject || '')).map((m) => m.subject), [], 'no raw dates in a client email');
   assert.deepEqual(allToDana.filter((m) => /Dana Whitfield's name/.test(m.text)).map((m) => m.subject), [], '"in your name" to Dana');
-  const d29Mail = allToDana.find((m) => /30-Day Trial Report/.test(m.subject || ''));
-  assert.ok(d29Mail, 'the Day 29 report went');
-  assert.equal((d29Mail.text.match(/Starter contacts at least/g) || []).length, 1, 'the volume numbers once');
-  assert.match(d29Mail.text, /of the companies it went to replied/, 'the per-version rate says what it counts');
-  const d30Mail = allToDana.find((m) => m.subject === 'Your Day 30 numbers');
-  assert.match(d30Mail.text, /if you start before \w+day \d+ November at \d+:\d\d [ap]m Eastern Time\./, 'the bonus deadline in her zone');
+  assert.deepEqual(allToDana.filter((m) => /\btrial\b|Day 30/i.test(`${m.subject}\n${m.text}`)).map((m) => m.subject), [], 'no trial words in a client email');
   const handoffMail = allToDana.find((m) => /^Booked — /.test(m.subject || ''));
   assert.match(handoffMail.text, /booked a call for Tuesday 27 October at 11:00 am Eastern Time\./);
-  const planMail2 = allToDana.find((m) => m.subject === 'Your trial — what happens now');
+  const planMail2 = allToDana.find((m) => /what happens now/i.test(m.subject || ''));
   assert.ok(planMail2.text.split(/\s+/).length <= 122, `"what happens now" is short: ${planMail2.text.split(/\s+/).length} words`);
   const friday1Mail = allToDana.find((m) => /build week 1 of 2/.test(m.subject || ''));
   assert.match(friday1Mail.text, /Waiting on you: nothing/, 'nothing asked before the launch call');

@@ -75,7 +75,6 @@ export default function ClientPage({ params }) {
           {d.client.sendHold && <button style={btn} onClick={() => confirm(`Sending is held: ${d.client.sendHold}. Clear it?`) && post({ action: 'clearSendHold' }, 'Send hold cleared')}>Clear send hold</button>}
           <a style={{ ...btnGhost, textDecoration: 'none' }} href={`/mc/clients/${id}/purchase`}>Purchase + setup</a>
           <a style={{ ...btnGhost, textDecoration: 'none' }} href={`/mc/clients/${id}/sequence`}>Sequence (copy)</a>
-          {!t.reviewCapturedAt && ['deciding', 'converted', 'not_now', 'retired'].includes(d.client.state) && <button style={btnGhost} onClick={() => post({ action: 'reviewCaptured' }, 'Review recorded')}>Review captured</button>}
           {['sending', 'paused'].includes(d.client.state) && <button style={btnGhost} onClick={() => post({ action: 'setState', to: d.client.state === 'paused' ? 'sending' : 'paused' }, 'State changed')}>{d.client.state === 'paused' ? 'Resume' : 'Pause'}</button>}
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

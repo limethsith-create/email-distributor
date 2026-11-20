@@ -20,7 +20,7 @@ export default function BookingOk({ params }) {
 
   return (
     <div style={{ maxWidth: 560, margin: '0 auto', display: 'grid', gap: 16 }}>
-      <Eyebrow>Aviance 30-Day Trial</Eyebrow>
+      <Eyebrow>Aviance</Eyebrow>
       <div style={{ ...box, display: 'grid', gap: 12 }}>
         <p style={{ margin: 0 }}>Did the test booking go through from a personal email address?</p>
         {!state.done && <button style={btn} onClick={tap}>It worked</button>}

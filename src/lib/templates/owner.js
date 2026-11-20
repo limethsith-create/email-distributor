@@ -6,8 +6,8 @@
  * `info: true` = news, not a problem (a purchase found, a bot answer, a
  * conversion) or a heads-up whose own hub to-do carries the red dot and clears
  * itself (a reply to answer, a time to confirm). It is still sent and logged,
- * but an open one does not turn a trial yellow or fill the morning digest —
- * otherwise every trial stayed yellow for good, since nobody acknowledges news.
+ * but an open one does not turn a client yellow or fill the morning digest —
+ * otherwise every client stayed yellow for good, since nobody acknowledges news.
  *
  * Every alert body has the same shape: what happened, what the system already
  * did, and a Mission Control link — so the owner never has to investigate
@@ -57,24 +57,21 @@ export const ALERTS = {
   noshow_high: { urgent: false, title: 'No-show rate high: {clientId}' },
   client_quiet_warning: { urgent: false, title: 'Client quiet: {clientId}' },
   paused_quiet: { urgent: true, title: 'Paused — client quiet: {clientId}' },
-  trial_stopped_by_client: { urgent: false, title: 'Client stopped the trial: {clientId}' },
+  trial_stopped_by_client: { urgent: false, title: 'Client pressed Stop: {clientId}' },
   // Stage D
-  extension_started: { urgent: false, info: true, title: 'Extension started: {clientId}' },
-  talk_request: { urgent: true, title: '{clientId} wants to talk' },
-  converted: { urgent: false, info: true, title: 'Converted: {clientId} on {plan}' },
   cancel_inboxes: { urgent: true, title: 'Cancel the inboxes for {clientId}' },
   // Scheduled
   morning_digest: { urgent: false, info: true, title: 'Morning digest — {date}' },
-  monday_digest: { urgent: false, info: true, title: 'Monday KPIs — {date}' },
+  monday_digest: { urgent: false, info: true, title: 'Monday summary — {date}' },
   test: { urgent: true, title: 'Test alert from Mission Control' },
   // ── Stage A additions ──
   market_unavailable: { urgent: true, title: 'Market count could not run: {clientId}' },
   autorenew_on: { urgent: true, title: 'Auto-renew is not confirmed off for {domain}' },
   promo_expired: { urgent: false, title: 'Promo expired: {registrar} {code}' },
   booking_link_broken: { urgent: false, title: 'Booking link problem: {clientId}' },
-  new_application: { urgent: true, title: 'New trial application: {company}' },
+  new_application: { urgent: true, title: 'New client record: {company}' },
   application_scored: { urgent: false, info: true, title: 'Fit score for {company}: {score}' },
-  research_failed: { urgent: false, title: 'Applicant research could not finish: {clientId}' },
+  research_failed: { urgent: false, title: 'Research could not finish: {clientId}' },
   // ── end Stage A ──
   // ── Stage B additions ──
   warmup_pool_small: { urgent: false, title: 'Warm-up pool has {count} members (needs {min})' },
@@ -99,7 +96,7 @@ export const ALERTS = {
   competitor_booked: { urgent: false, title: 'A competitor booked a call: {clientId}' },
   emergency_resolved: { urgent: false, info: true, title: 'Deliverability back to normal: {clientId}' },
   booking_unmatched: { urgent: false, title: 'Booking could not be matched to a prospect: {clientId}' },
-  trial_ended_quiet: { urgent: true, title: 'Trial ended — client quiet 14 business days: {clientId}' },
+  trial_ended_quiet: { urgent: true, title: 'Sending stopped — client quiet 14 business days: {clientId}' },
   // Leads + Copy v2
   verify_no_keys: { urgent: true, title: 'No email verifier key set — {clientId} has no sendable leads' },
   verify_failing: { urgent: false, title: 'Email verifier not answering: {service}' },
@@ -108,7 +105,6 @@ export const ALERTS = {
   // ── Stage D additions ──
   build_behind: { urgent: false, title: 'Build behind at Day −7: {clientId} — {what}' },
   invoice_unpaid: { urgent: false, title: 'Invoice still unpaid: {clientId} ({days} days)' },
-  decision_made: { urgent: false, info: true, title: '{clientId} chose: {choice}' },
   new_inquiry: { urgent: true, title: 'New plan inquiry: {company} — call {when}' },
   // ── end Stage D ──
   // ── Google Meet (docs/REPLYBOT-MEET.md §3) ── once per broken connection (not urgent: calls
@@ -155,6 +151,6 @@ export const ALERTS = {
   purchase_found: { urgent: false, info: true, title: 'We found {domain} — connecting it to {company}' },
   inboxes_ready: { urgent: false, info: true, title: '{domain} and {count} inboxes are ready — {next}' },
   autobuy_problem: { urgent: true, title: 'Inbox setup: {what}' },
-  purchase_unmatched: { urgent: false, info: true, title: 'You bought {domain} — which trial is it for? Pick in Settings' },
+  purchase_unmatched: { urgent: false, info: true, title: 'You bought {domain} — which client is it for? Pick in Settings' },
   // ── end CheapInboxes ──
 };

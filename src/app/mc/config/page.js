@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { box, btn, btnGhost, input, api, Eyebrow } from '../_ui/ui';
 
-const TABLE_KEYS = new Set(['US_HOLIDAYS', 'PLANS', 'BONUS', 'PLAN_SHOPPING']);
+const TABLE_KEYS = new Set(['US_HOLIDAYS', 'PLANS', 'PLAN_SHOPPING']);
 const isTable = (s) => TABLE_KEYS.has(s.key) || (Array.isArray(s.value) && s.value.some((x) => x && typeof x === 'object'));
 
 function Row({ s, onSaved }) {

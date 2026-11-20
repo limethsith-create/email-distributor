@@ -234,14 +234,14 @@ test('sender: state, legal hold, holiday and suppression gates', async () => {
   assert.equal(r.sent, 0);
 });
 
-test('sender: ready → sending on Day 1 and the first send dates the trial', async () => {
+test('sender: ready → sending on Day 1 and the first send is dated', async () => {
   await setup({ state: 'ready', leads: [lead('ann@alpha.com')], day1Date: '2026-10-05' });
   await kv.hdel(K.trial(ID), 'firstSendAt');
   await runSender(ID, { now: NOW });
   assert.equal((await getClient(ID)).state, 'sending');
   const tr = await kv.hgetall(K.trial(ID));
   assert.equal(tr.day1Date, '2026-10-06');
-  assert.equal(tr.day30Date, '2026-11-04');
+  assert.equal(tr.day30Date, undefined);
   assert.ok(tr.firstSendAt);
 });
 
@@ -685,10 +685,10 @@ test('client watch: quiet → warn, pause at 5 business days, resume on reply', 
   assert.equal(r.resumed, 'sending');
 });
 
-test('client buttons: customer hit, stop, away', async () => {
+test('client buttons: customer hit and away (there is no Stop button)', async () => {
   await setup();
   await emailedLead('ann@alpha.com');
-  const { customerHit, stopTrial, setAway } = await import('@/lib/systems/clientwatch');
+  const { customerHit, setAway, clientButtonsText } = await import('@/lib/systems/clientwatch');
   const res = await customerHit(ID, { email: 'ann@alpha.com', list: 'bigcustomer.com, someone@gmail.com', now: NOW });
   assert.equal(res.apologySent, true);
   assert.equal(await kv.sismember(K.blocklist(ID), 'alpha.com'), 1);
@@ -697,9 +697,7 @@ test('client buttons: customer hit, stop, away', async () => {
   assert.ok(alerts.find((a) => a.key === 'customer_hit'));
   assert.equal((await setAway(ID, { from: '2026-10-12', to: '2026-10-14', now: NOW })).ok, true);
   assert.equal((await setAway(ID, { from: '2026-10-14', to: '2026-10-12', now: NOW })).ok, false);
-  assert.equal((await stopTrial(ID, { now: NOW })).ok, true);
-  assert.equal((await getClient(ID)).state, 'paused');
-  assert.equal((await kv.hgetall(K.trial(ID))).endReason, 'client_stopped');
+  assert.doesNotMatch(await clientButtonsText(ID), /Stop/);
 });
 
 // ─── Learning + templates ────────────────────────────────────────────────────
@@ -726,7 +724,7 @@ test('every Stage C template renders with sample data and no blank slot', () => 
     companies: 240, replies: 7, positive: 2, diagnosis: 'd', fix: 'f', pending: 2, FirstName: 'Ann', slot1: 's1', slot2: 's2', calendarUrl: 'c',
     month: 'January', Referrer: 'Bob', Greeting: 'Hi Ann,', oneLiner: 'We fix IT.', SenderName: 'Jane', missedWhen: 'Tuesday', ClientCompany: 'Acme IT',
     // notifyClient fills firstName on every client email; the owner signs offpace_day15 and deliverability_notice.
-    firstName: 'Ann', ownerName: 'Limeth',
+    firstName: 'Ann', ownerName: 'Limeth', planName: 'Starter', // notifyClient always names the plan
   };
   const keys = ['hot_lead', 'hot_lead_nudge', 'call_handoff', 'slot_far_warning', 'call_tap', 'call_tap_reminder', 'quote_request', 'offpace_day15', 'deliverability_notice', 'paused_quiet', 'reply_interested', 'reply_interested_soft', 'reply_notnow', 'reply_no', 'reply_wrongperson_thanks', 'referral_intro', 'holding_reply', 'notnow_followup', 'reminder_24h', 'reminder_1h', 'rebook_email', 'apology_reschedule', 'apology_customer'];
   for (const k of keys) {
@@ -735,7 +733,7 @@ test('every Stage C template renders with sample data and no blank slot', () => 
     if (t.subject) fill(k, t.subject, sample);
     const body = fill(k, t.body, sample);
     assert.doesNotMatch(body, /\{[A-Za-z]/, k);
-    if (t.prospect) assert.equal(t.from, 'trial', k);
+    if (t.prospect) assert.equal(t.from, 'sender', k);
   }
 });
 

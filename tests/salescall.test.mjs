@@ -123,7 +123,8 @@ test('no reminders once the owner moved them on, and a booking made the same day
 
 test('stages: Calendar buttons move the inquiry, and Inquiries moves the Calendar', async () => {
   assert.deepEqual(STATUSES, ['new', 'held', 'no_show', 'contacted', 'proposal', 'won', 'lost']);
-  const r = await saveInquiry(site(), { now: NOW });
+  // Won needs their website (it makes them a client).
+  const r = await saveInquiry(site({ website: 'stoneroofing.com' }), { now: NOW });
   const q = await getInquiry(r.id);
   await calendarAction({ action: 'held', id: q.meetingId }, { now: new Date('2026-11-18T15:20:00.000Z') });
   assert.equal((await getInquiry(r.id)).status, 'held');
@@ -131,6 +132,7 @@ test('stages: Calendar buttons move the inquiry, and Inquiries moves the Calenda
   await setInquiryStatus(r.id, 'won', '', { now: NOW });
   const done = await getInquiry(r.id);
   assert.equal(done.status, 'won');
+  assert.equal((await getMeeting(q.meetingId)).status, 'held', 'the call was held (Call done before Won)');
   assert.deepEqual(done.stageHistory.map((h) => h.to), ['held', 'proposal', 'won']);
   // The other way: No-show in Inquiries marks the meeting.
   const r2 = await saveInquiry(site({ email: 'cy@x.com', slotStart: '2026-11-19T15:00:00.000Z', slotEnd: '2026-11-19T15:15:00.000Z' }), { now: NOW });

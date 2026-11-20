@@ -60,21 +60,6 @@ const onboardingNudge = {
   },
 };
 
-const queuePromote = {
-  name: 'queue-promote',
-  scope: 'global',
-  cost: 3,
-  minBudgetMs: 6000,
-  async due({ now, clients }) {
-    if (!(clients || []).some((c) => c.state === 'queued')) return null;
-    return dailyAt(et(now), '10:05');
-  },
-  async run({ now }) {
-    const { promoteFromQueue } = await import('@/lib/systems/gatekeeper');
-    return promoteFromQueue({ now });
-  },
-};
-
 const market = {
   name: 'market',
   scope: 'client',
@@ -161,7 +146,7 @@ const welcome = {
   },
 };
 
-const LIVE_DOMAIN = new Set(['warming', 'ready', 'sending', 'paused', 'extension']);
+const LIVE_DOMAIN = new Set(['warming', 'ready', 'sending', 'paused']);
 
 const auth = {
   name: 'auth',
@@ -222,7 +207,7 @@ const bookingTest = {
   minBudgetMs: 12_000,
   claimTtl: 7200,
   async due({ client, now }) {
-    if (skip(client) || !['warming', 'ready', 'sending', 'extension'].includes(client.state)) return null;
+    if (skip(client) || !['warming', 'ready', 'sending'].includes(client.state)) return null;
     // The test emails the client (the 60-second test, or what to fix): US business hours only.
     const p = et(now);
     const [from, to] = await cfg(null, 'OWNER.usHours');
@@ -352,4 +337,4 @@ const promoCheck = {
   },
 };
 
-export const JOBS = [onboardingNudge, queuePromote, onboardCalls, research, market, pricescout, purchaseNudge, autobuy, setupCheck, welcome, auth, blacklist, dmarc, bookingTest, bookingReminder, promoCheck, registrarPrices].map(onClientClock);
+export const JOBS = [onboardingNudge, onboardCalls, research, market, pricescout, purchaseNudge, autobuy, setupCheck, welcome, auth, blacklist, dmarc, bookingTest, bookingReminder, promoCheck, registrarPrices].map(onClientClock);

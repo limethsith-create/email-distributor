@@ -111,11 +111,11 @@ test('to-dos: one per alert kind (a daily repeat is one line with a count); none
   assert.deepEqual((await log()).filter((a) => !a.acknowledged).map((a) => a.id), ['l1']);
 });
 
-test('health and the morning digest ignore news alerts (a purchase found, a bot answer, a conversion)', async () => {
+test('health and the morning digest ignore news alerts (a purchase found, a bot answer, a meeting request)', async () => {
   // Before: every trial stayed yellow ("6 alerts open") and every digest said "1 client with open alerts", for good.
   const { computeHealth } = await import('@/lib/systems/health');
   const client = { id: 'acme', state: 'sending' };
-  const news = ['bot_replied', 'purchase_found', 'inboxes_ready', 'converted', 'meeting_requested', 'onboard_reply'].map((key) => ({ key, urgent: false }));
+  const news = ['bot_replied', 'purchase_found', 'inboxes_ready', 'meeting_requested', 'onboard_reply'].map((key) => ({ key, urgent: false }));
   for (const n of news) assert.equal(ALERTS[n.key].info, true, n.key);
   assert.equal(computeHealth({ client, alerts: news }).colour, 'green');
   assert.equal(computeHealth({ client, alerts: [...news, { key: 'inbox_rate_low', urgent: false }] }).colour, 'yellow');
@@ -188,7 +188,7 @@ test('the hot-lead nudge to the client waits for their working day; the invoice 
 test('the Monday digest is dated the owner\'s Monday, not the US Sunday', async () => {
   const { mondayDigest } = await import('@/lib/systems/digests');
   await mondayDigest({ now: new Date('2026-10-12T02:30:00Z') }); // Mon 08:00 Colombo = Sun 22:30 ET
-  assert.equal((await log()).find((a) => a.key === 'monday_digest').title, 'Monday KPIs — 2026-10-12');
+  assert.equal((await log()).find((a) => a.key === 'monday_digest').title, 'Monday summary — 2026-10-12');
 });
 
 // ── 5. Warm-up replies and the ramp ──────────────────────────────────────────
@@ -229,7 +229,7 @@ test('simple: a held trial does not say "Sending — day N"; the bot\'s answer i
   assert.equal(s.label, 'Sending on hold — blacklisted: getacme.com');
   assert.equal(s.needsYou, true);
   s = simpleFor(base({ state: 'sending' }));
-  assert.equal(s.label, 'Sending — day 6 of 30');
+  assert.equal(s.label, 'Sending — day 6');
 
   const raw = { sentAt: '2026-10-02T03:30:00Z', dueBy: '2026-10-07T03:30:00Z', contactEmail: 'ann@acme.com', lastReplyAt: '2026-10-02T13:05:00Z', lastAnsweredAt: '2026-10-02T13:10:00Z', lastBotAt: '2026-10-02T13:10:00Z' };
   const oc = onboardCallView(raw, [], { now: new Date('2026-10-02T14:00:00Z'), settings: normaliseSettings(), clientState: 'onboarding' });

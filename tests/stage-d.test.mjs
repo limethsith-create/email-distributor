@@ -9,15 +9,10 @@ import { setOverride } from '@/lib/config';
 import { createClient, getClient, setState } from '@/lib/db/client';
 import { saveInbox } from '@/lib/db/inboxes';
 import crypto from 'node:crypto';
-import { renderReport, recommendPlan } from '@/lib/systems/reports';
 import { composeFriday, runFriday } from '@/lib/systems/friday';
 import { runDayJobs } from '@/lib/systems/trialmanager';
-import { startExtension } from '@/lib/systems/extension';
-import { decide, decisionView } from '@/lib/systems/decision';
-import { decisionLink } from '@/lib/systems/reports';
 import { deleteClientData, retireClient } from '@/lib/systems/wrapup';
-import { startPlan } from '@/lib/systems/planstart';
-import { runInvoiceJob } from '@/lib/systems/invoice';
+import { createInvoice, runInvoiceJob } from '@/lib/systems/invoice';
 import { morningDigest } from '@/lib/systems/digests';
 import { alertOwner } from '@/lib/notify';
 import { validateAgainst } from '@/lib/systems/configedit';
@@ -67,70 +62,7 @@ async function setup({ state = 'sending', totals = TOTALS, trial = {}, settings 
 
 beforeEach(() => { mail.length = 0; });
 
-// ── 1. Rule 4 ──
-test('a report with a missing counter is blocked, alerts the owner, and never shows 0', async () => {
-  const { qualified, ...rest } = TOTALS;
-  await setup({ totals: rest });
-  const r = await renderReport('day29', CLIENT, { now: onDay(29) });
-  assert.equal(r.ok, false);
-  assert.match(r.blockedReason, /qualified/);
-  const stored = await kv.hgetall(`client:${CLIENT}:report:day29`);
-  assert.match(stored.blockedReason, /qualified/);
-  assert.equal(stored.text, '');
-  assert.ok((await alerts()).includes('report_blocked'));
-  // The day job holds the report and the decision; the client gets nothing.
-  await runDayJobs(CLIENT, { now: onDay(29) });
-  assert.equal(toClient().length, 0);
-  assert.equal((await getClient(CLIENT)).state, 'sending');
-});
-
-test('the Day 29 report renders from counters with the arithmetic', async () => {
-  await setup();
-  const r = await renderReport('day29', CLIENT, { now: onDay(29), decisionUrl: 'https://x/c/t/decide' });
-  assert.equal(r.ok, true);
-  assert.match(r.text, /Companies contacted: 412 · Emails sent: 1040 · Bounce: 1\.4%/);
-  assert.match(r.text, /3 qualified calls from 412 companies is 0\.73%/);
-  assert.match(r.text, /about 14 calls at your rate, and we guarantee 10/);
-  assert.match(r.text, /about 29, and we guarantee 20/);
-  assert.match(r.text, /Inbox placement: not measured/);
-  assert.equal(r.attachments.length, 2);
-});
-
-// ── 2. Plan Recommender ──
-test('plan recommender: every branch, with the arithmetic paragraph', () => {
-  const plans = { starter: { price: 2497, calls: 10, reach: 2000 }, growth: { price: 3997, calls: 20, reach: 4000 }, scale: { price: 8497, calls: 50, reach: 10000 }, payPerShow: 250 };
-  const base = { positive: 12, companies: 412, kickoffDate: 'Thu 17 Sep', plans, capacity: { starterMax: 3, growthMax: 7 } };
-  const g = recommendPlan({ ...base, qualified: 3, capacityPerWeek: 5 });
-  assert.equal(g.plan, 'growth');
-  assert.match(g.text, /3 qualified calls from 412 companies is 0\.73%/);
-  assert.match(g.text, /about 14 calls; we guarantee 10/);
-  assert.match(g.text, /about 29 at your rate/);
-  assert.match(g.text, /You told us on Thu 17 Sep you can take 5 calls a week, so I recommend Growth — \$3,997 a month, which works out at \$200 a call/);
-  assert.equal(recommendPlan({ ...base, qualified: 4, capacityPerWeek: 2 }).plan, 'starter');
-  assert.equal(recommendPlan({ ...base, qualified: 4, capacityPerWeek: 3 }).plan, 'starter');
-  assert.equal(recommendPlan({ ...base, qualified: 4, capacityPerWeek: 7 }).plan, 'growth');
-  const s = recommendPlan({ ...base, qualified: 9, capacityPerWeek: 8 });
-  assert.equal(s.plan, 'scale');
-  assert.match(s.text, /\$8,497.*\$170 a call/);
-  assert.equal(recommendPlan({ ...base, qualified: 3, capacityPerWeek: null }).kind, 'capacity_unknown');
-  const thin = recommendPlan({ ...base, qualified: 1, capacityPerWeek: 10 });
-  assert.equal(thin.plan, 'starter');
-  assert.equal(thin.kind, 'thin');
-  assert.match(thin.text, /1 qualified call from 412 companies is 0\.24%/);
-  const pps = recommendPlan({ ...base, qualified: 0, positive: 9, capacityPerWeek: 5 });
-  assert.equal(pps.plan, 'starter');
-  assert.equal(pps.kind, 'pay_per_show');
-  assert.match(pps.text, /9 positive replies from 412 companies is 2\.2%/);
-  assert.match(pps.text, /pay per show, \$250/);
-  const ext = recommendPlan({ ...base, qualified: 0, positive: 0 });
-  assert.equal(ext.plan, null);
-  assert.equal(ext.kind, 'extension');
-  const wb = recommendPlan({ ...base, qualified: 0, positive: 0, extensionUsed: true });
-  assert.equal(wb.plan, null);
-  assert.equal(wb.kind, 'winback');
-});
-
-// ── 3. Friday update ──
+// ── Friday update ──
 test('Friday update: build variant during the build weeks, under 120 words', async () => {
   await setup({ state: 'warming', totals: null, trial: { day1Date: '2026-10-15', signedDay: '2026-10-01', firstSendAt: '' } });
   await kv.hset(`client:${CLIENT}:sequence`, { variantA: '{}' });
@@ -164,7 +96,7 @@ test('Friday update: build variant during the build weeks, under 120 words', asy
   assert.match(g.text, /Waiting on you: approving the emails/);
 });
 
-test('Friday update: trial variant with pace-log fix, watch line and personal line; sent once', async () => {
+test('Friday update: sending variant with pace-log fix, watch line and personal line; sent once', async () => {
   await setup();
   const friday = new Date('2026-10-16T14:00:00Z'); // Day 16, a Friday
   for (const d of ['2026-10-12', '2026-10-13', '2026-10-14']) await kv.hset(`client:${CLIENT}:counters:${d}`, { sent: 60, replies: 2, positive: 1, booked: 0, held: 0 });
@@ -174,9 +106,10 @@ test('Friday update: trial variant with pace-log fix, watch line and personal li
   await kv.hset(`client:${CLIENT}:replies`, { r1: { leadEmail: 'bo@bolt.test', kind: 'interested', receivedAt: '2026-10-13T15:00:00Z', snippet: 'tell me more' } });
   const f = await composeFriday(CLIENT, friday);
   assert.equal(f.ok, true, f.blockedReason);
-  assert.equal(f.variant, 'trial');
+  assert.equal(f.variant, 'sending');
   assert.match(f.text, /^A reply came in from Bolt IT on Tue\./);
-  assert.match(f.text, /trial week 3 of 4/);
+  assert.match(f.text, /week 3 of sending/);
+  assert.doesNotMatch(f.text, /trial/i);
   assert.match(f.text, /Sent this week: 180 · to date: 1040, to 412 companies/);
   assert.match(f.text, /Replies: 6 \(3\.3%\) · positive: 3/);
   assert.match(f.text, /This week: compressed the sequence to 3–2–3/);
@@ -189,151 +122,9 @@ test('Friday update: trial variant with pace-log fix, watch line and personal li
   assert.equal(toClient().length, 1);
 });
 
-// ── 4. Day-job routing ──
-test('day jobs: Day 29 report, Day 30 with a qualified call → deciding + handover', async () => {
-  await setup();
-  await runDayJobs(CLIENT, { now: onDay(28) });
-  assert.equal(toClient().length, 0);
-  await runDayJobs(CLIENT, { now: onDay(29) });
-  assert.deepEqual(subjects(), ['Acme IT — 30-Day Trial Report']);
-  assert.equal(toClient()[0].attachments.length, 2);
-  await runDayJobs(CLIENT, { now: onDay(29) }); // idempotent
-  assert.equal(toClient().length, 1);
-  await runDayJobs(CLIENT, { now: onDay(30) });
-  assert.equal((await getClient(CLIENT)).state, 'deciding');
-  assert.ok(subjects().includes('Everything from your trial — Acme IT'));
-  assert.ok(subjects().includes('Your Day 30 numbers'));
-  const trial = await kv.hgetall(`client:${CLIENT}:trial`);
-  assert.equal(Date.parse(trial.bonusExpiresAt) - Date.parse(trial.decisionSentAt), 24 * 3600_000);
-});
-
-test('day jobs: Day 30 with 0 qualified → extension; ends at the first qualified call; never twice', async () => {
-  await setup({ totals: { ...TOTALS, qualified: 0, held: 0, booked: 1 } });
-  await runDayJobs(CLIENT, { now: onDay(29) });
-  assert.deepEqual(subjects(), ['Acme IT — Trial Report']); // zero-call version
-  await runDayJobs(CLIENT, { now: onDay(30) });
-  assert.equal((await getClient(CLIENT)).state, 'extension');
-  assert.ok(subjects().includes('Day 30 — we keep going'));
-  assert.ok((await alerts()).includes('extension_started'));
-  await runDayJobs(CLIENT, { now: onDay(35) });
-  assert.equal((await getClient(CLIENT)).state, 'extension');
-  await kv.hset(`client:${CLIENT}:counters:total`, { qualified: 1, held: 1 });
-  await runDayJobs(CLIENT, { now: onDay(41) });
-  assert.equal((await getClient(CLIENT)).state, 'deciding');
-  assert.equal((await kv.hgetall(`client:${CLIENT}:trial`)).decisionDay, '41');
-  assert.equal((await startExtension(CLIENT)).refused, 'already used');
-});
-
-test('day jobs: extension cap → deciding with the zero-call report', async () => {
-  await setup({ totals: { ...TOTALS, qualified: 0, positive: 0, held: 0, booked: 0 } });
-  await runDayJobs(CLIENT, { now: onDay(29) });
-  await runDayJobs(CLIENT, { now: onDay(30) });
-  assert.equal((await getClient(CLIENT)).state, 'extension');
-  await runDayJobs(CLIENT, { now: onDay(59) });
-  assert.equal((await getClient(CLIENT)).state, 'extension');
-  await runDayJobs(CLIENT, { now: onDay(60) });
-  assert.equal((await getClient(CLIENT)).state, 'deciding');
-  const zeroMail = toClient().find((m) => m.subject === 'Day 60 — the honest numbers');
-  assert.ok(zeroMail, subjects().join(' | '));
-  assert.match(zeroMail.text, /^Hi Ann,\n\nWe didn’t get you a call/);
-  assert.match(zeroMail.text, /change the offer or the market/); // extension used → no plan
-});
-
-// ── 5. Ladder ──
-test('ladder: review request Day 31, ladder 33/37/44, exit interview, Day 45 retire', async () => {
-  await setup({ state: 'deciding', trial: { decisionDay: '30', decisionSentAt: onDay(30).toISOString(), decisionEmailAt: onDay(30).toISOString(), bonusExpiresAt: onDay(31).toISOString() } });
-  await kv.hset(`client:${CLIENT}:replies`, { r1: { leadEmail: 'bo@bolt.test', kind: 'interested', receivedAt: '2026-10-13T15:00:00Z', snippet: 'tell me more' } });
-  await runDayJobs(CLIENT, { now: onDay(31) });
-  assert.deepEqual(subjects(), ['The review — ten minutes']);
-  assert.match(toClient()[0].text, /https:\/\/clutch\.co\/profile\/aviance/);
-  assert.match(toClient()[0].text, /I received this service for free for my review\./);
-  await runDayJobs(CLIENT, { now: onDay(32) });
-  assert.equal(toClient().length, 1);
-  await setState(CLIENT, 'not_now', 'test');
-  await runDayJobs(CLIENT, { now: onDay(33) });
-  assert.ok(subjects().includes('The review link, once more'));
-  assert.ok(subjects().includes('Three questions, ten minutes'));
-  // The exit interview goes from the trial inbox so the Reply Handler can store the answer.
-  assert.match(String(toClient().find((m) => m.subject === 'Three questions, ten minutes').from), /sam@acme-team\.test/);
-  await runDayJobs(CLIENT, { now: onDay(37) });
-  const d37 = toClient().find((m) => m.subject === 'Your conversations still open');
-  assert.match(d37.text, /bo@bolt\.test/);
-  await runDayJobs(CLIENT, { now: onDay(44) });
-  assert.ok(subjects().includes('The trial domain retires tomorrow'));
-  await runDayJobs(CLIENT, { now: onDay(45) });
-  assert.equal((await getClient(CLIENT)).state, 'retired');
-  assert.equal((await kv.hgetall(`inbox:${CLIENT}:sam@acme-team.test`)).enabled, '0');
-  assert.ok((await kv.hgetall(`client:${CLIENT}:domain`)).retiredAt);
-  assert.ok((await alerts()).includes('cancel_inboxes'));
-  assert.equal((await kv.hgetall(`client:${CLIENT}:trial`)).dataDeleteAt, '2026-12-14');
-});
-
-test('ladder: review request waits for REVIEW.clutchUrl; shifted after an extension; no click by Day 45 → not_now', async () => {
-  await setup({ state: 'deciding', settings: false, trial: { decisionDay: '47', decisionEmailAt: 'x' } });
-  await setOverride(null, 'OWNER.signerName', 'Limeth');
-  await runDayJobs(CLIENT, { now: onDay(47) });
-  assert.equal(toClient().length, 0);
-  await runDayJobs(CLIENT, { now: onDay(48) }); // ladder day 31, no Clutch link set
-  assert.equal(toClient().length, 0);
-  assert.ok((await alerts()).includes('config_missing'));
-  await setOverride(null, 'REVIEW.clutchUrl', 'https://clutch.co/x');
-  await runDayJobs(CLIENT, { now: onDay(49) });
-  assert.deepEqual(subjects(), ['The review — ten minutes']);
-  await runDayJobs(CLIENT, { now: onDay(62) }); // ladder day 45
-  const c = await getClient(CLIENT);
-  assert.equal(c.state, 'retired');
-  assert.equal((await kv.hgetall(`client:${CLIENT}:trial`)).decision, 'none');
-});
-
-// ── 6. Decision buttons ──
-test('decision page: five numbers, bonus expiry, Start → converted + invoice', async () => {
-  await setup({ state: 'deciding', trial: { decisionSentAt: onDay(30).toISOString(), bonusExpiresAt: new Date(onDay(30).getTime() + 864e5).toISOString() } });
-  const token = (await decisionLink(CLIENT, 'mail')).split('/c/')[1].split('/')[0];
-  const view = await decisionView(token, { now: onDay(30) });
-  assert.equal(view.ok, true);
-  assert.deepEqual(view.numbers.map((n) => n.value), [1040, 31, 12, 4, 3]);
-  assert.equal(view.recommendation.plan, 'growth');
-  assert.equal(view.bonus.calls, 22);
-  assert.equal(view.bonus.expired, false);
-  assert.equal((await decisionView(token, { now: onDay(32) })).bonus.expired, true);
-  assert.ok(view.faq.length >= 4);
-  const r = await decide(token, 'start', { now: new Date(onDay(30).getTime() + 3600_000) });
-  assert.equal(r.outcome, 'converted');
-  assert.equal(r.bonus, true);
-  const c = await getClient(CLIENT);
-  assert.equal(c.state, 'converted');
-  assert.equal(c.plan, 'growth');
-  const inv = toClient().find((m) => /^Invoice /.test(m.subject));
-  assert.match(inv.text, /\$3,997/);
-  assert.match(inv.text, /22 calls for the price of 20/);
-  assert.match(inv.text, /paypal\.me\/aviance\/3997USD/);
-  assert.ok((await alerts()).includes('converted'));
-  assert.equal((await decide(token, 'start')).already, true);
-});
-
-test('decision page: Talk to someone and Not now; bonus lapses after 24 h; bad token refused', async () => {
-  await setup({ state: 'deciding', trial: { decisionSentAt: onDay(30).toISOString(), bonusExpiresAt: new Date(onDay(30).getTime() + 864e5).toISOString() } });
-  const token = (await decisionLink(CLIENT, 'mail')).split('/c/')[1].split('/')[0];
-  const t = await decide(token, 'talk', { now: onDay(30) });
-  assert.equal(t.outcome, 'talk');
-  assert.ok(t.slots.length >= 2 && /ET$/.test(t.slots[0]));
-  assert.ok((await alerts()).includes('talk_request'));
-  assert.ok(subjects().includes('Let’s talk — pick a time'));
-  assert.equal((await getClient(CLIENT)).state, 'deciding');
-  assert.equal((await kv.hgetall(`client:${CLIENT}:promises`)) !== null, true);
-  const n = await decide(token, 'notnow', { now: onDay(31) });
-  assert.equal(n.outcome, 'not_now');
-  assert.equal((await getClient(CLIENT)).state, 'not_now');
-  // Still allowed to start from not_now (before Day 45) — but the bonus has lapsed.
-  const s = await decide(token, 'start', { now: onDay(33) });
-  assert.equal(s.outcome, 'converted');
-  assert.equal(s.bonus, false);
-  assert.equal((await decide('nope-not-a-token-at-all-xxxx', 'start')).ok, false);
-});
-
-// ── 7. Wrap-up deletion ──
+// ── Wrap-up deletion ──
 test('wrap-up deletion removes client data, keeps the stub (deleted + mainDomain) and learning', async () => {
-  await setup({ state: 'not_now' });
+  await setup({ state: 'paused' });
   await kv.hset(`client:${CLIENT}:leads`, { 'a@b.test': { email: 'a@b.test' } });
   await kv.set(`pacing:${CLIENT}`, { x: 1 });
   await kv.set(`lead:${CLIENT}:a@b.test:claim`, 1);
@@ -355,24 +146,24 @@ test('wrap-up deletion removes client data, keeps the stub (deleted + mainDomain
   assert.equal(await kv.hgetall(`inbox:${CLIENT}:sam@acme-team.test`), null);
 });
 
-// ── 8. Invoice ──
+// ── Invoice ──
 test('invoice is held with config_missing when no payment method is set, then sent once it is', async () => {
-  await setup({ state: 'converted', settings: false });
+  await setup({ state: 'onboarding', settings: false });
   await setOverride(null, 'OWNER.signerName', 'Limeth');
-  const r = await startPlan(CLIENT, 'starter', { bonus: false, now: onDay(31) });
-  assert.equal(r.invoice.status, 'blocked');
+  const r = await createInvoice(CLIENT, 'starter', { now: onDay(31) });
+  assert.equal(r.status, 'blocked');
   assert.equal(toClient().length, 0);
   assert.ok((await alerts()).includes('config_missing'));
   await setOverride(null, 'PAYMENT.wiseDetails', 'Wise USD account 123');
   await runInvoiceJob(CLIENT, { now: onDay(32) });
   const inv = toClient().find((m) => /^Invoice /.test(m.subject));
   assert.match(inv.text, /Wise \(bank transfer\): Wise USD account 123/);
-  assert.match(inv.text, /not applied/);
+  assert.match(inv.text, /Welcome to Starter/);
   await runInvoiceJob(CLIENT, { now: onDay(35) }); // +3 days → reminder
   assert.ok(subjects().some((s) => /^Reminder: invoice/.test(s)));
 });
 
-// ── 9. Morning digest ──
+// ── Morning digest ──
 test('morning digest says "All green" when nothing is open', async () => {
   await setup();
   const g = await morningDigest({ now: onDay(10), send: false });
@@ -386,7 +177,7 @@ test('morning digest says "All green" when nothing is open', async () => {
 });
 
 // ── Test clock, config validation, templates ──
-test('Test Mode clock: scaled time and jump to Day N', () => {
+test('scaled clock (a _test client only): scaled time and jump to Day N', () => {
   const origin = new Date('2026-10-01T00:00:00Z');
   const c = { id: '_test', clockScale: '24', clockOrigin: origin.toISOString(), clockOffsetMs: '0' };
   assert.equal(clientNow(c, new Date(origin.getTime() + 3600_000)).toISOString(), '2026-10-02T00:00:00.000Z');
@@ -414,7 +205,7 @@ test('every Stage D template renders with sample data and no unfilled slot', () 
   }
 });
 
-test('Stage D jobs: trial jobs skip aviance, run at 09:00 on the client clock; digests are global', async () => {
+test('Stage D jobs: client jobs skip aviance, run at 09:00 on the client clock; digests are global', async () => {
   const { JOBS } = await import('@/lib/joblist/stage-d');
   const job = (n) => JOBS.find((j) => j.name === n);
   const nine = new Date('2026-10-16T13:30:00Z'); // Fri 09:30 ET
@@ -436,16 +227,16 @@ test('Stage D jobs: trial jobs skip aviance, run at 09:00 on the client clock; d
   assert.equal(await job('monday').due({ now: new Date('2026-10-16T02:45:00Z') }), null);
 });
 
-test('Monday digest: KPIs from the ledger, "not measured" when no owner time was logged', async () => {
+test('Monday digest: clients sending and calls booked from stored counters; "not measured" when no owner time was logged', async () => {
   await setup();
   const { mondayDigest } = await import('@/lib/systems/digests');
   const empty = await mondayDigest({ now: onDay(12), send: false });
-  assert.match(empty.body, /no finished trials yet/);
-  assert.match(empty.body, /Time per trial: not measured/);
+  assert.match(empty.body, /^Clients sending: 1/);
+  assert.match(empty.body, /Calls booked for them \(all time, stored counters\): 4/);
+  assert.match(empty.body, /Your time per client: not measured/);
   assert.match(empty.body, /Health:\n {2}• (GREEN|YELLOW|RED) Acme IT/);
-  await kv.hset('system:trials:ledger', { a: { booked: 2, converted: true, reviewCapturedAt: 'x', ownerMinutes: 480 }, b: { booked: 0, notNowAt: 'x' } });
+  assert.doesNotMatch(empty.body, /trial/i);
+  await kv.hset('system:trials:ledger', { a: { booked: 2, ownerMinutes: 480 }, b: { booked: 0 } });
   const r = await mondayDigest({ now: onDay(12), send: false });
-  assert.match(r.body, /Trials that booked ≥ 1 call: 50% \(1 of 2\)/);
-  assert.match(r.body, /Trial to paid: 50% \(1 of 2\)/);
-  assert.match(r.body, /Time per trial: 8\.0 h per trial/);
+  assert.match(r.body, /Your time per client: 8\.0 h per client \(from 1 client with recorded minutes\)/);
 });

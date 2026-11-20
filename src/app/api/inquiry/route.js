@@ -26,11 +26,11 @@ export async function POST(request) {
     if (n > PER_HOUR) return Response.json({ ok: false, error: 'Too many requests from this address. Please try again later.' }, { status: 429 });
   } catch {}
   // The visitor is answered as soon as the time is held, the inquiry saved and the confirmation email sent;
-  // the paid application (research + fit score) and the owner's alerts run after the answer.
+  // the record held for the sales call (research + fit score) and the owner's alerts run after the answer.
   const started = Date.now();
   const defer = (job) => after(async () => {
     const out = await job();
-    // A paid application: finish its research (and fit score) within this function's time, like /api/apply.
+    // A record held for the call: finish its research (and fit score) within this function's time.
     if (out?.clientId) await researchToEnd(out.clientId, Math.max(5_000, 55_000 - (Date.now() - started)));
   });
   const r = await saveInquiry(body, { source: 'website', defer });

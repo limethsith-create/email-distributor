@@ -376,7 +376,7 @@ test('personas and the pure helpers', () => {
   for (const k of ['purchase_found', 'inboxes_ready', 'autobuy_problem', 'purchase_unmatched']) assert.ok(ALERTS[k], k);
   assert.equal(fill('t', ALERTS.purchase_found.title, { domain: 'acmeoutreach.com', company: 'Acme' }), 'We found acmeoutreach.com — connecting it to Acme');
   assert.equal(fill('t', ALERTS.inboxes_ready.title, { domain: 'acmeoutreach.com', count: 2, next: 'warm-up has started' }), 'acmeoutreach.com and 2 inboxes are ready — warm-up has started');
-  assert.equal(fill('t', ALERTS.purchase_unmatched.title, { domain: 'x.com' }), 'You bought x.com — which trial is it for? Pick in Settings');
+  assert.equal(fill('t', ALERTS.purchase_unmatched.title, { domain: 'x.com' }), 'You bought x.com — which client is it for? Pick in Settings');
   assert.equal(autobuyView({ client: { id: 'a', state: 'onboarding' } }), null, 'not at the buying step: no autobuy');
 });
 
@@ -418,7 +418,7 @@ test('matching: exact domain, an alternative, unmatched, one domain one trial, l
   assert.equal(alerts.find((a) => a.key === 'purchase_unmatched').url, '/#settings/inboxes');
   const board = await hubBoard({ now: at(1.2) });
   const todo = board.todos.find((t) => t.id === 'unmatched:randomname.com');
-  assert.equal(todo.text, 'You bought randomname.com — which trial is it for? Pick in Settings');
+  assert.equal(todo.text, 'You bought randomname.com — which client is it for? Pick in Settings');
   assert.deepEqual(todo.action, { type: 'view', view: 'settings', section: 'inboxes', domain: 'randomname.com' });
 
   await sync(2);

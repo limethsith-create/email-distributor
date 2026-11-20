@@ -1,7 +1,7 @@
 /**
  * Signed client page tokens (SPEC §14.3). 32 random bytes, only the SHA-256
  * is stored, one purpose per token, TTL 14 days (onboarding/approval) or 24 h
- * (tap buttons, decision). One-shot tokens are deleted when used.
+ * (tap buttons). One-shot tokens are deleted when used.
  *
  * Stored at client:{id}:token:{purpose} = { hash, data, oneShot } and a
  * reverse lookup tokenidx:{hash} = { clientId, purpose } so a URL only needs
@@ -44,8 +44,8 @@ export function pageUrl(token, path = '') {
 
 // ─── the hub's `links` (docs/HUB-API.md) ─────────────────────────────────────
 
-/** The client links the hub shows: the onboarding page, the approval page, the decision page, their dashboard. */
-export const LINK_PURPOSES = ['onboarding', 'approval', 'decision', 'dashboard'];  // dashboard: systems/clientdash.js
+/** The client links the hub shows: the onboarding page, the approval page, their dashboard. */
+export const LINK_PURPOSES = ['onboarding', 'approval', 'dashboard'];  // dashboard: systems/clientdash.js
 
 /**
  * Remember the LAST link of a purpose the client was sent, on the trial hash

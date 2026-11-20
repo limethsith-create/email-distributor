@@ -16,14 +16,10 @@ process.env.CRON_SECRET = process.env.CRON_SECRET || 'integration-secret';
 
 beforeEach(() => { __reset(); resetDeps(); });
 
-test('job names are unique across every stage file; aviance jobs refuse any other client', async () => {
+test('job names are unique across every stage file; the old outreach engine has no jobs', async () => {
   const { JOBS, duplicateJobNames } = await import('@/lib/jobs');
   assert.deepEqual(duplicateJobNames(), []);
-  for (const name of ['aviance-send', 'aviance-replies', 'aviance-eod-report']) {
-    const job = JOBS.find((j) => j.name === name);
-    assert.ok(job, name);
-    assert.deepEqual(await job.run({ clientId: 'acme', client: { id: 'acme', state: 'sending' }, now: new Date(), deadline: Date.now() + 1000 }), { skipped: 'aviance engine only' });
-  }
+  for (const name of ['aviance-send', 'aviance-replies', 'aviance-eod-report']) assert.equal(JOBS.find((j) => j.name === name), undefined, name);
 });
 
 test('every client job of Stages A–C sees the Test Mode clock; others see real time', async () => {
@@ -52,15 +48,15 @@ test('/api/unsubscribe adds the address to suppression:global and the legacy set
   assert.equal(await kv.sismember('suppression', 'pat@example.com'), 1);
 });
 
-test('converted keeps sending on the trial pair; emergency or a send hold stops it without a state change', async () => {
-  assert.ok(SENDING_STATES.has('converted'));
+test('a sending client: emergency stops it without a state change; a send hold pauses it', async () => {
+  assert.ok(SENDING_STATES.has('sending'));
   const sent = [];
   setDeps({
     sendEmail: async (account, opts) => { sent.push(opts); return { success: true, messageId: `<c${sent.length}@t>` }; },
     alertOwner: async () => ({ sent: true }),
     verifyEmail: async () => ({ valid: true }),
   });
-  await createClient('acme', { state: 'converted', name: 'Acme IT', contactEmail: 'boss@acmeit.com' });
+  await createClient('acme', { state: 'sending', name: 'Acme IT', contactEmail: 'boss@acmeit.com' });
   await kv.hset(K.profile('acme'), { senderName: 'Jane Doe', postalAddress: '1 Main St, Dover, DE 19901' });
   await kv.hset(K.trial('acme'), { day1Date: '2026-09-01', firstSendAt: '2026-09-01T13:00:00Z' });
   await saveInbox('acme', { email: 'jane@acme-team.com', password: 'pw', displayName: 'Jane Doe', enabled: true, dailyCap: '25' });
@@ -76,9 +72,9 @@ test('converted keeps sending on the trial pair; emergency or a send hold stops 
   await kv.hset(K.client('acme'), { emergencyActive: '1' });
   assert.match((await runSender('acme', { now: NOW })).skipped, /emergency/);
   await kv.hset(K.client('acme'), { emergencyActive: '0' });
-  assert.equal(await holdSending('acme', 'blacklisted'), 'held');
-  assert.equal((await getClient('acme')).state, 'converted');
-  assert.match((await runSender('acme', { now: NOW })).skipped, /held/);
+  assert.equal(await holdSending('acme', 'blacklisted'), 'paused');
+  assert.equal((await getClient('acme')).state, 'paused');
+  assert.ok((await runSender('acme', { now: NOW })).skipped);
   assert.equal(sent.length, 1);
 });
 
@@ -97,19 +93,4 @@ test('morning digest leads with Price Scout escalations and untested booking lin
   assert.match(lines[1], /^Booking link untested: Warm Co \(Day -4\)/);
   assert.doesNotMatch(r.body, /OK Co/);
   assert.equal(r.allGreen, false);
-});
-
-test('Test Mode: a scaled _test client runs its Stage A–C jobs on the virtual clock', async () => {
-  const { startTest } = await import('@/lib/systems/testmode');
-  const { runTick } = await import('@/lib/scheduler');
-  const { minuteKey } = await import('@/lib/joblist/helpers');
-  const { partsIn, ET } = await import('@/lib/time');
-  setDeps({ alertOwner: async () => ({ sent: true }), sendEmail: async () => ({ success: true, messageId: '<x@t>' }), verifyEmail: async () => ({ valid: true }) });
-  process.env.OWNER_EMAIL = 'owner@aviance.test';
-  const origin = new Date('2026-10-06T04:00:00Z'); // Tue 00:00 ET — no sending hours in real time
-  await startTest({ from: 'sending', now: origin }); // clockScale 24: one real hour = one day
-  const real = new Date(origin.getTime() + 30 * 60_000); // 00:30 real → 12:00 ET virtual
-  await runTick({ source: 'test', now: real, only: 'send', clientId: '_test' });
-  const c = await getClient('_test');
-  assert.equal(c['jp:send'], minuteKey(partsIn(ET, new Date(origin.getTime() + 12 * 3600e3))));
 });

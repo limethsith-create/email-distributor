@@ -38,11 +38,6 @@ export async function dashboardLink(clientId, { fresh = false, now = new Date() 
   }
   const token = await mintToken(clientId, DASHBOARD_PURPOSE, { ttl: DASHBOARD_TTL });
   const url = pageUrl(token, 'dashboard');
-  // A Test run client's link (the owner's preview): its token lookup is removed with the test run.
-  if (isDemoId(clientId)) {
-    const [{ sha256 }, { DEMO_KEYS }] = await Promise.all([import('@/lib/crypto'), import('@/lib/systems/demo')]);
-    await kv.sadd(DEMO_KEYS, `tokenidx:${sha256(token)}`).catch(() => {});
-  }
   await kv.hset(K.trial(clientId), { dashboardLink: url, dashboardLinkAt: now.toISOString() });
   return url;
 }
@@ -64,18 +59,18 @@ export async function sharedWith(clientId, trial = null) {
  * placement, health), credentials, lead grades.
  */
 export const JOURNEY = [
-  { key: 'applied', label: 'Applied' },
+  { key: 'applied', label: 'Call booked' },
   { key: 'onboarding', label: 'Onboarding call' },
   { key: 'setup', label: 'Setting up' },
   { key: 'sending', label: 'Sending emails' },
   { key: 'done', label: 'Done' },
 ];
 const STEP_OF = {
-  applied: 0, queued: 0,
+  applied: 0,
   onboarding: 1,
   awaiting_purchase: 2, setup_check: 2, warming: 2, ready: 2,
-  sending: 3, paused: 3, extension: 3, converted: 3,
-  deciding: 4, not_now: 4, retired: 4, declined: 4, closed_silent: 4, deleted: 4,
+  sending: 3, paused: 3,
+  retired: 4, declined: 4, closed_silent: 4, deleted: 4,
 };
 const has = (v) => v != null && v !== '' && v !== '0' && v !== 'false';
 const isoOr = (v) => { const t = Date.parse(v || ''); return Number.isFinite(t) ? new Date(t).toISOString() : null; };
@@ -103,8 +98,7 @@ const longDay = (day) => { const t = Date.parse(`${day}T12:00:00Z`); return Numb
 export function statusLine({ state, paid, planName = null, day, day1Date = null, onboard = {}, launch = {} }) {
   const setting = 'Setting up the new email inboxes and the list of people to write to.';
   switch (state) {
-    case 'applied': return 'Application received — it is being reviewed.';
-    case 'queued': return 'Accepted — waiting for a start date.';
+    case 'applied': return 'Your call with us is booked.';
     case 'onboarding':
       if (has(onboard.heldAt)) return setting;
       if (has(onboard.bookedFor)) return `The onboarding call is booked for ${etWhen(onboard.bookedFor)}.`;
@@ -116,16 +110,15 @@ export function statusLine({ state, paid, planName = null, day, day1Date = null,
       const d1 = day1Date ? longDay(day1Date) : null;
       return `Warming up the new inboxes, so the emails land in the inbox and not in spam.${d1 ? ` Emails start on ${d1}.` : ''}`;
     }
-    case 'sending': case 'extension':
-      return !paid && day != null && day > 0 ? `Sending emails — day ${day} of 30.` : 'Sending emails.';
+    case 'sending': return 'Sending emails.';
     case 'paused': return 'Sending is paused for now.';
-    case 'deciding': return 'The 30 days are done. Next: choosing whether to go on.';
     case 'declined': return 'Not going ahead.';
-    default: return paid && planName ? `On the ${planName}.` : 'The trial is finished.';
+    case 'retired': case 'deleted': return 'Sending has stopped.';
+    default: return planName ? `On the ${planName}.` : 'On your plan.';
   }
 }
 
-const PAID_LABEL = (plan) => (PAID.includes(plan) ? `${plan[0].toUpperCase()}${plan.slice(1)} plan` : '30-day trial');
+const PAID_LABEL = (plan) => `${PAID.includes(plan) ? `${plan[0].toUpperCase()}${plan.slice(1)}` : 'Starter'} plan`;
 
 /** A token → the client id it opens (null: unknown, expired, replaced by unshareDashboard, or the client is gone). */
 export async function sharedClientId(raw) {
@@ -152,8 +145,8 @@ export function overLimit(raw, { max = 120, now = new Date() } = {}) {
 }
 
 const CALL_STATUS = { booked: 'booked', held: 'showed', noshow: 'no_show', no_show: 'no_show', rebooked: 'moved', disputed: 'checking' };
-const PAST_ONBOARDING = new Set(['awaiting_purchase', 'setup_check', 'warming', 'ready', 'sending', 'paused', 'extension', 'deciding', 'converted', 'not_now', 'retired']);
-const PAST_LAUNCH = new Set(['sending', 'paused', 'extension', 'deciding', 'converted', 'not_now', 'retired']);
+const PAST_ONBOARDING = new Set(['awaiting_purchase', 'setup_check', 'warming', 'ready', 'sending', 'paused', 'retired']);
+const PAST_LAUNCH = new Set(['sending', 'paused', 'retired']);
 
 /** The client's calls: prospects' booked calls (newest first) and their two setup calls with us. */
 async function callsOf(clientId, client, bookingsRaw, onboard, launch) {
@@ -207,7 +200,7 @@ export async function dashboardView(raw, { now = new Date() } = {}) {
     p.exec(),
     threadFor(id, 'client', { shared: true }).catch(() => null),
   ]);
-  const plan = String(client.plan || 'trial').toLowerCase();
+  const plan = String(client.plan || 'starter').toLowerCase();
   const paid = PAID.includes(plan);
   const day = clientTrialDay(client, trial || {}, now);
   const state = client.state || 'applied';

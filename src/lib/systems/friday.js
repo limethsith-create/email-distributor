@@ -24,13 +24,13 @@ import { logEvent } from '@/lib/db/events';
 import { notifyClient, alertOwner } from '@/lib/notify';
 import { clientButtonsText } from '@/lib/systems/clientwatch';
 import { fill } from '@/lib/templates/render';
-import { FRIDAY_TRIAL_LINES, FRIDAY_BUILD_LINES } from '@/lib/templates/client/stage-d';
+import { FRIDAY_LINES, FRIDAY_BUILD_LINES } from '@/lib/templates/client/stage-d';
 import { addDays, dayKeyIn, daysBetween, ET, trialDay } from '@/lib/time';
 import { clientNow } from '@/lib/testclock';
 import { getReplies, getBookings, getPaceLog, pct, fmtDay, wordCount, ownerName, patchTrial
   , markReportRendered, cfgTree } from '@/lib/systems/dshared';
 
-export const FRIDAY_STATES = new Set(['warming', 'ready', 'sending', 'paused', 'extension']);
+export const FRIDAY_STATES = new Set(['warming', 'ready', 'sending', 'paused']);
 const WEEK_FIELDS = ['sent', 'replies', 'positive', 'booked', 'held'];
 const TOTAL_FIELDS = ['sent', 'replies', 'positive', 'booked', 'held', 'qualified', 'bounces', 'companiesContacted'];
 
@@ -153,7 +153,7 @@ export async function composeFriday(clientId, now = new Date()) {
 
   if (build) {
     const started = inboxes.map((i) => i.warmupStartedAt).filter(Boolean).sort()[0];
-    const buildDays = await cfg(clientId, 'TRIAL.buildDays');
+    const buildDays = await cfg(clientId, 'BUILD.days');
     const warmDay = started ? daysBetween(dayKeyIn(ET, new Date(started)), today) + 1 : null;
     const counts = await countByStatus(clientId);
     const listCount = Object.values(counts).reduce((a, b) => a + b, 0);
@@ -177,11 +177,7 @@ export async function composeFriday(clientId, now = new Date()) {
     const w = await sumDays(clientId, weekDays, WEEK_FIELDS);
     const pace = (await getPaceLog(clientId)).filter((p) => p.at && dayKeyIn(ET, new Date(p.at)) >= weekDays[6]);
     const target = await cfgTree(clientId, 'TARGET');
-    const cap = await cfg(clientId, 'EXTENSION_CAP');
-    // a paying client has no trial weeks and no extension: just the week of sending
-    const paid = ['starter', 'growth', 'scale'].includes(String(client.plan || '').toLowerCase());
-    const weekLabel = paid ? `week ${Math.max(1, Math.ceil(day / 7))} of sending`
-      : day > 30 ? `extension, day ${day} of ${cap}` : `trial week ${Math.min(f.trialWeeks, Math.max(1, Math.ceil(day / 7)))} of ${f.trialWeeks}`;
+    const weekLabel = `week ${Math.max(1, Math.ceil(day / 7))} of sending`;
     vars = {
       clientName: client.name || clientId, weekLabel,
       sentWeek: w.sent, sentTotal: t.sent, companies: t.companiesContacted,
@@ -192,7 +188,7 @@ export async function composeFriday(clientId, now = new Date()) {
       waiting,
       watch: watchLine({ bounceRate: t.sent > 0 ? t.bounces / t.sent : null, placement, inboxRate }, { bounceMax: diag.bounceMax, placementMin: diag.placementMin, inboxRateMin: lowRate }),
     };
-    lines = FRIDAY_TRIAL_LINES;
+    lines = FRIDAY_LINES;
     title = `${vars.clientName} — ${weekLabel}`;
   }
 
@@ -209,7 +205,7 @@ export async function composeFriday(clientId, now = new Date()) {
   }
   const words = wordCount(body);
   if (words >= f.maxWords) return { ok: false, blockedReason: `update is ${words} words (limit ${f.maxWords})` };
-  return { ok: true, text: body, words, title, variant: build ? 'build' : 'trial', day };
+  return { ok: true, text: body, words, title, variant: build ? 'build' : 'sending', day };
 }
 
 /** Compose, store and send this Friday's update (idempotent per date). */
@@ -232,7 +228,7 @@ export async function runFriday(clientId, { now: realNow = new Date() } = {}) {
   await kv.hset(K.report(clientId, name), { renderedAt: new Date().toISOString(), html: '', text: c.text, blockedReason: '' });
   await markReportRendered(clientId, name);
   // The client buttons (customer hit / away / stop) ride under trial-week updates; they are not part of the 120-word update.
-  const buttons = c.variant === 'trial' && ['sending', 'paused', 'extension'].includes(client.state) ? `\n\n${await clientButtonsText(clientId)}` : '';
+  const buttons = c.variant === 'sending' && ['sending', 'paused'].includes(client.state) ? `\n\n${await clientButtonsText(clientId)}` : '';
   const res = await notifyClient(clientId, 'friday_update', { title: c.title, body: `${c.text}${buttons}`, ownerName: sig }, { dedupe: `friday_update:${date}` });
   if (res.sent) {
     await kv.hincrby(K.trial(clientId), 'fridayCount', 1);

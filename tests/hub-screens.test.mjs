@@ -12,7 +12,7 @@ import { dayKeyIn, OWNER_TZ } from '@/lib/time';
 import { createClient } from '@/lib/db/client';
 import { io } from '@/lib/systems/intake-io';
 import { alertOwner, notifyClient } from '@/lib/notify';
-import { hubBoard, hubClient, todosFor, simpleFor, stateLabelFor, ownerAndEastern } from '@/lib/systems/hubview';
+import { hubBoard, hubClient, todosFor, simpleFor, ownerAndEastern } from '@/lib/systems/hubview';
 import { autobuyView } from '@/lib/systems/autobuy';
 import { warmupView, warmupHubSettings } from '@/lib/systems/warmup';
 import { invoiceView } from '@/lib/systems/invoice';
@@ -22,7 +22,6 @@ import { onboardCallFor } from '@/lib/systems/onboardcall';
 import { approveApplication } from '@/lib/systems/gatekeeper';
 import { requestMeeting, calendarAction } from '@/lib/systems/calendar';
 import { approvalUrl } from '@/lib/systems/approval';
-import { decisionLink } from '@/lib/systems/reports';
 import { mintToken, pageUrl, rememberLink, currentLinks } from '@/lib/pagetokens';
 import { renderTemplate } from '@/lib/templates/client';
 
@@ -53,7 +52,7 @@ const base = (over = {}) => ({
 
 // ── 3. detail.row is the board row ───────────────────────────────────────────
 
-test('trial detail `row` is the board row: the same alerts, health and counts (before: green and 0 while the board said red)', async () => {
+test('client detail `row` is the board row: the same alerts, health and counts (before: green and 0 while the board said red)', async () => {
   await createClient('acme', { name: 'Acme', state: 'sending', contactName: 'Ann Lee', contactEmail: 'ann@acme.com' });
   await alertOwner('angry_reply', { clientId: 'acme', body: 'Angry reply from someone' });
   const board = await hubBoard({ now: NOW });
@@ -73,7 +72,7 @@ test('simple: the red dot never comes with "Nothing for you" — an urgent alert
   const todos = todosFor(ctx);
   assert.equal(todos[0].id, 'alert-a1:acme');
   const s = simpleFor(ctx, todos);
-  assert.deepEqual([s.step, s.label, s.needsYou, s.next], ['sending', 'Sending — day 3 of 30', true, 'Read the angry reply and mark it as seen']);
+  assert.deepEqual([s.step, s.label, s.needsYou, s.next], ['sending', 'Sending — day 3', true, 'Read the angry reply and mark it as seen']);
   // Another urgent alert kind: still an instruction, naming the alert.
   const other = simpleFor(base({ alerts: [{ ...alert, key: 'domain_burned', title: 'Domain burned: Acme' }] }));
   assert.deepEqual([other.needsYou, other.next], [true, 'Read the alert “Domain burned: Acme” and mark it as seen']);
@@ -98,36 +97,21 @@ test('to-do legal: who wrote, when and their first line — never the reply id',
 
 // ── 6. deciding ──────────────────────────────────────────────────────────────
 
-test('deciding: its own step in plain words, the bonus deadline in Sri Lanka time with Eastern, the warm-up card kept', async () => {
-  const client = { id: 'acme', name: 'Acme', state: 'deciding', contactName: 'Ann Lee' };
-  const ctx = base({ client, trial: { bonusExpiresAt: '2026-11-20T14:00:00Z' } });
-  const s = simpleFor(ctx);
-  assert.deepEqual([s.step, s.label, s.next, s.needsYou], ['deciding', 'Trial finished — waiting for their decision', 'Nothing. Ann chooses on the decision page.', false]);
-  assert.equal(simpleFor(base({ client: { ...client, contactName: '' } })).next, 'Nothing. They choose on the decision page.');
-  assert.equal(stateLabelFor(ctx), 'Deciding — bonus until Fri 20 Nov, 7:30 pm Sri Lanka time (9:00 am Eastern)');
-  // A different US day: the Eastern day is written out.
+test('times for the owner: Sri Lanka time, with the Eastern day written out when it differs', () => {
   assert.equal(ownerAndEastern('2026-11-20T03:00:00Z'), 'Fri 20 Nov, 8:30 am Sri Lanka time (Thu 19 Nov, 10:00 pm Eastern)');
-  // "Talk to someone" pressed: the instruction, in red.
-  const talk = simpleFor(base({ client, trial: { talkRequestedAt: '2026-11-19T15:00:00Z' } }));
-  assert.deepEqual([talk.next, talk.needsYou], ['Call Ann Lee — they asked to talk', true]);
-  // After the decision `finished` stays.
-  assert.equal(simpleFor(base({ client: { ...client, state: 'converted' } })).step, 'finished');
-  // The warm-up card does not vanish between Day 30 and their click.
-  const w = warmupView({ client, inboxes: [{ email: 'a@acme-mail.com', passwordEnc: 'x', warmupStartedAt: '2026-10-07T12:00:00Z', inboxRate7d: '0.96', warmupReady: '1' }], now: new Date('2026-11-19T15:00:00Z'), s: await warmupHubSettings() });
-  assert.deepEqual([w.status, w.label], ['ready', 'Warm-up done · 96% reach the inbox']);
 });
 
 // ── 7. the invoice ───────────────────────────────────────────────────────────
 
 test('invoice: the contract shape (number, dueDate, remindersSent as a count) and a to-do that names the number', () => {
-  const inv = invoiceView({ plan: 'starter', amount: '2497', calls: '10', bonus: '1', invoiceNo: 'AV-202611-acme', issuedAt: '2026-11-19T19:10:00.000Z', status: 'sent', sentAt: '2026-11-19T19:10:00.000Z', remindersSent: '[3]', blockedReason: '' });
-  assert.deepEqual(inv, { number: 'AV-202611-acme', plan: 'starter', amount: 2497, calls: 10, bonus: true, status: 'sent', issuedAt: '2026-11-19T19:10:00.000Z', sentAt: '2026-11-19T19:10:00.000Z', paidAt: null, dueDate: '2026-11-19', remindersSent: 1, blockedReason: null });
+  const inv = invoiceView({ plan: 'starter', amount: '2497', calls: '10', invoiceNo: 'AV-202611-acme', issuedAt: '2026-11-19T19:10:00.000Z', status: 'sent', sentAt: '2026-11-19T19:10:00.000Z', remindersSent: '[3]', blockedReason: '' });
+  assert.deepEqual(inv, { number: 'AV-202611-acme', plan: 'starter', amount: 2497, calls: 10, status: 'sent', issuedAt: '2026-11-19T19:10:00.000Z', sentAt: '2026-11-19T19:10:00.000Z', paidAt: null, dueDate: '2026-11-19', remindersSent: 1, blockedReason: null });
   assert.equal(invoiceView(null), null);
   assert.equal(invoiceView({ remindersSent: '[]' }).remindersSent, 0);
-  const converted = { id: 'acme', name: 'Acme', state: 'converted', contactName: 'Ann Lee' };
-  const todo = todosFor(base({ client: converted, invoice: inv })).find((t) => t.id === 'invoice:acme');
+  const paying = { id: 'acme', name: 'Acme', state: 'onboarding', contactName: 'Ann Lee' };
+  const todo = todosFor(base({ client: paying, invoice: inv })).find((t) => t.id === 'invoice:acme');
   assert.equal(todo.text, 'Mark the month-one invoice paid when the money lands (AV-202611-acme)');
-  const noNumber = todosFor(base({ client: converted, invoice: { ...inv, number: null } })).find((t) => t.id === 'invoice:acme');
+  const noNumber = todosFor(base({ client: paying, invoice: { ...inv, number: null } })).find((t) => t.id === 'invoice:acme');
   assert.equal(noNumber.text, 'Mark the month-one invoice paid when the money lands');
 });
 
@@ -149,7 +133,7 @@ test('digests: the new one acknowledges the earlier ones of its kind — one mor
   await freshDay(); await mondayDigest({ now: new Date('2026-10-19T02:30:00Z') });
   await freshDay(); await mondayDigest({ now: new Date('2026-10-26T02:30:00Z') });
   const all = await log();
-  assert.deepEqual(all.filter((a) => !a.acknowledged).map((a) => a.title).sort(), ['Monday KPIs — 2026-10-26', 'Morning digest — 2026-10-22']);
+  assert.deepEqual(all.filter((a) => !a.acknowledged).map((a) => a.title).sort(), ['Monday summary — 2026-10-26', 'Morning digest — 2026-10-22']);
   const done = all.filter((a) => a.acknowledged);
   assert.equal(done.length, 3);
   assert.ok(done.every((a) => a.acknowledgedBy === 'machine' && a.ackReason === 'the next digest went out'));
@@ -193,23 +177,22 @@ test('onboardCall.meetLink: the confirmed call\'s Google Meet link, from its mee
 
 // ── 2. links ─────────────────────────────────────────────────────────────────
 
-test('links: the last onboarding / approval / decision link sent, only while its token still works (before: always {})', async () => {
+test('links: the last onboarding / approval link sent, only while its token still works (before: always {})', async () => {
   await createClient('acme', { name: 'Acme', state: 'warming', contactName: 'Ann Lee', contactEmail: 'ann@acme.com' });
   const approval = await approvalUrl('acme');
-  const decision = await decisionLink('acme', 'mail', 30);
   // The LAST link of a purpose is the one kept; one whose token does not exist is not shown.
   await rememberLink('acme', 'onboarding', 'https://app.test/c/first-onboarding-token-1234567890/onboard');
   await rememberLink('acme', 'onboarding', 'https://app.test/c/no-such-token-abcdefghijklmnop/onboard');
-  assert.deepEqual((await hubClient('acme')).links, { approval, decision });
+  assert.deepEqual((await hubClient('acme')).links, { approval });
   const tok = await mintToken('acme', 'onboarding:a2');
   await rememberLink('acme', 'onboarding', pageUrl(tok, 'onboard'));
   assert.equal(await approvalUrl('acme'), approval, 'a re-send reuses the approval link');
-  assert.deepEqual((await hubClient('acme')).links, { onboarding: pageUrl(tok, 'onboard'), approval, decision });
+  assert.deepEqual((await hubClient('acme')).links, { onboarding: pageUrl(tok, 'onboard'), approval });
   // An expired token drops out.
   await kv.del(K.token('acme', 'approval'));
-  assert.deepEqual((await hubClient('acme')).links, { onboarding: pageUrl(tok, 'onboard'), decision });
+  assert.deepEqual((await hubClient('acme')).links, { onboarding: pageUrl(tok, 'onboard') });
   assert.deepEqual(await currentLinks('nobody'), {});
-  // Only the three purposes the hub shows are kept.
+  // Only the purposes the hub shows are kept.
   assert.equal(await rememberLink('acme', 'tap:b1', 'https://app.test/c/x/tap'), false);
 });
 
@@ -253,6 +236,6 @@ test('client emails: the approval email greets by first name; the full name only
   assert.match(res.text, /will go out in your name\./, 'Dana is the sender: "your name", not her own full name');
   assert.doesNotMatch(res.text, /Hi Dana Whitfield/);
   // Every email of the approval round greets the same way.
-  const vars = { firstName: 'Dana', contactName: 'Dana Whitfield', approvalUrl: 'u', day1Date: 'd', silenceDate: 's', day30Date: 'd30', reason: 'r', waitingLine: 'w', ownerName: 'L' };
+  const vars = { firstName: 'Dana', contactName: 'Dana Whitfield', approvalUrl: 'u', day1Date: 'd', silenceDate: 's', reason: 'r', waitingLine: 'w', ownerName: 'L' };
   for (const key of ['approval_reminder', 'approval_updated', 'approved_by_silence', 'day1_moved']) assert.match(renderTemplate(key, { startWhen: 'Thursday 22 October at 9:00 am Eastern Time', ...vars }).text, /^Hi Dana,/, key);
 });

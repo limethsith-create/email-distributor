@@ -1,5 +1,14 @@
 # Aviance Trial Machine — Build Specification
 
+> **Superseded in part (2026-11-20).** This spec was written for the free
+> 30-day trial. The trial is gone: every client is on a paid plan, the
+> website's "Book a call" is the only way in, and a booking becomes a client
+> when the owner marks it Won. Sections on the trial application, the cap and
+> waiting list, Day 20 / Day 29 / Day 30, the decision page, extensions, the
+> review ladder, win-back, Test Mode and Aviance's own outreach describe
+> removed behaviour. See README "What changed" and docs/HUB-API.md
+> "Changes on 2026-11-20".
+
 Sep 24, 2026 · @limethsith
 
 This is the build spec for the system described in the plan. It is written to be handed to Claude Code and built inside the existing `email-distributor` repository. Everything here runs without a human or a Claude session once deployed.

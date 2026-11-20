@@ -1,5 +1,18 @@
 # Build progress (SPEC §15)
 
+> **2026-11-20 — no free trial, one way in, no own outreach.** The trial
+> (application, cap and queue, Day 20 / 29 / 30, decision page, extension,
+> ladder, win-back, trial agreement, Test Mode / Test run) and Aviance's own
+> cold email (auto-send, reply checker, EOD report, outreach archive, the old
+> dashboard pages, My stats) are removed. Every client is on a plan; the
+> website's "Book a call" (`POST /api/inquiry`) is the only way in and a
+> booking becomes a client when the owner marks it Won; "Add a paying
+> client" stays. `npm test` passes (560 tests). The table below is the
+> original build history; rows that name removed parts are history only
+> (`tests/full-run.test.mjs` is gone — `tests/journey.test.mjs` is the
+> end-to-end run now). The setup list still applies, except item 11's Clutch
+> profile (it was for the trial review) and anything about Test Mode.
+
 Merged to `main` and deployed on 2026-09-25 (the Aviance Hub's Trials tab
 runs it — `docs/HUB-API.md`). Updated after the integration pass. `npm test` (145 tests, including the full simulated trial)
 and `npm run build` pass.

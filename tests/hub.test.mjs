@@ -136,12 +136,12 @@ test('systems: warming up with a copy change request and an untested booking lin
 
 test('systems: sending with a legal hold, a dispute, an unpaid invoice and an urgent alert', () => {
   const ctx = base({
-    client: { id: 'acme', name: 'Acme', state: 'converted', plan: 'starter', legalHoldAt: '2026-10-19T00:00:00Z', legalHoldReply: 'my lawyer will hear about this', planStartedAt: '2026-10-18T00:00:00Z' },
-    trial: { unansweredHot: 2, decisionSentAt: '2026-10-17T00:00:00Z', decision: 'plan' },
+    client: { id: 'acme', name: 'Acme', state: 'sending', plan: 'starter', legalHoldAt: '2026-10-19T00:00:00Z', legalHoldReply: 'my lawyer will hear about this', planStartedAt: '2026-10-18T00:00:00Z' },
+    trial: { unansweredHot: 2 },
     counters: { sent: 400, sentD0: 200, bounces: 4, replies: 12, positive: 5, booked: 3, held: 2, qualified: 2, noshows: 1 },
     bookings: [{ id: 'b1', leadEmail: 'x@y.com', status: 'disputed', disputeReason: 'wrong title', disputedAt: '2026-10-19T10:00:00Z' }],
     invoice: { number: 'INV-1', issuedAt: '2026-10-18T00:00:00Z', amount: 2497 },
-    reports: [{ name: 'friday:2026-10-10', renderedAt: 'x' }, { name: 'friday:2026-10-17', renderedAt: 'x' }, { name: 'day29', renderedAt: 'x' }],
+    reports: [{ name: 'friday:2026-10-10', renderedAt: 'x' }, { name: 'friday:2026-10-17', renderedAt: 'x' }],
     alerts: [{ id: 'al1', at: '2026-10-20T14:00:00Z', urgent: true, title: 'LEGAL reply: acme — sending paused' }],
   });
   const s = Object.fromEntries(systemsFor(ctx).map((x) => [x.key, x]));
@@ -152,8 +152,8 @@ test('systems: sending with a legal hold, a dispute, an unpaid invoice and an ur
   assert.match(s.replies.line, /2 hot leads unanswered/);
   assert.equal(s.calls.status, 'waiting');
   assert.match(s.calls.line, /1 dispute for you to decide/);
-  assert.match(s.reports.line, /2 Friday updates · Day 29 report sent · decision page sent 2026-10-17 · decision: plan · invoice unpaid/);
-  assert.match(s.closing.line, /plan starter · unpaid/);
+  assert.match(s.reports.line, /2 Friday updates · invoice unpaid/);
+  assert.equal(s.closing.line, 'Runs only if they stop');
   const todo = todosFor(ctx);
   const texts = todo.map((t) => t.text);
   assert.ok(texts.some((t) => /clear the hold/.test(t)));

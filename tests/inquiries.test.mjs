@@ -1,12 +1,11 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { __reset, kv } from '@vercel/kv';
-import { saveInquiry, listInquiries, setInquiryStatus, addInquiryNote, inquiryToTrial, normaliseInquiry } from '@/lib/systems/inquiries';
+import { saveInquiry, listInquiries, setInquiryStatus, addInquiryNote, normaliseInquiry } from '@/lib/systems/inquiries';
 import { hubBoard } from '@/lib/systems/hubview';
 import { pushIo, savePushSub } from '@/lib/push';
 import { io } from '@/lib/systems/intake-io';
-import { getClient, setState, createClient } from '@/lib/db/client';
-import { approveApplication } from '@/lib/systems/gatekeeper';
+import { getClient, createClient } from '@/lib/db/client';
 import { runDayJobs } from '@/lib/systems/trialmanager';
 
 // Exactly what aviance.online's "Book a call" form sends.
@@ -56,24 +55,31 @@ test('an inquiry from the website (no website given) lands in the hub and pops u
   assert.equal(board.inquiries.counts.new, 1);
 });
 
-test('validation, status, notes, and turning an inquiry into a trial', async () => {
+test('validation, status, notes; Won makes them a paying client (one onboarding email), Lost closes the record quietly', async () => {
   assert.deepEqual(Object.keys(normaliseInquiry({ name: '', email: 'x', company: '', sells: '' }).errors).sort(), ['company', 'email', 'name', 'sells']);
   const { id } = await saveInquiry(site({ plan: 'nonsense', website: '' }));
   assert.equal((await listInquiries()).inquiries[0].plan, null);
-  // (a request with no website stays a plain inquiry; give it one before turning it into a trial)
-  const rec = (await listInquiries()).inquiries[0];
-  await kv.hset('inquiries', { [id]: { ...rec, website: 'stoneroofing.com' } });
   await addInquiryNote(id, 'Left a voicemail');
   const q = await setInquiryStatus(id, 'contacted', 'Call on Thursday');
   assert.equal(q.status, 'contacted');
   assert.deepEqual(q.notes.map((n) => n.text), ['Left a voicemail', 'Call on Thursday']);
   await assert.rejects(() => setInquiryStatus(id, 'maybe'), /status must be one of/);
+  // No website: Won cannot make a client, and the booking stays where it was.
+  await assert.rejects(() => setInquiryStatus(id, 'won'), /has no website/);
+  assert.equal((await listInquiries()).inquiries[0].status, 'contacted');
+  // With a website: Won → a Starter client in onboarding, one email.
+  const rec = (await listInquiries()).inquiries[0];
+  await kv.hset('inquiries', { [id]: { ...rec, website: 'https://stoneroofing.com' } });
   await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith') });
-  const t = await inquiryToTrial(id);
-  assert.equal(t.ok, true);
-  assert.equal(t.outcome, 'onboarding');
+  const w = await setInquiryStatus(id, 'won');
+  assert.equal(w.status, 'won');
+  assert.ok(w.clientId);
+  const c = await getClient(w.clientId);
+  assert.deepEqual([c.state, c.plan], ['onboarding', 'starter']);
   assert.deepEqual(emails, ['accepted_call']);
-  assert.equal((await inquiryToTrial(id)).already, true);
+  // Won again: nothing new.
+  await setInquiryStatus(id, 'won');
+  assert.deepEqual(emails, ['accepted_call']);
 });
 
 test('POST /api/inquiry: honeypot, bad data', async () => {
@@ -87,57 +93,74 @@ test('POST /api/inquiry: honeypot, bad data', async () => {
   assert.equal(bad.status, 400);
 });
 
-test('a paid request with a website becomes a paid application: researched, held for the owner, "Say yes" emails them the paid onboarding call — no trial cap, no one-trial rule, no Day 30', async () => {
-  await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith'), MAX_ACTIVE_TRIALS: '0' });
-  // an earlier (declined-for-good) trial on the same domain would block a trial, not a paying client
-  await createClient('stoneroofing-old', { name: 'Stone Roofing', contactEmail: 'old@stoneroofing.com', mainDomain: 'stoneroofing.com', plan: 'trial', state: 'applied' });
-  await setState('stoneroofing-old', 'onboarding', 'test');
+test('a booking with a website: researched and held for the sales call; Won emails them the onboarding call; Lost declines with no email', async () => {
+  await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith') });
   const r = await saveInquiry(site());
   assert.equal(r.ok, true);
-  assert.ok(r.clientId, 'a client was made');
+  assert.ok(r.clientId, 'a record was made for the call');
   const c = await getClient(r.clientId);
   assert.equal(c.plan, 'growth'); assert.equal(c.state, 'applied'); assert.equal(c.source, 'inquiry');
   const app = await kv.hgetall(`client:${r.clientId}:application`);
   assert.equal(app.review, 'pending');
   assert.match(app.answers, /Plan they asked for.*Growth/);
-  assert.deepEqual(emails, [], 'nothing goes to them before the yes');
+  assert.deepEqual(emails, [], 'nothing goes to them before Won');
   assert.equal((await listInquiries()).inquiries[0].clientId, r.clientId);
-  // the board: one to-do (the application), not a second "call them back" one
+  // The board: the booking is the one to-do (not a second one for the record).
   const board = await hubBoard();
-  assert.equal(board.todos.filter((t) => t.id === `inquiry:${r.id}`).length, 0);
-  // Say yes → the paid onboarding email, straight to onboarding (the trial cap is 0)
-  const out = await approveApplication(r.clientId);
-  assert.equal(out.outcome, 'onboarding');
-  assert.deepEqual(emails, ['accepted_call_paid']);
+  assert.equal(board.todos.filter((t) => t.id === `inquiry:${r.id}`).length, 1);
+  assert.equal(board.todos.filter((t) => String(t.id).includes(r.clientId)).length, 0);
+  // Won → the onboarding email, straight to onboarding.
+  const won = await setInquiryStatus(r.id, 'won');
+  assert.equal(won.clientId, r.clientId);
+  assert.deepEqual(emails, ['accepted_call']);
   assert.equal((await getClient(r.clientId)).state, 'onboarding');
-  // sending on Day 31: no trial report, no Day 30 decision
+  // Sending on Day 60: no report, no decision, it keeps sending.
   await kv.hset(`client:${r.clientId}`, { state: 'sending' });
   await kv.hset(`client:${r.clientId}:trial`, { day1Date: '2026-01-01', firstSendAt: '2026-01-01T15:00:00Z', day1NoticeAt: '2026-01-01T16:00:00Z' });
   const dj = await runDayJobs(r.clientId, { now: new Date('2026-03-01T15:00:00Z') });
   assert.equal(dj.day, 60, 'Day 60 of sending');
-  assert.equal(dj.report, undefined); assert.equal(dj.day30, undefined); assert.equal(dj.disposition, undefined);
   assert.equal((await getClient(r.clientId)).state, 'sending');
-  // the hub: no "of 30" for a paying client
-  const row = (await hubBoard()).stages.find((st) => st.key === 'live').clients.find((c) => c.id === r.clientId);
+  const row = (await hubBoard()).stages.find((st) => st.key === 'live').clients.find((x) => x.id === r.clientId);
   assert.equal(row.plan, 'growth');
-  assert.ok(!/of 30/.test(row.stateLabel) && !/of 30/.test(row.simple.label), row.stateLabel + ' / ' + row.simple.label);
+  assert.ok(!/of 30|trial/i.test(row.stateLabel) && !/of 30|trial/i.test(row.simple.label), row.stateLabel + ' / ' + row.simple.label);
+
+  // Won / Lost pressed on the client page (the intake route) move the booking too.
+  const { POST: intake } = await import('@/app/api/mc/clients/[id]/intake/route');
+  const b = await saveInquiry(site({ email: 'won2@stoneroofing.com', company: 'Page Roofing', website: 'pageroofing.com', slotStart: '2027-09-30T18:00:00.000Z', slotEnd: '2027-09-30T18:15:00.000Z' }));
+  const wr = await intake(new Request('http://x', { method: 'POST', body: JSON.stringify({ action: 'approveApplication' }) }), { params: { id: b.clientId } });
+  assert.equal(wr.status, 200);
+  assert.equal((await getClient(b.clientId)).state, 'onboarding');
+  assert.equal((await listInquiries()).inquiries.find((q) => q.id === b.id).status, 'won');
+  emails = [];
+  const c2 = await saveInquiry(site({ email: 'lost2@stoneroofing.com', company: 'Gone Roofing', website: 'goneroofing.com', slotStart: '2027-09-30T19:00:00.000Z', slotEnd: '2027-09-30T19:15:00.000Z' }));
+  await intake(new Request('http://x', { method: 'POST', body: JSON.stringify({ action: 'declineApplication' }) }), { params: { id: c2.clientId } });
+  assert.equal((await getClient(c2.clientId)).state, 'declined');
+  assert.equal((await listInquiries()).inquiries.find((q) => q.id === c2.id).status, 'lost');
+  assert.deepEqual(emails, []);
+
+  // Lost: the record is declined and nothing is emailed.
+  emails = [];
+  const l = await saveInquiry(site({ email: 'old+lost@stoneroofing.com', company: 'Lost Roofing', website: 'lostroofing.com', slotStart: '2027-09-30T16:00:00.000Z', slotEnd: '2027-09-30T16:15:00.000Z' }));
+  assert.equal(l.ok, true, l.error);
+  await setInquiryStatus(l.id, 'lost');
+  assert.equal((await getClient(l.clientId)).state, 'declined');
+  assert.deepEqual(emails, []);
 });
 
-test('the owner adds a paying client by hand (POST /api/mc/clients/new with a plan): paid onboarding email, no trial cap', async () => {
-  await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith'), MAX_ACTIVE_TRIALS: '0' });
+test('the owner adds a paying client by hand (POST /api/mc/clients/new): the onboarding email; no plan → Starter', async () => {
+  await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith') });
   const { POST } = await import('@/app/api/mc/clients/new/route');
   const res = await POST(new Request('http://x/api/mc/clients/new', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ companyName: 'Oak Legal', contactName: 'Olive Oak', contactEmail: 'olive@oaklegal.com', website: 'oaklegal.com', plan: 'Scale' }) }));
   const r = await res.json();
   assert.equal(r.ok, true); assert.equal(r.outcome, 'onboarding');
   const c = await getClient(r.clientId);
   assert.equal(c.plan, 'scale'); assert.equal(c.state, 'onboarding'); assert.equal(c.source, 'owner');
-  assert.deepEqual(emails, ['accepted_call_paid']);
-  // no plan → a trial, as before (the cap of 0 puts it on the waiting list)
+  assert.deepEqual(emails, ['accepted_call']);
   const t = await (await POST(new Request('http://x/api/mc/clients/new', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ companyName: 'Elm Dental', contactName: 'Eli Elm', contactEmail: 'eli@elmdental.com', website: 'elmdental.com' }) }))).json();
-  assert.equal((await getClient(t.clientId)).plan, 'trial'); assert.equal(t.outcome, 'queued');
+  assert.equal((await getClient(t.clientId)).plan, 'starter'); assert.equal(t.outcome, 'onboarding');
 });
 
-test('a paying client signs the plan agreement (their plan, price and calls), never the free-trial one; the onboarding page names the plan', async () => {
+test('every client signs the plan agreement (their plan, price and calls); the onboarding page names the plan', async () => {
   await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith') });
   const { agreementFor, loadOnboarding } = await import('@/lib/systems/onboarding');
   await createClient('oak-legal', { name: 'Oak Legal', contactName: 'Olive Oak', contactEmail: 'olive@oaklegal.com', mainDomain: 'oaklegal.com', plan: 'growth', state: 'applied' });
@@ -146,10 +169,11 @@ test('a paying client signs the plan agreement (their plan, price and calls), ne
   assert.match(ag.text, /^Aviance — Growth Plan Agreement/);
   assert.match(ag.text, /\$3,997 a month for 20 booked sales calls a month/);
   assert.ok(!/free|30-Day Trial|review/i.test(ag.text), 'no trial wording');
+  // An old record without a plan reads as Starter.
   await createClient('elm-dental', { name: 'Elm Dental', contactName: 'Eli Elm', contactEmail: 'eli@elmdental.com', mainDomain: 'elmdental.com', plan: 'trial', state: 'applied' });
-  assert.match((await agreementFor('elm-dental')).text, /^The Aviance 30-Day Trial — Agreement/);
+  assert.match((await agreementFor('elm-dental')).text, /^Aviance — Starter Plan Agreement/);
   assert.equal((await loadOnboarding('oak-legal')).planName, 'Growth');
-  assert.equal((await loadOnboarding('elm-dental')).planName, null);
+  assert.equal((await loadOnboarding('elm-dental')).planName, 'Starter');
 });
 
 test('no plan card: the plan comes from the calls a month they can take, and their answers feed the fit score', async () => {

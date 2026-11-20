@@ -1,122 +1,29 @@
 /**
- * Report renderer + Plan Recommender (SPEC §9.2, §9.3).
+ * Report renderer (SPEC §9.2): the Market Report, sent in the handover pack.
  *
- * Everything goes through `renderReport(name, clientId)`. It refuses to
- * render when a counter the report needs is missing (rule 4): the rendered
- * record gets a `blockedReason`, the owner gets `report_blocked`, and nothing
- * is shown as 0.
- *
- * Names: day20 (disposition sheet), day29 (Trial Report, normal or zero-call),
- * final (the report at the end of an extension), market (Market Report).
+ * `renderReport('market', clientId)` refuses to render when a counter the
+ * report needs is missing (rule 4): the rendered record gets a
+ * `blockedReason`, the owner gets `report_blocked`, and nothing is shown as 0.
  * Rendered reports are stored in client:{id}:report:{name}.
  */
 
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
-import { cfg } from '@/lib/config';
 import { getClient, getProfile, getTrial } from '@/lib/db/client';
 import { requireCounters, getDay } from '@/lib/db/counters';
 import { getLeads } from '@/lib/db/leads';
 import { logEvent } from '@/lib/db/events';
 import { alertOwner } from '@/lib/notify';
-import { fill } from '@/lib/templates/render';
-import { REPORT_LINES, REPORT_ZERO_LINES } from '@/lib/templates/client/stage-d';
 import { addDays, dayKeyIn, ET } from '@/lib/time';
-import { mintToken, pageUrl, rememberLink } from '@/lib/pagetokens';
 import { clientNow } from '@/lib/testclock';
-import { getReplies, getBookings, getPaceLog, pct, money, csv, esc, fmtDay, PLAN_NAMES, markReportRendered, parseRec, cfgTree } from '@/lib/systems/dshared';
+import { getReplies, getBookings, getPaceLog, pct, csv, esc, markReportRendered } from '@/lib/systems/dshared';
 
 export const REPORT_FIELDS = {
-  day29: ['sent', 'bounces', 'replies', 'positive', 'booked', 'held', 'qualified', 'noshows', 'companiesContacted'],
-  final: ['sent', 'bounces', 'replies', 'positive', 'booked', 'held', 'qualified', 'noshows', 'companiesContacted'],
   market: ['sent', 'bounces', 'replies', 'positive'],
-  day20: [],
 };
 
 const POSITIVE_KINDS = new Set(['interested', 'question']);
 const OPEN_KINDS = new Set(['interested', 'question', 'unclear']);
-
-// ── Plan Recommender (SPEC §9.3) ──────────────────────────────────────────────
-
-function perCall(plan) {
-  return money(Math.round(plan.price / plan.calls));
-}
-
-/**
- * Exactly the §9.3 rule. Inputs are stored numbers only.
- * @returns {{plan: string|null, kind: string, rate: number|null, rateText: string, text: string, short: string, projections: object}}
- */
-export function recommendPlan({ qualified, positive, companies, capacityPerWeek, kickoffDate, extensionUsed = false, plans, capacity = { starterMax: 3, growthMax: 7 } }) {
-  const q = Number(qualified);
-  const pos = Number(positive);
-  const c = Number(companies);
-  const rate = c > 0 ? q / c : null;
-  const rateText = rate == null ? 'n/a' : `${(rate * 100).toFixed(2)}%`;
-  const projections = {
-    starter: rate == null ? null : Math.floor(rate * plans.starter.reach),
-    growth: rate == null ? null : Math.floor(rate * plans.growth.reach),
-  };
-  const arithmetic = rate == null ? '' : [
-    `${q} qualified call${q === 1 ? '' : 's'} from ${c.toLocaleString('en-US')} companies is ${rateText}. That’s your rate, in your market, with your offer — not a benchmark.`,
-    `Starter contacts at least ${plans.starter.reach.toLocaleString('en-US')} companies a month. At your rate that’s about ${projections.starter} calls; we guarantee ${plans.starter.calls}. Growth contacts ${plans.growth.reach.toLocaleString('en-US')} — about ${projections.growth} at your rate, and we guarantee ${plans.growth.calls}.`,
-  ].join(' ');
-
-  // `advice`: the text without the arithmetic, for the report, whose own lines already show the rate and the volume.
-  const done = (o) => ({ ...o, advice: arithmetic && o.text.startsWith(arithmetic) ? o.text.slice(arithmetic.length).trim() : o.text });
-
-  const line = (key) => `${PLAN_NAMES[key]} — ${money(plans[key].price)} a month for ${plans[key].calls} guaranteed calls, ${perCall(plans[key])} a call`;
-
-  if (q >= 3) {
-    const cap = Number(capacityPerWeek);
-    if (!Number.isFinite(cap) || cap <= 0) {
-      return done({ plan: 'starter', kind: 'capacity_unknown', rate, rateText, projections, short: line('starter'),
-        text: `${arithmetic} You didn’t give us a capacity number, so I recommend the smallest plan that fits the rate: ${line('starter')}.` });
-    }
-    const plan = cap <= capacity.starterMax ? 'starter' : cap <= capacity.growthMax ? 'growth' : 'scale';
-    const when = kickoffDate ? `on ${kickoffDate}` : 'during onboarding';
-    return done({ plan, kind: 'capacity', rate, rateText, projections, short: line(plan),
-      text: `${arithmetic} You told us ${when} you can take ${cap} calls a week, so I recommend ${PLAN_NAMES[plan]} — ${money(plans[plan].price)} a month, which works out at ${perCall(plans[plan])} a call.` });
-  }
-  if (q >= 1) {
-    return done({ plan: 'starter', kind: 'thin', rate, rateText, projections, short: line('starter'),
-      text: `${arithmetic} With ${q} qualified call${q === 1 ? '' : 's'} so far, I recommend Starter, and only Starter — ${money(plans.starter.price)} for ${plans.starter.calls} calls — to prove the rate holds at volume before going bigger.` });
-  }
-  if (pos > 0) {
-    return done({ plan: 'starter', kind: 'pay_per_show', rate, rateText, projections, short: line('starter'),
-      text: `${pos} positive repl${pos === 1 ? 'y' : 'ies'} from ${c.toLocaleString('en-US')} companies is ${pct(pos, c)} — demand exists; the booking step is the problem. I recommend Starter — ${money(plans.starter.price)} for ${plans.starter.calls} guaranteed calls. The other honest option: pay per show, ${money(plans.payPerShow)} for every qualified call that actually attends, billed weekly.` });
-  }
-  if (!extensionUsed) {
-    return done({ plan: null, kind: 'extension', rate, rateText, projections, short: 'no plan yet — the free extension',
-      text: 'No positive replies, so no plan: I recommend the free extension. We keep sending at our cost and change the campaign, not the deal.' });
-  }
-  return done({ plan: null, kind: 'winback', rate, rateText, projections, short: 'no plan — change the offer or the market first',
-    text: `No positive replies from ${c.toLocaleString('en-US')} companies, so no plan. If nobody wanted it at this volume, more volume won’t change that. The honest next step is to change the offer or the market before outbound can work; we’ll check back in 90 days.` });
-}
-
-export async function plansConfig(clientId) {
-  return { plans: await cfgTree(clientId, 'PLANS'), capacity: await cfgTree(clientId, 'CAPACITY') };
-}
-
-// ── Diagnosis for zero-call reports (Section 7, "The four questions") ─────────
-
-export function diagnose({ sent, bounces, replies, positive, booked, placement }, d) {
-  const bounce = sent > 0 ? bounces / sent : null;
-  if (bounce != null && (bounce > d.bounceMax || (placement != null && placement < d.placementMin))) {
-    return `It wasn’t landing: bounce ${pct(bounces, sent)}, inbox placement ${placement == null ? 'not measured' : `${Math.round(placement * 100)}%`}. That’s infrastructure, not your market.`;
-  }
-  if (sent > 0 && replies / sent < d.replyMin) {
-    return `Your emails landed (bounce ${pct(bounces, sent)}), but too few people answered: a ${pct(replies, sent)} reply rate against a ${(d.replyMin * 100).toFixed(1)}% line. That points at the message or the list.`;
-  }
-  if (sent > 0 && positive / sent < d.positiveMin) {
-    return `People answered (${pct(replies, sent)} reply rate), but few wanted it: ${pct(positive, sent)} positive against a ${(d.positiveMin * 100).toFixed(0)}% line. That’s the offer or the market, not the copy.`;
-  }
-  if (positive > 0 && booked / positive < d.bookedShareMin) {
-    return `People wanted it — ${positive} positive replies — but only ${booked} booked. That’s the booking step, not the market.`;
-  }
-  return 'All four checks passed — it landed, people answered, some wanted it and they booked — but no qualified call was held inside the window.';
-}
-
-// ── Data gathering ────────────────────────────────────────────────────────────
 
 function placementOf(client) {
   const v = Number(client?.canaryPlacement);
@@ -142,21 +49,6 @@ function countBy(rows, field) {
   return Object.entries(m).sort((a, b) => b[1] - a[1]);
 }
 
-async function learningTop(clientId, profile, client) {
-  const niche = profile.niche || client.niche || null;
-  if (!niche) return null;
-  try {
-    const raw = (await kv.hgetall(K.learning(String(niche).toLowerCase().replace(/[^a-z0-9-]+/g, '-')))) || {};
-    let best = null;
-    for (const [variant, v] of Object.entries(raw)) {
-      const r = parseRec(v);
-      if (!r || !Number(r.sends)) continue;
-      const rate = Number(r.replies || 0) / Number(r.sends);
-      if (!best || rate > best.rate) best = { variant, rate };
-    }
-    return best;
-  } catch { return null; }
-}
 
 /** Everything the reports read, gathered once. */
 export async function gatherData(clientId, now = new Date()) {
@@ -234,29 +126,7 @@ ${table(['Measure', 'Value'], [['Emails sent', totals.sent], ['Bounce rate', pct
 
 // ── What produced it / what didn't ────────────────────────────────────────────
 
-function producedLine(data, learning) {
-  const parts = [];
-  const vs = data.variants.filter((v) => v.sent > 0);
-  if (vs.length) {
-    const best = [...vs].sort((a, b) => b.rate - a.rate)[0];
-    const others = vs.filter((v) => v !== best).map((v) => `${pct(v.replied, v.sent)} for ${v.variant}`);
-    // Per company it went to (the headline reply rate is per email sent): said so, so the two numbers never look like they disagree.
-    parts.push(`email version ${best.variant} (${pct(best.replied, best.sent)} of the companies it went to replied${others.length ? `, vs ${others.join(', ')}` : ''})`);
-  } else if (learning) {
-    parts.push(`version ${learning.variant}, the best performer in this niche so far`);
-  }
-  const positives = data.replies.filter((r) => POSITIVE_KINDS.has(r.kind) && r.lead?.city);
-  if (positives.length) {
-    const [city, n] = countBy(positives.map((r) => r.lead), 'city')[0];
-    parts.push(`${city} (${n} of ${positives.length} positive replies)`);
-  }
-  return parts.length ? parts.join(', and ') : 'not enough replies yet to name a winner';
-}
 
-function didntLine(paceLog) {
-  if (!paceLog.length) return 'no pace check had to step in';
-  return paceLog.map((p) => `Day ${p.day ?? '?'}: ${p.test || 'check'} — ${p.fix || 'no change'}`).join('; ');
-}
 
 // ── Storage + blocking ────────────────────────────────────────────────────────
 
@@ -280,18 +150,10 @@ async function block(clientId, name, missing) {
   return { ok: false, name, blockedReason, missing };
 }
 
-/** Decision page URL for reports/emails (purpose decision:{tag}; see decision.js). */
-export async function decisionLink(clientId, tag, ttlDays = 30) {
-  const token = await mintToken(clientId, `decision:${tag}`, { ttl: ttlDays * 86400 });
-  const url = pageUrl(token, 'decide');
-  await rememberLink(clientId, 'decision', url);
-  return url;
-}
-
 /**
  * Render a report. Returns { ok, name, text, html, attachments, zero, rec,
  * blockedReason }. Never sends anything itself.
- * opts: { now, decisionUrl }
+ * opts: { now }
  */
 export async function renderReport(name, clientId, opts = {}) {
   if (!(name in REPORT_FIELDS)) throw new Error(`unknown report ${name}`);
@@ -310,65 +172,7 @@ export async function renderReport(name, clientId, opts = {}) {
     return { ok: true, name, html: m.html, text: m.csv, market: m };
   }
 
-  if (name === 'day20') {
-    return { ok: true, name, bookings: data.bookings, data };
-  }
-
-  // day29 / final
-  const { plans, capacity } = await plansConfig(clientId);
-  const target = await cfgTree(clientId, 'TARGET');
-  const d = await cfgTree(clientId, 'DIAGNOSIS');
-  const learning = await learningTop(clientId, data.profile, data.client);
-  const rec = recommendPlan({
-    qualified: totals.qualified, positive: totals.positive, companies: totals.companiesContacted,
-    capacityPerWeek: data.profile.capacityPerWeek,
-    kickoffDate: data.trial.agreementAcceptedAt ? fmtDay(String(data.trial.agreementAcceptedAt).slice(0, 10)) : null,
-    extensionUsed: Boolean(data.trial.extensionStartedAt) || name === 'final',
-    plans, capacity,
-  });
-  const market = marketReport(data, totals, { placement, sendsPerDay: await sendsPerDay(clientId, data.trial, now) });
-  const rebooked = data.bookings.filter((b) => b.status === 'rebooked' || (Number(b.rebookAttempts) > 0 && ['held', 'booked'].includes(b.status))).length;
-  const zero = Number(totals.qualified) === 0;
-  const vars = {
-    clientName: data.client.name || clientId,
-    companies: totals.companiesContacted, sent: totals.sent,
-    bounceRate: pct(totals.bounces, totals.sent), placement: placement == null ? 'not measured' : `${Math.round(placement * 100)}%`,
-    replies: totals.replies, replyRate: pct(totals.replies, totals.sent),
-    positive: totals.positive, positiveRate: pct(totals.positive, totals.sent),
-    booked: totals.booked, held: totals.held, qualified: totals.qualified, rebooked,
-    qualifiedCalls: `${totals.qualified} qualified call${Number(totals.qualified) === 1 ? '' : 's'}`,
-    promiseMet: totals.qualified >= target.promise ? 'met' : 'not met',
-    targetMet: totals.qualified >= target.target ? 'met' : 'not met',
-    produced: producedLine(data, learning), didnt: didntLine(data.paceLog),
-    rate: rec.rateText,
-    starterReach: plans.starter.reach.toLocaleString('en-US'), starterCalls: rec.projections.starter ?? 'n/a', starterGuarantee: plans.starter.calls,
-    growthReach: plans.growth.reach.toLocaleString('en-US'), growthCalls: rec.projections.growth ?? 'n/a', growthGuarantee: plans.growth.calls,
-    openCount: market.openCount, recommendation: rec.advice || rec.text,
-    decisionUrl: opts.decisionUrl || 'sent with tomorrow’s email',
-    diagnosis: diagnose({ sent: totals.sent, bounces: totals.bounces, replies: totals.replies, positive: totals.positive, booked: totals.booked, placement }, d),
-    leadCount: data.leads.length,
-    variants: data.variants.length ? data.variants.map((v) => `version ${v.variant}: ${v.sent} sent, ${pct(v.replied, v.sent)} replied`).join('; ') : 'no variant data recorded',
-    sendsPerDay: (await sendsPerDay(clientId, data.trial, now)) ?? 'n/a',
-  };
-  const lines = zero ? REPORT_ZERO_LINES : REPORT_LINES;
-  let text;
-  try {
-    text = lines.map((l) => (l ? fill(`report:${name}`, l, vars) : '')).join('\n');
-  } catch (err) {
-    return block(clientId, name, err.missing || [err.message]);
-  }
-  const html = `<div style="font-family:Arial,sans-serif;white-space:pre-wrap">${esc(text)}</div>`;
-  await store(clientId, name, { html, text });
-  await store(clientId, 'market', { html: market.html, text: market.csv });
-  await logEvent(clientId, 'reports', 'report_rendered', { name, zero, recommendation: rec.plan || rec.kind });
-  const slug = (data.client.name || clientId).replace(/[^A-Za-z0-9]+/g, '-');
-  return {
-    ok: true, name, zero, text, html, recommendation: rec, totals, market,
-    attachments: [
-      { filename: `${slug}-market-report.html`, content: market.html, contentType: 'text/html' },
-      { filename: `${slug}-market-report.csv`, content: market.csv, contentType: 'text/csv' },
-    ],
-  };
+  throw new Error(`unknown report ${name}`);
 }
 
 export async function getRenderedReports(clientId) {

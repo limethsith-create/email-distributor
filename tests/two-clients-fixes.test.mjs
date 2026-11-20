@@ -1,9 +1,8 @@
 // The product fixes the two-client run (tests/two-clients.test.mjs) found,
 // each on its own: a long one-word domain gets sending names, the client's
-// own acronym and sentence pass the Copy Checker, a paying client never counts
-// as a trial, gets no trial wording and is invoiced at the plan agreement, its
-// website request moves on when the owner answers it, and a thank-you after
-// onboarding needs no answer.
+// own acronym and sentence pass the Copy Checker, a paying client gets no trial
+// wording and is invoiced at the plan agreement, its booking moves on with it,
+// and a thank-you after onboarding needs no answer.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { kv, __reset } from '@vercel/kv';
@@ -44,24 +43,23 @@ test('Copy Checker: the client’s own acronym is not shouting, and their own se
   assert.deepEqual(loud.failures.map((f) => f.rule), ['all_caps']);
 });
 
-test('a paying client: not a trial on the board, no trial words in its emails, no "Stop the trial" button', async () => {
+test('a paying client: no trial words in its emails, no "Stop" button in them', async () => {
   __reset();
   process.env.ENC_KEY = process.env.ENC_KEY || Buffer.alloc(32, 3).toString('base64');
   await createClient('summit', { name: 'Summit', plan: 'growth', state: 'onboarding', contactEmail: 'j@summit.test' });
-  await createClient('harbor', { name: 'Harbor', plan: 'trial', state: 'onboarding', contactEmail: 'm@harbor.test' });
-  assert.equal((await boardData(new Date())).activeTrials, 1, 'only the trial counts against the trial cap');
-  assert.doesNotMatch(await clientButtonsText('summit'), /Stop the trial/);
-  assert.match(await clientButtonsText('harbor'), /Stop the trial/);
-  const vars = { firstName: 'Jordan', day1Date: 'Thursday 22 October', startWhen: 'Thursday 22 October at 9:00 am', inWhoseName: 'in your name', inboxes: 'a@x.example', sendWindow: '9–5', day30Date: 'Friday 20 November', ownerName: 'Limeth', Name: 'Carl', Company: 'Dalton', invoiceNo: 'AV-1', planName: 'Growth', issuedDate: 'Wed 7 Oct', priceText: '$3,997', calls: 20, paymentLines: 'PayPal: x', bonusLine: 'x' };
-  for (const key of ['welcome_two_dates_paid', 'quote_request_paid', 'invoice_plan_start']) {
+  assert.equal((await boardData(new Date())).activeClients, 1);
+  assert.doesNotMatch(await clientButtonsText('summit'), /Stop/);
+  const vars = { firstName: 'Jordan', day1Date: 'Thursday 22 October', startWhen: 'Thursday 22 October at 9:00 am', inWhoseName: 'in your name', inboxes: 'jordan@summithq.com', sendWindow: '9–5', ownerName: 'Limeth', Name: 'Carl', Company: 'Dalton', invoiceNo: 'AV-1', planName: 'Growth', issuedDate: 'Wed 7 Oct', priceText: '$3,997', calls: 20, paymentLines: 'PayPal: x' };
+  for (const key of ['welcome_two_dates', 'quote_request', 'invoice_plan_start']) {
     const m = renderTemplate(key, vars);
     assert.doesNotMatch(`${m.subject}\n${m.text}`, TRIAL_WORDS, key);
   }
   assert.doesNotMatch(renderTemplate('invoice_plan_start', vars).text, /bonus|trial domain/i);
 });
 
-test('the website request behind a paid application: yes → contacted, agreement → won, no → lost', async () => {
+test('the booking behind a client moves with it, only forward: contacted → won (the plan agreement signed)', async () => {
   __reset();
+  await createClient('summit', { name: 'Summit', plan: 'growth', state: 'onboarding' });
   const r = await saveInquiry({ name: 'Jordan Blake', email: 'jordan@summit.test', company: 'Summit', sells: 'roofs', plan: 'growth' });
   await kv.hset(K.inquiries(), { [r.id]: { ...(await getInquiry(r.id)), clientId: 'summit' } });
   await settleInquiryFor('summit', 'contacted', 'said yes');
@@ -75,7 +73,7 @@ test('the website request behind a paid application: yes → contacted, agreemen
 
 test('a plain thank-you after onboarding needs no answer (no alert, no red dot)', async () => {
   __reset();
-  const client = { id: 'harbor', name: 'Harbor', contactName: 'Megan Ortiz', state: 'sending', plan: 'trial' };
+  const client = { id: 'harbor', name: 'Harbor', contactName: 'Megan Ortiz', state: 'sending', plan: 'starter' };
   const thanks = await onInbound(client, {}, { entryId: 'in-1', at: new Date().toISOString(), text: 'Perfect — thanks!\n\nMegan', from: 'megan@harbor.test' });
   assert.deepEqual(thanks, { rule: 'thanks', alert: false });
   const question = await onInbound(client, {}, { entryId: 'in-2', at: new Date().toISOString(), text: 'Can we add Portsmouth?', from: 'megan@harbor.test' });

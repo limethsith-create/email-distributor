@@ -47,7 +47,7 @@ import * as anymailfinder from '@/lib/ext/anymailfinder';
 
 export const ADAPTERS = { quickemail, verifalia, reoon, mailboxvalidator, zerobounce, hunter, tomba, proofy, anymailfinder };
 export const STATUSES = ['valid', 'risky', 'catchall', 'invalid', 'unknown', 'pending'];
-const VERIFY_STATES = new Set(['warming', 'ready', 'sending', 'paused', 'extension', 'converted']);
+const VERIFY_STATES = new Set(['warming', 'ready', 'sending', 'paused']);
 
 const monthOf = (now) => partsIn('UTC', now).monthKey;
 const dayOf = (now) => dayKeyIn(ET, now);

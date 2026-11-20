@@ -13,7 +13,7 @@
 import { isWeekday, partsIn, ET, dayKeyIn } from '@/lib/time';
 import { ALERTS } from '@/lib/templates/owner';
 
-const RUNNING = new Set(['sending', 'paused', 'extension']);
+const RUNNING = new Set(['sending', 'paused']);
 
 function businessDaysSince(iso, now) {
   const start = Date.parse(iso);

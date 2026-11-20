@@ -7,26 +7,19 @@ import { usePathname } from 'next/navigation';
 
 const NAV = [
   { href: '/mc', label: 'Mission' },
-  { href: '/', label: 'Dashboard' },
-  { href: '/inboxes', label: 'Inboxes' },
-  { href: '/leads', label: 'Leads' },
-  { href: '/replies', label: 'Replies' },
-  { href: '/activity', label: 'Activity' },
 ];
 
 // Mission Control sub-navigation, shown under the top bar on /mc pages only.
 const MC_NAV = [
   { href: '/mc', label: 'Board' },
-  { href: '/mc/queue', label: 'Queue' },
   { href: '/mc/warmup', label: 'Warm-up' },
   { href: '/mc/learning', label: 'Learning' },
   { href: '/mc/alerts', label: 'Alerts' },
   { href: '/mc/config', label: 'Config' },
-  { href: '/mc/test', label: 'Test' },
 ];
 
-/** Public pages (client token pages, the application form, the login) show no admin navigation. */
-const isPublicPage = (p) => Boolean(p) && (p.startsWith('/c/') || p === '/apply' || p === '/mc/login');
+/** Public pages (client token pages, the login) show no admin navigation. */
+const isPublicPage = (p) => Boolean(p) && (p.startsWith('/c/') || p === '/mc/login');
 
 function McNav({ pathname }) {
   if (!pathname?.startsWith('/mc') || isPublicPage(pathname)) return null;
@@ -42,7 +35,7 @@ function McNav({ pathname }) {
 
 function Brand() {
   return (
-    <Link href="/" className="flex items-center gap-2.5" style={{ textDecoration: 'none' }}>
+    <Link href="/mc" className="flex items-center gap-2.5" style={{ textDecoration: 'none' }}>
       {/* red mark */}
       <span style={{
         width: 26, height: 26, background: 'var(--accent)', display: 'flex',
@@ -53,7 +46,7 @@ function Brand() {
       </span>
       <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span style={{ color: 'var(--fg)', fontWeight: 800, fontSize: 17, letterSpacing: '0.02em' }}>AVIANCE</span>
-        <span className="mono" style={{ color: 'var(--fg-dim)', fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase' }}>Outreach</span>
+        <span className="mono" style={{ color: 'var(--fg-dim)', fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase' }}>Machine</span>
       </span>
     </Link>
   );
@@ -70,7 +63,7 @@ function ClientBrand() {
 function TopNav() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
-  // Client pages (/c/[token]/...), /apply and the login are public: no admin navigation on them.
+  // Client pages (/c/[token]/...) and the login are public: no admin navigation on them.
   const clientPage = isPublicPage(pathname);
 
   useEffect(() => {

@@ -174,7 +174,7 @@ export function isAllowedOrigin(origin) {
   return false;
 }
 
-/** The public website's origins, allowed to POST /api/apply. */
+/** The public website's origins, allowed to POST /api/inquiry. */
 export function isSiteOrigin(origin) {
   if (!origin) return false;
   const o = String(origin).replace(/\/+$/, '');

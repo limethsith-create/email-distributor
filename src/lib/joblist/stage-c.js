@@ -19,11 +19,11 @@ const hourKey = (p) => `${p.dayKey}T${String(p.hour).padStart(2, '0')}`;
 // `converted` keeps sending on the trial pair (SPEC §9.8), so the send job,
 // bounce scans and the Emergency Runner still run for it; the trial-only
 // jobs (client watch, pace) do not.
-const SEND_STATES = ['ready', 'sending', 'extension', 'converted'];
-const RUN_STATES = ['sending', 'paused', 'extension'];
-const DELIVERY_STATES = ['sending', 'paused', 'extension', 'converted'];
-const REPLY_STATES = ['sending', 'paused', 'extension', 'deciding', 'converted', 'not_now'];
-const BOOKING_STATES = ['sending', 'paused', 'extension', 'deciding', 'converted', 'not_now'];
+const SEND_STATES = ['ready', 'sending'];
+const RUN_STATES = ['sending', 'paused'];
+const DELIVERY_STATES = ['sending', 'paused'];
+const REPLY_STATES = ['sending', 'paused'];
+const BOOKING_STATES = ['sending', 'paused'];
 
 // Stagger per-client polling so three clients do not all open IMAP in the same minute.
 const offsetOf = (id) => [...String(id)].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) % 997, 7);
@@ -209,7 +209,7 @@ const notnow = {
   cost: 2,
   claimTtl: 2 * 86400,
   async due({ client, now }) {
-    if (!inStates(client, ['sending', 'extension', 'deciding'])) return null;
+    if (!inStates(client, ['sending'])) return null;
     const p = partsIn(ET, now);
     if (isUsHoliday(p.dayKey) || ['Sat', 'Sun'].includes(p.weekday)) return null;
     // Hourly 09:00–11:59 so a run cut short by the tick budget finishes the
@@ -228,7 +228,7 @@ const pace = {
   cost: 2,
   claimTtl: 2 * 86400,
   async due({ client, now }) {
-    if (!inStates(client, ['sending', 'extension'])) return null;
+    if (!inStates(client, ['sending'])) return null;
     const p = partsIn(ET, now);
     if (p.hour < 18 || p.hour >= 22) return null;
     // Once a day from 18:00; the run checks whether today is a pace day
@@ -261,7 +261,7 @@ const learning = {
 // so verification runs from then, while the client has leads waiting
 // (client.verifyPending, set when a batch lands) and not before
 // client.verifyNextDueAt (tomorrow when every free budget is spent).
-const VERIFY_STATES = ['warming', 'ready', 'sending', 'paused', 'extension', 'converted'];
+const VERIFY_STATES = ['warming', 'ready', 'sending', 'paused'];
 
 const leadVerify = {
   name: 'lead-verify',

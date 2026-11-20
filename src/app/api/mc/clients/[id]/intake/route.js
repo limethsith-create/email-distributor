@@ -9,9 +9,9 @@
  *   rerunBookingTest        test the calendar link now
  *   resendWelcome           the "we start on …" email again (once Day 1 is fixed) → { sent, again } | { skipped }
  *   rerunResearch           research the applicant again (website + Google listing)
- *   approveApplication      owner approves a website application (→ onboarding with the one
- *                           accepted_call email, or the queue); the onboarding-call check runs in after()
- *   declineApplication {reason}  owner declines it; the reason is emailed to the applicant
+ *   approveApplication      Won (→ onboarding with the one accepted_call email); the booking behind
+ *                           the record moves to won too. The onboarding-call check runs in after().
+ *   declineApplication {reason}  Lost: the record closes, nothing is emailed; the booking moves to lost
  */
 
 import { kv } from '@vercel/kv';
@@ -24,10 +24,10 @@ import { startSetupCheck, runSetupCheck, readChecks, sendWelcome } from '@/lib/s
 import { runBookingTest } from '@/lib/systems/bookingtest';
 import { asArray } from '@/lib/systems/intake-io';
 import { approveApplication, declineApplication } from '@/lib/systems/gatekeeper';
+import { settleInquiryFor } from '@/lib/systems/inquiries';
 import { after } from 'next/server';
 import { rerunResearch, researchToEnd } from '@/lib/systems/research';
 import { checkOnboardCallsQuietly } from '@/lib/systems/onboardcall';
-import { demoRefusal } from '@/lib/systems/demo';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -55,8 +55,6 @@ export async function GET(_req, { params }) {
 }
 
 export async function POST(request, { params }) {
-  const refused = demoRefusal((await params)?.id);
-  if (refused) return refused;
   const id = assertClientId(params.id);
   const client = await getClient(id);
   if (!client) return Response.json({ error: 'not found' }, { status: 404 });
@@ -74,14 +72,18 @@ export async function POST(request, { params }) {
       case 'approveApplication':
       {
         const result = await approveApplication(id);
+        await settleInquiryFor(id, 'won', 'Won (from the client page)');
         // The heartbeat is not running yet: the onboarding-call check (inbox, reminders,
         // overdue) runs right after the answer too (throttled, never throws).
         try { after(() => checkOnboardCallsQuietly()); } catch { /* not inside a request (tests) */ }
         return Response.json({ ok: true, ...result });
       }
       case 'declineApplication':
-        if (!String(body.reason || '').trim()) return Response.json({ error: 'Write the reason — it goes to the applicant.' }, { status: 400 });
-        return Response.json({ ok: true, ...(await declineApplication(id, body.reason)) });
+      {
+        const result = await declineApplication(id, body.reason);
+        await settleInquiryFor(id, 'lost', body.reason || 'Lost (from the client page)');
+        return Response.json({ ok: true, ...result });
+      }
       case 'marketOverride':
         return Response.json({ ok: true, result: await overrideMarket(id, { note: body.note || '' }) });
       case 'rerunMarket':

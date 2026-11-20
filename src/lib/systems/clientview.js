@@ -15,15 +15,13 @@ import { getPromises } from '@/lib/db/promises';
 import { getAlertLog } from '@/lib/notify';
 import { addDays, dayKeyIn, ET } from '@/lib/time';
 import { clientNow, clientTrialDay } from '@/lib/testclock';
-import { getReplies, getBookings, cfgTree } from '@/lib/systems/dshared';
+import { getReplies, getBookings } from '@/lib/systems/dshared';
 import { getRenderedReports } from '@/lib/systems/reports';
 import { getInvoice, invoiceView } from '@/lib/systems/invoice';
 import { computeHealth } from '@/lib/systems/health';
 
-/** Dated milestones from the trial record (Stage D's day-jobs schedule). */
+/** Dated milestones from the client's record (the day-jobs schedule). */
 export async function upcomingFor(client, trial, now = new Date()) {
-  const T = await cfgTree(client.id, 'TRIAL');
-  const cap = await cfg(client.id, 'EXTENSION_CAP');
   const at = await cfg(client.id, 'DAYJOBS.at');
   const vnow = clientNow(client, now);
   const today = dayKeyIn(ET, vnow);
@@ -32,25 +30,9 @@ export async function upcomingFor(client, trial, now = new Date()) {
   const onDay = (n) => (d1 ? addDays(d1, n - 1) : trial.signedDay ? addDays(trial.signedDay, n + 14) : null);
   const add = (date, what) => { if (date && date >= today) items.push({ date, time: `${at} ET`, what }); };
   if (['warming', 'ready'].includes(client.state)) add(onDay(-7), 'Day −7 build check');
-  if (['sending', 'paused', 'warming', 'ready'].includes(client.state)) {
-    add(onDay(20), 'Day 20 disposition sheet');
-    add(onDay(T.reportDay), 'Day 29 Trial Report + Market Report');
-    add(onDay(T.decisionDay), 'Day 30 decision (or extension if 0 qualified)');
-  }
-  if (client.state === 'extension') add(onDay(cap), `Extension cap (Day ${cap}) — decision with the zero-call report`);
-  if (['deciding', 'not_now', 'converted'].includes(client.state)) {
-    const shift = (Number(trial.decisionDay) || 30) - 30;
-    add(onDay(31 + shift), 'Review request');
-    if (client.state !== 'converted') {
-      for (const n of T.ladderDays) add(onDay(n + shift), `Ladder Day ${n}`);
-      add(onDay(T.retireDay + shift), 'Retire domain + inboxes');
-    }
-  }
   if (trial.dataDeleteAt) add(trial.dataDeleteAt, 'Delete client data');
-  const winback = client.winbackAt || trial.winbackAt;
-  if (winback) add(winback, '90-day win-back email');
   // Next Friday update.
-  if (['warming', 'ready', 'sending', 'paused', 'extension'].includes(client.state)) {
+  if (['warming', 'ready', 'sending', 'paused'].includes(client.state)) {
     for (let i = 0; i < 7; i++) {
       const d = addDays(today, i);
       if (new Date(`${d}T12:00:00Z`).getUTCDay() === 5) { items.push({ date: d, time: '09:00 ET', what: 'Friday update' }); break; }
