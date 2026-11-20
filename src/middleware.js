@@ -43,7 +43,7 @@ const SITE_API = new Set(['/api/inquiry', '/api/booking/availability']);
 const MACHINE = [/^\/api\/cron\//, /^\/api\/admin\/(export|import)$/];
 const HUB_API = /^\/api\/mc\//;
 // Owner-only screens: secrets, credentials, owner settings, warm-up controls (names kept closed by default even where no route exists).
-export const EMPLOYEE_DENY = /^\/api\/mc\/(keys|config|setup|people|google|cheapinboxes|login|logout|test|push|warmup|archive|demo)(\/|$)/;
+export const EMPLOYEE_DENY = /^\/api\/mc\/(keys|config|setup|people|google|cheapinboxes|login|logout|test|push|warmup|archive|demo|cleanup)(\/|$)/;
 const EMPLOYEE_POST = /^\/api\/mc\/(presence|team)\/?$/;   // team: only their own status (the route checks)
 const READ_ONLY = 'Read-only: ask the owner to do this.';
 
