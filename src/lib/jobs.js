@@ -13,6 +13,7 @@ import { partsIn, ET } from '@/lib/time';
 import { runWatchdog } from '@/lib/systems/watchdog';
 import { runUsageMeter } from '@/lib/systems/usage';
 import { runSalesReminders } from '@/lib/systems/salescall';
+import { meetingsBetween } from '@/lib/systems/calendar';
 import { JOBS as STAGE_A } from '@/lib/joblist/stage-a';
 import { JOBS as STAGE_B } from '@/lib/joblist/stage-b';
 import { JOBS as STAGE_C } from '@/lib/joblist/stage-c';
@@ -41,13 +42,22 @@ const usage = {
   async run(ctx) { return runUsageMeter(ctx); },
 };
 
-/** Website sales calls: the day-before and 1-hour reminders (systems/salescall.js). Every 15 minutes (the 1-hour reminder's window is 55 minutes wide). */
+/** Website sales calls: the day-before, 1-hour and 5-minute reminders (systems/salescall.js). Every minute near a call (the 5-minute reminder's window is only 5 minutes wide); each reminder still goes once per call (deduped inside). */
 const salesReminders = {
   name: 'sales-reminders',
   scope: 'global',
   cost: 1,
   claimTtl: 900,
-  async due({ now }) { const p = partsIn('UTC', now); return `${p.dayKey}T${String(p.hour).padStart(2, '0')}:${String(Math.floor(p.minute / 15) * 15).padStart(2, '0')}`; },
+  // Every minute while a sales call starts within the next 70 minutes (the 1-hour and 5-minute reminders);
+  // otherwise every 15 minutes (the day-before one). One cheap look at the calendar decides.
+  async due({ now }) {
+    const p = partsIn('UTC', now);
+    const slow = `${p.dayKey}T${String(p.hour).padStart(2, '0')}:${String(Math.floor(p.minute / 15) * 15).padStart(2, '0')}`;
+    try {
+      const soon = await meetingsBetween(now.getTime() - 5 * 60e3, now.getTime() + 70 * 60e3);
+      return soon.some((m) => m.kind === 'sales') ? `${p.dayKey}T${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}` : slow;
+    } catch { return slow; }
+  },
   async run(ctx) { return runSalesReminders(ctx); },
 };
 

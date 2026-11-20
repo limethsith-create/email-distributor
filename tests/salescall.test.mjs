@@ -228,6 +228,26 @@ test('ten calls at once: each gets its own 5-minute reminder, once', async () =>
   assert.deepEqual(new Set(fiveMin.map((s) => s.to)).size, 10, 'one each, nobody twice');
 });
 
+test('a run every minute for the whole hour before the call: each of the three reminders goes exactly once', async () => {
+  const r = await saveInquiry(site(), { now: NOW });
+  const q = await getInquiry(r.id);
+  const start = Date.parse((await getMeeting(q.meetingId)).start);
+  const before = sent.length;
+  // The job is due every minute (a new period each minute), like the heartbeat tick.
+  const job = JOBS.find((j) => j.name === 'sales-reminders');
+  const p1 = await job.due({ now: new Date(start - 30 * 60e3) });
+  const p2 = await job.due({ now: new Date(start - 29 * 60e3) });
+  assert.notEqual(p1, p2, 'a new period every minute while a call is near');
+  assert.equal(await job.due({ now: new Date(start - 6 * 3600e3 + 60e3) }), await job.due({ now: new Date(start - 6 * 3600e3 + 120e3) }), 'every 15 minutes when no call is near');
+  // Day-before window (opens 24 h out) through the call itself, once a minute.
+  for (let t = start - 24 * 3600e3; t <= start + 5 * 60e3; t += 60e3) await runSalesReminders({ now: new Date(t) });
+  const mails = sent.slice(before);
+  assert.deepEqual(mails.map((s) => s.subject), ['Our call tomorrow', 'Our call in 1 hour', 'Starting in 5 minutes'], 'each once, in order');
+  // And once more through the last hour on its own, every minute, nothing repeats.
+  for (let t = start - 60 * 60e3; t <= start; t += 60e3) await runSalesReminders({ now: new Date(t) });
+  assert.equal(sent.slice(before).length, 3);
+});
+
 test('designed emails: the confirmation and all three reminders go out branded, each with its own big button', async () => {
   const r = await saveInquiry(site({ company: 'Acme <Roofing>' }), { now: NOW });
   const q = await getInquiry(r.id);

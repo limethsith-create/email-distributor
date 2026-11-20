@@ -122,7 +122,8 @@ async function instrument() {
 
 export const results = {};
 // Guards ≈ measured + 10 %, so a change that makes the tick costlier fails here.
-const CEILING = { '0@1': 160_000, '1@1': 475_000, '1@2': 370_000, '2@1': 690_000, '2@2': 560_000, '3@1': 895_000, '3@2': 745_000 };
+// (Sales reminders look at the calendar every minute: about +50k commands a month.)
+const CEILING = { '0@1': 218_000, '1@1': 530_000, '1@2': 408_000, '2@1': 690_000, '2@2': 560_000, '3@1': 895_000, '3@2': 745_000 };
 
 for (const [n, every] of [[0, 1], [1, 1], [1, 2], [2, 1], [2, 2], [3, 1], [3, 2]]) {
   test(`redis budget: ${n} sending client(s), tick every ${every} min`, { timeout: 600_000 }, async () => {
