@@ -157,7 +157,7 @@
     "held": 0,
     "no_show": 0,
     "contacted": 0,
-    "proposal": 0,
+    "agreement_sent": 0,
     "won": 0,
     "lost": 0
    },

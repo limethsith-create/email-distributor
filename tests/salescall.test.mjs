@@ -1,7 +1,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { __reset, kv } from '@vercel/kv';
-import { saveInquiry, getInquiry, setInquiryStatus, listInquiries, STATUSES, answersText } from '@/lib/systems/inquiries';
+import { saveInquiry, getInquiry, setInquiryStatus, listInquiries, STATUSES, STAGE_WORDS, answersText } from '@/lib/systems/inquiries';
 import { salesIo, dueSalesReminder, runSalesReminders, planLineFor } from '@/lib/systems/salescall';
 import { getMeeting, calendarAction, calendarView } from '@/lib/systems/calendar';
 import { hubBoard } from '@/lib/systems/hubview';
@@ -122,18 +122,18 @@ test('no reminders once the owner moved them on, and a booking made the same day
 });
 
 test('stages: Calendar buttons move the inquiry, and Inquiries moves the Calendar', async () => {
-  assert.deepEqual(STATUSES, ['new', 'held', 'no_show', 'contacted', 'proposal', 'won', 'lost']);
+  assert.deepEqual(STATUSES, ['new', 'held', 'no_show', 'contacted', 'agreement_sent', 'won', 'lost']);
   // Won needs their website (it makes them a client).
   const r = await saveInquiry(site({ website: 'stoneroofing.com' }), { now: NOW });
   const q = await getInquiry(r.id);
   await calendarAction({ action: 'held', id: q.meetingId }, { now: new Date('2026-11-18T15:20:00.000Z') });
   assert.equal((await getInquiry(r.id)).status, 'held');
-  await setInquiryStatus(r.id, 'proposal', 'Sent the Growth proposal', { now: NOW });
+  await setInquiryStatus(r.id, 'agreement_sent', 'Sent the Growth proposal', { now: NOW });
   await setInquiryStatus(r.id, 'won', '', { now: NOW });
   const done = await getInquiry(r.id);
   assert.equal(done.status, 'won');
   assert.equal((await getMeeting(q.meetingId)).status, 'held', 'the call was held (Call done before Won)');
-  assert.deepEqual(done.stageHistory.map((h) => h.to), ['held', 'proposal', 'won']);
+  assert.deepEqual(done.stageHistory.map((h) => h.to), ['held', 'agreement_sent', 'won']);
   // The other way: No-show in Inquiries marks the meeting.
   const r2 = await saveInquiry(site({ email: 'cy@x.com', slotStart: '2026-11-19T15:00:00.000Z', slotEnd: '2026-11-19T15:15:00.000Z' }), { now: NOW });
   const q2 = await getInquiry(r2.id);
@@ -287,4 +287,16 @@ test('designed emails: with a video link, the reminders\' big button joins the c
   assert.equal(designedSalesHtml('sales_call_moved', ctx), null, 'other emails keep the plain design');
   const u = new URL(googleCalendarUrl({ start: ctx.start, end: ctx.end, title: 'Aviance call' }));
   assert.equal(u.searchParams.get('dates'), '20261124T150000Z/20261124T151500Z');
+});
+
+test('old "proposal" / "proposal_sent" records read as agreement_sent', async () => {
+  assert.equal(STAGE_WORDS.agreement_sent, 'Agreement and invoice sent');
+  const r = await saveInquiry(site({ email: 'old@x.com' }), { now: NOW });
+  await kv.hset('inquiries', { [r.id]: { ...(await getInquiry(r.id)), status: 'proposal_sent', stageHistory: [{ at: NOW.toISOString(), to: 'proposal' }] } });
+  assert.equal((await getInquiry(r.id)).status, 'agreement_sent');
+  assert.equal((await getInquiry(r.id)).stageHistory[0].to, 'agreement_sent');
+  const list = await listInquiries();
+  assert.equal(list.counts.agreement_sent, 1);
+  const moved = await setInquiryStatus(r.id, 'proposal', '', { now: NOW });
+  assert.equal(moved.status, 'agreement_sent');
 });

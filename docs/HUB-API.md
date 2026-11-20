@@ -594,11 +594,11 @@ email (+ .ics), then reminders the day before and an hour before
 (systems/salescall.js, docs/CALENDAR.md "Sales calls").
 
 Stages (`status`, in pipeline order): `new` (Booked) · `held` (Call done) ·
-`no_show` (No-show) · `contacted` (Following up) · `proposal` (Proposal sent) ·
+`no_show` (No-show) · `contacted` (Following up) · `agreement_sent` (Agreement and invoice sent) ·
 `won` · `lost`. Call done / No-show set here also mark the Calendar meeting; the
 Calendar's Call done / No-show / Cancel move the inquiry (cancel → lost).
 
-`GET /api/mc/hub` adds `inquiries: { counts: {new, held, no_show, contacted, proposal, won, lost}, open, latest: [ {id, at, name, company, plan, status, slotStart, whenHost} ] }`
+`GET /api/mc/hub` adds `inquiries: { counts: {new, held, no_show, contacted, agreement_sent, won, lost}, open, latest: [ {id, at, name, company, plan, status, slotStart, whenHost} ] }`
 and, for each `new` one, a to-do `{ id: "inquiry:{id}", clientName: company, urgent: (false while the call is ahead, true once it has passed or with no time), action: { type: "view", view: "inquiry", inquiryId } }`.
 
 `GET /api/mc/inquiries` → `{ inquiries: [record…] (newest first), counts }` where a record is
@@ -2289,3 +2289,6 @@ overrides), `/mc/config`.
 
 - A failed send login (SMTP 534/535 / EAUTH) now stores a plain sentence as the inbox's `disabledReason` and in the `inbox_auth_fail` alert body (Gmail: "Gmail won't let us sign in — make a new app password …"). No new fields; the hub already shows `disabledReason`.
 - Env: `GMAIL_ADDRESS` + `GMAIL_APP_PASSWORD` add one Gmail inbox (spaces in the 16-letter app password are dropped). `SMTP_ACCOUNT_n` / `GMAIL_ACCOUNT_n` still work, and spaces are dropped there too.
+## Changes on 2026-11-20 (stage rename)
+
+The booking stage `proposal` ("Proposal sent") is now `agreement_sent` ("Agreement and invoice sent"). Records still saying `proposal` or `proposal_sent` are read as `agreement_sent`, and POST `status` accepts the old keys too. Counts use the new key.
