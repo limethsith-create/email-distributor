@@ -7,7 +7,7 @@
 # Environment Variables. Run it once; running it again makes NEW values, so
 # paste them all again (never change ENC_KEY after inboxes are stored).
 #
-# It does NOT create or touch any outside account (Telegram, Healthchecks,
+# It does NOT create or touch any outside account (Healthchecks,
 # Google Places, Reoon, inbox providers) — those keys are pasted by the owner.
 
 set -euo pipefail
@@ -41,11 +41,9 @@ ENC_KEY=$ENC_KEY
 LEADFINDER_TOKEN=$LEADFINDER_TOKEN
 GITHUB_WEBHOOK_SECRET=$GITHUB_WEBHOOK_SECRET
 PUBLIC_BASE_URL=https://email-distributor.vercel.app
-OWNER_EMAIL=limethsith@gmail.com
 
 Still yours to fill in (from each service's own page):
 OWNER_INBOX=you@yourdomain.com:APP_PASSWORD:Your Name
-TELEGRAM_BOT_TOKEN=   TELEGRAM_CHAT_ID=
 HC_PING_URL=          (Healthchecks.io check "tick")
 PLACES_API_KEY=       REOON_API_KEY=       GITHUB_TOKEN=
   (or skip these three: paste them in the hub, Settings › Keys — docs/KEYS.md)

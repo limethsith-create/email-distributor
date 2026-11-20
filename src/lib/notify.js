@@ -1,14 +1,11 @@
 /**
  * Notifier (SPEC §10.2) — the only module that emails a human.
  *
- * Owner channel: email from OWNER_INBOX (format `email:app-password:Name`,
- * falling back to the first aviance sending inbox) to OWNER_EMAIL, plus
- * Telegram for urgent alerts. Every alert is deduped per day on
- * system:alerts:{date} and recorded in system:alerts:log and the event log.
- *
- * Rule 1 (no silent failure) ends here: if every channel fails, the failure
- * is written to events:global and the console so the Healthchecks/Mission
- * Control views still show it.
+ * Owner alerts appear only inside the hub (the bell and the alert list): there
+ * is no email, phone push or Telegram to the owner. Every alert is deduped per
+ * day on system:alerts:{date} and recorded in system:alerts:log and the event log.
+ * Client emails (notifyClient below) are unchanged: they go from OWNER_INBOX
+ * (format `email:app-password:Name`, falling back to the first aviance sending inbox).
  */
 
 import { isDemoId } from '@/lib/db/client';
@@ -20,7 +17,6 @@ import { parseAccount, getSmtpAccounts, loadAccounts, findSmtpAccount } from '@/
 import { ALERTS } from '@/lib/templates/owner';
 import { fill } from '@/lib/templates/render';
 import { dayKeyIn, partsIn, OWNER_TZ } from '@/lib/time';
-import { pushToOwner } from '@/lib/push';
 import { cfg } from '@/lib/config';
 import { onboardPixelUrl, mailPixelUrl } from '@/lib/tokens';
 
@@ -30,15 +26,10 @@ export function planNameOf(plan) {
   return p === 'growth' ? 'Growth' : p === 'scale' ? 'Scale' : 'Starter';
 }
 
-const DEFAULT_OWNER_EMAIL = 'limethsith@gmail.com';
 const LOG_CAP = 1000;
 
 export function baseUrl() {
   return (process.env.PUBLIC_BASE_URL || 'https://email-distributor.vercel.app').replace(/\/+$/, '');
-}
-
-export function ownerEmail() {
-  return (process.env.OWNER_EMAIL || process.env.DAILY_REPORT_TO || DEFAULT_OWNER_EMAIL).trim();
 }
 
 export async function ownerSender() {
@@ -66,30 +57,6 @@ export async function onboardSender() {
   throw new Error(`ONBOARDCALL.inbox ${wanted} is not an inbox the machine can log into — add it (with its password) as an Aviance inbox, or clear the setting`);
 }
 
-export async function sendTelegram(text) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId) return { ok: false, error: 'telegram not configured' };
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: text.slice(0, 4000), disable_web_page_preview: true }),
-      signal: AbortSignal.timeout(8000),
-    });
-    return { ok: res.ok, error: res.ok ? null : `telegram ${res.status}` };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-}
-
-export async function sendOwnerEmail(subject, text) {
-  const account = await ownerSender();
-  if (!account) return { ok: false, error: 'no owner inbox configured' };
-  const res = await sendEmail(account, { to: ownerEmail(), subject, text, html: `<pre style="font-family:inherit;white-space:pre-wrap">${esc(text)}</pre>`, transactional: true, noTrack: true });
-  return { ok: Boolean(res.success), error: res.success ? null : res.error };
-}
-
 function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -102,13 +69,13 @@ function esc(s) {
  *   body  what happened (plain text)
  *   did   what the system already did (one line)
  *   scope dedupe scope (default clientId or 'global')
- *   url   hub path the phone notification opens (default the trial or /#alerts)
- * @returns {{sent:boolean, deduped?:boolean, channels?:object}}
+ *   url   (unused, kept so callers need no change)
+ * @returns {{sent:boolean, deduped?:boolean, id?:string}}
  */
 export async function alertOwner(key, { clientId = null, vars = {}, body = '', did = '', scope = null, force = false, url = null } = {}) {
   const spec = ALERTS[key];
   if (!spec) throw new Error(`unknown alert ${key}`);
-  // A Test run client (systems/demo.js) never raises an alert: no email, no phone push, no log entry.
+  // A Test run client (systems/demo.js) never raises an alert: no log entry.
   if (clientId && isDemoId(clientId)) return { sent: false, skipped: 'demo' };
   const now = new Date();
   const day = dayKeyIn(OWNER_TZ, now);
@@ -126,7 +93,7 @@ export async function alertOwner(key, { clientId = null, vars = {}, body = '', d
     }
   }
 
-  // Titles are read by the owner (hub to-dos, phone, email subject): a trial's {clientId}
+  // Titles are read by the owner (hub to-dos and the alert list): a trial's {clientId}
   // shows as its name ("Ridgeline IT"), not the id slug ("ridgelineit"). The record keeps the id.
   let shown = null;
   if (clientId && (vars.clientId === undefined || vars.clientId === clientId)) {
@@ -138,41 +105,16 @@ export async function alertOwner(key, { clientId = null, vars = {}, body = '', d
   } catch {
     title = `${key}${clientId ? ` (${shown || clientId})` : ''}`;
   }
-  const link = clientId ? `${baseUrl()}/mc/clients/${clientId}` : `${baseUrl()}/mc`;
-  const text = [
-    body || title,
-    did ? `\nWhat the system already did: ${did}` : '',
-    `\nMission Control: ${link}`,
-  ].join('\n').trim();
-
-  const channels = { email: await sendOwnerEmail(`[Aviance] ${title}`, text) };
-  // Phone notification (hub home-screen app) for every alert — the owner's main channel.
-  channels.push = await pushToOwner({
-    title: spec.urgent ? `Urgent: ${title}` : title,
-    body: String(body || title).replace(/\s+/g, ' ').slice(0, 180),
-    url: url || (clientId ? `/#trial/${clientId}` : '/#alerts'),
-    tag: `${key}:${dedupeScope}`,
-    urgent: Boolean(spec.urgent),
-    // A quiet alert (the reply bot's "auto-replied"): low push urgency, and the hub may show it without sound.
-    ...(spec.quiet ? { quiet: true } : {}),
-  });
-  if (spec.urgent) channels.telegram = await sendTelegram(`${spec.urgent ? '🔴 ' : ''}${title}\n\n${text}`);
-  const delivered = Object.values(channels).some((c) => c.ok);
-
-  const record = { at: now.toISOString(), key, clientId, title, urgent: Boolean(spec.urgent), delivered, channels: Object.fromEntries(Object.entries(channels).map(([k, v]) => [k, v.ok ? 'ok' : v.error])), acknowledged: false, id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}` };
+  // Recorded for the hub: the bell and the alert list read system:alerts:log.
+  const record = { at: now.toISOString(), key, clientId, title, urgent: Boolean(spec.urgent), body: String(body || '').slice(0, 2000), did: String(did || '').slice(0, 500), delivered: true, acknowledged: false, id: `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}` };
   try {
     const p = kv.pipeline();
     p.lpush(K.alertLog(), record);
     p.ltrim(K.alertLog(), 0, LOG_CAP - 1);
     await p.exec();
   } catch {}
-  await logEvent(clientId, 'notify', delivered ? 'alert_sent' : 'alert_undelivered', { key, title, channels: record.channels });
-  if (!delivered) {
-    console.error('[notify] ALERT NOT DELIVERED on any channel:', key, title, record.channels);
-    // Allow a retry on the next occurrence rather than swallowing it for the day.
-    try { await kv.srem(K.alertsDay(day), dedupeKey); } catch {}
-  }
-  return { sent: delivered, id: record.id, channels: record.channels };
+  await logEvent(clientId, 'notify', 'alert_sent', { key, title });
+  return { sent: true, id: record.id };
 }
 
 export async function getAlertLog(limit = 200) {

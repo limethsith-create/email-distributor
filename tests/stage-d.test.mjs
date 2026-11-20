@@ -30,7 +30,6 @@ nodemailer.createTransport = () => ({ sendMail: async (m) => { mail.push(m); ret
 process.env.OWNER_INBOX = 'owner@aviance.test:app-pw:Owner';
 process.env.OWNER_EMAIL = 'owner@aviance.test';
 process.env.ENC_KEY = process.env.ENC_KEY || crypto.randomBytes(32).toString('base64');
-delete process.env.TELEGRAM_BOT_TOKEN;
 globalThis.fetch = async () => { throw new Error('network disabled in tests'); };
 
 const CLIENT = 'acme';

@@ -31,9 +31,8 @@ test('safeFetch never reaches the machine itself: literals, localhost, other sch
   }
 });
 
-test('security: cron key in the header only, sessions, redirects after sign-in, push hosts', async () => {
+test('security: cron key in the header only, sessions, redirects after sign-in', async () => {
   const { cronAuthorized, makeSession, verifySession, safeNext, HUB_SESSION_HOURS } = await import('@/lib/auth/session');
-  const { pushHostAllowed } = await import('@/lib/push');
   const req = (headers, url = 'https://x/api/cron/tick') => new Request(url, { headers });
   assert.equal(cronAuthorized(req({ authorization: 'Bearer s3cret' }), 's3cret'), true);
   assert.equal(cronAuthorized(req({}, 'https://x/api/cron/tick?token=s3cret'), 's3cret'), false, 'no key in the address');
@@ -47,8 +46,4 @@ test('security: cron key in the header only, sessions, redirects after sign-in, 
   if (old === undefined) delete process.env.SESSION_SECRET; else process.env.SESSION_SECRET = old;
   for (const bad of ['//evil.com', '/\\evil.com', 'https://evil.com', '/leads', '/mcevil', '/mc\r\nSet-Cookie:x']) assert.equal(safeNext(bad), '/mc', bad);
   for (const good of ['/mc', '/mc/clients/acme', '/mc?x=1']) assert.equal(safeNext(good), good);
-  assert.equal(pushHostAllowed('https://web.push.apple.com/abc'), true);
-  assert.equal(pushHostAllowed('https://fcm.googleapis.com/fcm/send/abc'), true);
-  assert.equal(pushHostAllowed('https://evil.example/collect'), false);
-  assert.equal(pushHostAllowed('http://fcm.googleapis.com/x'), false);
 });

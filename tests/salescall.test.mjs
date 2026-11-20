@@ -7,7 +7,7 @@ import { getMeeting, calendarAction, calendarView } from '@/lib/systems/calendar
 import { hubBoard } from '@/lib/systems/hubview';
 import { io } from '@/lib/systems/intake-io';
 import { JOBS } from '@/lib/jobs';
-import { pushIo, savePushSub } from '@/lib/push';
+import { getAlertLog } from '@/lib/notify';
 
 // What the website's "Book a call" form sends now (with the five quick questions).
 const NOW = new Date('2026-11-16T08:00:00.000Z');
@@ -21,14 +21,12 @@ const site = (over = {}) => ({
 });
 let sent = [];
 let alerts = [];
-let pushed = [];
+// Owner alerts are recorded for the hub only: read them from the alert log, oldest first.
+const pushedNow = async () => (await getAlertLog()).reverse();
 
 beforeEach(async () => {
   __reset();
-  sent = []; alerts = []; pushed = [];
-  process.env.VAPID_PUBLIC_KEY = 'BPUB'; process.env.VAPID_PRIVATE_KEY = 'priv';
-  pushIo.send = async (sub, payload) => { pushed.push(JSON.parse(payload)); return { statusCode: 201 }; };
-  await savePushSub({ endpoint: 'https://web.push.apple.com/x', keys: { p256dh: 'p', auth: 'a' } }, 'iPhone');
+  sent = []; alerts = [];
   await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth') });
   salesIo.sender = async () => ({ email: 'calls@aviance.test' });
   salesIo.send = async (account, mail) => { sent.push({ from: account.email, ...mail }); return { success: true, messageId: `<m${sent.length}@x>` }; };
@@ -69,7 +67,7 @@ test('a website booking lands in the Calendar as a confirmed sales call and they
   assert.ok(sent[0].icalEvent && /BEGIN:VCALENDAR/.test(sent[0].icalEvent.content));
   assert.ok(q.confirmationSentAt);
   // The owner's alert carries the answers and says the email went.
-  assert.ok(pushed.find((x) => /New plan inquiry: Stone Roofing/.test(x.title)), 'the owner is alerted');
+  assert.ok((await pushedNow()).find((x) => /New plan inquiry: Stone Roofing/.test(x.title)), 'the owner is alerted');
   assert.match(answersText(q), /Deal size: \$5,000 – \$25,000/);
   assert.match(answersText(q), /Calls a month they can take: Around 10/);
   // A double submit: no second meeting, no second email.
@@ -83,7 +81,7 @@ test('when the email cannot go, the inquiry says why and the owner is told', asy
   const q = await getInquiry(r.id);
   assert.ok(q.meetingId, 'still in the Calendar');
   assert.match(q.confirmationError, /auth failed/);
-  assert.ok(pushed.find((x) => /New plan inquiry/.test(x.title)));
+  assert.ok((await pushedNow()).find((x) => /New plan inquiry/.test(x.title)));
   assert.equal(q.confirmationSentAt, undefined);
 });
 

@@ -21,7 +21,6 @@ export async function GET() {
       migrated: Boolean(migrations?.phase1),
       encKey: hasEncKey(),
       cronSecret: Boolean(process.env.CRON_SECRET),
-      telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
       healthchecks: Boolean(process.env.HC_PING_URL),
       ownerInbox: Boolean(process.env.OWNER_INBOX),
     },

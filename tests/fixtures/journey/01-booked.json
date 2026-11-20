@@ -37,7 +37,6 @@
     "migrated": false,
     "encKey": true,
     "cronSecret": true,
-    "telegram": false,
     "healthchecks": false,
     "ownerInbox": true
    },
