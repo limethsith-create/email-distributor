@@ -2317,3 +2317,5 @@ overrides), `/mc/config`.
 ## Changes on 2026-11-20 (stage rename)
 
 The booking stage `proposal` ("Proposal sent") is now `agreement_sent` ("Agreement and invoice sent"). Records still saying `proposal` or `proposal_sent` are read as `agreement_sent`, and POST `status` accepts the old keys too. Counts use the new key.
+### Changes on 2026-11-20 (unpaid invoice chase)
+New alert key `invoice_not_paid_yet` (not urgent, title in plain words: "Not paid yet: {client} has not paid their invoice (24 hours). A reminder was sent."). It appears in `/api/mc/alerts` like any other alert; no hub change needed. The invoice record gains `remindedAt` (set once, when the 24-hour reminder email goes out) and `sentAt` is filled from `issuedAt` when missing.

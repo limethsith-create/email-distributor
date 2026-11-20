@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 import { composeFriday, runFriday } from '@/lib/systems/friday';
 import { runDayJobs } from '@/lib/systems/trialmanager';
 import { deleteClientData, retireClient } from '@/lib/systems/wrapup';
-import { createInvoice, runInvoiceJob } from '@/lib/systems/invoice';
+import { createInvoice, runInvoiceJob, getInvoice, chaseUnpaidInvoice, chaseUnpaidInvoices } from '@/lib/systems/invoice';
 import { morningDigest } from '@/lib/systems/digests';
 import { alertOwner } from '@/lib/notify';
 import { validateAgainst } from '@/lib/systems/configedit';
@@ -239,4 +239,43 @@ test('Monday digest: clients sending and calls booked from stored counters; "not
   await kv.hset('system:trials:ledger', { a: { booked: 2, ownerMinutes: 480 }, b: { booked: 0 } });
   const r = await mondayDigest({ now: onDay(12), send: false });
   assert.match(r.body, /Your time per client: 8\.0 h per client \(from 1 client with recorded minutes\)/);
+});
+
+// ── Unpaid invoice chase (24 hours) ──
+test('invoice chase: 23h nothing; 25h one email and one hub alert; later runs and paid invoices nothing', async () => {
+  await setup({ state: 'converted' });
+  await setOverride(CLIENT, 'PLANS', { starter: { price: 2497, calls: 5 } }).catch(() => {});
+  const sent = onDay(31);
+  await createInvoice(CLIENT, 'starter', { now: sent });
+  const chaseMails = () => toClient().filter((m) => /Quick note about invoice/.test(m.subject));
+  const chaseAlerts = async () => (await alerts()).filter((k) => k === 'invoice_not_paid_yet');
+  const at = (h) => new Date(sent.getTime() + h * 3600e3);
+  const clients = async () => [await getClient(CLIENT)];
+
+  assert.deepEqual(await chaseUnpaidInvoices({ clients: await clients(), now: at(23) }), { reminded: 0, held: 0 });
+  assert.equal(chaseMails().length, 0);
+  assert.equal((await chaseAlerts()).length, 0);
+
+  assert.equal((await chaseUnpaidInvoices({ clients: await clients(), now: at(25) })).reminded, 1);
+  assert.equal(chaseMails().length, 1);
+  assert.equal((await chaseAlerts()).length, 1);
+  assert.ok((await kv.hget(`client:${CLIENT}:invoice`, 'remindedAt')) || (await getInvoice(CLIENT)).remindedAt);
+
+  await chaseUnpaidInvoices({ clients: await clients(), now: at(26) });
+  await chaseUnpaidInvoices({ clients: await clients(), now: at(80) });
+  assert.equal(chaseMails().length, 1);
+  assert.equal((await chaseAlerts()).length, 1);
+});
+
+test('invoice chase: a paid invoice is never chased; a missing sentAt falls back to issuedAt and is stored', async () => {
+  await setup({ state: 'converted' });
+  const t0 = onDay(31);
+  await kv.hset(`client:${CLIENT}:invoice`, { plan: 'starter', amount: 2497, invoiceNo: 'AV-X', issuedAt: t0.toISOString(), status: 'sent' });
+  const later = new Date(t0.getTime() + 30 * 3600e3);
+  await kv.hset(`client:${CLIENT}:invoice`, { paidAt: later.toISOString(), status: 'paid' });
+  assert.equal((await chaseUnpaidInvoice(CLIENT, { now: later })).skipped, 'nothing to chase');
+  assert.equal(toClient().length, 0);
+  await kv.hset(`client:${CLIENT}:invoice`, { paidAt: '', status: 'sent' });
+  assert.equal((await chaseUnpaidInvoice(CLIENT, { now: later })).reminded, true);
+  assert.equal((await getInvoice(CLIENT)).sentAt, t0.toISOString());
 });

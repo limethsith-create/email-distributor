@@ -58,7 +58,16 @@ const salesReminders = {
       return soon.some((m) => m.kind === 'sales') ? `${p.dayKey}T${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}` : slow;
     } catch { return slow; }
   },
-  async run(ctx) { return runSalesReminders(ctx); },
+  async run(ctx) {
+    // The unpaid-invoice chase rides on this job (systems/invoice.js), at most once per 15 minutes even while
+    // the reminders run every minute; it never blocks the reminders.
+    let invoiceChase;
+    if (partsIn('UTC', ctx.now).minute % 15 < 1 || ctx.chaseNow) {
+      const { chaseUnpaidInvoices } = await import('@/lib/systems/invoice');
+      invoiceChase = await chaseUnpaidInvoices({ clients: ctx.clients, now: ctx.now }).catch((e) => ({ error: String(e?.message || e).slice(0, 120) }));
+    }
+    return { ...(await runSalesReminders(ctx)), ...(invoiceChase ? { invoiceChase } : {}) };
+  },
 };
 
 export const JOBS = [watchdog, usage, salesReminders, ...STAGE_A, ...STAGE_B, ...STAGE_C, ...STAGE_D];
