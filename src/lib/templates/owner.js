@@ -104,6 +104,7 @@ export const ALERTS = {
   // ── end Stage C ──
   // ── Stage D additions ──
   build_behind: { urgent: false, title: 'Build behind at Day −7: {clientId} — {what}' },
+  client_paid: { urgent: false, info: true, title: '{text}' },
   invoice_unpaid: { urgent: false, title: 'Invoice still unpaid: {clientId} ({days} days)' },
   new_inquiry: { urgent: true, title: 'New plan inquiry: {company} — call {when}' },
   // ── end Stage D ──

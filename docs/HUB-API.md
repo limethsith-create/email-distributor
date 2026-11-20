@@ -2284,3 +2284,6 @@ brain and model, the buttons, the follow-ups and the time. Not part of `npm test
 
 Config: `AVA_DAILY_CAP` (default 300; 0 = no cap), `AVA_MODELS` (model
 overrides), `/mc/config`.
+
+### Changes on 2026-11-20 (payment alert)
+Marking an invoice paid (`POST /api/mc/clients/{id} {action:'markPaid'}`, unchanged) now also adds one plain "paid" alert to the owner's alert list (key `client_paid`, e.g. "Sam from Acme paid the Growth invoice — $1,500") and moves the client's booking to Won. A second "Mark paid" does nothing new.

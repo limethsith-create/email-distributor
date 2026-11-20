@@ -131,15 +131,33 @@ export async function runInvoiceJob(clientId, { now: realNow = new Date() } = {}
   return { days, reminder: d };
 }
 
-/** Owner's "Mark paid". Returns the plan-mode shopping list (SPEC §9.8). */
-export async function markPaid(clientId, now = new Date()) {
+/**
+ * A payment is in: the ONE place "paid" is handled. Whoever marks it (the owner's "Mark paid" now, a PayPal
+ * hook later) calls this with the client id (an invoice is stored per client). The first time only: it closes
+ * the invoice, puts a plain-words "paid" alert in the owner's hub list and moves the booking to Won.
+ * Calling it again changes nothing and raises no second alert. → { paid, first, invoice }
+ */
+export async function invoicePaid(invoiceId, { now = new Date() } = {}) {
+  const clientId = invoiceId;
   const inv = await getInvoice(clientId);
   if (!inv || !inv.plan) throw new Error('no invoice for this client');
-  if (!inv.paidAt) {
-    await kv.hset(K.invoice(clientId), { paidAt: now.toISOString(), status: 'paid' });
-    await updateClient(clientId, { paidAt: now.toISOString() });
-    await logEvent(clientId, 'invoice', 'invoice_paid', { invoiceNo: inv.invoiceNo, amount: inv.amount });
-  }
+  if (inv.paidAt) return { paid: true, first: false, invoice: inv };
+  await kv.hset(K.invoice(clientId), { paidAt: now.toISOString(), status: 'paid' });
+  await updateClient(clientId, { paidAt: now.toISOString() });
+  await logEvent(clientId, 'invoice', 'invoice_paid', { invoiceNo: inv.invoiceNo, amount: inv.amount });
+  const client = (await getClient(clientId)) || {};
+  const who = [client.contactName, client.name].filter(Boolean).join(' from ') || clientId;
+  const sentence = `${who} paid the ${PLAN_NAMES[inv.plan] || inv.plan} invoice — ${money(inv.amount)}`;
+  await alertOwner('client_paid', { clientId, vars: { text: sentence }, body: `${sentence}.`, did: 'Marked the invoice paid and moved their booking to Won.' });
+  try { await (await import('@/lib/systems/inquiries')).settleInquiryFor(clientId, 'won', 'Invoice paid', { now }); } catch { /* the payment still counts */ }
+  // >>> ONBOARDING AFTER PAYMENT goes here: call the "start onboarding" function (another task adds it) with clientId. <<<
+  return { paid: true, first: true, invoice: { ...inv, paidAt: now.toISOString(), status: 'paid' } };
+}
+
+/** Owner's "Mark paid". Returns the plan-mode shopping list (SPEC §9.8). */
+export async function markPaid(clientId, now = new Date()) {
+  await invoicePaid(clientId, { now });
+  const inv = await getInvoice(clientId);
   const shopping = (await cfgTree(clientId, 'PLAN_SHOPPING'))?.[inv.plan] || null;
   return { paid: true, plan: inv.plan, shopping: shopping || { note: `No plan-mode shopping list is set for ${PLAN_NAMES[inv.plan]} in the cost model (PLAN_SHOPPING.${inv.plan}).` } };
 }
