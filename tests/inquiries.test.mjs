@@ -242,3 +242,20 @@ test('where they came from (?utm_source=cold_call / ref): stored length-limited,
   assert.equal(q3.utm, null); assert.equal(q3.ref, null); assert.equal(q3.cameFrom, null);
   assert.ok(!/Came from/.test(pushed.at(-1).body));
 });
+
+test('phone number: optional, kept only when it looks like one, shown in the alert and the application answers', async () => {
+  const { normalisePhone, inquiryAnswers, answersText } = await import('@/lib/systems/inquiries');
+  assert.equal(normalisePhone('+1 (512) 555-0142'), '+1 (512) 555-0142');
+  assert.equal(normalisePhone('512 555 0142 ext 12'), '512 555 0142 ext 12');
+  assert.equal(normalisePhone('12345'), null, 'too short');
+  assert.equal(normalisePhone('<b>call me</b>'), null, 'not a number');
+  assert.equal(normalisePhone(''), null);
+  const r = await saveInquiry(site({ website: '', phone: ' +1 512 555 0142 ', slotStart: '2027-09-30T16:00:00.000Z', slotEnd: '2027-09-30T16:15:00.000Z' }));
+  const { getInquiry: getInq } = await import('@/lib/systems/inquiries');
+  assert.equal((await getInq(r.id)).phone, '+1 512 555 0142');
+  assert.match(answersText({ phone: '+1 512 555 0142' }), /Phone: \+1 512 555 0142/);
+  assert.ok(inquiryAnswers({ phone: '+1 512 555 0142' }).some((a) => a.q === 'Phone' && a.a === '+1 512 555 0142'));
+  const r2 = await saveInquiry(site({ email: 'np@elm.com', website: '', slotStart: '2027-09-30T16:30:00.000Z', slotEnd: '2027-09-30T16:45:00.000Z' }));
+  assert.equal((await getInq(r2.id)).phone, null);
+  assert.ok(!inquiryAnswers({}).some((a) => a.q === 'Phone'));
+});

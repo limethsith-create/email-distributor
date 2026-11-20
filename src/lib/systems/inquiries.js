@@ -34,6 +34,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PLANS = ['starter', 'growth', 'scale'];
 
 const s = (v, n = 300) => String(v ?? '').trim().slice(0, n);
+/** A phone number as typed, kept only if it looks like one: digits, spaces, + ( ) - . and an "ext". Null otherwise. */
+export function normalisePhone(v) {
+  const t = String(v ?? '').trim().slice(0, 30).replace(/\s+/g, ' ');
+  if (!t || !/^[+\d\s().\-]+(\s*(?:ext|x)\.?\s*\d{1,6})?$/i.test(t)) return null;
+  const digits = t.replace(/\D/g, '').length;
+  return digits >= 7 && digits <= 20 ? t : null;
+}
 
 /**
  * The plan behind a request: the plan card they came from, else the calls a month they said they could
@@ -159,6 +166,8 @@ export function normaliseInquiry(raw = {}) {
     // Two more quick answers from the booking form: outbound tried before, and what they want from the call.
     tried: s(raw.tried, 80) || null,
     goal: s(raw.goal, 300) || null,
+    // Optional: so the owner can ring or text them if they are late for the call.
+    phone: normalisePhone(raw.phone),
     // Where they came from: the booking link's utm_* / ref (e.g. ?utm_source=cold_call after a call).
     ...normaliseSource(raw),
   };
@@ -281,7 +290,7 @@ async function afterSaved(id, rec, booked, { now = new Date() } = {}) {
 
 /** Their five answers as alert lines ('' when the form had none). */
 export function answersText(inq) {
-  const rows = [['Role', inq.role], ['Deal size', inq.dealSize], ['Wins customers today', inq.channel], ['Calls a month they can take', inq.capacity], ['Wants to start', inq.timing], ['Tried outbound before', inq.tried], ['Wants from the call', inq.goal]].filter(([, v]) => v);
+  const rows = [['Phone', inq.phone], ['Role', inq.role], ['Deal size', inq.dealSize], ['Wins customers today', inq.channel], ['Calls a month they can take', inq.capacity], ['Wants to start', inq.timing], ['Tried outbound before', inq.tried], ['Wants from the call', inq.goal]].filter(([, v]) => v);
   return rows.length ? `\n${rows.map(([k, v]) => `${k}: ${v}`).join('\n')}` : '';
 }
 
@@ -293,6 +302,7 @@ export function inquiryAnswers(inq) {
     { q: 'Plan they asked for', a: plan },
     { q: 'What they sell', a: inq.sells || '—' },
     { q: 'Website', a: inq.website || (inq.noWebsite ? 'Does not have one yet' : '—') },
+    ...(inq.phone ? [{ q: 'Phone', a: inq.phone }] : []),
     ...((inq.cameFrom || cameFromText(inq)) ? [{ q: 'Came from', a: inq.cameFrom || cameFromText(inq) }] : []),
     { q: 'Call they booked', a: inq.whenTheirs ? `${inq.whenTheirs}${inq.theirTz ? ` (${inq.theirTz})` : ''}` : inq.whenHost || 'No time picked' },
     ...(inq.role ? [{ q: 'Their role', a: inq.role }] : []),
