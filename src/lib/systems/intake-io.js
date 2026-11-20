@@ -16,6 +16,7 @@ import { fetchExt, fetchJson } from '@/lib/ext/http';
 import { sendEmail, testConnection } from '@/lib/mailer';
 import { cfg, isUsHoliday } from '@/lib/config';
 import { addDays, isWeekday } from '@/lib/time';
+import { guardImap, closeImap } from '@/lib/imap-safe';
 
 function withTimeout(promise, ms, label) {
   let t;
@@ -26,7 +27,7 @@ function withTimeout(promise, ms, label) {
 }
 
 function imapClient(account) {
-  return new ImapFlow({
+  return guardImap(new ImapFlow({
     host: account.imap.host,
     port: account.imap.port || 993,
     secure: true,
@@ -37,7 +38,7 @@ function imapClient(account) {
     connectionTimeout: 10000,
     greetingTimeout: 8000,
     socketTimeout: 15000,
-  });
+  }));
 }
 
 /** Login + confirm the spam folder exists. Never throws. */
@@ -52,7 +53,7 @@ async function imapLogin(account) {
   } catch (err) {
     return { ok: false, error: String(err?.responseText || err?.message || err).slice(0, 200), auth: Boolean(err?.authenticationFailed) };
   } finally {
-    try { await client.logout(); } catch {}
+    await closeImap(client);
   }
 }
 
@@ -81,7 +82,7 @@ async function imapFindMessage(account, needle, since) {
   } catch (err) {
     return { found: false, error: String(err?.message || err).slice(0, 200) };
   } finally {
-    try { await client.logout(); } catch {}
+    await closeImap(client);
   }
 }
 
@@ -128,7 +129,7 @@ async function imapFetchAttachments(account, { afterUid = 0, since, max = 25 } =
   } catch (err) {
     return { ok: false, error: String(err?.message || err).slice(0, 200), messages: out, maxUid, more };
   } finally {
-    try { await client.logout(); } catch {}
+    await closeImap(client);
   }
 }
 

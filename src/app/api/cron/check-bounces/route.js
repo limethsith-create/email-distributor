@@ -37,6 +37,7 @@ import {
   htmlToText, findTextPart, readStream, originalMessageId, findReturnedHeadersPart,
 } from '@/lib/mail-utils';
 import { getTodayKey } from '@/lib/metrics';
+import { guardImap, closeImap } from '@/lib/imap-safe';
 
 export const maxDuration = 120;
 export const dynamic = 'force-dynamic';
@@ -347,7 +348,7 @@ async function scanAccount(client, account, ctx, started) {
 async function runAccount(account, ctx) {
   const started = Date.now();
   const budget = Math.max(1000, Math.min(ACCOUNT_DEADLINE_MS, ctx.hardDeadline - started));
-  const client = new ImapFlow({
+  const client = guardImap(new ImapFlow({
     host: account.imap.host,
     port: account.imap.port || 993,
     secure: true,
@@ -357,7 +358,7 @@ async function runAccount(account, ctx) {
     connectionTimeout: 12000,
     greetingTimeout: 8000,
     socketTimeout: 25000,
-  });
+  }));
   let result;
   try {
     result = await withDeadline(scanAccount(client, account, ctx, started), budget, `IMAP ${account.email}`);
@@ -367,7 +368,7 @@ async function runAccount(account, ctx) {
       scanned: 0, candidates: 0, hard: [], delayed: 0, unknown: 0, unresolved: 0, error: errText(err),
     };
   } finally {
-    try { await withDeadline(client.logout(), 2000, 'logout'); } catch {}
+    await closeImap(client);
     try { client.close(); } catch {}
   }
   result.ms = Date.now() - started;
