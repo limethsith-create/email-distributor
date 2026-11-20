@@ -755,7 +755,6 @@ export async function hubBoard({ now = new Date() } = {}) {
         migrated: Boolean(migrations.phase1),
         encKey: Boolean(process.env.ENC_KEY),
         cronSecret: Boolean(process.env.CRON_SECRET),
-        telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
         healthchecks: Boolean(process.env.HC_PING_URL),
         ownerInbox: Boolean(process.env.OWNER_INBOX) || (await loadAccounts().catch(() => [])).length > 0,
       },
@@ -764,7 +763,7 @@ export async function hubBoard({ now = new Date() } = {}) {
     stages,
     todos,
     inquiries,
-    alerts: alerts.filter((a) => !a.acknowledged).slice(0, 50).map((a) => ({ id: a.id, at: a.at, key: a.key, clientId: a.clientId, title: a.title, urgent: a.urgent, delivered: a.delivered })),
+    alerts: alerts.filter((a) => !a.acknowledged).slice(0, 50).map((a) => ({ id: a.id, at: a.at, key: a.key, clientId: a.clientId, title: a.title, urgent: a.urgent, delivered: a.delivered, body: a.body || '', did: a.did || '' })),
   };
 }
 
@@ -793,7 +792,6 @@ async function machineTodos(board, { cheapInboxes = false } = {}) {
   if (!process.env.CRON_SECRET) missing.push('CRON_SECRET');
   // Owner alerts fall back to the first aviance inbox, so OWNER_INBOX is only missing when that is empty too.
   if (!process.env.OWNER_INBOX && !(await loadAccounts().catch(() => [])).length) missing.push('OWNER_INBOX');
-  if (!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID)) missing.push('Telegram');
   if (!process.env.HC_PING_URL) missing.push('Healthchecks');
   if (missing.length) t.push({ id: 'machine-setup', clientId: null, clientName: 'Machine', text: `Finish the machine setup: ${missing.join(', ')}`, detail: 'Settings in Vercel — see docs/PROGRESS.md', urgent: false, since: null, action: { type: 'none' } });
   const migrations = (await kv.hgetall(K.migrations()).catch(() => ({}))) || {};

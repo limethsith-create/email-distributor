@@ -8,7 +8,7 @@ import { saveInquiry, listInquiries, getInquiry } from '@/lib/systems/inquiries'
 import { salesIo } from '@/lib/systems/salescall';
 import { getMeeting, calendarAction, publicAvailability, inCallHours, salesSlotProblem, normaliseCalendar } from '@/lib/systems/calendar';
 import { io } from '@/lib/systems/intake-io';
-import { pushIo, savePushSub } from '@/lib/push';
+import { getAlertLog } from '@/lib/notify';
 
 const NOW = new Date('2026-11-19T08:00:00.000Z');
 // Tue 1 Dec 2026 10:00 AM EST = 15:00 UTC (the time the owner's test booked twice).
@@ -21,15 +21,13 @@ const site = (over = {}) => ({
 });
 let sent = [];
 let alerts = [];
-let pushed = [];
+// Owner alerts are recorded for the hub only: read them from the alert log, oldest first.
+const pushedNow = async () => (await getAlertLog()).reverse();
 
 beforeEach(async () => {
   __reset();
-  sent = []; alerts = []; pushed = [];
+  sent = []; alerts = [];
   globalThis.__after = [];
-  process.env.VAPID_PUBLIC_KEY = 'BPUB'; process.env.VAPID_PRIVATE_KEY = 'priv';
-  pushIo.send = async (sub, payload) => { pushed.push(JSON.parse(payload)); return { statusCode: 201 }; };
-  await savePushSub({ endpoint: 'https://web.push.apple.com/x', keys: { p256dh: 'p', auth: 'a' } }, 'iPhone');
   await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth') });
   salesIo.sender = async () => ({ email: 'calls@aviance.test' });
   salesIo.send = async (account, mail) => { sent.push(mail); return { success: true, messageId: `<m${sent.length}@x>` }; };
@@ -205,7 +203,7 @@ test('POST /api/inquiry answers once the booking is saved and emailed; the appli
   const q2 = await getInquiry(j.id);
   assert.ok(q2.clientId, 'the record for the call was made');
   assert.equal((await getMeeting(q2.meetingId)).linkedClientId, q2.clientId);
-  assert.ok(pushed.find((x) => /New plan inquiry: Stone Roofing/.test(x.title)), 'the owner hears about it');
+  assert.ok((await pushedNow()).find((x) => /New plan inquiry: Stone Roofing/.test(x.title)), 'the owner hears about it');
   assert.ok(researchStarted > 0, 'the website was researched after the answer');
 });
 
@@ -213,9 +211,9 @@ test('no website: the owner alert goes after the answer and still says whether t
   const res = await post(site());
   const j = await res.json();
   assert.equal(j.emailed, true);
-  assert.equal(pushed.length, 0, 'no alert before the answer');
+  assert.equal((await pushedNow()).length, 0, 'no alert before the answer');
   for (const fn of globalThis.__after.splice(0)) await fn();
-  const a = pushed.find((x) => /New plan inquiry: Stone Roofing/.test(x.title));
+  const a = (await pushedNow()).find((x) => /New plan inquiry: Stone Roofing/.test(x.title));
   assert.ok(a, 'the owner is alerted after the answer');
 });
 
@@ -226,5 +224,5 @@ test('the email failing is still reported honestly (emailed: false), with the al
   assert.equal(j.emailed, false);
   assert.match((await getInquiry(j.id)).confirmationError, /auth failed/);
   for (const fn of globalThis.__after.splice(0)) await fn();
-  assert.ok(pushed.find((x) => /New plan inquiry/.test(x.title)));
+  assert.ok((await pushedNow()).find((x) => /New plan inquiry/.test(x.title)));
 });

@@ -92,7 +92,6 @@ export const DEFAULTS = {
     signerName: null,
     address: null,
     email: null,
-    telegramChatId: null,
   },
   PAYMENT: { paypalMe: null, wiseDetails: null },
   // ── Stage A additions ── (new defaults only inside this block)

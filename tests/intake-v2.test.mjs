@@ -52,7 +52,6 @@ beforeEach(async () => {
     return { sent: true };
   };
   io.alertOwner = async (key, o = {}) => { alerts.push({ key, ...o }); return { sent: true }; };
-  io.sendOwnerEmail = async () => ({ ok: true });
   await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith') });
 });
 afterEach(() => { io.fetchExt = realFetchExt; });

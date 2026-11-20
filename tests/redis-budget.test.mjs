@@ -23,7 +23,6 @@ process.env.CRON_SECRET = process.env.CRON_SECRET || 'budget-secret';
 process.env.OWNER_INBOX = 'owner@aviance.test:app-pw:Owner';
 process.env.OWNER_EMAIL = 'owner@aviance.test';
 delete process.env.HC_PING_URL;
-delete process.env.TELEGRAM_BOT_TOKEN;
 
 nodemailer.createTransport = () => ({ sendMail: async () => ({ messageId: `<${crypto.randomUUID()}@t>`, response: '250 OK' }), close() {}, verify: async () => true });
 // Warm-up / canary mail really "arrives": sends land in the receiver's INBOX,

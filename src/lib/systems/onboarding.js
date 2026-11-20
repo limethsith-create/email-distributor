@@ -302,8 +302,6 @@ export async function acceptAgreement(clientId, { name, title, agree, ip, now = 
       await logEvent(clientId, SYSTEM, 'invoice_failed', { error: String(err?.message || err).slice(0, 200) });
     }
   }
-  const own = await io.sendOwnerEmail(`[Aviance] Agreement signed: ${vars.companyName}`, `${vars.companyName} accepted the plan agreement.\n\nAccepted by: ${vars.agreementName}, ${signerTitle}\nAt: ${record.agreementAcceptedAt} from IP ${record.agreementIp}\nText fingerprint: ${record.agreementHash}\n\n${ag.text}`).catch((e) => ({ ok: false, error: e.message }));
-  if (!own?.ok) await logEvent(clientId, SYSTEM, 'owner_copy_failed', { error: own?.error || 'unknown' });
 
   // Blocklist Keeper (SPEC §7.3) on onboarding submit: every pasted customer /
   // competitor, including bare company names (resolved with a Places IDs-only lookup).

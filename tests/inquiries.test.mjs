@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { __reset, kv } from '@vercel/kv';
 import { saveInquiry, listInquiries, setInquiryStatus, addInquiryNote, normaliseInquiry } from '@/lib/systems/inquiries';
 import { hubBoard } from '@/lib/systems/hubview';
-import { pushIo, savePushSub } from '@/lib/push';
+import { getAlertLog } from '@/lib/notify';
 import { io } from '@/lib/systems/intake-io';
 import { getClient, createClient } from '@/lib/db/client';
 import { runDayJobs } from '@/lib/systems/trialmanager';
@@ -15,16 +15,13 @@ const site = (over = {}) => ({
   slotStart: '2027-09-30T14:00:00.000Z', slotEnd: '2027-09-30T14:15:00.000Z', theirTz: 'America/Chicago',
   whenTheirs: 'Thursday, October 1, 2026 at 9:00 AM CDT', whenHost: 'Thursday, October 1, 2026 at 7:30 PM', ...over,
 });
-let pushed = [];
+// Owner alerts are recorded for the hub only: read them from the alert log, oldest first.
+const pushedNow = async () => (await getAlertLog()).reverse();
 let emails = [];
 
 beforeEach(async () => {
   __reset();
-  pushed = [];
   emails = [];
-  process.env.VAPID_PUBLIC_KEY = 'BPUB'; process.env.VAPID_PRIVATE_KEY = 'priv';
-  pushIo.send = async (s, payload) => { pushed.push(JSON.parse(payload)); return { statusCode: 201 }; };
-  await savePushSub({ endpoint: 'https://web.push.apple.com/x', keys: { p256dh: 'p', auth: 'a' } }, 'iPhone');
   io.notifyClient = async (clientId, key) => { emails.push(key); return { sent: true }; };
   io.alertOwner = async () => ({ sent: true });
   io.fetchExt = async () => ({ ok: true, status: 200, url: 'https://stoneroofing.com/', text: async () => '<title>Stone Roofing</title>' });
@@ -39,13 +36,12 @@ test('an inquiry from the website (no website given) lands in the hub and pops u
   assert.equal(inquiries[0].plan, 'growth');
   assert.equal(inquiries[0].status, 'new');
   assert.equal(counts.new, 1);
-  assert.equal(pushed.length, 1);
-  assert.equal(pushed[0].title, 'Urgent: New plan inquiry: Stone Roofing — call Thursday, October 1, 2026 at 7:30 PM (your time)');
-  assert.equal(pushed[0].url, `/#inquiry/${r.id}`);
-  assert.match(pushed[0].body, /Bob Stone <bob@stoneroofing\.com> from Stone Roofing asked about Growth/);
+  assert.equal((await pushedNow()).length, 1);
+  assert.equal((await pushedNow())[0].title, 'New plan inquiry: Stone Roofing — call Thursday, October 1, 2026 at 7:30 PM (your time)');
+  assert.match((await pushedNow())[0].body, /Bob Stone <bob@stoneroofing\.com> from Stone Roofing asked about Growth/);
   // Double-click on the form: merged, no second alert.
   assert.equal((await saveInquiry(site({ website: '' }))).duplicate, true);
-  assert.equal(pushed.length, 1);
+  assert.equal((await pushedNow()).length, 1);
   // The board shows it as a to-do: calm while the booked call is still ahead (the server refuses times that have passed).
   const board = await hubBoard();
   const todo = board.todos.find((t) => t.id === `inquiry:${r.id}`);
@@ -251,7 +247,7 @@ test('where they came from (?utm_source=cold_call / ref): stored length-limited,
   assert.deepEqual(q.utm, { source: 'cold_call', medium: 'phone', campaign: 'nov-roofers', content: null });
   assert.equal(q.ref, 'rehan');
   assert.equal(q.cameFrom, 'Cold call (campaign: nov-roofers, ref: rehan)');
-  assert.match(pushed[0].body, /asked about Growth\. Came from: Cold call \(campaign: nov-roofers, ref: rehan\) Call:/, 'on the phone preview too');
+  assert.match((await pushedNow())[0].body, /asked about Growth\.\s+Came from: Cold call \(campaign: nov-roofers, ref: rehan\)\s+Call:/, 'in the owner alert');
 
   // With a website: a paid application whose answers (and so its owner email) say where they came from.
   await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith') });
@@ -264,7 +260,7 @@ test('where they came from (?utm_source=cold_call / ref): stored length-limited,
   const r3 = await saveInquiry(site({ email: 'cy@elm.com', website: '', slotStart: '2027-09-30T15:00:00.000Z', slotEnd: '2027-09-30T15:15:00.000Z' }));
   const q3 = await getInq(r3.id);
   assert.equal(q3.utm, null); assert.equal(q3.ref, null); assert.equal(q3.cameFrom, null);
-  assert.ok(!/Came from/.test(pushed.at(-1).body));
+  assert.ok(!/Came from/.test((await pushedNow()).at(-1).body));
 });
 
 test('phone number: optional, kept only when it looks like one, shown in the alert and the application answers', async () => {

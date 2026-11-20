@@ -100,7 +100,7 @@ expiry checks) is:
   `/api/mc/people`, `/api/mc/google`, `/api/mc/cheapinboxes`,
   `/api/mc/login`, `/api/mc/logout`, `/api/mc/test`, `/api/mc/push`,
   `/api/mc/warmup`, `/api/mc/archive` (service keys, Google / CheapInboxes / helper-inbox
-  credentials and status, machine settings, Test Mode, push devices, the
+  credentials and status, machine settings, Test Mode, the
   activity log, the outreach archive);
 - `POST /api/mc/presence`, `POST /api/mc/team` (their own status), `POST /api/mc/ava/chat`,
   `POST /api/mc/ava/hear` (speech to text) and `POST /api/mc/ava/requests` (`add` only) — the only
@@ -176,7 +176,7 @@ Admins only (employees get 403). The owner appears too.
     "activeClients": 1,
     "openAlerts": 2,
     "usage": { "redis": {"used":123,"limit":500000,"pct":0}, "places": {...}, "reoon": {..., "remaining": 12} },
-    "setup": { "migrated": true, "encKey": true, "cronSecret": true, "telegram": false, "healthchecks": false, "ownerInbox": true }
+    "setup": { "migrated": true, "encKey": true, "cronSecret": true, "healthchecks": false, "ownerInbox": true }
   },
   "stages": [
     { "key": "intake",   "label": "Waiting for the sales call", "states": ["applied"],                 "clients": [ /* row */ ] },
@@ -575,14 +575,13 @@ out (`inboxes[].warmupStartedAt` then moves to that day), so the trial's
 }
 ```
 
-## Phone alerts (Web Push)
+## Owner alerts (in the hub only)
 
-Every owner alert is also pushed to the owner's phones (the hub installed on
-the home screen; iOS 16.4+). Under `/api/mc/push/*`, same auth as the rest:
-`GET key` → `{publicKey}` (503 without VAPID keys) · `POST subscribe {subscription, device}` →
-`{ok, count}` · `POST unsubscribe {endpoint}` · `GET status?endpoint=` → `{subscribed, count}` ·
-`POST test {endpoint?}` → `{ok, sent, failed}`. Payload: `{title, body, url, tag, urgent, at}`;
-`url` is `/#trial/{id}` or `/#alerts`; the same `tag` replaces the previous notification.
+Owner alerts are not sent anywhere outside the hub: no email, phone push or Telegram.
+Each alert is recorded and listed in the hub's bell and alert list (`alerts` in
+`GET /api/mc/hub`: `{id, at, key, clientId, title, urgent, delivered, body, did}`;
+`delivered` is always true). `/api/mc/push/*` no longer exists. Wherever an alert
+below says "phone", "push", "email" or "Telegram", read it as "hub alert only".
 
 ## Plan inquiries (the website's "Book a call")
 
@@ -2284,3 +2283,12 @@ brain and model, the buttons, the follow-ups and the time. Not part of `npm test
 
 Config: `AVA_DAILY_CAP` (default 300; 0 = no cap), `AVA_MODELS` (model
 overrides), `/mc/config`.
+
+## Changes on 2026-11-20 (owner alerts)
+
+Removed the owner's outside alert channels: email, phone (Web Push) and Telegram.
+Gone: `/api/mc/push/*`, `setup.telegram` in `GET /api/mc/board` and `GET /api/mc/hub`,
+the `channels` field of alert records and of `POST /api/mc/setup {action:'test-alert'}`,
+the "Agreement signed" copy email to the owner, and the env names `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_CHAT_ID`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `OWNER_EMAIL`,
+`DAILY_REPORT_TO`. Alert records now also carry `body` and `did`. Emails to clients are unchanged.

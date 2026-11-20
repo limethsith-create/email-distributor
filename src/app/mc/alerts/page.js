@@ -16,7 +16,7 @@ export default function Alerts() {
         <div key={a.id} style={{ ...box, opacity: a.acknowledged ? 0.5 : 1, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ color: a.urgent ? 'var(--danger)' : 'var(--fg-muted)', fontWeight: 700 }}>{a.urgent ? 'URGENT' : 'info'}</span>
           <span style={{ flex: 1, minWidth: 200 }}>{a.title}</span>
-          <span className="mono" style={{ fontSize: 12 }}>{ago(a.at)} · {a.delivered ? 'delivered' : 'NOT delivered'}</span>
+          <span className="mono" style={{ fontSize: 12 }}>{ago(a.at)} · </span>
           {!a.acknowledged && <button style={btnGhost} onClick={() => api('/api/mc/alerts', { action: 'ack', id: a.id }).then(load)}>Acknowledge</button>}
         </div>
       ))}

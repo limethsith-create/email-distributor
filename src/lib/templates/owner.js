@@ -1,6 +1,6 @@
 /**
- * Owner alert catalogue (SPEC §11 "To the owner"). `urgent` alerts also go to
- * Telegram. Each alert fires at most once per day per (key, scope) unless
+ * Owner alert catalogue (SPEC §11 "To the owner"). Alerts show only in the hub
+ * (bell and alert list). Each alert fires at most once per day per (key, scope) unless
  * `repeatDaily` is false and `everyHour` is set.
  *
  * `info: true` = news, not a problem (a purchase found, a bot answer, a
@@ -132,7 +132,7 @@ export const ALERTS = {
   // Not opened in 48 business hours: quiet — the trial's own to-do ("call or text them?") carries it.
   client_email_unopened: { urgent: false, info: true, quiet: true, title: "{person} hasn't opened the {what} email" },
   // ── end delivery monitoring ──
-  // ── Reply bot (docs/REPLYBOT-MEET.md §2) ── quiet: phone push at low urgency + email, one per
+  // ── Reply bot (docs/REPLYBOT-MEET.md §2) ── quiet: low-key in the alert list, one per
   // bot email. {who} = "Sam (eCreek IT)", {did} = "sent the booking link".
   bot_replied: { urgent: false, info: true, quiet: true, title: 'Auto-replied to {who}: {did}' },
   // The "not now" follow-up date came (the `later` rule): once. Not urgent — the promise it

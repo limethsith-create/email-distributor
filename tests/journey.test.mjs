@@ -401,10 +401,11 @@ test('the journey: website booking → Won → onboarding → sending → paid, 
   // (The plan already went after the call, so the short setup note goes as before — never two "what happens now".)
   assert.ok(toDana().some((m) => /set/i.test(m.subject || '') && !/agreement/i.test(m.subject || '')), `setup_in_progress reached Dana: ${toDana().map((m) => m.subject)}`);
   assert.ok(!toDana().some((m) => m.subject === 'What happens now'), 'the plan is not sent twice');
-  const shopAlert = sim.sent.filter((m) => m.to === OWNER.email && /Shopping list ready/.test(m.subject)).at(-1);
+  const shopAlert = (await allAlerts()).filter((a) => /Shopping list ready/.test(a.title)).at(-1);
+  assert.equal(sim.sent.filter((m) => m.to === OWNER.email).length, 0, 'no alert email goes to the owner');
   assert.ok(shopAlert, 'the owner got the shopping list');
-  assert.match(shopAlert.text, /CheapInboxes/);
-  assert.doesNotMatch(shopAlert.text, /paste form|Turn auto-renew OFF/);
+  assert.match(shopAlert.body, /CheapInboxes/);
+  assert.doesNotMatch(shopAlert.body, /paste form|Turn auto-renew OFF/);
   const s9 = await snap('09', 'agreement-signed', 'Dana fills the one-page onboarding form and signs the agreement. The market count passes; the shopping list is made and Dana hears that setup has started.');
   assert.equal(s9.row.state, 'awaiting_purchase');
   assert.equal(s9.detail.autobuy.status, 'ready_to_buy');

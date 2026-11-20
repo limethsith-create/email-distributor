@@ -68,7 +68,7 @@ src/lib/systems/       one file per system (see above) + hubview.js (the hub's v
 src/lib/joblist/       scheduler jobs per stage (stage-a … stage-d)
 src/lib/templates/     every email and page text; sequence/*.json is the clients' copy
 src/lib/config.js      every threshold (SPEC §12), overridable in /mc/config
-src/lib/notify.js      the only module that emails a human (owner alerts, client emails)
+src/lib/notify.js      emails the clients; owner alerts are recorded for the hub only (no email, phone or Telegram)
 src/app/api/cron/tick  the heartbeat
 src/app/api/inquiry    the website's "Book a call" form — the only way in
 src/app/api/mc/        Mission Control + hub API (admin session or hub token)
