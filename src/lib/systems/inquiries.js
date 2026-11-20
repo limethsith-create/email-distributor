@@ -150,7 +150,7 @@ export function cameFromText(inq = {}) {
 const isoOrNull = (v) => { const t = Date.parse(v); return Number.isFinite(t) ? new Date(t).toISOString() : null; };
 
 /** Website body → inquiry fields, or { errors }. */
-export function normaliseInquiry(raw = {}) {
+export function normaliseInquiry(raw = {}, { loose = false } = {}) {
   const inq = {
     name: s(raw.name, 120),
     email: s(raw.email, 200).toLowerCase(),
@@ -183,8 +183,10 @@ export function normaliseInquiry(raw = {}) {
   const errors = {};
   if (!inq.name) errors.name = 'Your name is required.';
   if (!EMAIL_RE.test(inq.email)) errors.email = 'A valid email address is required.';
+  // A call the owner books himself (cold call) may lack these: the company then reads as the person's name.
+  if (loose && !inq.company) inq.company = inq.name;
   if (!inq.company) errors.company = 'Company name is required.';
-  if (!inq.sells) errors.sells = 'Tell us what you sell.';
+  if (!loose && !inq.sells) errors.sells = 'Tell us what you sell.';
   return Object.keys(errors).length ? { errors } : { inquiry: inq };
 }
 
@@ -202,8 +204,8 @@ const newId = (now) => `q${now.getTime().toString(36)}${Math.random().toString(3
  * `defer(job)` when given (the route passes Next's `after`, so the visitor is answered as soon as the
  * booking is saved and emailed); without it, it runs here before returning, as before.
  */
-export async function saveInquiry(raw, { source = 'website', now = new Date(), defer = null } = {}) {
-  const r = normaliseInquiry(raw);
+export async function saveInquiry(raw, { source = 'website', now = new Date(), defer = null, loose = false, strict = true, notes = '' } = {}) {
+  const r = normaliseInquiry(raw, { loose });
   if (r.errors) return { ok: false, errors: r.errors };
   const inq = r.inquiry;
   const dupKey = `inquiry:dup:${inq.email}:${inq.slotStart || 'noslot'}`;
@@ -212,7 +214,7 @@ export async function saveInquiry(raw, { source = 'website', now = new Date(), d
 
   const id = newId(now);
   if (inq.slotStart) {
-    const refused = await holdSlot(id, inq, now);
+    const refused = await holdSlot(id, inq, now, { strict });
     if (refused) {
       await kv.del(dupKey).catch(() => {});
       await logEvent(null, 'inquiries', 'slot_refused', { code: refused.code, slotStart: inq.slotStart }).catch(() => {});
@@ -220,7 +222,7 @@ export async function saveInquiry(raw, { source = 'website', now = new Date(), d
     }
   }
 
-  const rec = { id, at: now.toISOString(), source, status: 'new', statusAt: now.toISOString(), notes: [], ...inq };
+  const rec = { id, at: now.toISOString(), source, status: 'new', statusAt: now.toISOString(), notes: notes ? [{ at: now.toISOString(), text: s(notes, 1000) }] : [], ...inq };
   const p = kv.pipeline();
   p.hset(K.inquiries(), { [id]: rec });
   p.lpush(K.inquiryOrder(), id);
@@ -247,14 +249,14 @@ export async function saveInquiry(raw, { source = 'website', now = new Date(), d
  * → { code, message } when the time cannot be had; null when it is held — or when the Calendar itself failed,
  * in which case bookAndConfirm tries again and writes the error on the inquiry, as before.
  */
-async function holdSlot(id, inq, now) {
+async function holdSlot(id, inq, now, { strict = true } = {}) {
   const minutes = inq.slotEnd ? Math.round((Date.parse(inq.slotEnd) - Date.parse(inq.slotStart)) / 60e3) : 15;
   try {
     const cal = await import('@/lib/systems/calendar');
     await cal.bookSalesCall({
       inquiryId: id, company: inq.company, person: inq.name, email: inq.email, start: inq.slotStart, minutes,
       theirZone: inq.theirTz, note: inq.sells, linkedClientId: null,
-    }, { now, strict: true });
+    }, { now, strict });
     return null;
   } catch (err) {
     return err?.code ? { code: err.code, message: err.message } : null;
@@ -284,7 +286,7 @@ async function afterSaved(id, rec, booked, { now = new Date() } = {}) {
       scope: id,
       url: `/#inquiry/${id}`,
       vars: { company: inq.company, when },
-      body: `${inq.name} <${inq.email}> from ${inq.company}${inq.plan ? ` asked about ${inq.plan[0].toUpperCase()}${inq.plan.slice(1)}` : ' asked about a plan'}.${came ? `\nCame from: ${came}` : ''}\nCall: ${when}${inq.whenTheirs ? ` — their time ${inq.whenTheirs}` : ''}\nThey sell: ${inq.sells}${inq.website ? `\nWebsite: ${inq.website}` : inq.noWebsite ? '\nWebsite: does not have one yet' : ''}${answersText(inq)}${bookedLine}`,
+      body: `${inq.name} <${inq.email}> from ${inq.company}${inq.plan ? ` asked about ${inq.plan[0].toUpperCase()}${inq.plan.slice(1)}` : ' asked about a plan'}.${came ? `\nCame from: ${came}` : ''}\nCall: ${when}${inq.whenTheirs ? ` — their time ${inq.whenTheirs}` : ''}${inq.sells ? `\nThey sell: ${inq.sells}` : ''}${inq.website ? `\nWebsite: ${inq.website}` : inq.noWebsite ? '\nWebsite: does not have one yet' : ''}${answersText(inq)}${bookedLine}`,
       did: booked?.emailed ? 'Saved under Plan call requests in the hub (stage: Booked) and sent them the confirmation. After a yes on the call, press Send the agreement and invoice.' : 'Saved under Plan call requests in the hub (stage: Booked). After a yes on the call, press Send the agreement and invoice.',
     }).catch(() => {});
     return app?.clientId ? { clientId: app.clientId } : {};

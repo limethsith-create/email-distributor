@@ -7,6 +7,8 @@
  *        won  → (payment received) they become a paying client and onboarding starts (the answer's inquiry.clientId); 400 when it cannot
  *        lost → the record held for the call closes; nothing is emailed
  *   POST {action:'note', id, text}
+ *   POST {action:'bookCheck', booking}  preview of a cold-call booking (nothing saved); see docs/HUB-API.md
+ *   POST {action:'book', booking, force?}  save it through the website booking path; 409 {warnings} when it clashes / is outside call hours and no force
  */
 import { after } from 'next/server';
 
@@ -35,9 +37,24 @@ export async function POST(request) {
         return Response.json({ ok: true, ...(await bookingPaid(String(body.id))) });
       }
       case 'note': return Response.json({ ok: true, inquiry: await addInquiryNote(String(body.id), body.text) });
+      case 'bookCheck': {
+        const { bookCheck } = await import('@/lib/systems/coldbook');
+        const { _clean, ...preview } = await bookCheck(body.booking || {});
+        return Response.json(preview);
+      }
+      case 'book': {
+        const { bookCall } = await import('@/lib/systems/coldbook');
+        const started = Date.now();
+        const defer = (job) => after(async () => {
+          const out = await job();
+          if (out?.clientId) { const { researchToEnd } = await import('@/lib/systems/research'); await researchToEnd(out.clientId, Math.max(5_000, 25_000 - (Date.now() - started))); }
+        });
+        return Response.json(await bookCall(body.booking || {}, { force: body.force === true, defer }));
+      }
       default: return Response.json({ error: 'unknown action' }, { status: 400 });
     }
   } catch (err) {
+    if (err?.status === 409) return Response.json({ error: err.message, warnings: err.warnings || [] }, { status: 409 });
     return Response.json({ error: err.message }, { status: 400 });
   }
 }

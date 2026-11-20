@@ -2328,3 +2328,19 @@ the `channels` field of alert records and of `POST /api/mc/setup {action:'test-a
 the "Agreement signed" copy email to the owner, and the env names `TELEGRAM_BOT_TOKEN`,
 `TELEGRAM_CHAT_ID`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `OWNER_EMAIL`,
 `DAILY_REPORT_TO`. Alert records now also carry `body` and `did`. Emails to clients are unchanged.
+
+## Changes on 2026-11-20 (cold-call booking)
+
+The owner can book a sales call himself while on the phone. Two new actions on `POST /api/mc/inquiries`:
+
+- `{action:'bookCheck', booking}` — a preview, nothing saved. `booking` = `{name, email, start (ISO UTC)}` plus optional
+  `minutes` (default 15), `company`, `website`, `theirTz` (IANA), `state` (name or 2 letters), `phone`, `sells`, `plan`, `notes`.
+  Answer: `{ok:true, theirTz, tzFrom:'entered'|'state'|'phone'|'default', website, websiteFrom:'entered'|'email'|null, whenHost, whenTheirs, theirZoneName, warnings:[{code:'clash'|'outside_hours', message}]}`.
+  Their zone is the entered one, else the state's, else the phone's US area code, else US Eastern. The website is the entered one, else the
+  email's domain (null for gmail, outlook, yahoo, icloud and other free mail). `400 {error}` in plain words for a missing name, email or
+  time, a bad email or time, or a time that has passed.
+- `{action:'book', booking, force?}` — saves it through the same path as a website booking (Calendar sales call, confirmation email with
+  invite, the three reminders, the new-booking alert, research when there is a website). The inquiry has stage `new`, `source:'cold_call'`,
+  `cameFrom:'Cold call'`, and `notes` holds the typed notes as its first note. With a warning and no `force:true` it answers
+  `409 {error, warnings}`; with `force:true` the Calendar hold is not strict. A missing company is stored as the person's name.
+  Answer `{ok:true, id, emailed, inquiry}`.
