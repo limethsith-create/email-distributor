@@ -387,7 +387,7 @@
   },
   "alerts": [
    {
-    "id": "1791366011590-9b6kqf",
+    "id": "1791366011590-tpzix8",
     "at": "2026-10-07T09:40:11.590Z",
     "key": "inboxes_ready",
     "clientId": "ridgelineit",
@@ -396,7 +396,7 @@
     "delivered": true
    },
    {
-    "id": "1791340920300-z50lzt",
+    "id": "1791340920300-9b6kqf",
     "at": "2026-10-07T02:42:00.300Z",
     "key": "purchase_found",
     "clientId": "ridgelineit",
@@ -405,7 +405,7 @@
     "delivered": true
    },
    {
-    "id": "1790946600550-zsmdx0",
+    "id": "1790946600550-egq7ex",
     "at": "2026-10-02T13:10:00.550Z",
     "key": "bot_replied",
     "clientId": "ridgelineit",
@@ -703,7 +703,7 @@
   },
   "trial": {
    "dashboardLink": "https://machine.test/c/TOKEN_1/dashboard",
-   "dashboardLinkAt": "2026-10-01T19:40:29.390Z",
+   "dashboardLinkAt": "2026-10-01T19:40:29.640Z",
    "onboardingLink": "https://machine.test/c/TOKEN_2/onboard",
    "onboardingLinkAt": "2026-10-02T03:30:00.000Z",
    "onboardingSentAt": "2026-10-02T03:30:00.000Z",
@@ -1740,7 +1740,6 @@
    "plan": "starter",
    "amount": 2497,
    "calls": 10,
-   "bonus": false,
    "status": "sent",
    "issuedAt": "2026-10-06T18:20:00.000Z",
    "sentAt": "2026-10-06T18:20:00.000Z",
@@ -1751,7 +1750,7 @@
   },
   "promises": [
    {
-    "id": "pmuqen92y2b8",
+    "id": "pmuqen92yzsm",
     "text": "Answer the client within 1 business day",
     "dueAt": "2026-10-02T23:59:00Z",
     "madeAt": "2026-10-02T03:30:00.250Z",
@@ -3330,7 +3329,7 @@
    ],
    "thread": [
     {
-     "id": "out-36880654bed94f22",
+     "id": "out-4700484a1918c1f0",
      "dir": "out",
      "at": "2026-10-02T03:30:00.000Z",
      "from": "hello@aviance.test",
@@ -3378,7 +3377,7 @@
      "statusText": null
     },
     {
-     "id": "out-4700484a1918c1f0",
+     "id": "out-f8884d2da40e2ada",
      "dir": "out",
      "at": "2026-10-02T13:10:00.000Z",
      "from": "hello@aviance.test",
@@ -3402,7 +3401,7 @@
      "statusText": "delivered"
     },
     {
-     "id": "out-d05d56c661ceeb53",
+     "id": "out-6364bc5d7ca4766e",
      "dir": "out",
      "at": "2026-10-02T14:02:00.000Z",
      "from": "hello@aviance.test",
@@ -3426,7 +3425,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-a94a45c31a85cd37",
+     "id": "out-a6604454448db36e",
      "dir": "out",
      "at": "2026-10-02T14:30:00.000Z",
      "from": "hello@aviance.test",
@@ -3450,7 +3449,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-a6604454448db36e",
+     "id": "out-76ff2f098c2fcaa9",
      "dir": "out",
      "at": "2026-10-05T13:30:00.000Z",
      "from": "hello@aviance.test",
@@ -3474,7 +3473,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-76ff2f098c2fcaa9",
+     "id": "out-7323c22503be51e2",
      "dir": "out",
      "at": "2026-10-06T15:40:00.000Z",
      "from": "hello@aviance.test",
@@ -3498,7 +3497,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-7323c22503be51e2",
+     "id": "out-45eb575b0a0479db",
      "dir": "out",
      "at": "2026-10-06T18:20:00.250Z",
      "from": "hello@aviance.test",
@@ -3522,7 +3521,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-45eb575b0a0479db",
+     "id": "out-186c27e7d8778e62",
      "dir": "out",
      "at": "2026-10-06T18:20:00.500Z",
      "from": "hello@aviance.test",
@@ -3546,7 +3545,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-a072c1fed1bc8fd3",
+     "id": "out-c21c9462765be9ed",
      "dir": "out",
      "at": "2026-10-06T18:20:08.150Z",
      "from": "hello@aviance.test",
@@ -3654,7 +3653,7 @@
   "conversation": {
    "thread": [
     {
-     "id": "out-36880654bed94f22",
+     "id": "out-4700484a1918c1f0",
      "dir": "out",
      "at": "2026-10-02T03:30:00.000Z",
      "from": "hello@aviance.test",
@@ -3702,7 +3701,7 @@
      "statusText": null
     },
     {
-     "id": "out-4700484a1918c1f0",
+     "id": "out-f8884d2da40e2ada",
      "dir": "out",
      "at": "2026-10-02T13:10:00.000Z",
      "from": "hello@aviance.test",
@@ -3726,7 +3725,7 @@
      "statusText": "delivered"
     },
     {
-     "id": "out-d05d56c661ceeb53",
+     "id": "out-6364bc5d7ca4766e",
      "dir": "out",
      "at": "2026-10-02T14:02:00.000Z",
      "from": "hello@aviance.test",
@@ -3750,7 +3749,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-a94a45c31a85cd37",
+     "id": "out-a6604454448db36e",
      "dir": "out",
      "at": "2026-10-02T14:30:00.000Z",
      "from": "hello@aviance.test",
@@ -3774,7 +3773,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-a6604454448db36e",
+     "id": "out-76ff2f098c2fcaa9",
      "dir": "out",
      "at": "2026-10-05T13:30:00.000Z",
      "from": "hello@aviance.test",
@@ -3798,7 +3797,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-76ff2f098c2fcaa9",
+     "id": "out-7323c22503be51e2",
      "dir": "out",
      "at": "2026-10-06T15:40:00.000Z",
      "from": "hello@aviance.test",
@@ -3822,7 +3821,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-7323c22503be51e2",
+     "id": "out-45eb575b0a0479db",
      "dir": "out",
      "at": "2026-10-06T18:20:00.250Z",
      "from": "hello@aviance.test",
@@ -3846,7 +3845,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-45eb575b0a0479db",
+     "id": "out-186c27e7d8778e62",
      "dir": "out",
      "at": "2026-10-06T18:20:00.500Z",
      "from": "hello@aviance.test",
@@ -3870,7 +3869,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-a072c1fed1bc8fd3",
+     "id": "out-c21c9462765be9ed",
      "dir": "out",
      "at": "2026-10-06T18:20:08.150Z",
      "from": "hello@aviance.test",

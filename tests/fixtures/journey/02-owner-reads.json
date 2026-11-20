@@ -28,7 +28,7 @@
     "lastSendAt": null
    },
    "activeClients": 0,
-   "openAlerts": 1,
+   "openAlerts": 2,
    "usage": {
     "redis": {
      "used": null,
@@ -83,7 +83,7 @@
       },
       "inboxRate": null,
       "lastJobAt": null,
-      "openAlerts": 0,
+      "openAlerts": 1,
       "urgentAlerts": 0,
       "demo": false,
       "stateLabel": "Booked a sales call — waiting for the call",
@@ -191,7 +191,7 @@
         "key": "reports",
         "label": "Reports & decision",
         "status": "off",
-        "line": "Friday updates start at Day −14",
+        "line": "Friday updates start once setup begins",
         "detail": []
        },
        {
@@ -332,6 +332,15 @@
   },
   "alerts": [
    {
+    "id": "1790883629390-2b8sg4",
+    "at": "2026-10-01T19:40:29.390Z",
+    "key": "application_scored",
+    "clientId": "ridgelineit",
+    "title": "Fit score for Ridgeline IT: 93/100 (Strong fit)",
+    "urgent": false,
+    "delivered": true
+   },
+   {
     "id": "1790883603270-5oy551",
     "at": "2026-10-01T19:40:03.270Z",
     "key": "new_inquiry",
@@ -361,7 +370,7 @@
    },
    "inboxRate": null,
    "lastJobAt": null,
-   "openAlerts": 0,
+   "openAlerts": 1,
    "urgentAlerts": 0,
    "demo": false,
    "stateLabel": "Booked a sales call — waiting for the call",
@@ -469,7 +478,7 @@
      "key": "reports",
      "label": "Reports & decision",
      "status": "off",
-     "line": "Friday updates start at Day −14",
+     "line": "Friday updates start once setup begins",
      "detail": []
     },
     {
@@ -493,7 +502,7 @@
   },
   "trial": {
    "dashboardLink": "https://machine.test/c/TOKEN_1/dashboard",
-   "dashboardLinkAt": "2026-10-01T19:40:29.390Z"
+   "dashboardLinkAt": "2026-10-01T19:40:29.640Z"
   },
   "domain": {
    "name": null,
@@ -561,6 +570,19 @@
   "promises": [],
   "upcoming": [],
   "events": [
+   {
+    "at": "2026-10-01T19:40:29.640Z",
+    "system": "notify",
+    "event": "alert_sent",
+    "detail": {
+     "key": "application_scored",
+     "title": "Fit score for Ridgeline IT: 93/100 (Strong fit)",
+     "channels": {
+      "email": "ok",
+      "push": "push not configured"
+     }
+    }
+   },
    {
     "at": "2026-10-01T19:40:29.390Z",
     "system": "research",

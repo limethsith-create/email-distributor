@@ -223,7 +223,7 @@
         "key": "reports",
         "label": "Reports & decision",
         "status": "off",
-        "line": "Friday updates start at Day −14",
+        "line": "Friday updates start once setup begins",
         "detail": []
        },
        {
@@ -345,7 +345,7 @@
   },
   "alerts": [
    {
-    "id": "1790949720250-egq7ex",
+    "id": "1790949720250-24rijb",
     "at": "2026-10-02T14:02:00.250Z",
     "key": "meeting_requested",
     "clientId": "ridgelineit",
@@ -354,7 +354,7 @@
     "delivered": true
    },
    {
-    "id": "1790946600550-zsmdx0",
+    "id": "1790946600550-egq7ex",
     "at": "2026-10-02T13:10:00.550Z",
     "key": "bot_replied",
     "clientId": "ridgelineit",
@@ -518,7 +518,7 @@
      "key": "reports",
      "label": "Reports & decision",
      "status": "off",
-     "line": "Friday updates start at Day −14",
+     "line": "Friday updates start once setup begins",
      "detail": []
     },
     {
@@ -543,7 +543,7 @@
   },
   "trial": {
    "dashboardLink": "https://machine.test/c/TOKEN_1/dashboard",
-   "dashboardLinkAt": "2026-10-01T19:40:29.390Z",
+   "dashboardLinkAt": "2026-10-01T19:40:29.640Z",
    "onboardingLink": "https://machine.test/c/TOKEN_2/onboard",
    "onboardingLinkAt": "2026-10-02T03:30:00.000Z",
    "onboardingSentAt": "2026-10-02T03:30:00.000Z",
@@ -614,7 +614,7 @@
   "invoice": null,
   "promises": [
    {
-    "id": "pmuqen92y2b8",
+    "id": "pmuqen92yzsm",
     "text": "Answer the client within 1 business day",
     "dueAt": "2026-10-02T23:59:00Z",
     "madeAt": "2026-10-02T03:30:00.250Z",
@@ -782,6 +782,19 @@
     "system": "gatekeeper",
     "event": "won",
     "detail": {}
+   },
+   {
+    "at": "2026-10-01T19:40:29.640Z",
+    "system": "notify",
+    "event": "alert_sent",
+    "detail": {
+     "key": "application_scored",
+     "title": "Fit score for Ridgeline IT: 93/100 (Strong fit)",
+     "channels": {
+      "email": "ok",
+      "push": "push not configured"
+     }
+    }
    },
    {
     "at": "2026-10-01T19:40:29.390Z",
@@ -1979,7 +1992,7 @@
    ],
    "thread": [
     {
-     "id": "out-36880654bed94f22",
+     "id": "out-4700484a1918c1f0",
      "dir": "out",
      "at": "2026-10-02T03:30:00.000Z",
      "from": "hello@aviance.test",
@@ -2027,7 +2040,7 @@
      "statusText": null
     },
     {
-     "id": "out-4700484a1918c1f0",
+     "id": "out-f8884d2da40e2ada",
      "dir": "out",
      "at": "2026-10-02T13:10:00.000Z",
      "from": "hello@aviance.test",
@@ -2051,7 +2064,7 @@
      "statusText": "delivered"
     },
     {
-     "id": "out-d05d56c661ceeb53",
+     "id": "out-6364bc5d7ca4766e",
      "dir": "out",
      "at": "2026-10-02T14:02:00.000Z",
      "from": "hello@aviance.test",
@@ -2082,7 +2095,7 @@
   "conversation": {
    "thread": [
     {
-     "id": "out-36880654bed94f22",
+     "id": "out-4700484a1918c1f0",
      "dir": "out",
      "at": "2026-10-02T03:30:00.000Z",
      "from": "hello@aviance.test",
@@ -2130,7 +2143,7 @@
      "statusText": null
     },
     {
-     "id": "out-4700484a1918c1f0",
+     "id": "out-f8884d2da40e2ada",
      "dir": "out",
      "at": "2026-10-02T13:10:00.000Z",
      "from": "hello@aviance.test",
@@ -2154,7 +2167,7 @@
      "statusText": "delivered"
     },
     {
-     "id": "out-d05d56c661ceeb53",
+     "id": "out-6364bc5d7ca4766e",
      "dir": "out",
      "at": "2026-10-02T14:02:00.000Z",
      "from": "hello@aviance.test",
