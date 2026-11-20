@@ -58,6 +58,7 @@ import { bump } from '@/lib/db/counters';
 import { logEvent } from '@/lib/db/events';
 import { clientNow, hasScaledClock } from '@/lib/testclock';
 import { alertOwner } from '@/lib/notify';
+import { guardImap, closeImap } from '@/lib/imap-safe';
 import { encrypt, hasEncKey } from '@/lib/crypto';
 import { io } from '@/lib/systems/intake-io';
 import { PROVIDERS, HELPER_PROVIDERS, providerForAddress, familyOf, providerLabel } from '@/lib/smtp-providers';
@@ -622,7 +623,7 @@ export async function runWarmupSend({ now = new Date(), deadline = Date.now() + 
 
 async function defaultImap(account) {
   const { ImapFlow } = await import('imapflow');
-  return new ImapFlow({
+  return guardImap(new ImapFlow({
     host: account.imap.host,
     port: account.imap.port || 993,
     secure: true,
@@ -632,7 +633,7 @@ async function defaultImap(account) {
     connectionTimeout: 12000,
     greetingTimeout: 8000,
     socketTimeout: 25000,
-  });
+  }));
 }
 
 const SPAM_NAME_RE = /^(\[(gmail|google mail)\]\/)?(spam|junk( ?e-?mail)?|bulk( mail)?|spamverdacht|unerw(ü|ue)nscht)$/i;
@@ -791,7 +792,7 @@ export async function processMailbox(member, { mode = 'warm', tag = '', now = ne
   } catch (err) {
     out.error = `${err.code ? `${err.code}: ` : ''}${err.message || String(err)}`;
   } finally {
-    try { await client.logout(); } catch { try { client.close(); } catch {} }
+    await closeImap(client);
   }
   if (handled.length) {
     await kv.sadd(K.warmupDone(day), ...handled);

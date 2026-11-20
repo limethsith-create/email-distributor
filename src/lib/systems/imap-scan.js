@@ -16,6 +16,7 @@
  */
 
 import { parseHeaders, splitIds, classifyKind, findTextPart, readStream, htmlToText } from '@/lib/mail-utils';
+import { guardImap, closeImap } from '@/lib/imap-safe';
 
 const FETCH_HEADERS = [
   'auto-submitted', 'precedence', 'x-auto-response-suppress', 'x-autoreply', 'x-autorespond',
@@ -85,12 +86,12 @@ function describe(msg, folder, account) {
 export async function scanMailbox(account, { folders = ['INBOX'], includeSpam = false, uidState = {}, maxMessages = 30, firstScanDays = 7, wantBody = () => true, wantIcs = (m) => m.hasIcs, timeoutMs = 25_000 } = {}) {
   const { ImapFlow } = await import('imapflow');
   const out = { ok: false, error: null, messages: [], uidState: {} };
-  const client = new ImapFlow({
+  const client = guardImap(new ImapFlow({
     host: account.imap.host, port: account.imap.port || 993, secure: true,
     auth: { user: account.email, pass: account.appPassword || account.password },
     logger: false, disableAutoIdle: true,
     connectionTimeout: 12000, greetingTimeout: 8000, socketTimeout: 20000,
-  });
+  }));
   const started = Date.now();
   try {
     await withTimeout(client.connect(), 15000, 'imap connect');
@@ -146,7 +147,7 @@ export async function scanMailbox(account, { folders = ['INBOX'], includeSpam = 
   } catch (err) {
     out.error = `${err.code ? `${err.code}: ` : ''}${err.message || String(err)}`;
   } finally {
-    try { await withTimeout(client.logout(), 2000, 'logout'); } catch { try { client.close(); } catch {} }
+    await closeImap(client);
   }
   return out;
 }
