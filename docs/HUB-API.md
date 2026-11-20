@@ -2319,3 +2319,5 @@ overrides), `/mc/config`.
 The booking stage `proposal` ("Proposal sent") is now `agreement_sent` ("Agreement and invoice sent"). Records still saying `proposal` or `proposal_sent` are read as `agreement_sent`, and POST `status` accepts the old keys too. Counts use the new key.
 ### Changes on 2026-11-20 (unpaid invoice chase)
 New alert key `invoice_not_paid_yet` (not urgent, title in plain words: "Not paid yet: {client} has not paid their invoice (24 hours). A reminder was sent."). It appears in `/api/mc/alerts` like any other alert; no hub change needed. The invoice record gains `remindedAt` (set once, when the 24-hour reminder email goes out) and `sentAt` is filled from `issuedAt` when missing.
+### Changes on 2026-11-20 (payment alert)
+Marking an invoice paid (`POST /api/mc/clients/{id} {action:'markPaid'}`, unchanged) now also adds one plain "paid" alert to the owner's alert list (key `client_paid`, e.g. "Sam from Acme paid the Growth invoice — $1,500") and moves the client's booking to Won. A second "Mark paid" does nothing new.
