@@ -14,8 +14,7 @@
  *             token>` of an allowed hub admin, with CORS for the hub's origin.
  *             An approved employee's token (profiles.role = 'employee') is
  *             read-only: GET/HEAD outside EMPLOYEE_DENY, plus POST
- *             /api/mc/presence, /api/mc/team (own status), /api/mc/ava/chat, /api/mc/ava/hear and
- *             /api/mc/ava/requests ('add'; 'done' is the owner's); anything else is 403. The verified email and
+ *             /api/mc/presence, /api/mc/team (own status); anything else is 403. The verified email and
  *             role are passed on as `x-hub-user` / `x-hub-role` request headers
  *             (any the caller sent are dropped).
  *  - admin:   everything else needs the ADMIN_SECRET session cookie.
@@ -60,7 +59,7 @@ async function demoActionOf(request, pathname) {
   if (request.method !== 'POST' || !DEMO_CLIENT_ROOT.test(pathname)) return null;
   try { const b = await request.clone().json(); return typeof b?.action === 'string' ? b.action : null; } catch { return null; }
 }
-const EMPLOYEE_POST = /^\/api\/mc\/(presence|team|ava\/chat|ava\/hear|ava\/requests)\/?$/;   // team: only their own status; ava/requests: 'add' only (the routes check)
+const EMPLOYEE_POST = /^\/api\/mc\/(presence|team)\/?$/;   // team: only their own status (the route checks)
 const READ_ONLY = 'Read-only: ask the owner to do this.';
 
 /** Is this request something an employee (read-only hub user) may do? */

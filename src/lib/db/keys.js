@@ -320,14 +320,6 @@ export const K = {
   hubStatus: (uid) => `hub:status:${hubUid(uid)}`,
   /** Who looks after which client (hash): clientId → JSON [uid, …]. Set by the owner (the hub's Team tab). */
   hubClientOwners: () => 'hub:clientowners',
-  /** Ava's change requests (list of JSON {id, at, by, text, status}, newest first, capped at 200). */
-  avaRequests: () => 'ava:requests',
-  /** Ava's questions today, everyone together (counter; day in Sri Lanka time; expires after 2 days). */
-  avaDay: (day) => `ava:day:${day}`,
-  /** The models one AI service offers (JSON {at, available: [ids]}, expires after 6 h; lib/ava/models.js). */
-  avaModels: (brain) => `ava:models:${brain}`,
-  /** The owner's "Business facts" note for Ava (string ≤ 4 KB; lib/ava/facts.js). */
-  avaFacts: () => 'ava:facts',
   /** Active seconds per day for one hub user (hash): YYYY-MM-DD → seconds. */
   hubPersonDays: (uid) => `hub:person:${hubUid(uid)}:days`,
   /** Presence posts by one user in one 10-minute bucket (counter, expires). */

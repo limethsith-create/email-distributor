@@ -22,8 +22,6 @@ const nextConfig = {
   // serverless function.
   outputFileTracingIncludes: {
     '/**': ['./config/*.txt'],
-    // Ava's written guide (lib/ava/tools.js reads it with fs).
-    '/api/mc/ava/**': ['./src/lib/ava/kb.md'],
   },
   poweredByHeader: false,
   async headers() {
