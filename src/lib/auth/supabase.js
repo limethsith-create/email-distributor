@@ -11,7 +11,8 @@
  *     `admin`; otherwise the user's own `profiles` row (read through Supabase
  *     REST with the user's token, so Row Level Security applies) must say
  *     `approved = true` and `role = 'employee'` → role `employee` (read-only,
- *     see the middleware). Lookups are cached in memory for about a minute.
+ *     see the middleware), or `role = 'client'` with a `client_id` → role `client` + clientId
+ *     (only GET /api/mc/portal/*, see the middleware). Lookups are cached in memory for about a minute.
  *
  * Web Crypto + fetch only, so it runs in the edge middleware too.
  * Nothing here trusts the token before the signature check.
@@ -98,7 +99,7 @@ export function __resetProfileCache() {
 async function lookupProfile(sub, token, now) {
   const hit = profileCache.get(sub);
   if (hit && now - hit.at < PROFILE_TTL_MS) return hit.profile;
-  const url = `${supabaseUrl()}/rest/v1/profiles?id=eq.${encodeURIComponent(sub)}&select=id,name,email,role,approved`;
+  const url = `${supabaseUrl()}/rest/v1/profiles?id=eq.${encodeURIComponent(sub)}&select=id,name,email,role,approved,client_id`;
   const res = await fetch(url, { headers: { apikey: supabaseAnonKey(), Authorization: `Bearer ${token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
   if (res.status >= 500) throw new Error(`profiles ${res.status}`);
   if (!res.ok) return null; // 401/403/4xx: not readable with this token — not cached
@@ -111,7 +112,7 @@ async function lookupProfile(sub, token, now) {
 
 /**
  * Verify a Supabase access token.
- * @returns {Promise<{ok: boolean, email?: string, sub?: string, role?: 'admin'|'employee', name?: string, error?: string}>}
+ * @returns {Promise<{ok: boolean, email?: string, sub?: string, role?: 'admin'|'employee'|'client', clientId?: string, name?: string, error?: string}>}
  */
 export async function verifyHubToken(token, { now = Date.now() } = {}) {
   try {
@@ -145,6 +146,12 @@ export async function verifyHubToken(token, { now = Date.now() } = {}) {
       return { ok: false, error: `profile lookup failed: ${err?.message || err}` };
     }
     if (!profile) return { ok: false, error: 'not an admin' };
+    // An approved client (role 'client' with a client_id) may read their own portal numbers, nothing else (middleware).
+    if (profile.approved === true && profile.role === 'client') {
+      const clientId = String(profile.client_id || '').trim();
+      if (!clientId) return { ok: false, error: 'client has no client id' };
+      return { ok: true, email, sub: payload.sub, role: 'client', clientId, name: String(profile.name || metaName || '').slice(0, 80) };
+    }
     if (profile.approved !== true || profile.role !== 'employee') return { ok: false, error: 'not an approved employee' };
     return { ok: true, email, sub: payload.sub, role: 'employee', name: String(profile.name || metaName || '').slice(0, 80) };
   } catch (err) {

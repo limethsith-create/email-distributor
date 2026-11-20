@@ -17,6 +17,9 @@
  *             /api/mc/presence, /api/mc/team (own status); anything else is 403. The verified email and
  *             role are passed on as `x-hub-user` / `x-hub-role` request headers
  *             (any the caller sent are dropped).
+ *             A client's token (profiles.role = 'client') reaches ONLY GET /api/mc/portal/* (403 'Not allowed' for
+ *             anything else, and for a `clientId` in the query that is not theirs); `x-hub-role: client` and
+ *             `x-hub-client: {their client id}` are set by us (`x-hub-client` is dropped from every incoming request).
  *  - admin:   everything else needs the ADMIN_SECRET session cookie.
  *
  * Missing secrets fail closed.
@@ -71,16 +74,30 @@ export function employeeMayAccess(method, pathname) {
 }
 
 /** Let the request through with the hub identity headers set (never the caller's own). */
-function passOn(request, { user = '', role = '' } = {}) {
+function passOn(request, { user = '', role = '', clientId = '' } = {}) {
   const headers = new Headers(request.headers);
   headers.delete('x-hub-user');
   headers.delete('x-hub-role');
+  headers.delete('x-hub-client');
   if (user) headers.set('x-hub-user', user);
   if (role) headers.set('x-hub-role', role);
+  if (clientId) headers.set('x-hub-client', clientId);
   const res = NextResponse.next({ request: { headers } });
   if (user) res.headers.set('x-hub-user', user);
   if (role) res.headers.set('x-hub-role', role);
+  if (clientId) res.headers.set('x-hub-client', clientId);
   return res;
+}
+
+// A client's token (profiles.role = 'client') reaches only the portal's read-only views, for their own client.
+const PORTAL_GET = /^\/api\/mc\/portal\/[^/]/;
+const NOT_ALLOWED = 'Not allowed';
+/** May a client (portal user) make this request? Only GET under /api/mc/portal/, and never for another client's id. */
+export function clientMayAccess(method, pathname, searchParams, clientId) {
+  if (String(method || '').toUpperCase() !== 'GET') return false;
+  if (!PORTAL_GET.test(pathname) || /(^|\/)\.\.?(\/|$)/.test(pathname)) return false;
+  const asked = searchParams?.getAll ? searchParams.getAll('clientId') : [];
+  return asked.every((c) => c === clientId);
 }
 
 function withCors(res, origin) {
@@ -138,6 +155,13 @@ export async function middleware(request) {
     if (token) {
       const v = await verifyHubToken(token);
       if (v.ok) {
+        if (v.role === 'client') {
+          // The client's id comes from the verified profile; the portal routes read x-hub-client, never the query.
+          if (!v.clientId || !clientMayAccess(request.method, pathname, request.nextUrl.searchParams, v.clientId)) {
+            return withCors(NextResponse.json({ error: NOT_ALLOWED }, { status: 403 }), hubOrigin);
+          }
+          return withCors(passOn(request, { user: v.email, role: 'client', clientId: v.clientId }), hubOrigin);
+        }
         const role = v.role === 'employee' ? 'employee' : 'admin';
         if (role === 'employee' && !employeeMayAccess(request.method, pathname)) {
           return withCors(NextResponse.json({ error: READ_ONLY }, { status: 403 }), hubOrigin);
