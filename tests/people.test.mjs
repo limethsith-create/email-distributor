@@ -57,7 +57,7 @@ test('employee tokens: approved employees are verified via their own profile row
   const v = await verifyHubToken(empToken);
   assert.deepEqual(v, { ok: true, email: 'nimal@aviance.store', sub: 'emp-1', role: 'employee', name: 'Nimal Perera' });
   assert.equal(calls.length, 1);
-  assert.match(calls[0].url, /\/rest\/v1\/profiles\?id=eq\.emp-1&select=id,name,email,role,approved$/);
+  assert.match(calls[0].url, /\/rest\/v1\/profiles\?id=eq\.emp-1&select=id,name,email,role,approved,client_id$/);
   assert.equal(calls[0].headers.apikey, 'sb_publishable_WV4FANV2hNsmbzK3DbiLFg_9bjiB8Z1');
   assert.equal(calls[0].headers.Authorization, `Bearer ${empToken}`);
   // Cached: no second lookup within a minute.
