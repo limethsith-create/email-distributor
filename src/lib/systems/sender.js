@@ -26,6 +26,7 @@ import { bump, getTotals } from '@/lib/db/counters';
 import { logEvent } from '@/lib/db/events';
 import { varsFor, renderTouch, TemplateError } from '@/lib/systems/sequence';
 import { keepColdText } from '@/lib/systems/maillog';
+import { plainAuthError } from '@/lib/mailer';
 import { getInboxHealth, recordSendSuccess, recordSendFailure, updateInboxHealth, shouldSkipInbox } from '@/lib/inbox-health';
 import { partsIn, dayKeyIn, ET, isWeekday, hhmmToMin, trialDay } from '@/lib/time';
 import { guardOutbound, unsubscribeHeaders } from '@/lib/systems/compliance';
@@ -405,9 +406,10 @@ async function recordFailure(clientId, { account, lead, touch, res, now }) {
     return 'rejected';
   }
   if (kind === 'auth') {
-    await patchInbox(clientId, account.email, { enabled: '0', disabledReason: 'login failed — check the app password', disabledAt: at });
-    await updateInboxHealth(account.email, { disabledReason: `Login failed (${res.responseCode || res.code || 'EAUTH'}): check the app password`, disabledAt: at });
-    await alert('inbox_auth_fail', { clientId, scope: account.email, vars: { email: account.email }, body: `SMTP login failed for ${account.email} (${clientId}).`, did: 'The inbox was switched off for cold sending; the lead goes back to the pool.' });
+    const plain = res.plain || plainAuthError(res, account) || 'login failed — check the app password';
+    await patchInbox(clientId, account.email, { enabled: '0', disabledReason: plain, disabledAt: at });
+    await updateInboxHealth(account.email, { disabledReason: plain, disabledAt: at });
+    await alert('inbox_auth_fail', { clientId, scope: account.email, vars: { email: account.email }, body: `${account.email}: ${plain}`, did: 'The inbox was switched off for cold sending; the lead goes back to the pool.' });
   }
   await saveLeadPatch(clientId, lead.email, { last_error: String(res.error || '').slice(0, 200), last_error_at: at });
   await kv.del(K.leadClaim(clientId, lead.email));
