@@ -1,6 +1,7 @@
 /**
  * /api/mc/inquiries — the hub's Inquiries section (admin / hub token).
  *   GET                                   → { inquiries (newest first), counts }
+ *   POST {action:'paid', id}   the booking's invoice is paid: one "paid" alert, onboarding starts, the booking moves to Won
  *   POST {action:'status', id, status, note?}   status: new (Booked) | held (Call done) | no_show | contacted (Following up) | agreement_sent (Agreement and invoice sent) | won | lost
  *        agreement_sent → the yes: the agreement and the invoice are emailed now (inquiry.agreement / .invoice); 400 when they cannot go
  *        won  → (payment received) they become a paying client and onboarding starts (the answer's inquiry.clientId); 400 when it cannot
@@ -28,6 +29,10 @@ export async function POST(request) {
         // Won without the heartbeat: the onboarding-call check runs right after the answer (throttled, never throws).
         if (body.status === 'won') { try { after(() => checkOnboardCallsQuietly()); } catch { /* tests */ } }
         return Response.json({ ok: true, inquiry });
+      }
+      case 'paid': {
+        const { bookingPaid } = await import('@/lib/systems/agreementsend');
+        return Response.json({ ok: true, ...(await bookingPaid(String(body.id))) });
       }
       case 'note': return Response.json({ ok: true, inquiry: await addInquiryNote(String(body.id), body.text) });
       default: return Response.json({ error: 'unknown action' }, { status: 400 });

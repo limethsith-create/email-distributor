@@ -122,4 +122,18 @@ Once it's paid, I'll email you a link to book our onboarding call.
 
 {ownerName}`,
   },
+  agreement_invoice_chase: {
+    from: 'onboard',
+    subject: 'Quick note about invoice {invoiceNo}',
+    body: `Hi {firstName},
+
+Just a friendly note: I sent your agreement and invoice {invoiceNo} ({priceText}, {planName} plan) yesterday, and I haven't seen the payment yet.
+
+Pay by:
+{paymentLines}
+
+If it's already on its way, ignore this, and thank you. Once it's in, I'll email you a link to book our onboarding call.
+
+{ownerName}`,
+  },
 };

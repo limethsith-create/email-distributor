@@ -65,6 +65,8 @@ const salesReminders = {
     if (partsIn('UTC', ctx.now).minute % 15 < 1 || ctx.chaseNow) {
       const { chaseUnpaidInvoices } = await import('@/lib/systems/invoice');
       invoiceChase = await chaseUnpaidInvoices({ clients: ctx.clients, now: ctx.now }).catch((e) => ({ error: String(e?.message || e).slice(0, 120) }));
+      const { chaseBookingInvoices } = await import('@/lib/systems/agreementsend');
+      invoiceChase.bookings = await chaseBookingInvoices({ now: ctx.now }).catch((e) => ({ error: String(e?.message || e).slice(0, 120) }));
     }
     return { ...(await runSalesReminders(ctx)), ...(invoiceChase ? { invoiceChase } : {}) };
   },

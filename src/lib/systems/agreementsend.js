@@ -141,3 +141,59 @@ export async function startOnboardingAfterPayment(inquiryId, { now = new Date() 
   }
   return { clientId, outcome: started.outcome, ...(started.already ? { already: true } : {}), inquiry: rec };
 }
+
+export const BOOKING_CHASE_AFTER_MS = 24 * 3600e3;
+
+/**
+ * 24 hours after the agreement and invoice went out and still not paid: ONE polite reminder to the
+ * person who booked (from the onboarding inbox) and ONE "not paid yet" alert in the hub. Once per booking
+ * (`invoice.remindedAt`). Never throws; one booking failing does not stop the rest. → { reminded, held }
+ */
+export async function chaseBookingInvoices({ now = new Date() } = {}) {
+  const { listInquiries, patchInquiry } = await import('@/lib/systems/inquiries');
+  const { io } = await import('@/lib/systems/intake-io');
+  const { inquiries } = await listInquiries({ limit: 500 });
+  let reminded = 0; let held = 0;
+  for (const inq of inquiries) {
+    const v = inq.invoice;
+    if (inq.status !== 'agreement_sent' || !v || !v.sentAt || v.paidAt || v.remindedAt) continue;
+    if (now.getTime() - Date.parse(v.sentAt) < BOOKING_CHASE_AFTER_MS) continue;
+    try {
+      const signer = await ownerName(null, 'The invoice reminder');
+      const lines = signer && (await paymentLines(null, v.amount));
+      if (!signer || !lines) { held++; continue; }
+      const r = await sendOnce(inq, 'agreement_invoice_chase', {
+        firstName: firstNameOf(inq.name) || 'there', ownerName: signer, invoiceNo: v.number,
+        priceText: money(v.amount), planName: PLAN_NAMES[v.plan] || v.plan, paymentLines: lines,
+      }, { now });
+      await patchInquiry(inq.id, { invoice: { ...v, remindedAt: now.toISOString() } });
+      if (!r.deduped) {
+        const who = [inq.name, inq.company].filter(Boolean).join(' from ') || inq.email;
+        await io.alertOwner('invoice_not_paid_yet', { scope: `booking_chase:${inq.id}`, vars: { clientId: who }, body: `Invoice ${v.number} (${money(v.amount)}) has not been paid 24 hours after the agreement went out.`, did: 'Sent them one reminder email.' });
+      }
+      reminded++;
+    } catch (err) {
+      await logEvent(null, SYSTEM, 'chase_failed', { inquiryId: inq.id, error: String(err?.message || err).slice(0, 200) }).catch(() => {});
+    }
+  }
+  return { reminded, held };
+}
+
+/**
+ * The owner (or, later, a PayPal check) says a booking's invoice is paid: ONE "paid" alert in the hub,
+ * then onboarding starts and the booking moves to Won. Again → nothing new. → { paid, first, inquiry }
+ */
+export async function bookingPaid(inquiryId, { now = new Date() } = {}) {
+  const { getInquiry } = await import('@/lib/systems/inquiries');
+  const inq = await getInquiry(String(inquiryId));
+  if (!inq) throw new Error('inquiry not found');
+  if (!inq.invoice) throw new Error('No invoice has gone to this booking yet.');
+  if (inq.invoice.paidAt && inq.status === 'won') return { paid: true, first: false, inquiry: inq };
+  const res = await startOnboardingAfterPayment(inq.id, { now });
+  const v = inq.invoice;
+  const who = [inq.name, inq.company].filter(Boolean).join(' from ') || inq.email;
+  const sentence = `${who} paid the ${PLAN_NAMES[v.plan] || v.plan} invoice — ${money(v.amount)}`;
+  const { io } = await import('@/lib/systems/intake-io');
+  await io.alertOwner('client_paid', { clientId: res?.clientId || null, scope: `booking_paid:${inq.id}`, vars: { text: sentence }, body: `${sentence}.`, did: 'Moved their booking to Won and sent the onboarding email.' });
+  return { paid: true, first: true, inquiry: (await getInquiry(inq.id)) || inq };
+}
