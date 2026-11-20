@@ -9,9 +9,9 @@
  *   rerunBookingTest        test the calendar link now
  *   resendWelcome           the "we start on …" email again (once Day 1 is fixed) → { sent, again } | { skipped }
  *   rerunResearch           research the applicant again (website + Google listing)
- *   approveApplication      the booking was won (→ onboarding with the one accepted_call email);
- *                           the onboarding-call check runs in after(). Normally pressed as Won on the booking.
- *   declineApplication {reason}  the booking was lost: the record closes, nothing is emailed
+ *   approveApplication      Won (→ onboarding with the one accepted_call email); the booking behind
+ *                           the record moves to won too. The onboarding-call check runs in after().
+ *   declineApplication {reason}  Lost: the record closes, nothing is emailed; the booking moves to lost
  */
 
 import { kv } from '@vercel/kv';
@@ -24,6 +24,7 @@ import { startSetupCheck, runSetupCheck, readChecks, sendWelcome } from '@/lib/s
 import { runBookingTest } from '@/lib/systems/bookingtest';
 import { asArray } from '@/lib/systems/intake-io';
 import { approveApplication, declineApplication } from '@/lib/systems/gatekeeper';
+import { settleInquiryFor } from '@/lib/systems/inquiries';
 import { after } from 'next/server';
 import { rerunResearch, researchToEnd } from '@/lib/systems/research';
 import { checkOnboardCallsQuietly } from '@/lib/systems/onboardcall';
@@ -71,13 +72,18 @@ export async function POST(request, { params }) {
       case 'approveApplication':
       {
         const result = await approveApplication(id);
+        await settleInquiryFor(id, 'won', 'Won (from the client page)');
         // The heartbeat is not running yet: the onboarding-call check (inbox, reminders,
         // overdue) runs right after the answer too (throttled, never throws).
         try { after(() => checkOnboardCallsQuietly()); } catch { /* not inside a request (tests) */ }
         return Response.json({ ok: true, ...result });
       }
       case 'declineApplication':
-        return Response.json({ ok: true, ...(await declineApplication(id, body.reason)) });
+      {
+        const result = await declineApplication(id, body.reason);
+        await settleInquiryFor(id, 'lost', body.reason || 'Lost (from the client page)');
+        return Response.json({ ok: true, ...result });
+      }
       case 'marketOverride':
         return Response.json({ ok: true, result: await overrideMarket(id, { note: body.note || '' }) });
       case 'rerunMarket':

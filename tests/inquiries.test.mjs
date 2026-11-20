@@ -124,6 +124,20 @@ test('a booking with a website: researched and held for the sales call; Won emai
   assert.equal(row.plan, 'growth');
   assert.ok(!/of 30|trial/i.test(row.stateLabel) && !/of 30|trial/i.test(row.simple.label), row.stateLabel + ' / ' + row.simple.label);
 
+  // Won / Lost pressed on the client page (the intake route) move the booking too.
+  const { POST: intake } = await import('@/app/api/mc/clients/[id]/intake/route');
+  const b = await saveInquiry(site({ email: 'won2@stoneroofing.com', company: 'Page Roofing', website: 'pageroofing.com', slotStart: '2027-09-30T18:00:00.000Z', slotEnd: '2027-09-30T18:15:00.000Z' }));
+  const wr = await intake(new Request('http://x', { method: 'POST', body: JSON.stringify({ action: 'approveApplication' }) }), { params: { id: b.clientId } });
+  assert.equal(wr.status, 200);
+  assert.equal((await getClient(b.clientId)).state, 'onboarding');
+  assert.equal((await listInquiries()).inquiries.find((q) => q.id === b.id).status, 'won');
+  emails = [];
+  const c2 = await saveInquiry(site({ email: 'lost2@stoneroofing.com', company: 'Gone Roofing', website: 'goneroofing.com', slotStart: '2027-09-30T19:00:00.000Z', slotEnd: '2027-09-30T19:15:00.000Z' }));
+  await intake(new Request('http://x', { method: 'POST', body: JSON.stringify({ action: 'declineApplication' }) }), { params: { id: c2.clientId } });
+  assert.equal((await getClient(c2.clientId)).state, 'declined');
+  assert.equal((await listInquiries()).inquiries.find((q) => q.id === c2.id).status, 'lost');
+  assert.deepEqual(emails, []);
+
   // Lost: the record is declined and nothing is emailed.
   emails = [];
   const l = await saveInquiry(site({ email: 'old+lost@stoneroofing.com', company: 'Lost Roofing', website: 'lostroofing.com', slotStart: '2027-09-30T16:00:00.000Z', slotEnd: '2027-09-30T16:15:00.000Z' }));

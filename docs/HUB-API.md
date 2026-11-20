@@ -26,8 +26,9 @@ section wins.
   `400 {error}` and no change when it cannot — e.g. the booking has no
   website: add them with "Add a paying client" instead); `status:'lost'` declines the record and
   emails nothing. `{action:'toTrial'}` is gone. `POST /api/mc/clients/{id}/intake
-  {action:'approveApplication'|'declineApplication'}` still exist (they are
-  what Won / Lost run; decline needs no reason and emails nothing).
+  {action:'approveApplication'|'declineApplication'}` are the same Won / Lost
+  from the client's page: the booking behind the record moves to `won` /
+  `lost` with it (decline needs no reason and emails nothing).
 - **Add a paying client:** `POST /api/mc/clients/new {companyName,
   contactName, contactEmail, website, plan?}` → onboarding at once (plan
   defaults to Starter).
