@@ -17,7 +17,7 @@
  *             /api/mc/presence, /api/mc/team (own status); anything else is 403. The verified email and
  *             role are passed on as `x-hub-user` / `x-hub-role` request headers
  *             (any the caller sent are dropped).
- *             A client's token (profiles.role = 'client') reaches ONLY GET /api/mc/portal/* (403 'Not allowed' for
+ *             A client's token (profiles.role = 'client') reaches ONLY GET /api/mc/portal/* and POST /api/mc/portal/invite (403 'Not allowed' for
  *             anything else, and for a `clientId` in the query that is not theirs); `x-hub-role: client` and
  *             `x-hub-client: {their client id}` are set by us (`x-hub-client` is dropped from every incoming request).
  *  - admin:   everything else needs the ADMIN_SECRET session cookie.
@@ -76,7 +76,9 @@ const PORTAL_GET = /^\/api\/mc\/portal\/[^/]/;
 const NOT_ALLOWED = 'Not allowed';
 /** May a client (portal user) make this request? Only GET under /api/mc/portal/, and never for another client's id. */
 export function clientMayAccess(method, pathname, searchParams, clientId) {
-  if (String(method || '').toUpperCase() !== 'GET') return false;
+  const m = String(method || '').toUpperCase();
+  if (m === 'POST') return pathname === '/api/mc/portal/invite' && (searchParams?.getAll ? searchParams.getAll('clientId').length === 0 : true);   // a client invites their own people; the route uses x-hub-client
+  if (m !== 'GET') return false;
   if (!PORTAL_GET.test(pathname) || /(^|\/)\.\.?(\/|$)/.test(pathname)) return false;
   const asked = searchParams?.getAll ? searchParams.getAll('clientId') : [];
   return asked.every((c) => c === clientId);
