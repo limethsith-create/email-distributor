@@ -566,7 +566,7 @@
     "system": "calendar",
     "event": "owner_confirm",
     "detail": {
-     "meetingId": "mmur1805cfd16242a6e",
+     "meetingId": "mmur1805c67561892bd",
      "start": "2026-10-06T15:00:00.000Z",
      "status": "confirmed"
     }
@@ -576,7 +576,7 @@
     "system": "onboardcall",
     "event": "calendar_confirmed",
     "detail": {
-     "meetingId": "mmur1805cfd16242a6e",
+     "meetingId": "mmur1805c67561892bd",
      "start": "2026-10-06T15:00:00.000Z",
      "call": "onboarding"
     }
@@ -595,7 +595,7 @@
     "system": "google",
     "event": "event_created",
     "detail": {
-     "meetingId": "mmur1805cfd16242a6e",
+     "meetingId": "mmur1805c67561892bd",
      "eventId": "gev2",
      "meet": true
     }
@@ -637,7 +637,7 @@
     "system": "calendar",
     "event": "requested",
     "detail": {
-     "meetingId": "mmur1805cfd16242a6e",
+     "meetingId": "mmur1805c67561892bd",
      "start": "2026-10-06T15:00:00.000Z"
     }
    },
@@ -646,7 +646,7 @@
     "system": "onboardcall",
     "event": "calendar_requested",
     "detail": {
-     "meetingId": "mmur1805cfd16242a6e",
+     "meetingId": "mmur1805c67561892bd",
      "start": "2026-10-06T15:00:00.000Z",
      "call": "onboarding"
     }
@@ -1933,7 +1933,7 @@
    "requestedFor": null,
    "requestedAt": null,
    "proposedFor": null,
-   "meetingId": "mmur1805cfd16242a6e",
+   "meetingId": "mmur1805c67561892bd",
    "meetLink": "https://meet.google.com/rdg-002-avc",
    "steps": [
     {
@@ -2285,14 +2285,14 @@
      "title": "Sales call — Ridgeline IT",
      "start": "2026-10-01T20:30:00.000Z",
      "minutes": 15,
-     "status": "confirmed",
+     "status": "held",
      "source": "website",
      "theirZone": "America/New_York",
      "note": "Managed IT and cybersecurity for law firms and accounting firms with 10–75 staff in the Carolinas",
      "declineReason": null,
      "proposed": null,
      "createdAt": "2026-10-01T19:40:00.000Z",
-     "updatedAt": "2026-10-01T19:40:00.000Z",
+     "updatedAt": "2026-10-02T03:30:00.000Z",
      "requestedAt": null,
      "confirmedAt": "2026-10-01T19:40:00.000Z",
      "sequence": 0,
@@ -2302,6 +2302,11 @@
        "what": "confirmed",
        "by": "them",
        "via": "website"
+      },
+      {
+       "at": "2026-10-02T03:30:00.000Z",
+       "what": "held",
+       "by": "owner"
       }
      ],
      "inquiryId": "qmupxutmobigo",
@@ -2319,7 +2324,7 @@
      }
     },
     {
-     "id": "mmur1805cfd16242a6e",
+     "id": "mmur1805c67561892bd",
      "clientId": "ridgelineit",
      "company": "Ridgeline IT",
      "person": "Dana Whitfield",

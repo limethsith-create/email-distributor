@@ -120,8 +120,8 @@
        "number": "AV-202610-ridgelineit",
        "amount": 2497,
        "issuedAt": "2026-10-06T18:20:00.000Z",
-       "paidAt": null,
-       "status": "sent",
+       "paidAt": "2026-10-07T02:42:02.050Z",
+       "status": "paid",
        "plan": "starter"
       },
       "contactName": "Dana Whitfield",
@@ -140,24 +140,6 @@
          "type": "view",
          "view": "settings",
          "section": "warmup"
-        }
-       },
-       {
-        "id": "invoice:ridgelineit",
-        "clientId": "ridgelineit",
-        "clientName": "Ridgeline IT",
-        "text": "Mark the month-one invoice paid when the money lands (AV-202610-ridgelineit)",
-        "detail": "Issued 2026-10-06 · $2,497",
-        "urgent": false,
-        "since": "2026-10-06T18:20:00.000Z",
-        "action": {
-         "type": "api",
-         "method": "POST",
-         "path": "/api/mc/clients/ridgelineit",
-         "body": {
-          "action": "markPaid"
-         },
-         "confirm": "Mark this invoice as paid?"
         }
        }
       ],
@@ -263,7 +245,7 @@
         "key": "reports",
         "label": "Reports & decision",
         "status": "ok",
-        "line": "0 Friday updates · invoice unpaid since 2026-10-06",
+        "line": "0 Friday updates · invoice paid 2026-10-07",
         "detail": []
        },
        {
@@ -351,24 +333,6 @@
      "body": {
       "action": "migrate"
      }
-    }
-   },
-   {
-    "id": "invoice:ridgelineit",
-    "clientId": "ridgelineit",
-    "clientName": "Ridgeline IT",
-    "text": "Mark the month-one invoice paid when the money lands (AV-202610-ridgelineit)",
-    "detail": "Issued 2026-10-06 · $2,497",
-    "urgent": false,
-    "since": "2026-10-06T18:20:00.000Z",
-    "action": {
-     "type": "api",
-     "method": "POST",
-     "path": "/api/mc/clients/ridgelineit",
-     "body": {
-      "action": "markPaid"
-     },
-     "confirm": "Mark this invoice as paid?"
     }
    }
   ],
@@ -468,8 +432,8 @@
     "number": "AV-202610-ridgelineit",
     "amount": 2497,
     "issuedAt": "2026-10-06T18:20:00.000Z",
-    "paidAt": null,
-    "status": "sent",
+    "paidAt": "2026-10-07T02:42:02.050Z",
+    "status": "paid",
     "plan": "starter"
    },
    "contactName": "Dana Whitfield",
@@ -488,24 +452,6 @@
       "type": "view",
       "view": "settings",
       "section": "warmup"
-     }
-    },
-    {
-     "id": "invoice:ridgelineit",
-     "clientId": "ridgelineit",
-     "clientName": "Ridgeline IT",
-     "text": "Mark the month-one invoice paid when the money lands (AV-202610-ridgelineit)",
-     "detail": "Issued 2026-10-06 · $2,497",
-     "urgent": false,
-     "since": "2026-10-06T18:20:00.000Z",
-     "action": {
-      "type": "api",
-      "method": "POST",
-      "path": "/api/mc/clients/ridgelineit",
-      "body": {
-       "action": "markPaid"
-      },
-      "confirm": "Mark this invoice as paid?"
      }
     }
    ],
@@ -611,7 +557,7 @@
      "key": "reports",
      "label": "Reports & decision",
      "status": "ok",
-     "line": "0 Friday updates · invoice unpaid since 2026-10-06",
+     "line": "0 Friday updates · invoice paid 2026-10-07",
      "detail": []
     },
     {
@@ -1628,7 +1574,7 @@
     "check:twostep": "{\"status\":\"pass\",\"detail\":\"app-password login works, so 2-Step is on\",\"checkedAt\":\"2026-10-07T09:40:00.000Z\"}",
     "check:loopback": "{\"status\":\"pass\",\"detail\":\"received in INBOX; dkim=pass spf=pass\",\"checkedAt\":\"2026-10-07T09:40:10.490Z\"}",
     "loopbackSentAt": "2026-10-07T09:40:00.000Z",
-    "loopbackToken": "AVL-6335a61e3e",
+    "loopbackToken": "AVL-1cee05cf6e",
     "loopbackFrom": "dana@getridgelineit.com",
     "loopbackTo": "dana.whitfield@getridgelineit.com",
     "spf": "pass",
@@ -1740,10 +1686,10 @@
    "plan": "starter",
    "amount": 2497,
    "calls": 10,
-   "status": "sent",
+   "status": "paid",
    "issuedAt": "2026-10-06T18:20:00.000Z",
    "sentAt": "2026-10-06T18:20:00.000Z",
-   "paidAt": null,
+   "paidAt": "2026-10-07T02:42:02.050Z",
    "dueDate": "2026-10-06",
    "remindersSent": 0,
    "blockedReason": null
@@ -1884,6 +1830,15 @@
     "detail": {
      "domain": "getridgelineit.com",
      "to": "https://ridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-07T02:42:02.050Z",
+    "system": "invoice",
+    "event": "invoice_paid",
+    "detail": {
+     "invoiceNo": "AV-202610-ridgelineit",
+     "amount": 2497
     }
    },
    {
@@ -2095,7 +2050,7 @@
     "system": "calendar",
     "event": "owner_held",
     "detail": {
-     "meetingId": "mmur1805cfd16242a6e",
+     "meetingId": "mmur1805c67561892bd",
      "start": "2026-10-06T15:00:00.000Z",
      "status": "held"
     }
@@ -2123,7 +2078,7 @@
     "system": "onboardcall",
     "event": "calendar_held",
     "detail": {
-     "meetingId": "mmur1805cfd16242a6e",
+     "meetingId": "mmur1805c67561892bd",
      "start": "2026-10-06T15:00:00.000Z",
      "call": "onboarding"
     }
@@ -2151,7 +2106,7 @@
     "system": "calendar",
     "event": "owner_confirm",
     "detail": {
-     "meetingId": "mmur1805cfd16242a6e",
+     "meetingId": "mmur1805c67561892bd",
      "start": "2026-10-06T15:00:00.000Z",
      "status": "confirmed"
     }
@@ -2161,7 +2116,7 @@
     "system": "onboardcall",
     "event": "calendar_confirmed",
     "detail": {
-     "meetingId": "mmur1805cfd16242a6e",
+     "meetingId": "mmur1805c67561892bd",
      "start": "2026-10-06T15:00:00.000Z",
      "call": "onboarding"
     }
@@ -2180,19 +2135,9 @@
     "system": "google",
     "event": "event_created",
     "detail": {
-     "meetingId": "mmur1805cfd16242a6e",
+     "meetingId": "mmur1805c67561892bd",
      "eventId": "gev2",
      "meet": true
-    }
-   },
-   {
-    "at": "2026-10-02T14:02:00.800Z",
-    "system": "gatekeeper",
-    "event": "close_extended",
-    "detail": {
-     "from": "2026-10-02T14:02:00.000Z",
-     "closesOn": "held",
-     "why": "a time they asked for waits for your yes in the Calendar"
     }
    }
   ],
@@ -3293,7 +3238,7 @@
    "requestedFor": null,
    "requestedAt": null,
    "proposedFor": null,
-   "meetingId": "mmur1805cfd16242a6e",
+   "meetingId": "mmur1805c67561892bd",
    "meetLink": "https://meet.google.com/rdg-002-avc",
    "steps": [
     {

@@ -403,6 +403,14 @@ export async function setInquiryStatus(id, status, note = '', { now = new Date()
   if (!fromCalendar && (status === 'held' || status === 'no_show') && rec.meetingId) {
     try { await (await import('@/lib/systems/salescall')).meetingForStage(rec, status, { now }); } catch {}
   }
+  // Won: the sales call clearly happened — a call still "confirmed" in the Calendar is marked done, so it never asks.
+  if (!fromCalendar && status === 'won' && rec.meetingId) {
+    try {
+      const sc = await import('@/lib/systems/salescall');
+      const m = await (await import('@/lib/systems/calendar')).getMeeting(rec.meetingId);
+      if (m && m.kind === 'sales' && m.status === 'confirmed' && Date.parse(m.start) <= now.getTime()) await sc.meetingForStage(rec, 'held', { now });
+    } catch {}
+  }
   return rec;
 }
 

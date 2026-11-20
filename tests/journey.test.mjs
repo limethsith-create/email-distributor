@@ -426,7 +426,12 @@ test('the journey: website booking → Won → onboarding → sending → paid, 
     return r;
   };
   await hook('order.completed');
-  const s10 = await snap('10', 'purchase-found', 'The owner buys the domain and two inboxes in his CheapInboxes account. CheapInboxes tells the machine (webhook); the machine finds the purchase and links it to Ridgeline IT.', { check: false, extra: { cheapinboxes: (await call('api/mc/cheapinboxes/route', 'GET')).json } });
+  // The month-one invoice went when Dana signed the plan agreement (due that day): the money lands, the owner presses the to-do.
+  const paidTodo = (await hubLooks()).board.todos.find((t) => t.id === `invoice:${clientId}`);
+  assert.ok(paidTodo, 'a to-do to mark the invoice paid');
+  const paid = await call('api/mc/clients/[id]/route', 'POST', { path: paidTodo.action.path, params: { id: clientId }, body: paidTodo.action.body });
+  assert.equal(paid.status, 200, JSON.stringify(paid.json));
+  const s10 = await snap('10', 'purchase-found', 'The owner buys the domain and two inboxes in his CheapInboxes account. CheapInboxes tells the machine (webhook); the machine finds the purchase and links it to Ridgeline IT. The month-one payment lands too; the owner marks the invoice paid.', { check: false, extra: { cheapinboxes: (await call('api/mc/cheapinboxes/route', 'GET')).json } });
   assert.equal(s10.detail.autobuy.status, 'provisioning');
   assert.equal(s10.row.simple.label, 'Setting up their inboxes (about 2 days)');
   assert.equal(s10.row.simple.needsYou, false, JSON.stringify(s10.row.todo));
@@ -854,17 +859,14 @@ test('the journey: website booking → Won → onboarding → sending → paid, 
   const s24 = await snap('29', 'day-15', 'Day 15 of sending (US clocks went back on 1 November; the sends follow their 9–5). Sending simply goes on: there is no Day 30.');
   assert.equal(s24.row.simple.dayOf30, 15);
   assert.equal(s24.row.state, 'sending');
-  // The month-one invoice went when Dana signed the plan agreement; the money lands and the owner presses the to-do.
+  // The month-one invoice (sent when Dana signed the plan agreement) is paid.
   assert.match(s24.detail.invoice.number, /^AV-\d{6}-ridgelineit$/);
   assert.equal(s24.detail.invoice.amount, 2497);
+  assert.ok(s24.detail.invoice.paidAt, 'paid in step 10');
   await goTo(colombo('2026-11-24', '09:00'));
-  const paidTodo = (await hubLooks()).board.todos.find((t) => t.id === `invoice:${clientId}`);
-  assert.ok(paidTodo, 'a to-do to mark the invoice paid');
-  const paid = await call('api/mc/clients/[id]/route', 'POST', { path: paidTodo.action.path, params: { id: clientId }, body: paidTodo.action.body });
-  assert.equal(paid.status, 200, JSON.stringify(paid.json));
-  const s28 = await snap('30', 'paid', 'The money lands; the owner marks the month-one invoice paid. Sending goes on, month after month.');
+  const s28 = await snap('30', 'month-two', 'Into month two: sending goes on, month after month, with nothing for the owner to do.');
   assert.equal(s28.row.state, 'sending');
-  assert.ok(!s28.row.todo.some((t) => t.id === `invoice:${clientId}`), 'the invoice to-do is gone');
+  assert.ok(!s28.row.todo.some((t) => t.id === `invoice:${clientId}`), 'no invoice to-do');
   // Hub screens fix: alerts do not pile up — one digest of each kind open at most, handled alerts closed.
   const open28 = (await allAlerts()).filter((a) => !a.acknowledged);
   assert.ok(open28.filter((a) => a.key === 'morning_digest').length <= 1 && open28.filter((a) => a.key === 'monday_digest').length <= 1, open28.map((a) => a.title).join('; '));

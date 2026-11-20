@@ -132,6 +132,7 @@ test('stages: Calendar buttons move the inquiry, and Inquiries moves the Calenda
   await setInquiryStatus(r.id, 'won', '', { now: NOW });
   const done = await getInquiry(r.id);
   assert.equal(done.status, 'won');
+  assert.equal((await getMeeting(q.meetingId)).status, 'held', 'the call was held (Call done before Won)');
   assert.deepEqual(done.stageHistory.map((h) => h.to), ['held', 'proposal', 'won']);
   // The other way: No-show in Inquiries marks the meeting.
   const r2 = await saveInquiry(site({ email: 'cy@x.com', slotStart: '2026-11-19T15:00:00.000Z', slotEnd: '2026-11-19T15:15:00.000Z' }), { now: NOW });

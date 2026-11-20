@@ -28,7 +28,7 @@
     "lastSendAt": "2026-10-28T14:30:00.500Z"
    },
    "activeClients": 1,
-   "openAlerts": 10,
+   "openAlerts": 9,
    "usage": {
     "redis": {
      "used": null,
@@ -112,15 +112,15 @@
        "1 urgent alert open"
       ],
       "five": {
-       "sent": 92,
+       "sent": 96,
        "replies": 12,
        "positive": 5,
        "booked": 1,
        "qualified": 1
       },
-      "inboxRate": 0.897,
+      "inboxRate": 0.944,
       "lastJobAt": "2026-10-28T16:00:00.000Z",
-      "openAlerts": 7,
+      "openAlerts": 6,
       "urgentAlerts": 1,
       "demo": false,
       "stateLabel": "Sending — Day 8",
@@ -145,8 +145,8 @@
        "number": "AV-202610-ridgelineit",
        "amount": 2497,
        "issuedAt": "2026-10-06T18:20:00.000Z",
-       "paidAt": null,
-       "status": "sent",
+       "paidAt": "2026-10-07T02:42:02.050Z",
+       "status": "paid",
        "plan": "starter"
       },
       "contactName": "Dana Whitfield",
@@ -158,7 +158,7 @@
         "clientId": "ridgelineit",
         "clientName": "Ridgeline IT",
         "text": "Read the legal reply, then clear the hold",
-        "detail": "alan@lowelaw340.com wrote on Wed 28 Oct, 8:10 pm (your time): “Forwarding this to our attorney. Cease and desist.”",
+        "detail": "alan@ortizlaw140.com wrote on Wed 28 Oct, 8:10 pm (your time): “Forwarding this to our attorney. Cease and desist.”",
         "urgent": true,
         "since": "2026-10-28T14:45:00.000Z",
         "action": {
@@ -169,24 +169,6 @@
           "action": "clearLegalHold"
          },
          "confirm": "Clear the legal hold and let this client send again?"
-        }
-       },
-       {
-        "id": "invoice:ridgelineit",
-        "clientId": "ridgelineit",
-        "clientName": "Ridgeline IT",
-        "text": "Mark the month-one invoice paid when the money lands (AV-202610-ridgelineit)",
-        "detail": "Issued 2026-10-06 · $2,497",
-        "urgent": false,
-        "since": "2026-10-06T18:20:00.000Z",
-        "action": {
-         "type": "api",
-         "method": "POST",
-         "path": "/api/mc/clients/ridgelineit",
-         "body": {
-          "action": "markPaid"
-         },
-         "confirm": "Mark this invoice as paid?"
         }
        }
       ],
@@ -236,21 +218,21 @@
        {
         "key": "warmup",
         "label": "Warm-up",
-        "status": "working",
-        "line": "Day 22 of 14 · inbox rate 90% · 2 inboxes",
+        "status": "ok",
+        "line": "Day 22 of 14 · inbox rate 94% · 2 inboxes",
         "detail": [
          "dana@getridgelineit.com: 100%",
-         "dana.whitfield@getridgelineit.com: 90%"
+         "dana.whitfield@getridgelineit.com: 94%"
         ]
        },
        {
         "key": "list",
         "label": "Lead list",
         "status": "ok",
-        "line": "451 contacts · 396 unsent · 43 in sequence · finder done",
+        "line": "451 contacts · 392 unsent · 47 in sequence · finder done",
         "detail": [
-         "unsent: 396",
-         "in_sequence: 43",
+         "unsent: 392",
+         "in_sequence: 47",
          "replied: 6",
          "suppressed: 5",
          "notnow: 1"
@@ -279,7 +261,7 @@
         "status": "blocked",
         "line": "Legal hold — a reply mentioned legal action; sending on this domain is stopped until you clear it",
         "detail": [
-         "92 sent · 55 first touches · bounces 0 (0%)"
+         "96 sent · 59 first touches · bounces 0 (0%)"
         ]
        },
        {
@@ -300,7 +282,7 @@
         "key": "reports",
         "label": "Reports & decision",
         "status": "ok",
-        "line": "3 Friday updates · invoice unpaid since 2026-10-06",
+        "line": "3 Friday updates · invoice paid 2026-10-07",
         "detail": []
        },
        {
@@ -343,7 +325,7 @@
     "clientId": "ridgelineit",
     "clientName": "Ridgeline IT",
     "text": "Read the legal reply, then clear the hold",
-    "detail": "alan@lowelaw340.com wrote on Wed 28 Oct, 8:10 pm (your time): “Forwarding this to our attorney. Cease and desist.”",
+    "detail": "alan@ortizlaw140.com wrote on Wed 28 Oct, 8:10 pm (your time): “Forwarding this to our attorney. Cease and desist.”",
     "urgent": true,
     "since": "2026-10-28T14:45:00.000Z",
     "action": {
@@ -384,24 +366,6 @@
       "action": "migrate"
      }
     }
-   },
-   {
-    "id": "invoice:ridgelineit",
-    "clientId": "ridgelineit",
-    "clientName": "Ridgeline IT",
-    "text": "Mark the month-one invoice paid when the money lands (AV-202610-ridgelineit)",
-    "detail": "Issued 2026-10-06 · $2,497",
-    "urgent": false,
-    "since": "2026-10-06T18:20:00.000Z",
-    "action": {
-     "type": "api",
-     "method": "POST",
-     "path": "/api/mc/clients/ridgelineit",
-     "body": {
-      "action": "markPaid"
-     },
-     "confirm": "Mark this invoice as paid?"
-    }
    }
   ],
   "inquiries": {
@@ -419,7 +383,7 @@
   },
   "alerts": [
    {
-    "id": "1793198700000-zlswjf",
+    "id": "1793198700000-vmceju",
     "at": "2026-10-28T14:45:00.000Z",
     "key": "legal_reply",
     "clientId": "ridgelineit",
@@ -428,7 +392,7 @@
     "delivered": true
    },
    {
-    "id": "1793154600000-bu25ch",
+    "id": "1793154600000-s2hdsb",
     "at": "2026-10-28T02:30:00.000Z",
     "key": "morning_digest",
     "clientId": null,
@@ -437,7 +401,7 @@
     "delivered": true
    },
    {
-    "id": "1792981800250-xxfrp1",
+    "id": "1792981800250-3uarrc",
     "at": "2026-10-26T02:30:00.250Z",
     "key": "monday_digest",
     "clientId": null,
@@ -446,7 +410,7 @@
     "delivered": true
    },
    {
-    "id": "1792160100250-gkqxnq",
+    "id": "1792160100250-4lu77c",
     "at": "2026-10-16T14:15:00.250Z",
     "key": "bot_replied",
     "clientId": "ridgelineit",
@@ -455,20 +419,11 @@
     "delivered": true
    },
    {
-    "id": "1792155600250-byjcds",
+    "id": "1792155600250-9jb4on",
     "at": "2026-10-16T13:00:00.250Z",
     "key": "launch_ready",
     "clientId": "ridgelineit",
     "title": "Ridgeline IT is ready for the launch call — invite sent",
-    "urgent": false,
-    "delivered": true
-   },
-   {
-    "id": "1791900000250-dbd2pl",
-    "at": "2026-10-13T14:00:00.250Z",
-    "key": "invoice_unpaid",
-    "clientId": "ridgelineit",
-    "title": "Invoice still unpaid: Ridgeline IT (7 days)",
     "urgent": false,
     "delivered": true
    },
@@ -523,15 +478,15 @@
     "1 urgent alert open"
    ],
    "five": {
-    "sent": 92,
+    "sent": 96,
     "replies": 12,
     "positive": 5,
     "booked": 1,
     "qualified": 1
    },
-   "inboxRate": 0.897,
+   "inboxRate": 0.944,
    "lastJobAt": "2026-10-28T16:00:00.000Z",
-   "openAlerts": 7,
+   "openAlerts": 6,
    "urgentAlerts": 1,
    "demo": false,
    "stateLabel": "Sending — Day 8",
@@ -556,8 +511,8 @@
     "number": "AV-202610-ridgelineit",
     "amount": 2497,
     "issuedAt": "2026-10-06T18:20:00.000Z",
-    "paidAt": null,
-    "status": "sent",
+    "paidAt": "2026-10-07T02:42:02.050Z",
+    "status": "paid",
     "plan": "starter"
    },
    "contactName": "Dana Whitfield",
@@ -569,7 +524,7 @@
      "clientId": "ridgelineit",
      "clientName": "Ridgeline IT",
      "text": "Read the legal reply, then clear the hold",
-     "detail": "alan@lowelaw340.com wrote on Wed 28 Oct, 8:10 pm (your time): “Forwarding this to our attorney. Cease and desist.”",
+     "detail": "alan@ortizlaw140.com wrote on Wed 28 Oct, 8:10 pm (your time): “Forwarding this to our attorney. Cease and desist.”",
      "urgent": true,
      "since": "2026-10-28T14:45:00.000Z",
      "action": {
@@ -580,24 +535,6 @@
        "action": "clearLegalHold"
       },
       "confirm": "Clear the legal hold and let this client send again?"
-     }
-    },
-    {
-     "id": "invoice:ridgelineit",
-     "clientId": "ridgelineit",
-     "clientName": "Ridgeline IT",
-     "text": "Mark the month-one invoice paid when the money lands (AV-202610-ridgelineit)",
-     "detail": "Issued 2026-10-06 · $2,497",
-     "urgent": false,
-     "since": "2026-10-06T18:20:00.000Z",
-     "action": {
-      "type": "api",
-      "method": "POST",
-      "path": "/api/mc/clients/ridgelineit",
-      "body": {
-       "action": "markPaid"
-      },
-      "confirm": "Mark this invoice as paid?"
      }
     }
    ],
@@ -647,21 +584,21 @@
     {
      "key": "warmup",
      "label": "Warm-up",
-     "status": "working",
-     "line": "Day 22 of 14 · inbox rate 90% · 2 inboxes",
+     "status": "ok",
+     "line": "Day 22 of 14 · inbox rate 94% · 2 inboxes",
      "detail": [
       "dana@getridgelineit.com: 100%",
-      "dana.whitfield@getridgelineit.com: 90%"
+      "dana.whitfield@getridgelineit.com: 94%"
      ]
     },
     {
      "key": "list",
      "label": "Lead list",
      "status": "ok",
-     "line": "451 contacts · 396 unsent · 43 in sequence · finder done",
+     "line": "451 contacts · 392 unsent · 47 in sequence · finder done",
      "detail": [
-      "unsent: 396",
-      "in_sequence: 43",
+      "unsent: 392",
+      "in_sequence: 47",
       "replied: 6",
       "suppressed: 5",
       "notnow: 1"
@@ -690,7 +627,7 @@
      "status": "blocked",
      "line": "Legal hold — a reply mentioned legal action; sending on this domain is stopped until you clear it",
      "detail": [
-      "92 sent · 55 first touches · bounces 0 (0%)"
+      "96 sent · 59 first touches · bounces 0 (0%)"
      ]
     },
     {
@@ -711,7 +648,7 @@
      "key": "reports",
      "label": "Reports & decision",
      "status": "ok",
-     "line": "3 Friday updates · invoice unpaid since 2026-10-06",
+     "line": "3 Friday updates · invoice paid 2026-10-07",
      "detail": []
     },
     {
@@ -1759,7 +1696,7 @@
     "check:twostep": "{\"status\":\"pass\",\"detail\":\"app-password login works, so 2-Step is on\",\"checkedAt\":\"2026-10-07T09:40:00.000Z\"}",
     "check:loopback": "{\"status\":\"pass\",\"detail\":\"received in INBOX; dkim=pass spf=pass\",\"checkedAt\":\"2026-10-07T09:40:10.490Z\"}",
     "loopbackSentAt": "2026-10-07T09:40:00.000Z",
-    "loopbackToken": "AVL-6335a61e3e",
+    "loopbackToken": "AVL-1cee05cf6e",
     "loopbackFrom": "dana@getridgelineit.com",
     "loopbackTo": "dana.whitfield@getridgelineit.com",
     "spf": "pass",
@@ -1841,10 +1778,10 @@
     "warmupFirstSentAt": "2026-10-07T13:45:00.000Z",
     "lastWarmReadAt": "2026-10-28T16:00:00.000Z",
     "lastWarmReadError": "",
-    "readyStreak": "0",
+    "readyStreak": "21",
     "readyCheckedDay": "2026-10-27",
-    "warmupReady": "0",
-    "inboxRate7d": 0.897,
+    "warmupReady": "1",
+    "inboxRate7d": 0.944,
     "spamTool": "dkimvalidator",
     "spamScore": "",
     "spamAssassin": "-0.1",
@@ -1857,8 +1794,8 @@
    }
   ],
   "leadsByStatus": {
-   "unsent": 396,
-   "in_sequence": 43,
+   "unsent": 392,
+   "in_sequence": 47,
    "replied": 6,
    "bounced": 0,
    "suppressed": 5,
@@ -1891,8 +1828,8 @@
    "sentAt": "2026-10-16T13:00:00.000Z"
   },
   "counters": {
-   "sent": 92,
-   "sentD0": 55,
+   "sent": 96,
+   "sentD0": 59,
    "sentD3": 37,
    "sentD7": 0,
    "sentD10": 0,
@@ -1904,120 +1841,120 @@
    "qualified": 1,
    "noshows": 0,
    "wrongfit": 0,
-   "warmupSent": 253,
-   "warmupInbox": 245,
+   "warmupSent": 245,
+   "warmupInbox": 237,
    "warmupSpam": 8,
    "warmupRescued": 8,
-   "companiesContacted": 54
+   "companiesContacted": 58
   },
   "repliesByKind": {
    "interested": 4,
-   "notnow": 1,
-   "wrongperson": 1,
-   "angry": 1,
-   "unclear": 1,
    "question": 1,
+   "notnow": 1,
    "no": 2,
    "ooo": 1,
+   "angry": 1,
+   "wrongperson": 1,
+   "unclear": 1,
    "legal": 1
   },
   "replies": [
    {
     "id": "re84c4d92e708ff25",
     "kind": "legal",
-    "leadEmail": "alan@lowelaw340.com",
+    "leadEmail": "alan@ortizlaw140.com",
     "receivedAt": "2026-10-28T14:40:00.000Z",
     "snippet": "Forwarding this to our attorney. Cease and desist."
    },
    {
     "id": "rcd3fe1d5e2be7fc0",
     "kind": "interested",
-    "leadEmail": "reid@quinnlaw436.com",
-    "receivedAt": "2026-10-28T06:30:00.000Z",
+    "leadEmail": "lena@elliscpa431.com",
+    "receivedAt": "2026-10-28T05:15:00.000Z",
     "snippet": "Interested. What would this cost for 20 people?"
    },
    {
     "id": "rf014fcc4d7b50c24",
     "kind": "interested",
-    "leadEmail": "evan@uptonlaw384.com",
+    "leadEmail": "alan@reyeslaw400.com",
     "receivedAt": "2026-10-24T21:45:00.000Z",
     "snippet": "Interested. What would this cost for 20 people?"
    },
    {
     "id": "r1b6998bf45f9c83c",
     "kind": "no",
-    "leadEmail": "ivan@ellislaw408.com",
+    "leadEmail": "dina@adamscpa23.com",
     "receivedAt": "2026-10-24T08:45:00.000Z",
     "snippet": "No thanks."
    },
    {
     "id": "r9b9d85b93a402b0f",
     "kind": "interested",
-    "leadEmail": "alan@ortizlaw140.com",
+    "leadEmail": "alan@chenlaw20.com",
     "receivedAt": "2026-10-23T15:45:00.000Z",
     "snippet": "Interested — we have had two outages this year. What does it cost?"
    },
    {
-    "id": "r251079e8f9ea9ea5",
-    "kind": "notnow",
-    "leadEmail": "dina@elliscpa63.com",
-    "receivedAt": "2026-10-23T15:45:00.000Z",
-    "snippet": "Not right now, maybe next quarter."
-   },
-   {
-    "id": "r4232c9442a668078",
-    "kind": "wrongperson",
-    "leadEmail": "evan@fosterlaw4.com",
-    "receivedAt": "2026-10-23T15:45:00.000Z",
-    "snippet": "I'm not the right person — please contact maria.lopez@fosterlaw4.com, she runs operations."
-   },
-   {
-    "id": "r6fe0c910d5ff0e7a",
-    "kind": "angry",
-    "leadEmail": "evan@irwinlaw264.com",
-    "receivedAt": "2026-10-23T15:45:00.000Z",
-    "snippet": "Stop emailing me. How did you get my address?"
-   },
-   {
-    "id": "r3ddc9ad8f6c89449",
-    "kind": "unclear",
-    "leadEmail": "evan@pricelaw104.com",
-    "receivedAt": "2026-10-23T15:45:00.000Z",
-    "snippet": "Received."
-   },
-   {
     "id": "r721e1427d2c03eee",
     "kind": "question",
-    "leadEmail": "alan@reyeslaw400.com",
+    "leadEmail": "alan@fosterlaw280.com",
     "receivedAt": "2026-10-23T15:45:00.000Z",
     "snippet": "Who else in Charlotte do you look after?"
    },
    {
+    "id": "r251079e8f9ea9ea5",
+    "kind": "notnow",
+    "leadEmail": "alan@jensenlaw320.com",
+    "receivedAt": "2026-10-23T15:45:00.000Z",
+    "snippet": "Not right now, maybe next quarter."
+   },
+   {
     "id": "rd1e88ba36545559d",
     "kind": "no",
-    "leadEmail": "dina@trancpa443.com",
+    "leadEmail": "alan@pricelaw380.com",
     "receivedAt": "2026-10-23T15:45:00.000Z",
     "snippet": "No thanks."
    },
    {
     "id": "r9be7ae2eef89ee38",
     "kind": "ooo",
-    "leadEmail": "evan@brookslaw424.com",
+    "leadEmail": "alan@reyeslaw400.com",
     "receivedAt": "2026-10-23T15:45:00.000Z",
     "snippet": "I am out of the office until next Monday."
    },
    {
+    "id": "r6fe0c910d5ff0e7a",
+    "kind": "angry",
+    "leadEmail": "dina@kellercpa123.com",
+    "receivedAt": "2026-10-23T15:45:00.000Z",
+    "snippet": "Stop emailing me. How did you get my address?"
+   },
+   {
+    "id": "r4232c9442a668078",
+    "kind": "wrongperson",
+    "leadEmail": "dina@irwincpa103.com",
+    "receivedAt": "2026-10-23T15:45:00.000Z",
+    "snippet": "I'm not the right person — please contact maria.lopez@irwincpa103.com, she runs operations."
+   },
+   {
+    "id": "r3ddc9ad8f6c89449",
+    "kind": "unclear",
+    "leadEmail": "dina@vancecpa3.com",
+    "receivedAt": "2026-10-23T15:45:00.000Z",
+    "snippet": "Received."
+   },
+   {
     "id": "r35a2af9b52eaacbd",
     "kind": "interested",
-    "leadEmail": "vera@grantcpa359.com",
+    "leadEmail": "ivan@shawlaw88.com",
     "receivedAt": "2026-10-22T22:00:00.000Z",
     "snippet": "Interested. What would this cost for 20 people?"
    }
   ],
   "bookings": [
    {
-    "id": "b987d391904cdaec7",
-    "leadEmail": "alan@ortizlaw140.com",
+    "id": "bb119bce8d103c8d8",
+    "leadEmail": "alan@chenlaw20.com",
     "scheduledAt": "2026-10-27T15:00:00.000Z",
     "status": "held",
     "qualified": true,
@@ -2048,12 +1985,12 @@
    "plan": "starter",
    "amount": 2497,
    "calls": 10,
-   "status": "sent",
+   "status": "paid",
    "issuedAt": "2026-10-06T18:20:00.000Z",
    "sentAt": "2026-10-06T18:20:00.000Z",
-   "paidAt": null,
+   "paidAt": "2026-10-07T02:42:02.050Z",
    "dueDate": "2026-10-06",
-   "remindersSent": 2,
+   "remindersSent": 0,
    "blockedReason": null
   },
   "promises": [
@@ -2078,7 +2015,7 @@
     "system": "replies",
     "event": "reply",
     "detail": {
-     "lead": "alan@lowelaw340.com",
+     "lead": "alan@ortizlaw140.com",
      "kind": "legal",
      "rule": "attorney",
      "action": "suppressed; sending held (legal); owner alerted"
@@ -2239,18 +2176,18 @@
     }
    },
    {
-    "at": "2026-10-28T06:45:00.500Z",
+    "at": "2026-10-28T05:45:00.500Z",
     "system": "replies",
     "event": "reply",
     "detail": {
-     "lead": "reid@quinnlaw436.com",
+     "lead": "lena@elliscpa431.com",
      "kind": "interested",
      "rule": "(?<!not |no longer |not really |never )\\binterested\\b",
      "action": "reply_interested sent; hot_lead sent"
     }
    },
    {
-    "at": "2026-10-28T06:45:00.500Z",
+    "at": "2026-10-28T05:45:00.500Z",
     "system": "notify",
     "event": "client_email_sent",
     "detail": {
@@ -2259,13 +2196,13 @@
     }
    },
    {
-    "at": "2026-10-28T06:45:00.250Z",
+    "at": "2026-10-28T05:45:00.250Z",
     "system": "outbound",
     "event": "prospect_sent",
     "detail": {
      "template": "reply_interested",
-     "to": "reid@quinnlaw436.com",
-     "inbox": "dana@getridgelineit.com"
+     "to": "lena@elliscpa431.com",
+     "inbox": "dana.whitfield@getridgelineit.com"
     }
    },
    {
@@ -2296,7 +2233,7 @@
     "system": "scorekeeper",
     "event": "tap",
     "detail": {
-     "bookingId": "b987d391904cdaec7",
+     "bookingId": "bb119bce8d103c8d8",
      "action": "showed"
     }
    },
@@ -2324,7 +2261,7 @@
     "event": "prospect_sent",
     "detail": {
      "template": "reminder_1h",
-     "to": "alan@ortizlaw140.com",
+     "to": "alan@chenlaw20.com",
      "inbox": "dana@getridgelineit.com"
     }
    },
@@ -2343,13 +2280,13 @@
       },
       "yahoo": {
        "sent": 2,
-       "inbox": 1,
-       "placement": 0.5
+       "inbox": 2,
+       "placement": 1
       },
       "aol": {
        "sent": 2,
-       "inbox": 2,
-       "placement": 1
+       "inbox": 1,
+       "placement": 0.5
       },
       "icloud": {
        "sent": 2,
@@ -2431,22 +2368,12 @@
     }
    },
    {
-    "at": "2026-10-26T15:30:00.000Z",
-    "system": "sender",
-    "event": "smoke_cleared",
-    "detail": {
-     "sent": 50,
-     "bounces": 0,
-     "rate": 0
-    }
-   },
-   {
     "at": "2026-10-26T15:00:00.250Z",
     "system": "outbound",
     "event": "prospect_sent",
     "detail": {
      "template": "reminder_24h",
-     "to": "alan@ortizlaw140.com",
+     "to": "alan@chenlaw20.com",
      "inbox": "dana@getridgelineit.com"
     }
    },
@@ -2531,14 +2458,6 @@
     }
    },
    {
-    "at": "2026-10-26T13:00:00.250Z",
-    "system": "sender",
-    "event": "smoke_reached",
-    "detail": {
-     "sent": 50
-    }
-   },
-   {
     "at": "2026-10-26T12:00:00.250Z",
     "system": "notify",
     "event": "client_email_sent",
@@ -2598,6 +2517,24 @@
        "reasons": []
       }
      ]
+    }
+   },
+   {
+    "at": "2026-10-25T22:00:00.250Z",
+    "system": "outbound",
+    "event": "prospect_sent",
+    "detail": {
+     "template": "holding_reply",
+     "to": "alan@reyeslaw400.com",
+     "inbox": "dana@getridgelineit.com"
+    }
+   },
+   {
+    "at": "2026-10-25T18:15:00.000Z",
+    "system": "mailwatch",
+    "event": "opened",
+    "detail": {
+     "template": "hot_lead"
     }
    }
   ],
@@ -3810,7 +3747,7 @@
    "requestedFor": null,
    "requestedAt": null,
    "proposedFor": null,
-   "meetingId": "mmur1805cfd16242a6e",
+   "meetingId": "mmur1805c67561892bd",
    "meetLink": "https://meet.google.com/rdg-002-avc",
    "steps": [
     {
@@ -4110,55 +4047,7 @@
      "statusText": "delivered · opened Sat 10 Oct, 4:30 pm"
     },
     {
-     "id": "out-b7a5c7e95a3fecc7",
-     "dir": "out",
-     "at": "2026-10-09T14:00:00.250Z",
-     "from": "hello@aviance.test",
-     "to": "dana@ridgelineit.com",
-     "subject": "Reminder: invoice AV-202610-ridgelineit",
-     "text": "Hi Dana,\n\nA reminder that invoice AV-202610-ridgelineit ($2,497, Starter) is still open.\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nIf it’s already on its way, ignore this, and thank you.\n\nLimeth Sith",
-     "kind": "system",
-     "auto": false,
-     "rule": null,
-     "template": "invoice_reminder",
-     "accepted": true,
-     "messageId": "<MSGID_11>",
-     "openedAt": "2026-10-10T11:00:00.000Z",
-     "bouncedAt": null,
-     "bounceReason": null,
-     "repliedAt": null,
-     "milestone": false,
-     "unopenedAt": null,
-     "status": "opened",
-     "statusAt": "2026-10-10T11:00:00.000Z",
-     "statusText": "delivered · opened Sat 10 Oct, 4:30 pm"
-    },
-    {
-     "id": "out-116e90f1b07728fd",
-     "dir": "out",
-     "at": "2026-10-13T14:00:00.250Z",
-     "from": "hello@aviance.test",
-     "to": "dana@ridgelineit.com",
-     "subject": "Reminder: invoice AV-202610-ridgelineit",
-     "text": "Hi Dana,\n\nA reminder that invoice AV-202610-ridgelineit ($2,497, Starter) is still open.\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nIf it’s already on its way, ignore this, and thank you.\n\nLimeth Sith",
-     "kind": "system",
-     "auto": false,
-     "rule": null,
-     "template": "invoice_reminder",
-     "accepted": true,
-     "messageId": "<MSGID_12>",
-     "openedAt": "2026-10-14T11:00:00.000Z",
-     "bouncedAt": null,
-     "bounceReason": null,
-     "repliedAt": null,
-     "milestone": false,
-     "unopenedAt": null,
-     "status": "opened",
-     "statusAt": "2026-10-14T11:00:00.000Z",
-     "statusText": "delivered · opened Wed 14 Oct, 4:30 pm"
-    },
-    {
-     "id": "out-fa69c9eebbe93ede",
+     "id": "out-3c0f69d8aa589ea8",
      "dir": "out",
      "at": "2026-10-16T13:00:00.000Z",
      "from": "hello@aviance.test",
@@ -4170,7 +4059,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_13>",
+     "messageId": "<MSGID_11>",
      "openedAt": "2026-10-16T14:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4182,7 +4071,7 @@
      "statusText": "replied Fri 16 Oct, 7:30 pm"
     },
     {
-     "id": "out-1861194e72a1693a",
+     "id": "out-a2b32789d222428c",
      "dir": "out",
      "at": "2026-10-16T13:00:01.150Z",
      "from": "hello@aviance.test",
@@ -4194,7 +4083,7 @@
      "rule": null,
      "template": "booking_test_request",
      "accepted": true,
-     "messageId": "<MSGID_14>",
+     "messageId": "<MSGID_12>",
      "openedAt": "2026-10-17T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4206,7 +4095,7 @@
      "statusText": "delivered · opened Sat 17 Oct, 4:30 pm"
     },
     {
-     "id": "out-1fdd7bbddfe1480d",
+     "id": "out-b52c00d798f1983d",
      "dir": "out",
      "at": "2026-10-16T13:00:01.400Z",
      "from": "hello@aviance.test",
@@ -4218,7 +4107,7 @@
      "rule": null,
      "template": "friday_update",
      "accepted": true,
-     "messageId": "<MSGID_15>",
+     "messageId": "<MSGID_13>",
      "openedAt": "2026-10-17T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4254,7 +4143,7 @@
      "statusText": null
     },
     {
-     "id": "out-be4b3b925395d761",
+     "id": "out-547af3959846713d",
      "dir": "out",
      "at": "2026-10-16T14:15:00.000Z",
      "from": "hello@aviance.test",
@@ -4266,7 +4155,7 @@
      "rule": "wants_time",
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_16>",
+     "messageId": "<MSGID_14>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -4278,7 +4167,7 @@
      "statusText": "delivered"
     },
     {
-     "id": "out-4436ab78e2355609",
+     "id": "out-3a7b79c0d449f3ac",
      "dir": "out",
      "at": "2026-10-16T14:32:00.000Z",
      "from": "hello@aviance.test",
@@ -4290,7 +4179,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_17>",
+     "messageId": "<MSGID_15>",
      "openedAt": "2026-10-17T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4302,7 +4191,7 @@
      "statusText": "delivered · opened Sat 17 Oct, 4:30 pm"
     },
     {
-     "id": "out-ed92be1ca72c9ac4",
+     "id": "out-be4b3b925395d761",
      "dir": "out",
      "at": "2026-10-16T15:00:00.000Z",
      "from": "hello@aviance.test",
@@ -4314,7 +4203,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_18>",
+     "messageId": "<MSGID_16>",
      "openedAt": "2026-10-17T11:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4326,7 +4215,7 @@
      "statusText": "delivered · opened Sat 17 Oct, 4:45 pm"
     },
     {
-     "id": "out-1f948c5383e0ad62",
+     "id": "out-1a088c02e904e984",
      "dir": "out",
      "at": "2026-10-19T13:00:00.000Z",
      "from": "hello@aviance.test",
@@ -4338,7 +4227,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_19>",
+     "messageId": "<MSGID_17>",
      "openedAt": "2026-10-20T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4350,7 +4239,7 @@
      "statusText": "delivered · opened Tue 20 Oct, 4:30 pm"
     },
     {
-     "id": "out-6995899711abfd8c",
+     "id": "out-42d05a7eb6ebe0ec",
      "dir": "out",
      "at": "2026-10-20T16:00:00.250Z",
      "from": "hello@aviance.test",
@@ -4362,7 +4251,7 @@
      "rule": null,
      "template": "welcome_two_dates",
      "accepted": true,
-     "messageId": "<MSGID_20>",
+     "messageId": "<MSGID_18>",
      "openedAt": "2026-10-21T12:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4374,7 +4263,7 @@
      "statusText": "delivered · opened Wed 21 Oct, 5:45 pm"
     },
     {
-     "id": "out-4b575e58eae6792d",
+     "id": "out-7bb26003e50095d8",
      "dir": "out",
      "at": "2026-10-21T13:00:00.750Z",
      "from": "hello@aviance.test",
@@ -4386,7 +4275,7 @@
      "rule": null,
      "template": "day1_started",
      "accepted": true,
-     "messageId": "<MSGID_21>",
+     "messageId": "<MSGID_19>",
      "openedAt": "2026-10-22T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4398,19 +4287,19 @@
      "statusText": "delivered · opened Thu 22 Oct, 4:30 pm"
     },
     {
-     "id": "out-db183e5f330a632f",
+     "id": "out-1c14a43f48ee7c02",
      "dir": "out",
      "at": "2026-10-22T22:15:00.500Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Hot — Grant CPA 359, Vera Grant, Owner",
-     "text": "Vera Grant at Grant CPA 359 (Greenville) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Grant CPA 359 — Greenville, SC — https://www.grantcpa359.com.",
+     "subject": "Hot — Shaw Law Group 88, Ivan Shaw, Managing Partner",
+     "text": "Ivan Shaw at Shaw Law Group 88 (Raleigh) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Shaw Law Group 88 — Raleigh, NC — https://www.shawlaw88.com.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead",
      "accepted": true,
-     "messageId": "<MSGID_22>",
+     "messageId": "<MSGID_20>",
      "openedAt": "2026-10-23T18:30:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4422,19 +4311,19 @@
      "statusText": "delivered · opened Sat midnight"
     },
     {
-     "id": "out-949c4c62e64fa216",
+     "id": "out-f1aa8d123db88ecc",
      "dir": "out",
      "at": "2026-10-23T12:00:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Still waiting — Grant CPA 359, Vera Grant",
-     "text": "Vera Grant at Grant CPA 359 replied 13 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. At 24 hours I send them a short holding note in your name.",
+     "subject": "Still waiting — Shaw Law Group 88, Ivan Shaw",
+     "text": "Ivan Shaw at Shaw Law Group 88 replied 13 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. At 24 hours I send them a short holding note in your name.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead_nudge",
      "accepted": true,
-     "messageId": "<MSGID_23>",
+     "messageId": "<MSGID_21>",
      "openedAt": "2026-10-24T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4446,19 +4335,19 @@
      "statusText": "delivered · opened Sat 4:30 pm"
     },
     {
-     "id": "out-7ba3a86bf3d02db0",
+     "id": "out-0c08e4661f2fe59b",
      "dir": "out",
      "at": "2026-10-23T13:00:00.750Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Ridgeline IT — week 1 of sending",
-     "text": "Hi Dana,\n\nA reply came in from Grant CPA 359 on Thu.\n\nRidgeline IT — week 1 of sending\nSent this week: 34 · to date: 34, to 34 companies\nReplies: 1 (2.9%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 0 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_14/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_14/away\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nA reply came in from Shaw Law Group 88 on Thu.\n\nRidgeline IT — week 1 of sending\nSent this week: 34 · to date: 34, to 34 companies\nReplies: 1 (2.9%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 0 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_14/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_14/away\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "friday_update",
      "accepted": true,
-     "messageId": "<MSGID_24>",
+     "messageId": "<MSGID_22>",
      "openedAt": "2026-10-24T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4470,13 +4359,61 @@
      "statusText": "delivered · opened Sat 4:30 pm"
     },
     {
-     "id": "out-64ff22959962dde0",
+     "id": "out-166630708a9e2919",
      "dir": "out",
      "at": "2026-10-23T16:00:01.000Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Hot — Ortiz Law Group 140, Alan Ortiz, Managing Partner",
-     "text": "Alan Ortiz at Ortiz Law Group 140 (Greenville) replied: “Interested — we have had two outages this year. What does it cost?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Ortiz Law Group 140 — Greenville, SC — https://www.ortizlaw140.com.",
+     "subject": "Hot — Chen Law Group 20, Alan Chen, Managing Partner",
+     "text": "Alan Chen at Chen Law Group 20 (Greenville) replied: “Interested — we have had two outages this year. What does it cost?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Chen Law Group 20 — Greenville, SC — https://www.chenlaw20.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead",
+     "accepted": true,
+     "messageId": "<MSGID_23>",
+     "openedAt": "2026-10-24T12:15:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-24T12:15:00.000Z",
+     "statusText": "delivered · opened Sat 5:45 pm"
+    },
+    {
+     "id": "out-9730cbe65f711e97",
+     "dir": "out",
+     "at": "2026-10-23T16:00:01.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Foster Law Group 280, Alan Foster, Managing Partner",
+     "text": "Alan Foster at Foster Law Group 280 (Raleigh) replied: “Who else in Charlotte do you look after?” Tagged: needs answer. I have not replied — please answer them today; response speed decides these. Context: Foster Law Group 280 — Raleigh, NC — https://www.fosterlaw280.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead",
+     "accepted": true,
+     "messageId": "<MSGID_24>",
+     "openedAt": "2026-10-24T12:15:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-24T12:15:00.000Z",
+     "statusText": "delivered · opened Sat 5:45 pm"
+    },
+    {
+     "id": "out-3e8cdf69c80dfa15",
+     "dir": "out",
+     "at": "2026-10-23T16:00:02.500Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Vance CPA 3, Dina Vance, Owner",
+     "text": "Dina Vance at Vance CPA 3 (Charlotte) replied: “Received.” Tagged: unclear — your call. I have not replied. Context: Vance CPA 3 — Charlotte, NC — https://www.vancecpa3.com.",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4494,67 +4431,19 @@
      "statusText": "delivered · opened Sat 5:45 pm"
     },
     {
-     "id": "out-e70a1bfc2a451fba",
-     "dir": "out",
-     "at": "2026-10-23T16:00:02.000Z",
-     "from": "dana@getridgelineit.com",
-     "to": "dana@ridgelineit.com",
-     "subject": "Hot — Price Law Group 104, Evan Price, Managing Partner",
-     "text": "Evan Price at Price Law Group 104 (Greenville) replied: “Received.” Tagged: unclear — your call. I have not replied. Context: Price Law Group 104 — Greenville, SC — https://www.pricelaw104.com.",
-     "kind": "system",
-     "auto": false,
-     "rule": null,
-     "template": "hot_lead",
-     "accepted": true,
-     "messageId": "<MSGID_26>",
-     "openedAt": "2026-10-24T12:15:00.000Z",
-     "bouncedAt": null,
-     "bounceReason": null,
-     "repliedAt": null,
-     "milestone": false,
-     "unopenedAt": null,
-     "status": "opened",
-     "statusAt": "2026-10-24T12:15:00.000Z",
-     "statusText": "delivered · opened Sat 5:45 pm"
-    },
-    {
-     "id": "out-a7fb4ec57b33f869",
-     "dir": "out",
-     "at": "2026-10-23T16:00:02.250Z",
-     "from": "dana@getridgelineit.com",
-     "to": "dana@ridgelineit.com",
-     "subject": "Hot — Reyes Law Group 400, Alan Reyes, Managing Partner",
-     "text": "Alan Reyes at Reyes Law Group 400 (Raleigh) replied: “Who else in Charlotte do you look after?” Tagged: needs answer. I have not replied — please answer them today; response speed decides these. Context: Reyes Law Group 400 — Raleigh, NC — https://www.reyeslaw400.com.",
-     "kind": "system",
-     "auto": false,
-     "rule": null,
-     "template": "hot_lead",
-     "accepted": true,
-     "messageId": "<MSGID_27>",
-     "openedAt": "2026-10-24T12:15:00.000Z",
-     "bouncedAt": null,
-     "bounceReason": null,
-     "repliedAt": null,
-     "milestone": false,
-     "unopenedAt": null,
-     "status": "opened",
-     "statusAt": "2026-10-24T12:15:00.000Z",
-     "statusText": "delivered · opened Sat 5:45 pm"
-    },
-    {
-     "id": "out-31e429199dcb58d6",
+     "id": "out-ca7e55968cbdee58",
      "dir": "out",
      "at": "2026-10-23T17:15:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Booked — Ortiz Law Group 140, Alan Ortiz",
-     "text": "Alan Ortiz (Managing Partner) at Ortiz Law Group 140 booked a call for Tuesday 27 October at 11:00 am Eastern Time.\n\nWhy they said yes, in their words: “Interested — we have had two outages this year. What does it cost?”\n\nWhat they asked: nothing beyond the reply above\n\nThe thread so far:\nFri 23 Oct — interested: “Interested — we have had two outages this year. What does it cost?”\n\nAfter the call I’ll send you one-tap buttons to tell me how it went.",
+     "subject": "Booked — Chen Law Group 20, Alan Chen",
+     "text": "Alan Chen (Managing Partner) at Chen Law Group 20 booked a call for Tuesday 27 October at 11:00 am Eastern Time.\n\nWhy they said yes, in their words: “Interested — we have had two outages this year. What does it cost?”\n\nWhat they asked: nothing beyond the reply above\n\nThe thread so far:\nFri 23 Oct — interested: “Interested — we have had two outages this year. What does it cost?”\n\nAfter the call I’ll send you one-tap buttons to tell me how it went.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "call_handoff",
      "accepted": true,
-     "messageId": "<MSGID_28>",
+     "messageId": "<MSGID_26>",
      "openedAt": "2026-10-24T13:30:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4566,19 +4455,19 @@
      "statusText": "delivered · opened Sat 7 pm"
     },
     {
-     "id": "out-eab5b2ea2dbac7e8",
+     "id": "out-6b32b94b39563952",
      "dir": "out",
      "at": "2026-10-24T22:00:00.500Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Hot — Upton Law Group 384, Evan Upton, Managing Partner",
-     "text": "Evan Upton at Upton Law Group 384 (Charlotte) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Upton Law Group 384 — Charlotte, NC — https://www.uptonlaw384.com.",
+     "subject": "Hot — Reyes Law Group 400, Alan Reyes, Managing Partner",
+     "text": "Alan Reyes at Reyes Law Group 400 (Raleigh) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Reyes Law Group 400 — Raleigh, NC — https://www.reyeslaw400.com.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead",
      "accepted": true,
-     "messageId": "<MSGID_29>",
+     "messageId": "<MSGID_27>",
      "openedAt": "2026-10-25T18:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4590,19 +4479,19 @@
      "statusText": "delivered · opened Sun 11:45 pm"
     },
     {
-     "id": "out-49bbb096cc7b1ab5",
+     "id": "out-68b0be52b1fd41ce",
      "dir": "out",
      "at": "2026-10-26T12:00:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Still waiting — Upton Law Group 384, Evan Upton",
-     "text": "Evan Upton at Upton Law Group 384 replied 38 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. They’ve had a short holding note from me in your name, so they know you’ll be in touch.",
+     "subject": "Still waiting — Reyes Law Group 400, Alan Reyes",
+     "text": "Alan Reyes at Reyes Law Group 400 replied 38 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. They’ve had a short holding note from me in your name, so they know you’ll be in touch.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead_nudge",
      "accepted": true,
-     "messageId": "<MSGID_30>",
+     "messageId": "<MSGID_28>",
      "openedAt": "2026-10-27T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4638,7 +4527,7 @@
      "statusText": null
     },
     {
-     "id": "out-2da8995ccb3dd754",
+     "id": "out-01445afc8cc30979",
      "dir": "out",
      "at": "2026-10-26T14:30:00.550Z",
      "from": "hello@aviance.test",
@@ -4650,7 +4539,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_31>",
+     "messageId": "<MSGID_29>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -4662,19 +4551,19 @@
      "statusText": "delivered"
     },
     {
-     "id": "out-937741e0e0916147",
+     "id": "out-eb5284839c4d6c84",
      "dir": "out",
      "at": "2026-10-27T16:00:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Your call with Alan Ortiz",
-     "text": "Your call with Alan Ortiz at Ortiz Law Group 140 was booked for Tuesday 27 October at 11:00 am Eastern Time. One tap tells me what happened:\n\nShowed: https://machine.test/c/TOKEN_15/tap?a=showed\nNo-show: https://machine.test/c/TOKEN_15/tap?a=noshow\nWrong fit: https://machine.test/c/TOKEN_15/tap?a=wrongfit\nDoesn’t count (reason required): https://machine.test/c/TOKEN_15/tap?a=dispute\n\nIf you couldn’t make it yourself: https://machine.test/c/TOKEN_15/tap?a=client_noshow",
+     "subject": "Your call with Alan Chen",
+     "text": "Your call with Alan Chen at Chen Law Group 20 was booked for Tuesday 27 October at 11:00 am Eastern Time. One tap tells me what happened:\n\nShowed: https://machine.test/c/TOKEN_15/tap?a=showed\nNo-show: https://machine.test/c/TOKEN_15/tap?a=noshow\nWrong fit: https://machine.test/c/TOKEN_15/tap?a=wrongfit\nDoesn’t count (reason required): https://machine.test/c/TOKEN_15/tap?a=dispute\n\nIf you couldn’t make it yourself: https://machine.test/c/TOKEN_15/tap?a=client_noshow",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "call_tap",
      "accepted": true,
-     "messageId": "<MSGID_32>",
+     "messageId": "<MSGID_30>",
      "openedAt": "2026-10-28T12:00:00.250Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4686,19 +4575,19 @@
      "statusText": "delivered · opened Wed 5:30 pm"
     },
     {
-     "id": "out-550e50f7b67ed862",
+     "id": "out-558caf36c738b283",
      "dir": "out",
      "at": "2026-10-27T18:30:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Your first call — Ortiz Law Group 140",
-     "text": "Your first booked call was held: Alan Ortiz at Ortiz Law Group 140. What was the meeting like? One or two sentences is plenty. Reply to this email.\n\nIf it’s all right with you, I’d like to write that down and use it, with your name and company. I’ll send it to you first, so you can change it or kill it.",
+     "subject": "Your first call — Chen Law Group 20",
+     "text": "Your first booked call was held: Alan Chen at Chen Law Group 20. What was the meeting like? One or two sentences is plenty. Reply to this email.\n\nIf it’s all right with you, I’d like to write that down and use it, with your name and company. I’ll send it to you first, so you can change it or kill it.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "quote_request",
      "accepted": true,
-     "messageId": "<MSGID_33>",
+     "messageId": "<MSGID_31>",
      "openedAt": "2026-10-28T14:30:00.500Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4710,19 +4599,19 @@
      "statusText": "delivered · opened Wed 8 pm"
     },
     {
-     "id": "out-82a1e8c9c2d4c0b7",
+     "id": "out-b88c469e521b060a",
      "dir": "out",
-     "at": "2026-10-28T06:45:00.500Z",
+     "at": "2026-10-28T05:45:00.500Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Hot — Quinn Law Group 436, Reid Quinn, Managing Partner",
-     "text": "Reid Quinn at Quinn Law Group 436 (Raleigh) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Quinn Law Group 436 — Raleigh, NC — https://www.quinnlaw436.com.",
+     "subject": "Hot — Ellis CPA 431, Lena Ellis, Owner",
+     "text": "Lena Ellis at Ellis CPA 431 (Greenville) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Ellis CPA 431 — Greenville, SC — https://www.elliscpa431.com.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead",
      "accepted": true,
-     "messageId": "<MSGID_34>",
+     "messageId": "<MSGID_32>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -4730,23 +4619,23 @@
      "milestone": false,
      "unopenedAt": null,
      "status": "delivered",
-     "statusAt": "2026-10-28T06:45:00.000Z",
+     "statusAt": "2026-10-28T05:45:00.000Z",
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-307c5c3ebe9fbda2",
+     "id": "out-666100a5d272c609",
      "dir": "out",
      "at": "2026-10-28T12:00:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Still waiting — Quinn Law Group 436, Reid Quinn",
-     "text": "Reid Quinn at Quinn Law Group 436 replied 5 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. At 24 hours I send them a short holding note in your name.",
+     "subject": "Still waiting — Ellis CPA 431, Lena Ellis",
+     "text": "Lena Ellis at Ellis CPA 431 replied 6 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. At 24 hours I send them a short holding note in your name.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead_nudge",
      "accepted": true,
-     "messageId": "<MSGID_35>",
+     "messageId": "<MSGID_33>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -4786,7 +4675,7 @@
    "requestedFor": null,
    "requestedAt": null,
    "proposedFor": null,
-   "meetingId": "mmvb2gidcc738a8a15f",
+   "meetingId": "mmvb2gidca8a15f1f0d",
    "meetLink": "https://meet.google.com/rdg-003-avc",
    "approvedOnCall": "2026-10-20T15:40:00.000Z",
    "approvedOnPage": null,
@@ -5090,55 +4979,7 @@
      "statusText": "delivered · opened Sat 10 Oct, 4:30 pm"
     },
     {
-     "id": "out-b7a5c7e95a3fecc7",
-     "dir": "out",
-     "at": "2026-10-09T14:00:00.250Z",
-     "from": "hello@aviance.test",
-     "to": "dana@ridgelineit.com",
-     "subject": "Reminder: invoice AV-202610-ridgelineit",
-     "text": "Hi Dana,\n\nA reminder that invoice AV-202610-ridgelineit ($2,497, Starter) is still open.\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nIf it’s already on its way, ignore this, and thank you.\n\nLimeth Sith",
-     "kind": "system",
-     "auto": false,
-     "rule": null,
-     "template": "invoice_reminder",
-     "accepted": true,
-     "messageId": "<MSGID_11>",
-     "openedAt": "2026-10-10T11:00:00.000Z",
-     "bouncedAt": null,
-     "bounceReason": null,
-     "repliedAt": null,
-     "milestone": false,
-     "unopenedAt": null,
-     "status": "opened",
-     "statusAt": "2026-10-10T11:00:00.000Z",
-     "statusText": "delivered · opened Sat 10 Oct, 4:30 pm"
-    },
-    {
-     "id": "out-116e90f1b07728fd",
-     "dir": "out",
-     "at": "2026-10-13T14:00:00.250Z",
-     "from": "hello@aviance.test",
-     "to": "dana@ridgelineit.com",
-     "subject": "Reminder: invoice AV-202610-ridgelineit",
-     "text": "Hi Dana,\n\nA reminder that invoice AV-202610-ridgelineit ($2,497, Starter) is still open.\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nIf it’s already on its way, ignore this, and thank you.\n\nLimeth Sith",
-     "kind": "system",
-     "auto": false,
-     "rule": null,
-     "template": "invoice_reminder",
-     "accepted": true,
-     "messageId": "<MSGID_12>",
-     "openedAt": "2026-10-14T11:00:00.000Z",
-     "bouncedAt": null,
-     "bounceReason": null,
-     "repliedAt": null,
-     "milestone": false,
-     "unopenedAt": null,
-     "status": "opened",
-     "statusAt": "2026-10-14T11:00:00.000Z",
-     "statusText": "delivered · opened Wed 14 Oct, 4:30 pm"
-    },
-    {
-     "id": "out-fa69c9eebbe93ede",
+     "id": "out-3c0f69d8aa589ea8",
      "dir": "out",
      "at": "2026-10-16T13:00:00.000Z",
      "from": "hello@aviance.test",
@@ -5150,7 +4991,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_13>",
+     "messageId": "<MSGID_11>",
      "openedAt": "2026-10-16T14:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5162,7 +5003,7 @@
      "statusText": "replied Fri 16 Oct, 7:30 pm"
     },
     {
-     "id": "out-1861194e72a1693a",
+     "id": "out-a2b32789d222428c",
      "dir": "out",
      "at": "2026-10-16T13:00:01.150Z",
      "from": "hello@aviance.test",
@@ -5174,7 +5015,7 @@
      "rule": null,
      "template": "booking_test_request",
      "accepted": true,
-     "messageId": "<MSGID_14>",
+     "messageId": "<MSGID_12>",
      "openedAt": "2026-10-17T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5186,7 +5027,7 @@
      "statusText": "delivered · opened Sat 17 Oct, 4:30 pm"
     },
     {
-     "id": "out-1fdd7bbddfe1480d",
+     "id": "out-b52c00d798f1983d",
      "dir": "out",
      "at": "2026-10-16T13:00:01.400Z",
      "from": "hello@aviance.test",
@@ -5198,7 +5039,7 @@
      "rule": null,
      "template": "friday_update",
      "accepted": true,
-     "messageId": "<MSGID_15>",
+     "messageId": "<MSGID_13>",
      "openedAt": "2026-10-17T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5234,7 +5075,7 @@
      "statusText": null
     },
     {
-     "id": "out-be4b3b925395d761",
+     "id": "out-547af3959846713d",
      "dir": "out",
      "at": "2026-10-16T14:15:00.000Z",
      "from": "hello@aviance.test",
@@ -5246,7 +5087,7 @@
      "rule": "wants_time",
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_16>",
+     "messageId": "<MSGID_14>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -5258,7 +5099,7 @@
      "statusText": "delivered"
     },
     {
-     "id": "out-4436ab78e2355609",
+     "id": "out-3a7b79c0d449f3ac",
      "dir": "out",
      "at": "2026-10-16T14:32:00.000Z",
      "from": "hello@aviance.test",
@@ -5270,7 +5111,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_17>",
+     "messageId": "<MSGID_15>",
      "openedAt": "2026-10-17T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5282,7 +5123,7 @@
      "statusText": "delivered · opened Sat 17 Oct, 4:30 pm"
     },
     {
-     "id": "out-ed92be1ca72c9ac4",
+     "id": "out-be4b3b925395d761",
      "dir": "out",
      "at": "2026-10-16T15:00:00.000Z",
      "from": "hello@aviance.test",
@@ -5294,7 +5135,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_18>",
+     "messageId": "<MSGID_16>",
      "openedAt": "2026-10-17T11:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5306,7 +5147,7 @@
      "statusText": "delivered · opened Sat 17 Oct, 4:45 pm"
     },
     {
-     "id": "out-1f948c5383e0ad62",
+     "id": "out-1a088c02e904e984",
      "dir": "out",
      "at": "2026-10-19T13:00:00.000Z",
      "from": "hello@aviance.test",
@@ -5318,7 +5159,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_19>",
+     "messageId": "<MSGID_17>",
      "openedAt": "2026-10-20T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5330,7 +5171,7 @@
      "statusText": "delivered · opened Tue 20 Oct, 4:30 pm"
     },
     {
-     "id": "out-6995899711abfd8c",
+     "id": "out-42d05a7eb6ebe0ec",
      "dir": "out",
      "at": "2026-10-20T16:00:00.250Z",
      "from": "hello@aviance.test",
@@ -5342,7 +5183,7 @@
      "rule": null,
      "template": "welcome_two_dates",
      "accepted": true,
-     "messageId": "<MSGID_20>",
+     "messageId": "<MSGID_18>",
      "openedAt": "2026-10-21T12:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5354,7 +5195,7 @@
      "statusText": "delivered · opened Wed 21 Oct, 5:45 pm"
     },
     {
-     "id": "out-4b575e58eae6792d",
+     "id": "out-7bb26003e50095d8",
      "dir": "out",
      "at": "2026-10-21T13:00:00.750Z",
      "from": "hello@aviance.test",
@@ -5366,7 +5207,7 @@
      "rule": null,
      "template": "day1_started",
      "accepted": true,
-     "messageId": "<MSGID_21>",
+     "messageId": "<MSGID_19>",
      "openedAt": "2026-10-22T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5378,19 +5219,19 @@
      "statusText": "delivered · opened Thu 22 Oct, 4:30 pm"
     },
     {
-     "id": "out-db183e5f330a632f",
+     "id": "out-1c14a43f48ee7c02",
      "dir": "out",
      "at": "2026-10-22T22:15:00.500Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Hot — Grant CPA 359, Vera Grant, Owner",
-     "text": "Vera Grant at Grant CPA 359 (Greenville) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Grant CPA 359 — Greenville, SC — https://www.grantcpa359.com.",
+     "subject": "Hot — Shaw Law Group 88, Ivan Shaw, Managing Partner",
+     "text": "Ivan Shaw at Shaw Law Group 88 (Raleigh) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Shaw Law Group 88 — Raleigh, NC — https://www.shawlaw88.com.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead",
      "accepted": true,
-     "messageId": "<MSGID_22>",
+     "messageId": "<MSGID_20>",
      "openedAt": "2026-10-23T18:30:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5402,19 +5243,19 @@
      "statusText": "delivered · opened Sat midnight"
     },
     {
-     "id": "out-949c4c62e64fa216",
+     "id": "out-f1aa8d123db88ecc",
      "dir": "out",
      "at": "2026-10-23T12:00:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Still waiting — Grant CPA 359, Vera Grant",
-     "text": "Vera Grant at Grant CPA 359 replied 13 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. At 24 hours I send them a short holding note in your name.",
+     "subject": "Still waiting — Shaw Law Group 88, Ivan Shaw",
+     "text": "Ivan Shaw at Shaw Law Group 88 replied 13 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. At 24 hours I send them a short holding note in your name.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead_nudge",
      "accepted": true,
-     "messageId": "<MSGID_23>",
+     "messageId": "<MSGID_21>",
      "openedAt": "2026-10-24T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5426,19 +5267,19 @@
      "statusText": "delivered · opened Sat 4:30 pm"
     },
     {
-     "id": "out-7ba3a86bf3d02db0",
+     "id": "out-0c08e4661f2fe59b",
      "dir": "out",
      "at": "2026-10-23T13:00:00.750Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Ridgeline IT — week 1 of sending",
-     "text": "Hi Dana,\n\nA reply came in from Grant CPA 359 on Thu.\n\nRidgeline IT — week 1 of sending\nSent this week: 34 · to date: 34, to 34 companies\nReplies: 1 (2.9%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 0 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_14/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_14/away\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nA reply came in from Shaw Law Group 88 on Thu.\n\nRidgeline IT — week 1 of sending\nSent this week: 34 · to date: 34, to 34 companies\nReplies: 1 (2.9%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 0 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_14/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_14/away\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "friday_update",
      "accepted": true,
-     "messageId": "<MSGID_24>",
+     "messageId": "<MSGID_22>",
      "openedAt": "2026-10-24T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5450,13 +5291,61 @@
      "statusText": "delivered · opened Sat 4:30 pm"
     },
     {
-     "id": "out-64ff22959962dde0",
+     "id": "out-166630708a9e2919",
      "dir": "out",
      "at": "2026-10-23T16:00:01.000Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Hot — Ortiz Law Group 140, Alan Ortiz, Managing Partner",
-     "text": "Alan Ortiz at Ortiz Law Group 140 (Greenville) replied: “Interested — we have had two outages this year. What does it cost?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Ortiz Law Group 140 — Greenville, SC — https://www.ortizlaw140.com.",
+     "subject": "Hot — Chen Law Group 20, Alan Chen, Managing Partner",
+     "text": "Alan Chen at Chen Law Group 20 (Greenville) replied: “Interested — we have had two outages this year. What does it cost?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Chen Law Group 20 — Greenville, SC — https://www.chenlaw20.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead",
+     "accepted": true,
+     "messageId": "<MSGID_23>",
+     "openedAt": "2026-10-24T12:15:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-24T12:15:00.000Z",
+     "statusText": "delivered · opened Sat 5:45 pm"
+    },
+    {
+     "id": "out-9730cbe65f711e97",
+     "dir": "out",
+     "at": "2026-10-23T16:00:01.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Foster Law Group 280, Alan Foster, Managing Partner",
+     "text": "Alan Foster at Foster Law Group 280 (Raleigh) replied: “Who else in Charlotte do you look after?” Tagged: needs answer. I have not replied — please answer them today; response speed decides these. Context: Foster Law Group 280 — Raleigh, NC — https://www.fosterlaw280.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead",
+     "accepted": true,
+     "messageId": "<MSGID_24>",
+     "openedAt": "2026-10-24T12:15:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-24T12:15:00.000Z",
+     "statusText": "delivered · opened Sat 5:45 pm"
+    },
+    {
+     "id": "out-3e8cdf69c80dfa15",
+     "dir": "out",
+     "at": "2026-10-23T16:00:02.500Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Vance CPA 3, Dina Vance, Owner",
+     "text": "Dina Vance at Vance CPA 3 (Charlotte) replied: “Received.” Tagged: unclear — your call. I have not replied. Context: Vance CPA 3 — Charlotte, NC — https://www.vancecpa3.com.",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -5474,67 +5363,19 @@
      "statusText": "delivered · opened Sat 5:45 pm"
     },
     {
-     "id": "out-e70a1bfc2a451fba",
-     "dir": "out",
-     "at": "2026-10-23T16:00:02.000Z",
-     "from": "dana@getridgelineit.com",
-     "to": "dana@ridgelineit.com",
-     "subject": "Hot — Price Law Group 104, Evan Price, Managing Partner",
-     "text": "Evan Price at Price Law Group 104 (Greenville) replied: “Received.” Tagged: unclear — your call. I have not replied. Context: Price Law Group 104 — Greenville, SC — https://www.pricelaw104.com.",
-     "kind": "system",
-     "auto": false,
-     "rule": null,
-     "template": "hot_lead",
-     "accepted": true,
-     "messageId": "<MSGID_26>",
-     "openedAt": "2026-10-24T12:15:00.000Z",
-     "bouncedAt": null,
-     "bounceReason": null,
-     "repliedAt": null,
-     "milestone": false,
-     "unopenedAt": null,
-     "status": "opened",
-     "statusAt": "2026-10-24T12:15:00.000Z",
-     "statusText": "delivered · opened Sat 5:45 pm"
-    },
-    {
-     "id": "out-a7fb4ec57b33f869",
-     "dir": "out",
-     "at": "2026-10-23T16:00:02.250Z",
-     "from": "dana@getridgelineit.com",
-     "to": "dana@ridgelineit.com",
-     "subject": "Hot — Reyes Law Group 400, Alan Reyes, Managing Partner",
-     "text": "Alan Reyes at Reyes Law Group 400 (Raleigh) replied: “Who else in Charlotte do you look after?” Tagged: needs answer. I have not replied — please answer them today; response speed decides these. Context: Reyes Law Group 400 — Raleigh, NC — https://www.reyeslaw400.com.",
-     "kind": "system",
-     "auto": false,
-     "rule": null,
-     "template": "hot_lead",
-     "accepted": true,
-     "messageId": "<MSGID_27>",
-     "openedAt": "2026-10-24T12:15:00.000Z",
-     "bouncedAt": null,
-     "bounceReason": null,
-     "repliedAt": null,
-     "milestone": false,
-     "unopenedAt": null,
-     "status": "opened",
-     "statusAt": "2026-10-24T12:15:00.000Z",
-     "statusText": "delivered · opened Sat 5:45 pm"
-    },
-    {
-     "id": "out-31e429199dcb58d6",
+     "id": "out-ca7e55968cbdee58",
      "dir": "out",
      "at": "2026-10-23T17:15:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Booked — Ortiz Law Group 140, Alan Ortiz",
-     "text": "Alan Ortiz (Managing Partner) at Ortiz Law Group 140 booked a call for Tuesday 27 October at 11:00 am Eastern Time.\n\nWhy they said yes, in their words: “Interested — we have had two outages this year. What does it cost?”\n\nWhat they asked: nothing beyond the reply above\n\nThe thread so far:\nFri 23 Oct — interested: “Interested — we have had two outages this year. What does it cost?”\n\nAfter the call I’ll send you one-tap buttons to tell me how it went.",
+     "subject": "Booked — Chen Law Group 20, Alan Chen",
+     "text": "Alan Chen (Managing Partner) at Chen Law Group 20 booked a call for Tuesday 27 October at 11:00 am Eastern Time.\n\nWhy they said yes, in their words: “Interested — we have had two outages this year. What does it cost?”\n\nWhat they asked: nothing beyond the reply above\n\nThe thread so far:\nFri 23 Oct — interested: “Interested — we have had two outages this year. What does it cost?”\n\nAfter the call I’ll send you one-tap buttons to tell me how it went.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "call_handoff",
      "accepted": true,
-     "messageId": "<MSGID_28>",
+     "messageId": "<MSGID_26>",
      "openedAt": "2026-10-24T13:30:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5546,19 +5387,19 @@
      "statusText": "delivered · opened Sat 7 pm"
     },
     {
-     "id": "out-eab5b2ea2dbac7e8",
+     "id": "out-6b32b94b39563952",
      "dir": "out",
      "at": "2026-10-24T22:00:00.500Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Hot — Upton Law Group 384, Evan Upton, Managing Partner",
-     "text": "Evan Upton at Upton Law Group 384 (Charlotte) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Upton Law Group 384 — Charlotte, NC — https://www.uptonlaw384.com.",
+     "subject": "Hot — Reyes Law Group 400, Alan Reyes, Managing Partner",
+     "text": "Alan Reyes at Reyes Law Group 400 (Raleigh) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Reyes Law Group 400 — Raleigh, NC — https://www.reyeslaw400.com.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead",
      "accepted": true,
-     "messageId": "<MSGID_29>",
+     "messageId": "<MSGID_27>",
      "openedAt": "2026-10-25T18:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5570,19 +5411,19 @@
      "statusText": "delivered · opened Sun 11:45 pm"
     },
     {
-     "id": "out-49bbb096cc7b1ab5",
+     "id": "out-68b0be52b1fd41ce",
      "dir": "out",
      "at": "2026-10-26T12:00:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Still waiting — Upton Law Group 384, Evan Upton",
-     "text": "Evan Upton at Upton Law Group 384 replied 38 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. They’ve had a short holding note from me in your name, so they know you’ll be in touch.",
+     "subject": "Still waiting — Reyes Law Group 400, Alan Reyes",
+     "text": "Alan Reyes at Reyes Law Group 400 replied 38 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. They’ve had a short holding note from me in your name, so they know you’ll be in touch.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead_nudge",
      "accepted": true,
-     "messageId": "<MSGID_30>",
+     "messageId": "<MSGID_28>",
      "openedAt": "2026-10-27T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5618,7 +5459,7 @@
      "statusText": null
     },
     {
-     "id": "out-2da8995ccb3dd754",
+     "id": "out-01445afc8cc30979",
      "dir": "out",
      "at": "2026-10-26T14:30:00.550Z",
      "from": "hello@aviance.test",
@@ -5630,7 +5471,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_31>",
+     "messageId": "<MSGID_29>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -5642,19 +5483,19 @@
      "statusText": "delivered"
     },
     {
-     "id": "out-937741e0e0916147",
+     "id": "out-eb5284839c4d6c84",
      "dir": "out",
      "at": "2026-10-27T16:00:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Your call with Alan Ortiz",
-     "text": "Your call with Alan Ortiz at Ortiz Law Group 140 was booked for Tuesday 27 October at 11:00 am Eastern Time. One tap tells me what happened:\n\nShowed: https://machine.test/c/TOKEN_15/tap?a=showed\nNo-show: https://machine.test/c/TOKEN_15/tap?a=noshow\nWrong fit: https://machine.test/c/TOKEN_15/tap?a=wrongfit\nDoesn’t count (reason required): https://machine.test/c/TOKEN_15/tap?a=dispute\n\nIf you couldn’t make it yourself: https://machine.test/c/TOKEN_15/tap?a=client_noshow",
+     "subject": "Your call with Alan Chen",
+     "text": "Your call with Alan Chen at Chen Law Group 20 was booked for Tuesday 27 October at 11:00 am Eastern Time. One tap tells me what happened:\n\nShowed: https://machine.test/c/TOKEN_15/tap?a=showed\nNo-show: https://machine.test/c/TOKEN_15/tap?a=noshow\nWrong fit: https://machine.test/c/TOKEN_15/tap?a=wrongfit\nDoesn’t count (reason required): https://machine.test/c/TOKEN_15/tap?a=dispute\n\nIf you couldn’t make it yourself: https://machine.test/c/TOKEN_15/tap?a=client_noshow",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "call_tap",
      "accepted": true,
-     "messageId": "<MSGID_32>",
+     "messageId": "<MSGID_30>",
      "openedAt": "2026-10-28T12:00:00.250Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5666,19 +5507,19 @@
      "statusText": "delivered · opened Wed 5:30 pm"
     },
     {
-     "id": "out-550e50f7b67ed862",
+     "id": "out-558caf36c738b283",
      "dir": "out",
      "at": "2026-10-27T18:30:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Your first call — Ortiz Law Group 140",
-     "text": "Your first booked call was held: Alan Ortiz at Ortiz Law Group 140. What was the meeting like? One or two sentences is plenty. Reply to this email.\n\nIf it’s all right with you, I’d like to write that down and use it, with your name and company. I’ll send it to you first, so you can change it or kill it.",
+     "subject": "Your first call — Chen Law Group 20",
+     "text": "Your first booked call was held: Alan Chen at Chen Law Group 20. What was the meeting like? One or two sentences is plenty. Reply to this email.\n\nIf it’s all right with you, I’d like to write that down and use it, with your name and company. I’ll send it to you first, so you can change it or kill it.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "quote_request",
      "accepted": true,
-     "messageId": "<MSGID_33>",
+     "messageId": "<MSGID_31>",
      "openedAt": "2026-10-28T14:30:00.500Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -5690,19 +5531,19 @@
      "statusText": "delivered · opened Wed 8 pm"
     },
     {
-     "id": "out-82a1e8c9c2d4c0b7",
+     "id": "out-b88c469e521b060a",
      "dir": "out",
-     "at": "2026-10-28T06:45:00.500Z",
+     "at": "2026-10-28T05:45:00.500Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Hot — Quinn Law Group 436, Reid Quinn, Managing Partner",
-     "text": "Reid Quinn at Quinn Law Group 436 (Raleigh) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Quinn Law Group 436 — Raleigh, NC — https://www.quinnlaw436.com.",
+     "subject": "Hot — Ellis CPA 431, Lena Ellis, Owner",
+     "text": "Lena Ellis at Ellis CPA 431 (Greenville) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Ellis CPA 431 — Greenville, SC — https://www.elliscpa431.com.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead",
      "accepted": true,
-     "messageId": "<MSGID_34>",
+     "messageId": "<MSGID_32>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -5710,23 +5551,23 @@
      "milestone": false,
      "unopenedAt": null,
      "status": "delivered",
-     "statusAt": "2026-10-28T06:45:00.000Z",
+     "statusAt": "2026-10-28T05:45:00.000Z",
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-307c5c3ebe9fbda2",
+     "id": "out-666100a5d272c609",
      "dir": "out",
      "at": "2026-10-28T12:00:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Still waiting — Quinn Law Group 436, Reid Quinn",
-     "text": "Reid Quinn at Quinn Law Group 436 replied 5 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. At 24 hours I send them a short holding note in your name.",
+     "subject": "Still waiting — Ellis CPA 431, Lena Ellis",
+     "text": "Lena Ellis at Ellis CPA 431 replied 6 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. At 24 hours I send them a short holding note in your name.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead_nudge",
      "accepted": true,
-     "messageId": "<MSGID_35>",
+     "messageId": "<MSGID_33>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -5742,16 +5583,16 @@
   "autobuy": null,
   "warmup": {
    "status": "ready",
-   "label": "Warm-up done · 90% reach the inbox",
+   "label": "Warm-up done · 94% reach the inbox",
    "day": 22,
    "of": 14,
    "readyBy": null,
-   "inboxRate": 0.897,
+   "inboxRate": 0.944,
    "inboxes": [
     {
      "email": "dana@getridgelineit.com",
      "day": 22,
-     "sentToday": 14,
+     "sentToday": 13,
      "quota": 8,
      "inboxRate7d": 1,
      "ready": true
@@ -5759,10 +5600,10 @@
     {
      "email": "dana.whitfield@getridgelineit.com",
      "day": 22,
-     "sentToday": 14,
+     "sentToday": 15,
      "quota": 8,
-     "inboxRate7d": 0.897,
-     "ready": false
+     "inboxRate7d": 0.944,
+     "ready": true
     }
    ],
    "problem": null,
@@ -6035,55 +5876,7 @@
      "statusText": "delivered · opened Sat 10 Oct, 4:30 pm"
     },
     {
-     "id": "out-b7a5c7e95a3fecc7",
-     "dir": "out",
-     "at": "2026-10-09T14:00:00.250Z",
-     "from": "hello@aviance.test",
-     "to": "dana@ridgelineit.com",
-     "subject": "Reminder: invoice AV-202610-ridgelineit",
-     "text": "Hi Dana,\n\nA reminder that invoice AV-202610-ridgelineit ($2,497, Starter) is still open.\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nIf it’s already on its way, ignore this, and thank you.\n\nLimeth Sith",
-     "kind": "system",
-     "auto": false,
-     "rule": null,
-     "template": "invoice_reminder",
-     "accepted": true,
-     "messageId": "<MSGID_11>",
-     "openedAt": "2026-10-10T11:00:00.000Z",
-     "bouncedAt": null,
-     "bounceReason": null,
-     "repliedAt": null,
-     "milestone": false,
-     "unopenedAt": null,
-     "status": "opened",
-     "statusAt": "2026-10-10T11:00:00.000Z",
-     "statusText": "delivered · opened Sat 10 Oct, 4:30 pm"
-    },
-    {
-     "id": "out-116e90f1b07728fd",
-     "dir": "out",
-     "at": "2026-10-13T14:00:00.250Z",
-     "from": "hello@aviance.test",
-     "to": "dana@ridgelineit.com",
-     "subject": "Reminder: invoice AV-202610-ridgelineit",
-     "text": "Hi Dana,\n\nA reminder that invoice AV-202610-ridgelineit ($2,497, Starter) is still open.\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nIf it’s already on its way, ignore this, and thank you.\n\nLimeth Sith",
-     "kind": "system",
-     "auto": false,
-     "rule": null,
-     "template": "invoice_reminder",
-     "accepted": true,
-     "messageId": "<MSGID_12>",
-     "openedAt": "2026-10-14T11:00:00.000Z",
-     "bouncedAt": null,
-     "bounceReason": null,
-     "repliedAt": null,
-     "milestone": false,
-     "unopenedAt": null,
-     "status": "opened",
-     "statusAt": "2026-10-14T11:00:00.000Z",
-     "statusText": "delivered · opened Wed 14 Oct, 4:30 pm"
-    },
-    {
-     "id": "out-fa69c9eebbe93ede",
+     "id": "out-3c0f69d8aa589ea8",
      "dir": "out",
      "at": "2026-10-16T13:00:00.000Z",
      "from": "hello@aviance.test",
@@ -6095,7 +5888,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_13>",
+     "messageId": "<MSGID_11>",
      "openedAt": "2026-10-16T14:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6107,7 +5900,7 @@
      "statusText": "replied Fri 16 Oct, 7:30 pm"
     },
     {
-     "id": "out-1861194e72a1693a",
+     "id": "out-a2b32789d222428c",
      "dir": "out",
      "at": "2026-10-16T13:00:01.150Z",
      "from": "hello@aviance.test",
@@ -6119,7 +5912,7 @@
      "rule": null,
      "template": "booking_test_request",
      "accepted": true,
-     "messageId": "<MSGID_14>",
+     "messageId": "<MSGID_12>",
      "openedAt": "2026-10-17T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6131,7 +5924,7 @@
      "statusText": "delivered · opened Sat 17 Oct, 4:30 pm"
     },
     {
-     "id": "out-1fdd7bbddfe1480d",
+     "id": "out-b52c00d798f1983d",
      "dir": "out",
      "at": "2026-10-16T13:00:01.400Z",
      "from": "hello@aviance.test",
@@ -6143,7 +5936,7 @@
      "rule": null,
      "template": "friday_update",
      "accepted": true,
-     "messageId": "<MSGID_15>",
+     "messageId": "<MSGID_13>",
      "openedAt": "2026-10-17T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6179,7 +5972,7 @@
      "statusText": null
     },
     {
-     "id": "out-be4b3b925395d761",
+     "id": "out-547af3959846713d",
      "dir": "out",
      "at": "2026-10-16T14:15:00.000Z",
      "from": "hello@aviance.test",
@@ -6191,7 +5984,7 @@
      "rule": "wants_time",
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_16>",
+     "messageId": "<MSGID_14>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -6203,7 +5996,7 @@
      "statusText": "delivered"
     },
     {
-     "id": "out-4436ab78e2355609",
+     "id": "out-3a7b79c0d449f3ac",
      "dir": "out",
      "at": "2026-10-16T14:32:00.000Z",
      "from": "hello@aviance.test",
@@ -6215,7 +6008,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_17>",
+     "messageId": "<MSGID_15>",
      "openedAt": "2026-10-17T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6227,7 +6020,7 @@
      "statusText": "delivered · opened Sat 17 Oct, 4:30 pm"
     },
     {
-     "id": "out-ed92be1ca72c9ac4",
+     "id": "out-be4b3b925395d761",
      "dir": "out",
      "at": "2026-10-16T15:00:00.000Z",
      "from": "hello@aviance.test",
@@ -6239,7 +6032,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_18>",
+     "messageId": "<MSGID_16>",
      "openedAt": "2026-10-17T11:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6251,7 +6044,7 @@
      "statusText": "delivered · opened Sat 17 Oct, 4:45 pm"
     },
     {
-     "id": "out-1f948c5383e0ad62",
+     "id": "out-1a088c02e904e984",
      "dir": "out",
      "at": "2026-10-19T13:00:00.000Z",
      "from": "hello@aviance.test",
@@ -6263,7 +6056,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_19>",
+     "messageId": "<MSGID_17>",
      "openedAt": "2026-10-20T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6275,7 +6068,7 @@
      "statusText": "delivered · opened Tue 20 Oct, 4:30 pm"
     },
     {
-     "id": "out-6995899711abfd8c",
+     "id": "out-42d05a7eb6ebe0ec",
      "dir": "out",
      "at": "2026-10-20T16:00:00.250Z",
      "from": "hello@aviance.test",
@@ -6287,7 +6080,7 @@
      "rule": null,
      "template": "welcome_two_dates",
      "accepted": true,
-     "messageId": "<MSGID_20>",
+     "messageId": "<MSGID_18>",
      "openedAt": "2026-10-21T12:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6299,7 +6092,7 @@
      "statusText": "delivered · opened Wed 21 Oct, 5:45 pm"
     },
     {
-     "id": "out-4b575e58eae6792d",
+     "id": "out-7bb26003e50095d8",
      "dir": "out",
      "at": "2026-10-21T13:00:00.750Z",
      "from": "hello@aviance.test",
@@ -6311,7 +6104,7 @@
      "rule": null,
      "template": "day1_started",
      "accepted": true,
-     "messageId": "<MSGID_21>",
+     "messageId": "<MSGID_19>",
      "openedAt": "2026-10-22T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6323,19 +6116,19 @@
      "statusText": "delivered · opened Thu 22 Oct, 4:30 pm"
     },
     {
-     "id": "out-db183e5f330a632f",
+     "id": "out-1c14a43f48ee7c02",
      "dir": "out",
      "at": "2026-10-22T22:15:00.500Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Hot — Grant CPA 359, Vera Grant, Owner",
-     "text": "Vera Grant at Grant CPA 359 (Greenville) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Grant CPA 359 — Greenville, SC — https://www.grantcpa359.com.",
+     "subject": "Hot — Shaw Law Group 88, Ivan Shaw, Managing Partner",
+     "text": "Ivan Shaw at Shaw Law Group 88 (Raleigh) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Shaw Law Group 88 — Raleigh, NC — https://www.shawlaw88.com.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead",
      "accepted": true,
-     "messageId": "<MSGID_22>",
+     "messageId": "<MSGID_20>",
      "openedAt": "2026-10-23T18:30:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6347,19 +6140,19 @@
      "statusText": "delivered · opened Sat midnight"
     },
     {
-     "id": "out-949c4c62e64fa216",
+     "id": "out-f1aa8d123db88ecc",
      "dir": "out",
      "at": "2026-10-23T12:00:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Still waiting — Grant CPA 359, Vera Grant",
-     "text": "Vera Grant at Grant CPA 359 replied 13 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. At 24 hours I send them a short holding note in your name.",
+     "subject": "Still waiting — Shaw Law Group 88, Ivan Shaw",
+     "text": "Ivan Shaw at Shaw Law Group 88 replied 13 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. At 24 hours I send them a short holding note in your name.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead_nudge",
      "accepted": true,
-     "messageId": "<MSGID_23>",
+     "messageId": "<MSGID_21>",
      "openedAt": "2026-10-24T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6371,19 +6164,19 @@
      "statusText": "delivered · opened Sat 4:30 pm"
     },
     {
-     "id": "out-7ba3a86bf3d02db0",
+     "id": "out-0c08e4661f2fe59b",
      "dir": "out",
      "at": "2026-10-23T13:00:00.750Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Ridgeline IT — week 1 of sending",
-     "text": "Hi Dana,\n\nA reply came in from Grant CPA 359 on Thu.\n\nRidgeline IT — week 1 of sending\nSent this week: 34 · to date: 34, to 34 companies\nReplies: 1 (2.9%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 0 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_14/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_14/away\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nA reply came in from Shaw Law Group 88 on Thu.\n\nRidgeline IT — week 1 of sending\nSent this week: 34 · to date: 34, to 34 companies\nReplies: 1 (2.9%) · positive: 1\nMeetings booked: 0 · held: 0 · running total: 0 qualified — promise 1, target 3\nThis week: no changes\nWaiting on you: nothing\nWatch: all green\n\nIf you ever need them:\n• We emailed one of your customers: https://machine.test/c/TOKEN_14/customer\n• You're away (we halve the volume those days): https://machine.test/c/TOKEN_14/away\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "friday_update",
      "accepted": true,
-     "messageId": "<MSGID_24>",
+     "messageId": "<MSGID_22>",
      "openedAt": "2026-10-24T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6395,13 +6188,61 @@
      "statusText": "delivered · opened Sat 4:30 pm"
     },
     {
-     "id": "out-64ff22959962dde0",
+     "id": "out-166630708a9e2919",
      "dir": "out",
      "at": "2026-10-23T16:00:01.000Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Hot — Ortiz Law Group 140, Alan Ortiz, Managing Partner",
-     "text": "Alan Ortiz at Ortiz Law Group 140 (Greenville) replied: “Interested — we have had two outages this year. What does it cost?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Ortiz Law Group 140 — Greenville, SC — https://www.ortizlaw140.com.",
+     "subject": "Hot — Chen Law Group 20, Alan Chen, Managing Partner",
+     "text": "Alan Chen at Chen Law Group 20 (Greenville) replied: “Interested — we have had two outages this year. What does it cost?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Chen Law Group 20 — Greenville, SC — https://www.chenlaw20.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead",
+     "accepted": true,
+     "messageId": "<MSGID_23>",
+     "openedAt": "2026-10-24T12:15:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-24T12:15:00.000Z",
+     "statusText": "delivered · opened Sat 5:45 pm"
+    },
+    {
+     "id": "out-9730cbe65f711e97",
+     "dir": "out",
+     "at": "2026-10-23T16:00:01.250Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Foster Law Group 280, Alan Foster, Managing Partner",
+     "text": "Alan Foster at Foster Law Group 280 (Raleigh) replied: “Who else in Charlotte do you look after?” Tagged: needs answer. I have not replied — please answer them today; response speed decides these. Context: Foster Law Group 280 — Raleigh, NC — https://www.fosterlaw280.com.",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "hot_lead",
+     "accepted": true,
+     "messageId": "<MSGID_24>",
+     "openedAt": "2026-10-24T12:15:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-24T12:15:00.000Z",
+     "statusText": "delivered · opened Sat 5:45 pm"
+    },
+    {
+     "id": "out-3e8cdf69c80dfa15",
+     "dir": "out",
+     "at": "2026-10-23T16:00:02.500Z",
+     "from": "dana@getridgelineit.com",
+     "to": "dana@ridgelineit.com",
+     "subject": "Hot — Vance CPA 3, Dina Vance, Owner",
+     "text": "Dina Vance at Vance CPA 3 (Charlotte) replied: “Received.” Tagged: unclear — your call. I have not replied. Context: Vance CPA 3 — Charlotte, NC — https://www.vancecpa3.com.",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -6419,67 +6260,19 @@
      "statusText": "delivered · opened Sat 5:45 pm"
     },
     {
-     "id": "out-e70a1bfc2a451fba",
-     "dir": "out",
-     "at": "2026-10-23T16:00:02.000Z",
-     "from": "dana@getridgelineit.com",
-     "to": "dana@ridgelineit.com",
-     "subject": "Hot — Price Law Group 104, Evan Price, Managing Partner",
-     "text": "Evan Price at Price Law Group 104 (Greenville) replied: “Received.” Tagged: unclear — your call. I have not replied. Context: Price Law Group 104 — Greenville, SC — https://www.pricelaw104.com.",
-     "kind": "system",
-     "auto": false,
-     "rule": null,
-     "template": "hot_lead",
-     "accepted": true,
-     "messageId": "<MSGID_26>",
-     "openedAt": "2026-10-24T12:15:00.000Z",
-     "bouncedAt": null,
-     "bounceReason": null,
-     "repliedAt": null,
-     "milestone": false,
-     "unopenedAt": null,
-     "status": "opened",
-     "statusAt": "2026-10-24T12:15:00.000Z",
-     "statusText": "delivered · opened Sat 5:45 pm"
-    },
-    {
-     "id": "out-a7fb4ec57b33f869",
-     "dir": "out",
-     "at": "2026-10-23T16:00:02.250Z",
-     "from": "dana@getridgelineit.com",
-     "to": "dana@ridgelineit.com",
-     "subject": "Hot — Reyes Law Group 400, Alan Reyes, Managing Partner",
-     "text": "Alan Reyes at Reyes Law Group 400 (Raleigh) replied: “Who else in Charlotte do you look after?” Tagged: needs answer. I have not replied — please answer them today; response speed decides these. Context: Reyes Law Group 400 — Raleigh, NC — https://www.reyeslaw400.com.",
-     "kind": "system",
-     "auto": false,
-     "rule": null,
-     "template": "hot_lead",
-     "accepted": true,
-     "messageId": "<MSGID_27>",
-     "openedAt": "2026-10-24T12:15:00.000Z",
-     "bouncedAt": null,
-     "bounceReason": null,
-     "repliedAt": null,
-     "milestone": false,
-     "unopenedAt": null,
-     "status": "opened",
-     "statusAt": "2026-10-24T12:15:00.000Z",
-     "statusText": "delivered · opened Sat 5:45 pm"
-    },
-    {
-     "id": "out-31e429199dcb58d6",
+     "id": "out-ca7e55968cbdee58",
      "dir": "out",
      "at": "2026-10-23T17:15:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Booked — Ortiz Law Group 140, Alan Ortiz",
-     "text": "Alan Ortiz (Managing Partner) at Ortiz Law Group 140 booked a call for Tuesday 27 October at 11:00 am Eastern Time.\n\nWhy they said yes, in their words: “Interested — we have had two outages this year. What does it cost?”\n\nWhat they asked: nothing beyond the reply above\n\nThe thread so far:\nFri 23 Oct — interested: “Interested — we have had two outages this year. What does it cost?”\n\nAfter the call I’ll send you one-tap buttons to tell me how it went.",
+     "subject": "Booked — Chen Law Group 20, Alan Chen",
+     "text": "Alan Chen (Managing Partner) at Chen Law Group 20 booked a call for Tuesday 27 October at 11:00 am Eastern Time.\n\nWhy they said yes, in their words: “Interested — we have had two outages this year. What does it cost?”\n\nWhat they asked: nothing beyond the reply above\n\nThe thread so far:\nFri 23 Oct — interested: “Interested — we have had two outages this year. What does it cost?”\n\nAfter the call I’ll send you one-tap buttons to tell me how it went.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "call_handoff",
      "accepted": true,
-     "messageId": "<MSGID_28>",
+     "messageId": "<MSGID_26>",
      "openedAt": "2026-10-24T13:30:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6491,19 +6284,19 @@
      "statusText": "delivered · opened Sat 7 pm"
     },
     {
-     "id": "out-eab5b2ea2dbac7e8",
+     "id": "out-6b32b94b39563952",
      "dir": "out",
      "at": "2026-10-24T22:00:00.500Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Hot — Upton Law Group 384, Evan Upton, Managing Partner",
-     "text": "Evan Upton at Upton Law Group 384 (Charlotte) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Upton Law Group 384 — Charlotte, NC — https://www.uptonlaw384.com.",
+     "subject": "Hot — Reyes Law Group 400, Alan Reyes, Managing Partner",
+     "text": "Alan Reyes at Reyes Law Group 400 (Raleigh) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Reyes Law Group 400 — Raleigh, NC — https://www.reyeslaw400.com.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead",
      "accepted": true,
-     "messageId": "<MSGID_29>",
+     "messageId": "<MSGID_27>",
      "openedAt": "2026-10-25T18:15:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6515,19 +6308,19 @@
      "statusText": "delivered · opened Sun 11:45 pm"
     },
     {
-     "id": "out-49bbb096cc7b1ab5",
+     "id": "out-68b0be52b1fd41ce",
      "dir": "out",
      "at": "2026-10-26T12:00:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Still waiting — Upton Law Group 384, Evan Upton",
-     "text": "Evan Upton at Upton Law Group 384 replied 38 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. They’ve had a short holding note from me in your name, so they know you’ll be in touch.",
+     "subject": "Still waiting — Reyes Law Group 400, Alan Reyes",
+     "text": "Alan Reyes at Reyes Law Group 400 replied 38 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. They’ve had a short holding note from me in your name, so they know you’ll be in touch.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead_nudge",
      "accepted": true,
-     "messageId": "<MSGID_30>",
+     "messageId": "<MSGID_28>",
      "openedAt": "2026-10-27T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6563,7 +6356,7 @@
      "statusText": null
     },
     {
-     "id": "out-2da8995ccb3dd754",
+     "id": "out-01445afc8cc30979",
      "dir": "out",
      "at": "2026-10-26T14:30:00.550Z",
      "from": "hello@aviance.test",
@@ -6575,7 +6368,7 @@
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_31>",
+     "messageId": "<MSGID_29>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -6587,19 +6380,19 @@
      "statusText": "delivered"
     },
     {
-     "id": "out-937741e0e0916147",
+     "id": "out-eb5284839c4d6c84",
      "dir": "out",
      "at": "2026-10-27T16:00:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Your call with Alan Ortiz",
-     "text": "Your call with Alan Ortiz at Ortiz Law Group 140 was booked for Tuesday 27 October at 11:00 am Eastern Time. One tap tells me what happened:\n\nShowed: https://machine.test/c/TOKEN_15/tap?a=showed\nNo-show: https://machine.test/c/TOKEN_15/tap?a=noshow\nWrong fit: https://machine.test/c/TOKEN_15/tap?a=wrongfit\nDoesn’t count (reason required): https://machine.test/c/TOKEN_15/tap?a=dispute\n\nIf you couldn’t make it yourself: https://machine.test/c/TOKEN_15/tap?a=client_noshow",
+     "subject": "Your call with Alan Chen",
+     "text": "Your call with Alan Chen at Chen Law Group 20 was booked for Tuesday 27 October at 11:00 am Eastern Time. One tap tells me what happened:\n\nShowed: https://machine.test/c/TOKEN_15/tap?a=showed\nNo-show: https://machine.test/c/TOKEN_15/tap?a=noshow\nWrong fit: https://machine.test/c/TOKEN_15/tap?a=wrongfit\nDoesn’t count (reason required): https://machine.test/c/TOKEN_15/tap?a=dispute\n\nIf you couldn’t make it yourself: https://machine.test/c/TOKEN_15/tap?a=client_noshow",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "call_tap",
      "accepted": true,
-     "messageId": "<MSGID_32>",
+     "messageId": "<MSGID_30>",
      "openedAt": "2026-10-28T12:00:00.250Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6611,19 +6404,19 @@
      "statusText": "delivered · opened Wed 5:30 pm"
     },
     {
-     "id": "out-550e50f7b67ed862",
+     "id": "out-558caf36c738b283",
      "dir": "out",
      "at": "2026-10-27T18:30:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Your first call — Ortiz Law Group 140",
-     "text": "Your first booked call was held: Alan Ortiz at Ortiz Law Group 140. What was the meeting like? One or two sentences is plenty. Reply to this email.\n\nIf it’s all right with you, I’d like to write that down and use it, with your name and company. I’ll send it to you first, so you can change it or kill it.",
+     "subject": "Your first call — Chen Law Group 20",
+     "text": "Your first booked call was held: Alan Chen at Chen Law Group 20. What was the meeting like? One or two sentences is plenty. Reply to this email.\n\nIf it’s all right with you, I’d like to write that down and use it, with your name and company. I’ll send it to you first, so you can change it or kill it.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "quote_request",
      "accepted": true,
-     "messageId": "<MSGID_33>",
+     "messageId": "<MSGID_31>",
      "openedAt": "2026-10-28T14:30:00.500Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -6635,19 +6428,19 @@
      "statusText": "delivered · opened Wed 8 pm"
     },
     {
-     "id": "out-82a1e8c9c2d4c0b7",
+     "id": "out-b88c469e521b060a",
      "dir": "out",
-     "at": "2026-10-28T06:45:00.500Z",
+     "at": "2026-10-28T05:45:00.500Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Hot — Quinn Law Group 436, Reid Quinn, Managing Partner",
-     "text": "Reid Quinn at Quinn Law Group 436 (Raleigh) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Quinn Law Group 436 — Raleigh, NC — https://www.quinnlaw436.com.",
+     "subject": "Hot — Ellis CPA 431, Lena Ellis, Owner",
+     "text": "Lena Ellis at Ellis CPA 431 (Greenville) replied: “Interested. What would this cost for 20 people?” I’ve offered two slots; if they book, the invite lands in your calendar. If they ask for you directly, reply today — response speed decides these. Context: Ellis CPA 431 — Greenville, SC — https://www.elliscpa431.com.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead",
      "accepted": true,
-     "messageId": "<MSGID_34>",
+     "messageId": "<MSGID_32>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -6655,23 +6448,23 @@
      "milestone": false,
      "unopenedAt": null,
      "status": "delivered",
-     "statusAt": "2026-10-28T06:45:00.000Z",
+     "statusAt": "2026-10-28T05:45:00.000Z",
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-307c5c3ebe9fbda2",
+     "id": "out-666100a5d272c609",
      "dir": "out",
      "at": "2026-10-28T12:00:00.250Z",
      "from": "dana@getridgelineit.com",
      "to": "dana@ridgelineit.com",
-     "subject": "Still waiting — Quinn Law Group 436, Reid Quinn",
-     "text": "Reid Quinn at Quinn Law Group 436 replied 5 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. At 24 hours I send them a short holding note in your name.",
+     "subject": "Still waiting — Ellis CPA 431, Lena Ellis",
+     "text": "Lena Ellis at Ellis CPA 431 replied 6 hours ago and hasn’t heard from you yet: “Interested. What would this cost for 20 people?”\n\nIf you can, reply today. Speed decides these. At 24 hours I send them a short holding note in your name.",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "hot_lead_nudge",
      "accepted": true,
-     "messageId": "<MSGID_35>",
+     "messageId": "<MSGID_33>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -6754,7 +6547,7 @@
       "DKIM pass",
       "SPF pass"
      ],
-     "reportUrl": "https://dkimvalidator.com/cgi-bin/sa.pl?email=avvmpn1a7dw2dfjjf7us",
+     "reportUrl": "https://dkimvalidator.com/cgi-bin/sa.pl?email=av64coe7ly7kncznsm5x",
      "error": null
     },
     {
@@ -6770,7 +6563,7 @@
       "DKIM pass",
       "SPF pass"
      ],
-     "reportUrl": "https://dkimvalidator.com/cgi-bin/sa.pl?email=avyu3x0tqnbwgdz7g3f3",
+     "reportUrl": "https://dkimvalidator.com/cgi-bin/sa.pl?email=avdmbo3i5lf5lms75kcu",
      "error": null
     },
     {
@@ -6783,13 +6576,13 @@
      "pass": null,
      "detail": [
       "google: 100% inbox (6/6)",
-      "yahoo: 50% inbox (1/2)",
-      "aol: 100% inbox (2/2)",
+      "yahoo: 100% inbox (2/2)",
+      "aol: 50% inbox (1/2)",
       "icloud: 100% inbox (2/2)",
       "gmx: 100% inbox (2/2)",
       "yandex: 100% inbox (2/2)",
-      "dana@getridgelineit.com: 7/8 in the inbox",
-      "dana.whitfield@getridgelineit.com: 8/8 in the inbox"
+      "dana@getridgelineit.com: 8/8 in the inbox",
+      "dana.whitfield@getridgelineit.com: 7/8 in the inbox"
      ],
      "reportUrl": null,
      "error": null
@@ -6863,17 +6656,17 @@
      "inbox": null,
      "score": null,
      "spamAssassin": null,
-     "inboxRate": 1,
+     "inboxRate": 0.938,
      "pass": null,
      "detail": [
-      "google: 100% inbox (6/6)",
+      "google: 83% inbox (5/6)",
       "yahoo: 100% inbox (2/2)",
       "aol: 100% inbox (2/2)",
       "icloud: 100% inbox (2/2)",
       "gmx: 100% inbox (2/2)",
       "yandex: 100% inbox (2/2)",
       "dana@getridgelineit.com: 8/8 in the inbox",
-      "dana.whitfield@getridgelineit.com: 8/8 in the inbox"
+      "dana.whitfield@getridgelineit.com: 7/8 in the inbox"
      ],
      "reportUrl": null,
      "error": null
@@ -6888,8 +6681,8 @@
      "pass": null,
      "detail": [
       "google: 100% inbox (6/6)",
-      "yahoo: 100% inbox (2/2)",
-      "aol: 50% inbox (1/2)",
+      "yahoo: 50% inbox (1/2)",
+      "aol: 100% inbox (2/2)",
       "icloud: 100% inbox (2/2)",
       "gmx: 100% inbox (2/2)",
       "yandex: 100% inbox (2/2)",
@@ -6943,7 +6736,7 @@
    },
    "bounce": {
     "rate7d": 0,
-    "sent7d": 86,
+    "sent7d": 90,
     "at": "2026-10-28T04:15:00.000Z",
     "pauseAt": 0.015,
     "stopAt": 0.02,
@@ -7421,7 +7214,7 @@
      ]
     }
    ],
-   "sendableUnsent": 397,
+   "sendableUnsent": 393,
    "builtAt": "2026-10-28T04:15:00.000Z"
   },
   "links": {
