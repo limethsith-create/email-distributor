@@ -3,9 +3,10 @@
 // Test run is gone from the product, and the privacy and shared-view tests still use its realistic data.
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
-import { DEMO_IDS, isDemoId, syncClientIndex } from '@/lib/db/client';
+import { syncClientIndex } from '@/lib/db/client';
 import { dayKeyIn, daysBetween, ET } from '@/lib/time';
 
+const DEMO_IDS = new Set(['demo-harbor-dental', 'demo-summit-roofing', 'demo-lakeview-pt']);
 export const DEMO = { harbor: 'demo-harbor-dental', summit: 'demo-summit-roofing', lakeview: 'demo-lakeview-pt' };
 export const DEMO_KEYS = 'demo:keys';          // every whole key `load` wrote (set)
 export const DEMO_MEMBERS = 'demo:members';    // entries it added to shared keys (set of JSON {key, type, member})
