@@ -61,6 +61,11 @@ export const TEMPLATES = {
     subject: 'Invoice {invoiceNo} — {planName}, month one',
     body: 'Hi {firstName},\n\nWelcome to {planName}.\n\nInvoice {invoiceNo} · issued {issuedDate} · due today\n{planName}: {priceText} a month for {calls} guaranteed booked calls\nTotal due: {priceText}\n\nPay by:\n{paymentLines}\n\nWe’re setting up your sending address and inboxes now; after about two weeks of warm-up the first emails go out. Month to month, 14 days’ notice, no setup fee.\n\n{ownerName}',
   },
+  // One polite nudge ~24 hours after the agreement and invoice went out and nothing was paid (systems/invoice.js chaseUnpaidInvoices).
+  invoice_chase: {
+    subject: 'Quick note about invoice {invoiceNo}',
+    body: 'Hi {firstName},\n\nJust a friendly note: we sent over your agreement and invoice {invoiceNo} ({priceText}, {planName}) yesterday, and we haven’t seen the payment yet.\n\nPay by:\n{paymentLines}\n\nIf it’s already on its way, ignore this, and thank you. If anything is unclear, just reply and I’ll help.\n\n{ownerName}',
+  },
   invoice_reminder: {
     subject: 'Reminder: invoice {invoiceNo}',
     body: 'Hi {firstName},\n\nA reminder that invoice {invoiceNo} ({priceText}, {planName}) is still open.\n\nPay by:\n{paymentLines}\n\nIf it’s already on its way, ignore this, and thank you.\n\n{ownerName}',

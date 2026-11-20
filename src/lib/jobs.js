@@ -48,7 +48,12 @@ const salesReminders = {
   cost: 1,
   claimTtl: 900,
   async due({ now }) { const p = partsIn('UTC', now); return `${p.dayKey}T${String(p.hour).padStart(2, '0')}:${String(Math.floor(p.minute / 15) * 15).padStart(2, '0')}`; },
-  async run(ctx) { return runSalesReminders(ctx); },
+  async run(ctx) {
+    // The unpaid-invoice chase rides on this frequent job (systems/invoice.js); it never blocks the reminders.
+    const { chaseUnpaidInvoices } = await import('@/lib/systems/invoice');
+    const invoiceChase = await chaseUnpaidInvoices({ clients: ctx.clients, now: ctx.now }).catch((e) => ({ error: String(e?.message || e).slice(0, 120) }));
+    return { ...(await runSalesReminders(ctx)), invoiceChase };
+  },
 };
 
 export const JOBS = [watchdog, usage, salesReminders, ...STAGE_A, ...STAGE_B, ...STAGE_C, ...STAGE_D];

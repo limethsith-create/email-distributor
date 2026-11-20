@@ -131,6 +131,51 @@ export async function runInvoiceJob(clientId, { now: realNow = new Date() } = {}
   return { days, reminder: d };
 }
 
+/**
+ * Frequent check (runs inside the 15-minute heartbeat job): an invoice that went out 24+ hours ago and is
+ * still unpaid gets ONE polite reminder email to the client and ONE "not paid yet" alert in the hub's
+ * alert list. Keyed off the invoice's own sent time (sentAt, else issuedAt — it is stored when missing)
+ * and unpaid status, so it works whatever created the invoice. `remindedAt` on the invoice makes it once.
+ */
+export const CHASE_AFTER_MS = 24 * 3600e3;
+
+export async function chaseUnpaidInvoice(clientId, { now = new Date() } = {}) {
+  const inv = await getInvoice(clientId);
+  if (!inv || !inv.plan || inv.paidAt || inv.remindedAt) return { skipped: 'nothing to chase' };
+  if (inv.status && inv.status !== 'sent') return { skipped: inv.status };
+  const sentAt = inv.sentAt || inv.issuedAt;
+  const sentMs = Date.parse(sentAt || '');
+  if (!Number.isFinite(sentMs)) return { skipped: 'no sent time' };
+  if (!inv.sentAt) await kv.hset(K.invoice(clientId), { sentAt });
+  if (now.getTime() - sentMs < CHASE_AFTER_MS) return { skipped: 'not 24 hours yet' };
+  const sig = await ownerName(clientId, 'The invoice reminder');
+  if (!sig) return { held: 'OWNER.signerName' };
+  const lines = await paymentLines(clientId, inv.amount);
+  if (!lines) return { held: 'PAYMENT' };
+  const res = await notifyClient(clientId, 'invoice_chase', { invoiceNo: inv.invoiceNo, priceText: money(inv.amount), planName: PLAN_NAMES[inv.plan], paymentLines: lines, ownerName: sig }, { dedupe: `invoice_chase:${inv.invoiceNo}`, now });
+  await kv.hset(K.invoice(clientId), { remindedAt: now.toISOString() });
+  await logEvent(clientId, 'invoice', 'invoice_chase_sent', { invoiceNo: inv.invoiceNo, deduped: res.deduped || undefined });
+  if (!res.deduped) {
+    await alertOwner('invoice_not_paid_yet', { clientId, scope: `invoice_chase:${inv.invoiceNo}`, body: `Invoice ${inv.invoiceNo} (${money(inv.amount)}) has not been paid 24 hours after it was sent.`, did: 'Sent the client one polite reminder email. Nothing more is sent automatically until the day-3 reminder.' });
+  }
+  return { reminded: true };
+}
+
+/** Every client with an unpaid invoice. Never throws; one client failing does not stop the rest. */
+export async function chaseUnpaidInvoices({ clients = [], now = new Date() } = {}) {
+  let reminded = 0; let held = 0;
+  for (const c of clients) {
+    if (!c || c.id === 'aviance' || c.paidAt || ['declined', 'closed_silent', 'deleted'].includes(c.state)) continue;
+    try {
+      const r = await chaseUnpaidInvoice(c.id, { now: clientNow(c, now) });
+      if (r.reminded) reminded++; else if (r.held) held++;
+    } catch (err) {
+      await logEvent(c.id, 'invoice', 'invoice_chase_failed', { error: String(err?.message || err).slice(0, 200) }).catch(() => {});
+    }
+  }
+  return { reminded, held };
+}
+
 /** Owner's "Mark paid". Returns the plan-mode shopping list (SPEC §9.8). */
 export async function markPaid(clientId, now = new Date()) {
   const inv = await getInvoice(clientId);

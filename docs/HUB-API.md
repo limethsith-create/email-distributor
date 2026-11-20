@@ -2284,3 +2284,6 @@ brain and model, the buttons, the follow-ups and the time. Not part of `npm test
 
 Config: `AVA_DAILY_CAP` (default 300; 0 = no cap), `AVA_MODELS` (model
 overrides), `/mc/config`.
+
+### Changes on 2026-11-20 (unpaid invoice chase)
+New alert key `invoice_not_paid_yet` (not urgent, title in plain words: "Not paid yet: {client} has not paid their invoice (24 hours). A reminder was sent."). It appears in `/api/mc/alerts` like any other alert; no hub change needed. The invoice record gains `remindedAt` (set once, when the 24-hour reminder email goes out) and `sentAt` is filled from `issuedAt` when missing.
