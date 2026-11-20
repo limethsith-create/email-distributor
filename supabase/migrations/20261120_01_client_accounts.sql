@@ -53,7 +53,7 @@ create index if not exists profiles_client_id_idx on public.profiles (client_id)
 -- ── helpers (everyone else uses these) ───────────────────────────────────────────────────────────
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
-  select exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin');
+  select exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'admin' and p.approved is true);
 $$;
 
 -- Approved team member (admin or employee). A client is never "approved" in this sense.

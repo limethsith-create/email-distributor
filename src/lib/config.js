@@ -90,6 +90,9 @@ export const DEFAULTS = {
     email: null,
   },
   PAYMENT: { paypalMe: null, wiseDetails: null },
+  // How many client people (not the team) each plan allows in the portal. The hub writes this into the database when a client is invited;
+  // the database refuses anyone beyond it.
+  PORTAL: { seats: { starter: 2, growth: 4, scale: 6 } },
   // ── Stage A additions ── (new defaults only inside this block)
   INTAKE: {
     // Lead-gen / outbound / SDR agencies are not trial clients (trial doc §2).
