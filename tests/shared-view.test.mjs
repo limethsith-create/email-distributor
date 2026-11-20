@@ -83,7 +83,7 @@ test('the shared view of a paying client: the five tabs’ data, and nothing on 
   const d = await page(token);
   assert.equal(d.status, 200, JSON.stringify(d.json));
   const v = d.json;
-  assert.deepEqual(Object.keys(v).sort(), ['calls', 'company', 'day', 'demo', 'five', 'journey', 'last30', 'messages', 'ok', 'openedTracked', 'paid', 'plan', 'rates', 'replyTo', 'sentSince', 'status', 'updatedAt'].sort());
+  assert.deepEqual(Object.keys(v).sort(), ['calls', 'company', 'day', 'five', 'journey', 'last30', 'messages', 'ok', 'openedTracked', 'paid', 'plan', 'rates', 'replyTo', 'sentSince', 'status', 'updatedAt'].sort());
   assert.equal(v.company, 'Oak Legal');
   assert.equal(v.plan, 'Growth plan');
   assert.equal(v.day, null, 'no trial day on a paid plan');

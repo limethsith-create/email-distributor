@@ -6,7 +6,7 @@
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { cfg } from '@/lib/config';
-import { getAllClients, getTrial, ACTIVE_STATES, isDemo } from '@/lib/db/client';
+import { getAllClients, getTrial, ACTIVE_STATES } from '@/lib/db/client';
 import { getTotals } from '@/lib/db/counters';
 import { getInboxRecords } from '@/lib/db/inboxes';
 import { getPromises } from '@/lib/db/promises';
@@ -42,8 +42,8 @@ export async function clientRow(c, { alerts = [], now = new Date() } = {}) {
     inboxRate: rates.length ? Math.min(...rates) : null,
     lastJobAt,
     openAlerts: open.length, urgentAlerts: open.filter((a) => a.urgent).length,
-    // A Test run client (systems/demo.js): shown in the hub, flagged, never acted on.
-    demo: isDemo(c),
+    // Only Ava's tools still read this (Agent B removes them); no client is flagged any more.
+    demo: c.demo === '1',
   };
 }
 
@@ -56,9 +56,8 @@ async function usagePct(service, field, limit, month) {
   } catch { return { used: null, limit, pct: null }; }
 }
 
-/** `includeDemo`: the hub's board shows the Test run clients; the owner digests and Mission Control never do. */
-export async function boardData(now = new Date(), { includeDemo = false } = {}) {
-  const [hb, clients, alerts] = await Promise.all([kv.hgetall(K.heartbeat()).catch(() => ({})), getAllClients(null, { includeDemo }), getAlertLog(500)]);
+export async function boardData(now = new Date()) {
+  const [hb, clients, alerts] = await Promise.all([kv.hgetall(K.heartbeat()).catch(() => ({})), getAllClients(), getAlertLog(500)]);
   const rows = await Promise.all(clients.map((c) => clientRow(c, { alerts, now })));
   rows.sort((a, b) => COLOUR_RANK[a.health] - COLOUR_RANK[b.health] || b.urgentAlerts - a.urgentAlerts || b.openAlerts - a.openAlerts || a.id.localeCompare(b.id));
   const month = partsIn('UTC', now).monthKey;

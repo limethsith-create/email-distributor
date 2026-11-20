@@ -710,7 +710,7 @@ export async function hubRow(client, { alerts, now = new Date(), onboard = null,
 }
 
 export async function hubBoard({ now = new Date() } = {}) {
-  const [board, clients] = await Promise.all([boardData(now, { includeDemo: true }), getAllClients(null, { includeDemo: true })]);
+  const [board, clients] = await Promise.all([boardData(now), getAllClients()]);
   const alerts = await getAlertLog(500);
   // ONBOARDCALL (+ LAUNCH) settings once per board (one read), only when some trial has a call.
   const onboard = clients.some((c) => c.onboardCallSentAt || c.launchCallSentAt) ? await onboardSettings().catch(() => null) : null;
