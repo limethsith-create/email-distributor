@@ -6,7 +6,7 @@
  *
  * Stages (the owner's pipeline, in order): new = Booked (the call is on the
  * calendar) → held = Call done / no_show = No-show → contacted = Following up →
- * proposal = Proposal sent → won / lost. Moving one to Call done / No-show
+ * agreement_sent = Agreement and invoice sent → won / lost. Moving one to Call done / No-show
  * marks its Calendar meeting too, and the Calendar's buttons move it back here.
  *
  * A booking with a website also gets a client record held for the sales call
@@ -23,11 +23,18 @@ import { K } from '@/lib/db/keys';
 import { logEvent } from '@/lib/db/events';
 import { alertOwner } from '@/lib/notify';
 
-export const STATUSES = ['new', 'held', 'no_show', 'contacted', 'proposal', 'won', 'lost'];
+export const STATUSES = ['new', 'held', 'no_show', 'contacted', 'agreement_sent', 'won', 'lost'];
 /** The owner's words for each stage (the hub shows these). */
-export const STAGE_WORDS = { new: 'Booked', held: 'Call done', no_show: 'No-show', contacted: 'Following up', proposal: 'Proposal sent', won: 'Won', lost: 'Lost' };
+export const STAGE_WORDS = { new: 'Booked', held: 'Call done', no_show: 'No-show', contacted: 'Following up', agreement_sent: 'Agreement and invoice sent', won: 'Won', lost: 'Lost' };
 /** Stages still in play (not won or lost). */
-export const OPEN_STAGES = ['new', 'held', 'no_show', 'contacted', 'proposal'];
+export const OPEN_STAGES = ['new', 'held', 'no_show', 'contacted', 'agreement_sent'];
+/** Older records (and old callers) say 'proposal' / 'proposal_sent': the same stage as agreement_sent. */
+export const stageKey = (v) => (v === 'proposal' || v === 'proposal_sent' ? 'agreement_sent' : v);
+const fixStage = (r) => {
+  if (!r || typeof r !== 'object') return r;
+  const hist = Array.isArray(r.stageHistory) && r.stageHistory.some((h) => stageKey(h?.to) !== h?.to) ? r.stageHistory.map((h) => ({ ...h, to: stageKey(h?.to) })) : r.stageHistory;
+  return stageKey(r.status) === r.status && hist === r.stageHistory ? r : { ...r, status: stageKey(r.status), ...(hist ? { stageHistory: hist } : {}) };
+};
 const CAP = 2000;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PLANS = ['starter', 'growth', 'scale'];
@@ -359,14 +366,14 @@ export async function startClientFrom(inq, { now = new Date() } = {}) {
 
 export async function getInquiry(id) {
   const rec = await kv.hget(K.inquiries(), String(id));
-  return rec && typeof rec === 'object' ? rec : null;
+  return rec && typeof rec === 'object' ? fixStage(rec) : null;
 }
 
 /** Newest first, with counts per status. */
 export async function listInquiries({ limit = 200 } = {}) {
   const ids = (await kv.lrange(K.inquiryOrder(), 0, Math.max(0, limit - 1))) || [];
   const all = ids.length ? await kv.hmget(K.inquiries(), ...ids) : {};
-  const rows = ids.map((id) => (all && all[id]) || null).filter(Boolean);
+  const rows = ids.map((id) => (all && all[id]) || null).filter(Boolean).map(fixStage);
   const counts = Object.fromEntries(STATUSES.map((x) => [x, 0]));
   for (const r of rows) if (counts[r.status] !== undefined) counts[r.status]++;
   return { inquiries: rows, counts };
@@ -384,6 +391,7 @@ async function patch(id, fields) {
 }
 
 export async function setInquiryStatus(id, status, note = '', { now = new Date(), fromCalendar = false } = {}) {
+  status = stageKey(status);
   if (!STATUSES.includes(status)) throw new Error(`status must be one of ${STATUSES.join(', ')}`);
   const cur = await getInquiry(id);
   if (!cur) throw new Error('inquiry not found');

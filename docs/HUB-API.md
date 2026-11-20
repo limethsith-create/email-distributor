@@ -594,11 +594,11 @@ email (+ .ics), then reminders the day before and an hour before
 (systems/salescall.js, docs/CALENDAR.md "Sales calls").
 
 Stages (`status`, in pipeline order): `new` (Booked) · `held` (Call done) ·
-`no_show` (No-show) · `contacted` (Following up) · `proposal` (Proposal sent) ·
+`no_show` (No-show) · `contacted` (Following up) · `agreement_sent` (Agreement and invoice sent) ·
 `won` · `lost`. Call done / No-show set here also mark the Calendar meeting; the
 Calendar's Call done / No-show / Cancel move the inquiry (cancel → lost).
 
-`GET /api/mc/hub` adds `inquiries: { counts: {new, held, no_show, contacted, proposal, won, lost}, open, latest: [ {id, at, name, company, plan, status, slotStart, whenHost} ] }`
+`GET /api/mc/hub` adds `inquiries: { counts: {new, held, no_show, contacted, agreement_sent, won, lost}, open, latest: [ {id, at, name, company, plan, status, slotStart, whenHost} ] }`
 and, for each `new` one, a to-do `{ id: "inquiry:{id}", clientName: company, urgent: (false while the call is ahead, true once it has passed or with no time), action: { type: "view", view: "inquiry", inquiryId } }`.
 
 `GET /api/mc/inquiries` → `{ inquiries: [record…] (newest first), counts }` where a record is
@@ -2284,3 +2284,7 @@ brain and model, the buttons, the follow-ups and the time. Not part of `npm test
 
 Config: `AVA_DAILY_CAP` (default 300; 0 = no cap), `AVA_MODELS` (model
 overrides), `/mc/config`.
+
+## Changes on 2026-11-20 (stage rename)
+
+The booking stage `proposal` ("Proposal sent") is now `agreement_sent` ("Agreement and invoice sent"). Records still saying `proposal` or `proposal_sent` are read as `agreement_sent`, and POST `status` accepts the old keys too. Counts use the new key.

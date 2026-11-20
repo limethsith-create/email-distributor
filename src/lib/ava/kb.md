@@ -44,7 +44,7 @@ the sales call, Onboarding, Buying & setup, Warm-up & build, Sending, Stopped & 
 The only way in is the website's "Book a call" form. Each booking lands in Plan call requests, goes in the Calendar
 as a sales call with a confirmation email and reminders, and pops up on the owner's phone. When they gave a website
 the machine also researches the company before the call (see "What we found"). After the call the owner moves the
-booking on: Call done, Following up, Proposal sent, then Won or Lost. Won makes them a client and emails them to book
+booking on: Call done, Following up, Agreement and invoice sent, then Won or Lost. Won makes them a client and emails them to book
 the onboarding call — only the owner can press it; Ava cannot. Lost closes it and nothing is emailed. A booking
 without a website cannot be Won: add the client with "Add a paying client" (it needs their website). That button is
 also for anyone closed outside a website booking.
@@ -158,7 +158,7 @@ client yourself (for someone closed outside a website booking). Plan call reques
 Everyone who books a call on the website's "Book a call" form. Each one pops up on the owner's phone and is a to-do:
 calm while the call is ahead, urgent once it has passed ("How did the call go?"). The list has filters (Open, Won,
 Lost, All). One booking shows their call time, what they sell and the plan; Reply by email; Where it stands (Call done,
-Following up, Proposal sent, Won, Lost, with a note); and Notes. Won makes them a client and emails them to book the
+Following up, Agreement and invoice sent, Won, Lost, with a note); and Notes. Won makes them a client and emails them to book the
 onboarding call.
 
 ## Calendar page

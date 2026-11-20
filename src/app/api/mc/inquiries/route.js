@@ -1,7 +1,7 @@
 /**
  * /api/mc/inquiries — the hub's Inquiries section (admin / hub token).
  *   GET                                   → { inquiries (newest first), counts }
- *   POST {action:'status', id, status, note?}   status: new (Booked) | held (Call done) | no_show | contacted (Following up) | proposal (Proposal sent) | won | lost
+ *   POST {action:'status', id, status, note?}   status: new (Booked) | held (Call done) | no_show | contacted (Following up) | agreement_sent (Agreement and invoice sent; the old 'proposal' is still accepted) | won | lost
  *        won  → they become a paying client and onboarding starts (the answer's inquiry.clientId); 400 when it cannot
  *        lost → the record held for the call closes; nothing is emailed
  *   POST {action:'note', id, text}
