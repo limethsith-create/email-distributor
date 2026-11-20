@@ -141,7 +141,7 @@ async function act(body, role = 'admin') {
 test('invitePortal: emails the link to the address (owner only) and returns sent', async () => {
   const r = await act({ action: 'invitePortal', email: ' Sam@OakLegal.com ', link: LINK });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.deepEqual(r.body, { ok: true, sent: true });
+  assert.deepEqual(r.body, { ok: true, sent: true, seats: 4 });
   assert.equal(sent.length, 1);
   assert.equal(sent[0].to, 'sam@oaklegal.com');
   assert.equal(sent[0].subject, 'Your Aviance portal');
