@@ -3,6 +3,9 @@
  * connection details.
  *
  * Reads accounts from SMTP_ACCOUNT_1..10 (falls back to GMAIL_ACCOUNT_1..10).
+ * Also GMAIL_ADDRESS + GMAIL_APP_PASSWORD (one Gmail inbox, the clearest name).
+ * Gmail needs a 16-letter APP password (Google Account › Security › 2-Step
+ * Verification › App passwords), never the normal one; spaces in it are dropped.
  * Format: `email:password:displayName`. Display names may themselves contain
  * colons; passwords may not (Gmail app passwords never do). Values are
  * trimmed so a stray newline in a Vercel env var can no longer fail auth.
@@ -36,10 +39,16 @@ function detectProvider(email, explicit) {
   return 'namecheap';
 }
 
+export function cleanPassword(raw) {
+  return String(raw || '').replace(/\s+/g, '');
+}
+
 export function parseAccount(raw, index = 0) {
   const value = String(raw || '').trim();
   if (!value) return null;
-  const [emailRaw, password, ...rest] = value.split(':');
+  const [emailRaw, passwordRaw, ...rest] = value.split(':');
+  // Google shows an app password as "abcd efgh ijkl mnop" — the spaces are not part of it.
+  const password = cleanPassword(passwordRaw);
   const email = String(emailRaw || '').trim().toLowerCase();
   if (!email || !email.includes('@') || !password) return null;
   const displayName = rest.join(':').trim() || email.split('@')[0];
@@ -71,6 +80,13 @@ function envAccounts() {
       const envVar = process.env[`SMTP_ACCOUNT_${i}`] || process.env[`GMAIL_ACCOUNT_${i}`];
       const account = parseAccount(envVar, i);
       if (account) accounts.push({ ...account, clientId: 'aviance', source: 'env' });
+    }
+    // One Gmail inbox by its own clear names (account 1 slot if no SMTP_ACCOUNT_1 line used it).
+    const gAddr = String(process.env.GMAIL_ADDRESS || process.env.GMAIL_USER || '').trim().toLowerCase();
+    const gPass = cleanPassword(process.env.GMAIL_APP_PASSWORD);
+    if (gAddr.includes('@') && gPass && !accounts.some((a) => a.email === gAddr)) {
+      const account = parseAccount(`${gAddr}:${gPass}:${process.env.GMAIL_DISPLAY_NAME || ''}`, 0);
+      if (account) accounts.push({ ...account, provider: 'google', smtp: { ...PROVIDERS.google.smtp }, imap: { ...PROVIDERS.google.imap }, spamFolder: PROVIDERS.google.spamFolder, clientId: 'aviance', source: 'env' });
     }
     cache = accounts;
   }

@@ -2284,3 +2284,8 @@ brain and model, the buttons, the follow-ups and the time. Not part of `npm test
 
 Config: `AVA_DAILY_CAP` (default 300; 0 = no cap), `AVA_MODELS` (model
 overrides), `/mc/config`.
+
+## Changes on 2026-11-20 (Gmail sign-in)
+
+- A failed send login (SMTP 534/535 / EAUTH) now stores a plain sentence as the inbox's `disabledReason` and in the `inbox_auth_fail` alert body (Gmail: "Gmail won't let us sign in — make a new app password …"). No new fields; the hub already shows `disabledReason`.
+- Env: `GMAIL_ADDRESS` + `GMAIL_APP_PASSWORD` add one Gmail inbox (spaces in the 16-letter app password are dropped). `SMTP_ACCOUNT_n` / `GMAIL_ACCOUNT_n` still work, and spaces are dropped there too.
