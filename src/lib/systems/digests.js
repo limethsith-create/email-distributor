@@ -9,11 +9,9 @@
  * hours; plus every promise due today or overdue (Promise Register) and any
  * config drift (overrides that differ from the defaults, SPEC §10.3).
  *
- * Monday (08:00 Asia/Colombo): the KPI numbers from the KPIs SOP — share of
- * finished trials that booked ≥ 1 call, reviews captured, trial-to-paid,
- * extensions running (max KPI.maxExtensions), time per trial from the
- * owner's recorded minutes ("not measured" when nobody recorded any), and the
- * health colour of every live client. Includes `aviance`.
+ * Monday (08:00 Asia/Colombo): clients sending, calls booked for them, time
+ * per client from the owner's recorded minutes ("not measured" when nobody
+ * recorded any), and the health colour of every live client. Includes `aviance`.
  */
 
 import { kv } from '@vercel/kv';
@@ -28,7 +26,7 @@ import { alertOwner, getAlertLog, ackMatching } from '@/lib/notify';
 import { dayKeyIn, OWNER_TZ } from '@/lib/time';
 import { boardData } from '@/lib/systems/boarddata';
 import { promisesDue } from '@/lib/systems/promiseregister';
-import { getLedger, cfgTree } from '@/lib/systems/dshared';
+import { getLedger } from '@/lib/systems/dshared';
 import { ALERTS } from '@/lib/templates/owner';
 import { isConnected as cheapInboxesConnected } from '@/lib/ext/cheapinboxes';
 
@@ -116,28 +114,21 @@ async function supersedeDigests(key, res, now) {
   return ackMatching((a) => a.key === key && a.id !== res.id, { by: 'machine', reason: 'the next digest went out', now });
 }
 
-const share = (n, d) => (d > 0 ? `${Math.round((n / d) * 100)}% (${n} of ${d})` : 'no finished trials yet');
 
 export async function mondayDigest({ now = new Date(), send = true } = {}) {
-  const kpi = await cfgTree(null, 'KPI');
   const ledger = (await getLedger()).filter((r) => r.id !== '_test');
-  const finished = ledger.filter((r) => r.converted === true || r.notNowAt || r.retiredAt);
-  const booked = finished.filter((r) => Number(r.booked) > 0).length;
-  const reviews = finished.filter((r) => r.reviewCapturedAt).length;
-  const paid = finished.filter((r) => r.converted === true).length;
   const board = await boardData(now);
-  const extensions = board.extensions;
+  const live = board.clients.filter((c) => c.id !== 'aviance' && ['sending', 'paused'].includes(c.state));
+  const booked = live.reduce((a, c) => a + (Number.isFinite(c.five?.booked) ? c.five.booked : 0), 0);
   const timed = ledger.filter((r) => Number(r.ownerMinutes) > 0);
   const timeLine = timed.length
-    ? `${(timed.reduce((a, r) => a + Number(r.ownerMinutes), 0) / timed.length / 60).toFixed(1)} h per trial (from ${timed.length} trial${timed.length === 1 ? '' : 's'} with recorded minutes; target ≤ ${kpi.hoursPerTrial} h)`
+    ? `${(timed.reduce((a, r) => a + Number(r.ownerMinutes), 0) / timed.length / 60).toFixed(1)} h per client (from ${timed.length} client${timed.length === 1 ? '' : 's'} with recorded minutes)`
     : 'not measured';
   const colours = board.clients.filter((c) => c.state !== 'deleted').map((c) => `  • ${c.health.toUpperCase()} ${c.name} (${c.state}${c.trialDay != null ? `, day ${c.trialDay}` : ''})${c.healthReasons.length ? ` — ${c.healthReasons.join('; ')}` : ''}`);
   const body = [
-    `Trials that booked ≥ 1 call: ${share(booked, finished.length)} — target ${Math.round(kpi.bookedShare * 100)}%`,
-    `Reviews captured: ${share(reviews, finished.length)} — target ${Math.round(kpi.reviewShare * 100)}%`,
-    `Trial to paid: ${share(paid, finished.length)} — target ${Math.round(kpi.paidShare * 100)}%`,
-    `Extensions running: ${extensions} — max ${kpi.maxExtensions}${extensions > kpi.maxExtensions ? ' (OVER)' : ''}`,
-    `Time per trial: ${timeLine}`,
+    `Clients sending: ${live.length}`,
+    `Calls booked for them (all time, stored counters): ${booked}`,
+    `Your time per client: ${timeLine}`,
     '',
     'Health:',
     ...(colours.length ? colours : ['  • no clients']),
@@ -145,7 +136,7 @@ export async function mondayDigest({ now = new Date(), send = true } = {}) {
   // The owner's own date, like the morning digest: it goes out Monday 08:00 in Sri Lanka, which is
   // still Sunday in the US — "Monday KPIs — <Sunday's date>" read wrong.
   const date = dayKeyIn(OWNER_TZ, now);
-  const res = send ? await alertOwner('monday_digest', { vars: { date }, body, did: 'Numbers from stored counters and the trial ledger only.' }) : null;
+  const res = send ? await alertOwner('monday_digest', { vars: { date }, body, did: 'Numbers from stored counters and the client ledger only.' }) : null;
   await supersedeDigests('monday_digest', res, now);
-  return { body, sent: res?.sent ?? false, finished: finished.length };
+  return { body, sent: res?.sent ?? false, clients: live.length };
 }

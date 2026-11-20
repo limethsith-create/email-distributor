@@ -1,6 +1,6 @@
 import { kv } from '@vercel/kv';
 import { K, assertClientId } from '@/lib/db/keys';
-import { getClient, getProfile, getTrial, getDomain, setState, STATES, isDemoId } from '@/lib/db/client';
+import { getClient, getProfile, getTrial, getDomain, setState, STATES } from '@/lib/db/client';
 import { getInboxRecords, saveInbox, removeInbox, patchInbox, publicInbox } from '@/lib/db/inboxes';
 import { getEvents, logEvent } from '@/lib/db/events';
 import { runTick, jobRecords } from '@/lib/scheduler';
@@ -12,7 +12,6 @@ import { markInboxesCancelled } from '@/lib/systems/wrapup';
 import { markPaid } from '@/lib/systems/invoice';
 import { patchTrial, recordLedger } from '@/lib/systems/dshared';
 import { ackAlerts } from '@/lib/notify';
-import { demoRefusal } from '@/lib/systems/demo';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -34,20 +33,6 @@ export async function GET(_req, { params }) {
 
 export async function POST(request, { params }) {
   const body = await request.json().catch(() => ({}));
-  const pid = (await params)?.id;
-  // A Test run client: only its dashboard link, for the owner's preview (nothing is sent or changed).
-  if (isDemoId(pid) && (body.action === 'shareDashboard' || (body.action === 'dashboardLink' && body.fresh !== true))) {
-    if (!(await getClient(pid))) return Response.json({ error: 'not found' }, { status: 404 });
-    if (body.action === 'shareDashboard') {
-      const { isValidEmail, normalizeEmail } = await import('@/lib/metrics');
-      if (!isValidEmail(normalizeEmail(body.email))) return Response.json({ error: 'Enter a valid email address.' }, { status: 400 });
-    }
-    const { dashboardLink } = await import('@/lib/systems/clientdash');
-    const url = await dashboardLink(pid);
-    return Response.json(body.action === 'shareDashboard' ? { ok: true, url, sent: false, demo: true } : { ok: true, url, demo: true });
-  }
-  const refused = demoRefusal(pid);
-  if (refused) return refused;
   const id = assertClientId(params.id);
   const client = await getClient(id);
   if (!client) return Response.json({ error: 'not found' }, { status: 404 });
@@ -108,7 +93,6 @@ export async function POST(request, { params }) {
         return Response.json({ ok: true });
       case 'inboxEnabled':
         await patchInbox(id, body.email, { enabled: body.enabled ? '1' : '0' });
-        if (id === 'aviance') await kv.hset('inbox_enabled', { [String(body.email).toLowerCase()]: body.enabled ? '1' : '0' });
         await logEvent(id, 'mc', 'inbox_switched', { email: body.email, enabled: Boolean(body.enabled) });
         return Response.json({ ok: true });
       case 'setState': {
@@ -146,13 +130,6 @@ export async function POST(request, { params }) {
         await kv.hset(K.client(id), { sendHold: '', sendHoldClearedAt: new Date().toISOString() });
         await logEvent(id, 'mc', 'send_hold_cleared', { by: 'owner' });
         await ackAlerts(id, ['blacklisted'], { reason: 'send hold cleared' });
-        return Response.json({ ok: true });
-      }
-      case 'reviewCaptured': {
-        const at = new Date().toISOString();
-        await patchTrial(id, { reviewCapturedAt: at });
-        await recordLedger(id, { reviewCapturedAt: at });
-        await logEvent(id, 'mc', 'review_captured', {});
         return Response.json({ ok: true });
       }
       case 'logTime': {

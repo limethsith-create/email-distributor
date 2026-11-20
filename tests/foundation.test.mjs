@@ -46,13 +46,12 @@ test('time zones', () => {
 
 test('config defaults, overrides and hard caps', async () => {
   __reset();
-  assert.equal(await cfg(null, 'MAX_ACTIVE_TRIALS'), 3);
-  assert.deepEqual(await cfg(null, 'FIT.employeesMin'), 5);
+  assert.equal(await cfg(null, 'BUILD.days'), 14);
   const { kv } = await import('@vercel/kv');
   await kv.hset('system:config', { COLD_CAP: JSON.stringify(90) });
   assert.equal(await cfg(null, 'COLD_CAP'), HARD_COLD_CAP);
-  await kv.hset('client:acme:config', { MAX_ACTIVE_TRIALS: '5' });
-  assert.equal(await cfg('acme', 'MAX_ACTIVE_TRIALS'), 5);
+  await kv.hset('client:acme:config', { 'BUILD.days': '10' });
+  assert.equal(await cfg('acme', 'BUILD.days'), 10);
 });
 
 test('inbox passwords round-trip through AES-256-GCM', async () => {

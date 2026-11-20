@@ -635,7 +635,7 @@ test('approval by silence: link Day −7, reminders Day −5 and −3, approved 
 
 test('warming → ready: Day 1 slides one sending day while the gate is red, then ready when green', async () => {
   __reset();
-  await trialClient('beta', { trial: { signedDay: '2026-09-22', day1Date: '2026-10-06', day30Date: '2026-11-04' } });
+  await trialClient('beta', { trial: { signedDay: '2026-09-22', day1Date: '2026-10-06' } });
   await saveInbox('beta', { email: 'a@beta-trial.com', password: 'x' });
   const sent = [];
   const deps = { notify: async (id, key, vars, opts) => { sent.push({ key, vars, dedupe: opts.dedupe }); return { sent: true }; } };
@@ -647,7 +647,7 @@ test('warming → ready: Day 1 slides one sending day while the gate is red, the
   assert.equal(r1.slid, '2026-10-07');
   let trial = await kv.hgetall(K.trial('beta'));
   assert.equal(trial.day1Date, '2026-10-07');
-  assert.equal(trial.day30Date, '2026-11-05');
+  assert.equal(trial.day30Date, undefined, 'no Day 30 any more');
   assert.equal(trial.day1Original, '2026-10-06');
   assert.equal(sent[0].key, 'day1_moved');
   assert.match(sent[0].vars.waitingLine, /approve the emails here/);

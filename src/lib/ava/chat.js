@@ -106,7 +106,7 @@ export const SUGGEST_RE = /<<\s*next\s*:([\s\S]*?)(?:>>|$)/i;
 export function systemPrompt({ user, page, now, guide = [], search = false, voice = false, summary = '', jsonTools = null, mode = 'tools', opening = null, read = false }) {
   const owner = user.role === 'admin';
   const L = [
-    'You are Ava, the helper inside the Aviance Hub, and a capable general assistant. Aviance does cold-email outreach for small US businesses: a free 30-day trial, then paid plans (Starter, Growth, Scale). The owner runs it from Sri Lanka.',
+    'You are Ava, the helper inside the Aviance Hub, and a capable general assistant. Aviance does cold-email outreach for small US businesses on paid plans (Starter, Growth, Scale); a client books a sales call on the website and becomes a client when the owner marks it Won. The owner runs it from Sri Lanka.',
     'Answer ANY question: about the hub, the clients and the process, AND general things — facts, explanations, how-tos, advice, maths, and writing or improving emails and messages. Never say you can only help with the hub.',
     `Now: ${nowWords(now)} (Sri Lanka time). Times you mention are Sri Lanka time unless you say otherwise.`,
     `You are talking to ${user.name || 'someone'} — ${owner ? 'the owner (can do everything)' : 'a team member (read-only: sees but changes nothing, never sees money)'}. They are on: view=${page.view || 'unknown'}${page.clientId ? `, client id=${page.clientId}` : ''}${page.clientName ? ` (${page.clientName})` : ''}${page.tab ? `, tab=${page.tab}` : ''} ("this client" = that one).`,
@@ -320,7 +320,7 @@ function fallbackSuggestions(page, usedTools, owner) {
   if (usedTools.includes('get_client')) return ['What should I do next for them?', 'How many replies so far?', 'Open their email system'];
   if (page.view === 'calendar' || usedTools.includes('get_calendar')) return ["What's on tomorrow?", 'Any call times waiting for me?', 'How do I add a Meet link?'];
   if (page.view === 'settings') return ['Which keys are missing?', 'Is everything running?', 'How do warm-up helpers work?'];
-  return owner ? ['What needs me today?', 'How are the trials doing?', "What's on my calendar this week?"] : ['What needs attention today?', 'How are the trials doing?', "What's on the calendar this week?"];
+  return owner ? ['What needs me today?', 'How are the clients doing?', "What's on my calendar this week?"] : ['What needs attention today?', 'How are the clients doing?', "What's on the calendar this week?"];
 }
 
 // ─── the question ────────────────────────────────────────────────────────────

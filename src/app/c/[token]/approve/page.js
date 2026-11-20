@@ -104,7 +104,7 @@ export default function ApprovePage({ params }) {
   return (
     <main style={{ maxWidth: 860, margin: '32px auto', padding: '0 16px 64px', display: 'grid', gap: 20 }}>
       <header>
-        <div className="eyebrow" style={{ marginBottom: 6 }}>Your 30-day trial</div>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>Your campaign</div>
         <h1 style={{ fontSize: 30, fontWeight: 800, margin: 0 }}>{d.company}: the list and the emails</h1>
         <p style={{ color: 'var(--fg-muted)', marginTop: 8 }}>
           Please approve each part below, or tell us what to change.{d.day1Date ? ` First send: ${fmt(d.day1Date)}.` : ''}

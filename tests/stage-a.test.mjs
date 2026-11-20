@@ -13,8 +13,8 @@ import { saveInbox, getInboxRecords } from '@/lib/db/inboxes';
 import { readToken } from '@/lib/pagetokens';
 import { TEMPLATES as STAGE_A_TEMPLATES } from '@/lib/templates/client/stage-a';
 import { fill } from '@/lib/templates/render';
-import { renderAgreement } from '@/lib/templates/agreement';
-import { FIT_RULES, evaluateFit, detectAgency, normaliseApplication, normaliseDomain, applyForTrial, runOnboardingNudge, promoteFromQueue } from '@/lib/systems/gatekeeper';
+import { renderPaidAgreement } from '@/lib/templates/agreement';
+import { detectAgency, normaliseDomain, addClient, approveApplication, declineApplication, runOnboardingNudge } from '@/lib/systems/gatekeeper';
 import { buildQueries, estimateFrom, runMarketCount, keywordsOf } from '@/lib/systems/market';
 import { candidateDomains, allowedTlds, registrarQuotes, inboxQuotes, buildShoppingList, runPriceScout, runPurchaseNudge, parseCloudflareCom } from '@/lib/systems/pricescout';
 import { computeDates, dnsblQueries, reverseIp, isListedAnswer, evalSpf, evalDkim, evalDmarc, evalMx, parseAuthResults, runSetupCheck, startSetupCheck } from '@/lib/systems/setupcheck';
@@ -29,7 +29,7 @@ import { DEFAULTS } from '@/lib/config';
 function renderTemplate(key, vars) {
   const t = STAGE_A_TEMPLATES[key];
   if (!t) throw new Error(`unknown template ${key}`);
-  // As templates/client renderTemplate: a trial sends in the client's own name unless another sender is named.
+  // As templates/client renderTemplate: emails go in the client's own name unless another sender is named.
   const v = vars.inWhoseName ? vars : { ...vars, inWhoseName: 'in your name' };
   return { subject: fill(key, t.subject, v), text: fill(key, t.body, v) };
 }
@@ -45,7 +45,7 @@ function stubIo() {
   emails = [];
   alerts = [];
   io.notifyClient = async (clientId, key, vars, opts = {}) => {
-    const msg = renderTemplate(key, { clientName: 'C', contactName: 'Ann Lee', ...vars }); // throws on any empty slot
+    const msg = renderTemplate(key, { clientName: 'C', contactName: 'Ann Lee', planName: 'Starter', ...vars }); // throws on any empty slot (notify.js always names the plan)
     emails.push({ clientId, key, vars, opts, msg });
     return { sent: true };
   };
@@ -80,44 +80,17 @@ test('domains normalise from websites and emails', () => {
   assert.equal(normaliseDomain('not a site'), null);
 });
 
-test('each fit rule fails on its own', () => {
-  const fit = DEFAULTS.FIT;
-  const base = normaliseApplication(GOOD);
-  assert.deepEqual(evaluateFit(base, fit, { agencyHit: null }), { ok: true });
-  const breakers = {
-    us_based: { usBased: 'no' },
-    employees: { employees: '51' },
-    deal_value: { dealValue: '1999' },
-    sold_to_strangers: { soldToStrangers: 'no' },
-    dream_customers: { dreamCustomers: ['Only one'] },
-    meet_within_5_days: { meetWithin5Days: 'no' },
-    slots_per_week: { slotsPerWeek: '4' },
-    nobody_else_emailing: { nobodyElseEmailing: 'no' },
-    review_agreed: { reviewAgreed: 'no' },
-  };
-  for (const rule of FIT_RULES) {
-    if (rule.id === 'not_agency') {
-      const v = evaluateFit(base, fit, { agencyHit: 'lead generation' });
-      assert.equal(v.rule, 'not_agency');
-      continue;
-    }
-    const app = normaliseApplication({ ...GOOD, ...breakers[rule.id] });
-    const v = evaluateFit(app, fit, { agencyHit: null });
-    assert.equal(v.ok, false, rule.id);
-    assert.equal(v.rule, rule.id);
-    assert.ok(v.reason.length > 10);
-  }
-  assert.equal(evaluateFit(normaliseApplication({ ...GOOD, employees: '5' }), fit, {}).ok, true);
-  assert.equal(evaluateFit(normaliseApplication({ ...GOOD, employees: '4' }), fit, {}).rule, 'employees');
+test('the agency check names the words it found', () => {
   assert.equal(detectAgency('Top B2B Lead Generation agency in Ohio', DEFAULTS.INTAKE.agencyKeywords), 'lead generation');
   assert.equal(detectAgency('We fix leaky pipes; no outbound nonsense', DEFAULTS.INTAKE.agencyKeywords), null);
 });
 
-test('happy path: fit passes → one accepted_call email with the onboarding link, token, promise', async () => {
-  const r = await applyForTrial(GOOD, { now: new Date('2026-10-05T14:00:00Z') });
+test('the owner adds a paying client: one accepted_call email with the onboarding link, token, promise', async () => {
+  const r = await addClient(GOOD, { now: new Date('2026-10-05T14:00:00Z') });
   assert.equal(r.outcome, 'onboarding');
   const c = await getClient(r.clientId);
   assert.equal(c.state, 'onboarding');
+  assert.equal(c.plan, 'starter');
   assert.equal(c.mainDomain, 'acme.com');
   assert.deepEqual(emails.map((e) => e.key), ['accepted_call'], 'one email on a yes (docs/ONBOARD-CALL.md)');
   const mail = emails.find((e) => e.key === 'accepted_call');
@@ -125,73 +98,54 @@ test('happy path: fit passes → one accepted_call email with the onboarding lin
   assert.equal((await readToken(token, { purpose: 'onboarding' })).clientId, r.clientId);
   const promises = Object.values(await kv.hgetall(`client:${r.clientId}:promises`));
   assert.ok(promises[0].doneAt);
-  // Double submit inside the claim window is swallowed, not declined.
-  const again = await applyForTrial(GOOD);
+  // Double submit inside the claim window is swallowed.
+  const again = await addClient(GOOD);
   assert.equal(again.duplicate, true);
 });
 
-test('repeat domain is declined, including a deleted client; a declined one is not a repeat', async () => {
+test('the plan: Growth and Scale are kept, anything else is Starter; a known domain gets the next id', async () => {
   await createClient('acme', { mainDomain: 'acme.com', state: 'deleted' });
-  const r = await applyForTrial(GOOD);
-  assert.equal(r.outcome, 'declined');
-  assert.equal(r.reason, 'one_trial_ever');
-  assert.equal(emails.at(-1).key, 'decline_repeat');
-  assert.equal((await getClient(r.clientId)).state, 'declined');
-
+  const r = await addClient(GOOD, { plan: 'growth' });
+  assert.equal(r.clientId, 'acme-2');
+  assert.equal((await getClient(r.clientId)).plan, 'growth');
   __reset(); stubIo(); await signer();
-  await createClient('acme', { mainDomain: 'acme.com', state: 'declined' });
-  const r2 = await applyForTrial(GOOD);
-  assert.equal(r2.outcome, 'onboarding');
-  assert.equal(r2.clientId, 'acme-2');
+  const r2 = await addClient(GOOD, { plan: 'trial' });
+  assert.equal((await getClient(r2.clientId)).plan, 'starter');
 });
 
-test('a fit failure is declined with the reason; an agency website is caught', async () => {
-  const r = await applyForTrial({ ...GOOD, employees: '3' });
-  assert.equal(r.outcome, 'declined');
-  assert.equal(emails.at(-1).key, 'decline_fit');
-  assert.match(emails.at(-1).vars.reason, /5 to 50 people/);
+test('a booking held for its sales call: no email; Won starts onboarding; Lost declines quietly', async () => {
+  const r = await addClient(GOOD, { source: 'inquiry', review: { answers: [], fit: { verdict: 'unknown' } } });
+  assert.equal(r.outcome, 'review');
+  assert.equal((await getClient(r.clientId)).state, 'applied');
+  assert.deepEqual(emails, []);
+  const won = await approveApplication(r.clientId);
+  assert.equal(won.outcome, 'onboarding');
+  assert.equal((await getClient(r.clientId)).state, 'onboarding');
+  assert.deepEqual(emails.map((e) => e.key), ['accepted_call']);
+  await assert.rejects(approveApplication(r.clientId), /not waiting/);
 
   __reset(); stubIo(); await signer();
-  io.fetchExt = async () => ({ ok: true, status: 200, text: async () => '<title>Pipeline Pros | Appointment Setting for B2B</title>' });
-  const r2 = await applyForTrial({ ...GOOD, website: 'pipelinepros.com', contactEmail: 'x@pipelinepros.com' });
-  assert.equal(r2.reason, 'fit:not_agency');
-});
-
-test('cap reached → queued with position and expected date; extension → queued', async () => {
-  for (const [id, d30] of [['t1', '2026-11-20'], ['t2', '2026-11-10'], ['t3', '2026-12-01']]) {
-    await createClient(id, { state: 'sending', mainDomain: `${id}.com` });
-    await kv.hset(`client:${id}:trial`, { day30Date: d30 });
-  }
-  const r = await applyForTrial(GOOD);
-  assert.equal(r.outcome, 'queued');
-  assert.equal(r.position, 1);
-  assert.equal(r.expectedDate, '2026-11-26'); // earliest day30 (Nov 10) + 16
-  const q = emails.find((e) => e.key === 'queued_position');
-  assert.match(q.vars.expectedLine, /Thursday 26 November/);
-  assert.deepEqual(await kv.lrange('queue:trial', 0, -1), [r.clientId]);
-
-  __reset(); stubIo(); await signer();
-  await createClient('ext', { state: 'extension', mainDomain: 'ext.com' });
-  const r2 = await applyForTrial(GOOD);
-  assert.equal(r2.outcome, 'queued');
-  assert.match(emails.at(-1).vars.expectedLine, /firm date/);
+  const l = await addClient(GOOD, { source: 'inquiry', review: { answers: [] } });
+  await declineApplication(l.clientId);
+  assert.equal((await getClient(l.clientId)).state, 'declined');
+  assert.deepEqual(emails, [], 'nothing is emailed on Lost');
 });
 
 test('gatekeeper failure leaves the client applied and alerts gatekeeper_error', async () => {
   io.notifyClient = async () => { throw new Error('smtp down'); };
-  const r = await applyForTrial(GOOD);
+  const r = await addClient(GOOD);
   assert.equal(r.outcome, 'manual');
   assert.equal((await getClient(r.clientId)).state, 'applied');
   assert.equal(alerts.at(-1).key, 'gatekeeper_error');
-  assert.equal(alerts.at(-1).vars.email, 'ann@acme.com');
+  assert.equal(alerts.at(-1).vars.email, GOOD.contactEmail);
 });
 
-test('owner New client skips the fit rules', async () => {
-  const r = await applyForTrial({ companyName: 'Beta', contactName: 'Bo Chen', contactEmail: 'bo@beta.io', website: 'beta.io' }, { preApproved: true });
+test('a client added with only the basics starts onboarding', async () => {
+  const r = await addClient({ companyName: 'Beta', contactName: 'Bo Chen', contactEmail: 'bo@beta.io', website: 'beta.io' });
   assert.equal(r.outcome, 'onboarding');
 });
 
-test('onboarding nudge: day +2 and +4 reminders, day +7 closed_silent and the queue pops', async () => {
+test('onboarding nudge: day +2 and +4 reminders, day +7 closed_silent', async () => {
   const sentAt = new Date('2026-10-05T14:00:00Z'); // Mon 10:00 ET
   await createClient('late', { state: 'onboarding', contactName: 'Lu Late', contactEmail: 'lu@late.com', mainDomain: 'late.com' });
   await kv.hset('client:late:trial', { onboardingSentAt: sentAt.toISOString() });
@@ -204,32 +158,16 @@ test('onboarding nudge: day +2 and +4 reminders, day +7 closed_silent and the qu
   assert.deepEqual(emails.map((e) => e.key), ['onboarding_reminder', 'onboarding_reminder']);
   assert.match(emails[0].vars.link, /\/onboard$/);
   assert.equal(emails[0].vars.closeDate, 'Monday 12 October');
-
-  // A queued applicant waits for the slot.
-  await createClient('waiting', { state: 'queued', contactName: 'Wu Wait', contactEmail: 'wu@wait.com', mainDomain: 'wait.com' });
-  await kv.rpush('queue:trial', 'waiting');
   const r = await runOnboardingNudge({ clientId: 'late', now: at(7) });
   assert.equal(r.closed, true);
   assert.equal((await getClient('late')).state, 'closed_silent');
-  assert.deepEqual(r.promoted, ['waiting']);
-  assert.equal((await getClient('waiting')).state, 'onboarding');
-  assert.deepEqual(emails.slice(-2).map((e) => e.key), ['closed_silent', 'accepted_call']);
+  assert.deepEqual(emails.slice(-1).map((e) => e.key), ['closed_silent']);
 });
 
 test('a client who signed is never closed silent', async () => {
   await createClient('signed', { state: 'onboarding', contactName: 'Si Gned', contactEmail: 's@signed.com' });
   await kv.hset('client:signed:trial', { onboardingSentAt: '2026-10-01T14:00:00Z', agreementAcceptedAt: '2026-10-02T14:00:00Z' });
   assert.equal((await runOnboardingNudge({ clientId: 'signed', now: new Date('2026-10-20T14:00:00Z') })).skipped, 'accepted');
-});
-
-test('queue promotion respects the cap', async () => {
-  for (const id of ['a1', 'a2', 'a3']) await createClient(id, { state: 'warming' });
-  await createClient('q1', { state: 'queued', contactName: 'Q One', contactEmail: 'q@one.com' });
-  await kv.rpush('queue:trial', 'q1');
-  assert.deepEqual((await promoteFromQueue()).promoted, []);
-  // Owner promote overrides the cap.
-  assert.deepEqual((await promoteFromQueue({ clientId: 'q1' })).promoted, ['q1']);
-  assert.equal((await getClient('q1')).state, 'onboarding');
 });
 
 // ── Onboarding ─────────────────────────────────────────────────────────────
@@ -447,7 +385,7 @@ test('Cloudflare .com price parser', () => {
 // ── Setup Checker ──────────────────────────────────────────────────────────
 
 test('Day 1 moves to the next US business day (weekend and federal holiday)', () => {
-  assert.deepEqual(computeDates('2026-10-02'), { signedDay: '2026-10-02', day1Date: '2026-10-16', day30Date: '2026-11-14' });
+  assert.deepEqual(computeDates('2026-10-02'), { signedDay: '2026-10-02', day1Date: '2026-10-16' });
   assert.equal(computeDates('2026-10-03').day1Date, '2026-10-19'); // Sat 17 Oct → Mon 19 Oct
   assert.equal(computeDates('2026-09-28').day1Date, '2026-10-13'); // Mon 12 Oct is Columbus Day
 });
@@ -518,7 +456,6 @@ test('setup checker: all pass → warming, dates, inboxes on; the "we start on" 
   assert.equal((await getClient('acme')).state, 'warming');
   const trial = await getTrial('acme');
   assert.equal(trial.signedDay, '2026-10-03');
-  assert.equal(trial.day30Date, '2026-11-17');
   // Day 1 is only the ramp's estimate at the setup check: no "we start on" email yet (docs/IMPROVE-PASS.md C.3).
   assert.equal(trial.welcomeSentAt, undefined);
   assert.ok(!emails.some((e) => e.key === 'welcome_two_dates'));
@@ -673,9 +610,9 @@ test('booking test sends the one-tap request; the tap sets bookingTested', async
 test('every Stage A template renders with sample data; the agreement fills all brackets', () => {
   const sample = {
     firstName: 'Ann', clientName: 'Acme', ownerName: 'Limeth', link: 'https://x/c/t/onboard', closeDate: 'Monday 12 October', position: 2,
-    expectedLine: 'Soon.', reason: 'because.', minMarket: '1,000', estimate: '500', widenedLine: ' in the areas you gave me', mainDomain: 'acme.com',
+    reason: 'because.', minMarket: '1,000', estimate: '500', widenedLine: ' in the areas you gave me', mainDomain: 'acme.com',
     agreementText: 'TEXT', agreementName: 'Ann Lee', agreementTitle: 'CEO', companyName: 'Acme', acceptedAt: '2026-10-05 14:00', agreementIp: '1.2.3.4',
-    day1Date: 'Monday 19 October', day30Date: 'Tuesday 17 November', calendarUrl: 'https://cal', problem: 'broken.',
+    day1Date: 'Monday 19 October', calendarUrl: 'https://cal', problem: 'broken.',
   startWhen: 'Monday 19 October at 8:00 am Central Time (9:00 am Eastern)', senderName: 'Dana Whitfield', inboxes: 'dana@ridgeline-team.com and dana.w@ridgeline-team.com', sendWindow: "between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone",
     // Onboarding call (accepted_call, accepted_call_reminder, onboard_call_tomorrow, onboard_owner_reply)
     callMinutes: 30, bookingLine: 'Book a time that suits you: https://cal.com/limeth/onboarding', onboardingLink: 'https://x/c/t/onboard', planName: 'Growth',
@@ -691,10 +628,11 @@ test('every Stage A template renders with sample data; the agreement fills all b
     const m = renderTemplate(key, sample);
     assert.ok(m.subject && m.text && !/\{[A-Za-z]/.test(m.text), key);
   }
-  const text = renderAgreement({ company: 'Acme', date: '5 October 2026', usHours: ['09:00', '17:00'], signerName: 'Limeth Sith' });
+  const PLAN = { name: 'Starter', price: 1500, calls: 4 };
+  const text = renderPaidAgreement({ company: 'Acme', date: '5 October 2026', usHours: ['09:00', '17:00'], signerName: 'Limeth Sith', plan: PLAN });
   assert.ok(!/\[|\{/.test(text.replace(/\[Company\]/g, '')));
   assert.match(text, /Between Aviance \(“we”\) and Acme \(“you”\)\. Effective 5 October 2026\./);
-  assert.throws(() => renderAgreement({ company: 'Acme', date: 'x', usHours: ['09:00', '17:00'], signerName: null }));
+  assert.throws(() => renderPaidAgreement({ company: 'Acme', date: 'x', usHours: ['09:00', '17:00'], signerName: null, plan: PLAN }));
 });
 
 // ── Jobs and guards ────────────────────────────────────────────────────────

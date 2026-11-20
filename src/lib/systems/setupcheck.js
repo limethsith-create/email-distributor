@@ -127,10 +127,10 @@ export function fixFor(check, domain, collector) {
   }
 }
 
-/** Day 1 = signedDay + buildDays moved to the next US business day; Day 30 = Day 1 + decisionDay − 1. */
-export function computeDates(signedDay, buildDays = 14, decisionDay = 30) {
+/** Day 1 = signedDay + buildDays moved to the next US business day. */
+export function computeDates(signedDay, buildDays = 14) {
   const day1Date = nextUsBusinessDay(addDays(signedDay, buildDays));
-  return { signedDay, day1Date, day30Date: addDays(day1Date, decisionDay - 1) };
+  return { signedDay, day1Date };
 }
 
 // ── network checks ──────────────────────────────────────────────────────────
@@ -392,9 +392,8 @@ async function concludeRound(clientId, checks, { now, domainName, collector }) {
 
 /** All checks passed: dates, inboxes on, counters, state warming, welcome email. */
 export async function finishSetup(clientId, { now = io.now() } = {}) {
-  const buildDays = await cfg(clientId, 'TRIAL.buildDays');
-  const decisionDay = await cfg(clientId, 'TRIAL.decisionDay');
-  const dates = computeDates(dayKeyIn(ET, now), buildDays, decisionDay);
+  const buildDays = await cfg(clientId, 'BUILD.days');
+  const dates = computeDates(dayKeyIn(ET, now), buildDays);
   const inboxes = await getInboxRecords(clientId);
   // Warm-up day 1 is fixed by the first warm-up email that really goes out (warmup.js noteFirstWarmupSend).
   for (const r of inboxes) await patchInbox(clientId, r.email, { enabled: '1', warmupStartedAt: r.warmupStartedAt || now.toISOString(), ...(r.warmupStartedAt ? {} : { warmupAwaitingFirstSend: '1' }) });

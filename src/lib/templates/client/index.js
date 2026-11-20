@@ -12,7 +12,7 @@ const squash = (s) => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
 
 /**
  * "in your name" when the emails go out in the contact's own name (the usual
- * case: Dana's trial sends as Dana), else "in Sam Carter's name". null
+ * case: Dana's campaign sends as Dana), else "in Sam Carter's name". null
  * without a sender name.
  */
 export function inWhoseName({ senderName, contactName } = {}) {
@@ -27,7 +27,7 @@ export function inWhoseName({ senderName, contactName } = {}) {
 export function renderTemplate(key, vars = {}) {
   const t = TEMPLATES[key];
   if (!t) throw new Error(`unknown template ${key}`);
-  // A trial sends in the client's own name unless another sender is named.
+  // A campaign sends in the client's own name unless another sender is named.
   const v = vars.inWhoseName ? vars : { ...vars, inWhoseName: inWhoseName(vars) || 'in your name' };
   return { subject: fill(key, t.subject || '', v), text: fill(key, t.body, v), from: t.from || 'owner' };
 }

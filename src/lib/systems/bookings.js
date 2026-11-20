@@ -196,7 +196,7 @@ export async function sendHandoff(clientId, booking, now = new Date()) {
     asked: h.asked || 'nothing beyond the reply above',
     thread: h.thread || '(no reply thread — they booked from the email link)',
   };
-  const r = await notifyClientSafe(clientId, 'call_handoff', vars, { from: 'trial', dedupe: `call_handoff:${booking.id}` });
+  const r = await notifyClientSafe(clientId, 'call_handoff', vars, { from: 'sender', dedupe: `call_handoff:${booking.id}` });
   if (r.sent || r.deduped) await saveBooking(clientId, booking.id, { threadForwardedAt: now.toISOString() });
   return r;
 }
@@ -266,7 +266,7 @@ export async function recordBookingEvent(clientId, ev, { now = new Date(), sourc
   if (scheduledAt) {
     const bd = businessDaysBetween(now.getTime(), Date.parse(scheduledAt));
     if (bd > farDays) {
-      await notifyClientSafe(clientId, 'slot_far_warning', { Name: lead?.name || lead?.first_name || attendee || 'The prospect', Company: lead?.company || hostOf(attendee || '') || 'their company', when: (await clientWhen(clientId, scheduledAt)) || formatWhen(scheduledAt, lead?.tz || ET), days: bd }, { from: 'trial', dedupe: `slot_far:${id}` });
+      await notifyClientSafe(clientId, 'slot_far_warning', { Name: lead?.name || lead?.first_name || attendee || 'The prospect', Company: lead?.company || hostOf(attendee || '') || 'their company', when: (await clientWhen(clientId, scheduledAt)) || formatWhen(scheduledAt, lead?.tz || ET), days: bd }, { from: 'sender', dedupe: `slot_far:${id}` });
     }
   }
   return { id, created: true, lead: lead?.email || null };
@@ -370,13 +370,13 @@ export async function runReminders(clientId, { now = new Date() } = {}) {
     // call_tap at +1 h.
     if (b.status === 'booked' && !b.tapSentAt && nowMs >= at + 3600e3) {
       const vars = { Name: lead?.name || lead?.first_name || b.attendeeName || b.attendeeEmail || 'the prospect', Company: lead?.company || (b.attendeeEmail ? hostOf(b.attendeeEmail) : 'their company'), when: (await clientWhen(clientId, b.scheduledAt)) || 'the booked time', ...(await tapLinks(clientId, b.id)) };
-      const r = await notifyClientSafe(clientId, 'call_tap', vars, { from: 'trial', dedupe: `call_tap:${b.id}:${b.scheduledAt}` });
+      const r = await notifyClientSafe(clientId, 'call_tap', vars, { from: 'sender', dedupe: `call_tap:${b.id}:${b.scheduledAt}` });
       if (r.sent || r.deduped) { await saveBooking(clientId, b.id, { tapSentAt: now.toISOString() }); out.taps++; }
     }
     // Tap reminder at +24 h after the tap email.
     if (b.status === 'booked' && b.tapSentAt && !b.attendedTapAt && !b.tapReminderAt && nowMs >= Date.parse(b.tapSentAt) + tapHours * 3600e3) {
       const vars = { Name: lead?.name || lead?.first_name || b.attendeeEmail || 'the prospect', Company: lead?.company || 'their company', when: (await clientWhen(clientId, b.scheduledAt)) || 'the booked time', ...(await tapLinks(clientId, b.id)) };
-      const r = await notifyClientSafe(clientId, 'call_tap_reminder', vars, { from: 'trial', dedupe: `call_tap_reminder:${b.id}` });
+      const r = await notifyClientSafe(clientId, 'call_tap_reminder', vars, { from: 'sender', dedupe: `call_tap_reminder:${b.id}` });
       if (r.sent || r.deduped) { await saveBooking(clientId, b.id, { tapReminderAt: now.toISOString() }); out.tapReminders++; }
     }
   }

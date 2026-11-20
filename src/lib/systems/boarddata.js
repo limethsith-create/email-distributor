@@ -6,12 +6,12 @@
 import { kv } from '@vercel/kv';
 import { K } from '@/lib/db/keys';
 import { cfg } from '@/lib/config';
-import { getAllClients, getTrial, ACTIVE_TRIAL_STATES, isDemo } from '@/lib/db/client';
+import { getAllClients, getTrial, ACTIVE_STATES, isDemo } from '@/lib/db/client';
 import { getTotals } from '@/lib/db/counters';
 import { getInboxRecords } from '@/lib/db/inboxes';
 import { getPromises } from '@/lib/db/promises';
 import { getAlertLog } from '@/lib/notify';
-import { addDays, partsIn } from '@/lib/time';
+import { partsIn } from '@/lib/time';
 import { clientNow, clientTrialDay } from '@/lib/testclock';
 import { computeHealth, COLOUR_RANK } from '@/lib/systems/health';
 import { LIMITS } from '@/lib/systems/usage';
@@ -35,14 +35,13 @@ export async function clientRow(c, { alerts = [], now = new Date() } = {}) {
     if (r?.at && (!lastJobAt || r.at > lastJobAt)) lastJobAt = r.at;
   }
   return {
-    id: c.id, name: c.name || c.id, state: c.state, plan: c.plan || 'trial',
-    trialDay: day, day1Date: trial.day1Date || null, day30Date: trial.day30Date || (trial.day1Date ? addDays(trial.day1Date, 29) : null),
+    id: c.id, name: c.name || c.id, state: c.state, plan: c.plan || 'starter',
+    trialDay: day, day1Date: trial.day1Date || null,
     health: health.colour, healthReasons: health.reasons,
     five: Object.fromEntries(FIVE.map((f) => [f, Number.isFinite(totals[f]) ? totals[f] : null])),
     inboxRate: rates.length ? Math.min(...rates) : null,
     lastJobAt,
     openAlerts: open.length, urgentAlerts: open.filter((a) => a.urgent).length,
-    extension: c.state === 'extension',
     // A Test run client (systems/demo.js): shown in the hub, flagged, never acted on.
     demo: isDemo(c),
   };
@@ -65,8 +64,7 @@ export async function boardData(now = new Date(), { includeDemo = false } = {}) 
   const month = partsIn('UTC', now).monthKey;
   const reoonLimit = LIMITS.reoon.monthly;
   const reoon = await usagePct('reoon', LIMITS.reoon.field, reoonLimit, month);
-  // Only trials count toward the trial cap (a paying client is not a trial — gatekeeper.capacity agrees).
-  const trialRows = rows.filter((r) => r.id !== 'aviance' && r.id !== '_test' && r.plan === 'trial' && !r.demo);
+  const clientRows = rows.filter((r) => r.id !== 'aviance' && r.id !== '_test' && !r.demo);
   return {
     heartbeat: { lastTickAt: hb?.lastTickAt || null, ageSec: hb?.lastTickAt ? Math.round((now.getTime() - Date.parse(hb.lastTickAt)) / 1000) : null, source: hb?.lastTickSource || null, lastSendAt: hb?.lastSendAt || null },
     usage: {
@@ -74,9 +72,7 @@ export async function boardData(now = new Date(), { includeDemo = false } = {}) 
       places: await usagePct('places', LIMITS.places.field, await cfg(null, 'PLACES.monthlyEnterprise'), month),
       reoon: { ...reoon, remaining: Number.isFinite(reoon.used) ? Math.max(0, reoonLimit - reoon.used) : null },
     },
-    activeTrials: trialRows.filter((r) => ACTIVE_TRIAL_STATES.has(r.state)).length,
-    maxActiveTrials: await cfg(null, 'MAX_ACTIVE_TRIALS'),
-    extensions: trialRows.filter((r) => r.extension).length,
+    activeClients: clientRows.filter((r) => ACTIVE_STATES.has(r.state)).length,
     openAlerts: alerts.filter((a) => !a.acknowledged).length,
     clients: rows,
   };

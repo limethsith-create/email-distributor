@@ -716,7 +716,7 @@ test('one reminder track: while the onboarding call is to happen only its own re
   await approved();
   const day = (d) => new Date(MON.getTime() + d * 864e5);
   for (const d of [1, 2, 3, 4, 5, 6]) await runOnboardingNudge({ clientId: ID, now: day(d) });
-  assert.equal(toSam().filter((m) => m.subject === 'Your trial page is waiting').length, 0, 'no Day +2 / +4 page reminders');
+  assert.equal(toSam().filter((m) => m.subject === 'Your onboarding page is waiting').length, 0, 'no Day +2 / +4 page reminders');
   // Silence still closes on Day +7 (the call's reminders went, then the overdue alert).
   const r = await runOnboardingNudge({ clientId: ID, now: day(7) });
   assert.equal(r.closed, true);
@@ -733,7 +733,7 @@ test('one reminder track: while the onboarding call is to happen only its own re
   const res = [];
   for (const d of [3, 4, 5, 6, 7, 8]) res.push((await runOnboardingNudge({ clientId: ID, now: day(d) })).sent ?? null);
   assert.deepEqual(res, [null, 2, null, 4, null, null], 'Day +2 and +4 after the call');
-  assert.equal(toSam().filter((m) => m.subject === 'Your trial page is waiting').length, 2);
+  assert.equal(toSam().filter((m) => m.subject === 'Your onboarding page is waiting').length, 2);
   assert.equal((await runOnboardingNudge({ clientId: ID, now: day(9) })).closed, true, 'Day +7 after the call');
 });
 

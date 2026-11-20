@@ -47,7 +47,7 @@ test('every owner alert pops up on the phone, linked to the trial', async () => 
   const r = await alertOwner('new_application', { clientId: 'acme', vars: { company: 'Acme Plumbing' }, body: 'Ann Lee applied for a trial.', did: 'Held for review.' });
   assert.equal(r.channels.push, 'ok');
   assert.equal(sent.length, 1);
-  assert.equal(sent[0].payload.title, 'Urgent: New trial application: Acme Plumbing');
+  assert.equal(sent[0].payload.title, 'Urgent: New client record: Acme Plumbing');
   assert.equal(sent[0].payload.url, '/#trial/acme');
   assert.match(sent[0].payload.body, /Ann Lee applied/);
   // Non-urgent alerts go to the phone too, without the "Urgent" prefix.

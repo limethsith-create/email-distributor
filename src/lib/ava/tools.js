@@ -39,7 +39,7 @@ const num = (v) => (v === null || v === undefined || v === '' || !Number.isFinit
 const dateOnly = (iso) => (iso ? String(iso).slice(0, 10) : null);
 const firstName = (n) => String(n || '').trim().split(/\s+/)[0] || null;
 
-/** Every client row on the board (trials and paying; not the owner's own outreach or Test Mode), with its stage label. */
+/** Every client row on the board (not the owner's own record), with its stage label. */
 function boardRows(board) {
   const out = [];
   for (const s of board.stages || []) for (const r of s.clients || []) if (!HIDDEN_IDS.has(r.id)) out.push({ row: r, stage: s.label });
@@ -62,12 +62,11 @@ const TODO_TYPES = [
   [/^legal:/, 'legal reply to read, then clear the hold'],
   [/^sendhold:/, 'send hold to clear'],
   [/^invoice:/, 'invoice to mark paid when the money lands'],
-  [/^cancel-inboxes:/, 'trial inboxes to cancel'],
+  [/^cancel-inboxes:/, 'client inboxes to cancel'],
   [/^warmup-helpers/, 'warm-up helpers to add'],
   [/^booking-test:/, 'booking test the client has not done yet'],
   [/^inquiry:/, 'new plan inquiry to call back'],
-  [/^unmatched:/, 'CheapInboxes purchase to match to a trial'],
-  [/^promote-/, 'free trial slot — start the next one from the waiting list'],
+  [/^unmatched:/, 'CheapInboxes purchase to match to a client'],
   [/^machine-heartbeat/, 'machine heartbeat missing — check the cron'],
   [/^machine-/, 'machine setup to finish'],
 ];
@@ -152,7 +151,7 @@ const cap = (arr, n = LIST_CAP) => (arr.length > n ? arr.slice(0, n) : arr);
 /** One compact line about a client on the board. */
 function clientLine({ row, stage }) {
   return {
-    id: row.id, name: row.name, plan: row.plan || 'trial', stage, step: row.simple?.step || null,
+    id: row.id, name: row.name, plan: row.plan || 'starter', stage, step: row.simple?.step || null,
     status: row.simple?.label || row.stateLabel || null,
     day: num(row.simple?.dayOf30) ?? num(row.trialDay), needsYou: Boolean(row.simple?.needsYou),
     ...(row.demo ? { testRun: true } : {}),
@@ -169,7 +168,6 @@ function rowsWithKeys(board) {
 function counts(rows) {
   return {
     totalClients: rows.length,
-    trials: rows.filter((x) => !PAID.includes(x.row.plan)).length,
     paying: rows.filter((x) => PAID.includes(x.row.plan)).length,
     needYouNow: rows.filter((x) => x.row.simple?.needsYou).length,
   };
@@ -283,12 +281,12 @@ async function get_client(args, ctx) {
   const kinds = d.repliesByKind && typeof d.repliesByKind === 'object' ? Object.fromEntries(Object.entries(d.repliesByKind).map(([k, v]) => [k, num(v) ?? 0]).filter(([, v]) => v)) : {};
   const out = {
     found: true,
-    id: row.id, name: row.name, plan: row.plan || 'trial', stage, step: row.simple?.step || null,
+    id: row.id, name: row.name, plan: row.plan || 'starter', stage, step: row.simple?.step || null,
     ...(row.demo ? { testRun: true } : {}),
     status: row.simple?.label || row.stateLabel || null,
     next: row.simple?.next || null,
     needsYou: Boolean(row.simple?.needsYou),
-    day: num(row.simple?.dayOf30) ?? num(row.trialDay), day1Date: row.day1Date || null, day30Date: (row.plan || 'trial') === 'trial' ? row.day30Date || null : null,
+    day: num(row.simple?.dayOf30) ?? num(row.trialDay), day1Date: row.day1Date || null,
     health: row.health || null,
     emails: {
       sent: num(five.sent) ?? num(counters.sent), replies: num(five.replies) ?? num(counters.replies),
@@ -314,8 +312,8 @@ async function get_client(args, ctx) {
 
 // ─── list_clients ────────────────────────────────────────────────────────────
 
-export const FILTERS = ['all', 'needs_you', 'trials', 'paying', 'applied', 'onboarding', 'setting_up', 'warming_up', 'sending', 'deciding', 'done', 'waiting_list', 'test_run'];
-const FILTER_KEYS = { applied: ['intake'], onboarding: ['onboard'], setting_up: ['setup'], warming_up: ['build'], sending: ['live'], deciding: ['decide'], done: ['won', 'closing', 'ended'] };
+export const FILTERS = ['all', 'needs_you', 'paying', 'applied', 'onboarding', 'setting_up', 'warming_up', 'sending', 'done'];
+const FILTER_KEYS = { applied: ['intake'], onboarding: ['onboard'], setting_up: ['setup'], warming_up: ['build'], sending: ['live'], done: ['closing', 'ended'] };
 
 async function list_clients(args, ctx) {
   const filter = FILTERS.includes(args?.filter) ? args.filter : 'all';
@@ -324,22 +322,17 @@ async function list_clients(args, ctx) {
   const rows = rowsWithKeys(board);
   let pick = rows;
   if (filter === 'needs_you') pick = rows.filter((r) => r.row.simple?.needsYou);
-  else if (filter === 'trials') pick = rows.filter((r) => !PAID.includes(r.row.plan));
-  else if (filter === 'paying') pick = rows.filter((r) => PAID.includes(r.row.plan));
-  else if (filter === 'test_run') pick = rows.filter((r) => r.row.demo);
+  else if (filter === 'paying') pick = rows.filter((r) => r.key !== 'intake');
   else if (FILTER_KEYS[filter]) pick = rows.filter((r) => FILTER_KEYS[filter].includes(r.key));
-  const out = { filter, ...counts(rows), count: filter === 'waiting_list' ? (board.machine?.queue || []).length : pick.length };
-  if (filter !== 'waiting_list') out.clients = cap(pick.map(clientLine));
+  const out = { filter, ...counts(rows), count: pick.length };
+  out.clients = cap(pick.map(clientLine));
   if (pick.length > LIST_CAP) out.more = pick.length - LIST_CAP;
   if (filter === 'all' || filter === 'needs_you') {
     out.needsTheOwner = cap(needsLines(board.todos, alertsById).map((x) => ({ text: x.text, urgent: x.urgent })), 15);
     out.openAlerts = num(board.machine?.openAlerts) ?? 0;
     out.newPlanInquiries = (board.inquiries?.latest || []).filter((q) => q.status === 'new').length;
   }
-  if (filter === 'all' || filter === 'waiting_list' || filter === 'applied') {
-    out.activeTrials = num(board.machine?.activeTrials); out.maxActiveTrials = num(board.machine?.maxActiveTrials);
-    out.waitingList = (board.machine?.queue || []).map((q) => q.name || q.id);
-  }
+  if (filter === 'all') out.activeClients = num(board.machine?.activeClients);
   return out;
 }
 
@@ -362,7 +355,7 @@ async function all_clients(ctx) {
     scope: 'all_clients', ...counts(rows), byStage, totalsRealClients: tot,
     replyRatePct: tot.sent ? Math.round((tot.replies / tot.sent) * 1000) / 10 : null,
     clients: cap(per.sort((a, b) => (b.sent || 0) - (a.sent || 0))),
-    activeTrials: num(board.machine?.activeTrials), maxActiveTrials: num(board.machine?.maxActiveTrials),
+    activeClients: num(board.machine?.activeClients),
   };
 }
 

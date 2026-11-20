@@ -21,7 +21,6 @@ import {
   inboxPlan, buildOffers, totalsOf, refreshLivePrices, runRegistrarPriceRefresh,
 } from '@/lib/systems/domains';
 import { runPriceScout, getShopping, shoppingView } from '@/lib/systems/pricescout';
-import { submitWebsiteApplication } from '@/lib/systems/webapply';
 import { JOBS as STAGE_A_JOBS } from '@/lib/joblist/stage-a';
 
 process.env.ENC_KEY = process.env.ENC_KEY || crypto.randomBytes(32).toString('base64');
@@ -405,19 +404,18 @@ test('research failure paths: unreachable site is a flag; an internal error mark
   assert.match(researchLine(fv), /^Research: could not finish/);
 });
 
-test('a website application alerts the owner at once; the full research and its score follow in one application_scored alert', async () => {
+test('a booking held for its sales call: research runs, no email goes out; the full research and its score follow in one application_scored alert', async () => {
   serveSite();
   serveApis();
-  const site = {
-    source: 'website', name: 'Ann Lee', email: 'ann@acme-plumbing.com', website: 'https://www.acme-plumbing.com/', city: 'Charlotte, NC',
-    sell: 'Commercial plumbing for property managers in the Carolinas', value: '$5,000–$20,000', capacity: '5–10 a week',
-    strangers: 'Yes — cold buyers already', calendar: 'Yes', then: 'Growth', notes: '', agree: true,
-  };
-  const r = await submitWebsiteApplication(site, { fetchText: async () => '' });
+  const { addClient } = await import('@/lib/systems/gatekeeper');
+  const r = await addClient(
+    { companyName: 'Acme Plumbing', contactName: 'Ann Lee', contactEmail: 'ann@acme-plumbing.com', website: 'https://www.acme-plumbing.com/', notes: 'Commercial plumbing for property managers in the Carolinas' },
+    { source: 'inquiry', review: { answers: [], fit: { verdict: 'unknown' }, extras: { city: 'Charlotte, NC', sellsTo: 'Commercial plumbing for property managers in the Carolinas' } } },
+  );
   assert.equal(r.outcome, 'review');
-  assert.equal(alerts.length, 1, 'the application alert goes out without waiting for the whole-site research');
-  assert.equal(alerts[0].key, 'new_application');
+  assert.equal(alerts.length, 0, 'the booking has its own new_inquiry alert');
   assert.equal(emails.length, 0);
+  assert.equal((await getClient(r.clientId)).state, 'applied');
   // The rest runs right after the answer (researchToEnd in the route's after()).
   const { researchToEnd } = await import('@/lib/systems/research');
   assert.equal(await researchToEnd(r.clientId, 60_000), 'done');
@@ -430,17 +428,12 @@ test('a website application alerts the owner at once; the full research and its 
   assert.match(v.summary, /OpenStreetMap count suggests about 140 property managers in North Carolina\./); // no Places key → OSM
   assert.deepEqual(v.market, { query: 'property managers in North Carolina', estimate: 140, source: 'overpass' });
   // Owner-created clients get research too (by the job).
-  const { applyForTrial } = await import('@/lib/systems/gatekeeper');
-  const o = await applyForTrial({ companyName: 'Beta HVAC', contactName: 'Bo', contactEmail: 'bo@beta-hvac.com', website: 'beta-hvac.com' }, { preApproved: true, source: 'owner' });
+  const o = await addClient({ companyName: 'Beta HVAC', contactName: 'Bo', contactEmail: 'bo@beta-hvac.com', website: 'beta-hvac.com' }, { source: 'owner' });
   assert.equal((await getClient(o.clientId)).researchStep, 'running');
   const job = STAGE_A_JOBS.find((j) => j.name === 'research');
   assert.ok(await job.due({ client: await getClient(o.clientId), now: NOW }));
   assert.equal(await job.due({ client: { ...(await getClient(o.clientId)), id: 'aviance' }, now: NOW }), null);
   assert.equal(await job.due({ client: await getClient(r.clientId), now: NOW }), null, 'done research is not due');
-  // A form application declined on the spot is not researched.
-  const d = await applyForTrial({ companyName: 'Tiny Co', contactName: 'Tia', contactEmail: 'tia@tiny-co.com', website: 'tiny-co.com', usBased: 'no' }, { source: 'form' });
-  assert.equal(d.outcome, 'declined');
-  assert.equal(await researchView(d.clientId), null);
 });
 
 // ── domains: candidates, scoring, availability ───────────────────────────────

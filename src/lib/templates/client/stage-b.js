@@ -1,6 +1,6 @@
 /**
  * Client / prospect message templates for Stage B (SPEC §11).
- * Shape: { key: { subject, body, from: 'owner' | 'trial' } }. Slots are {name}.
+ * Shape: { key: { subject, body, from: 'owner' | 'sender' | 'onboard' } }. Slots are {name}.
  * The owner's docs have no wording for these four (the doc approves copy on a
  * live Build Session, which the spec replaced with the approval page), so the
  * text below is new, kept in the doc's voice — logged in
@@ -9,22 +9,6 @@
  */
 export const TEMPLATES = {
   approval_link: {
-    from: 'owner',
-    subject: 'Your emails, for your OK',
-    body: `Hi {firstName},
-
-Everything for your trial is ready for one look from you: the customer profile, 20 of the companies we found, and the four emails that will go out {inWhoseName}.
-
-It takes about five minutes: {approvalUrl}
-
-Approve each part, or tell me what to change and I'll fix it. First send is {day1Date}.
-
-If I don't hear back by {silenceDate}, I'll take it as approved and keep to that date.
-
-{ownerName}`,
-  },
-
-  approval_link_paid: {
     from: 'owner',
     subject: 'Your emails, for your OK',
     body: `Hi {firstName},
@@ -39,19 +23,8 @@ If I don't hear back by {silenceDate}, I'll take it as approved and keep to that
 
 {ownerName}`,
   },
+
   approval_reminder: {
-    from: 'owner',
-    subject: 'Still waiting for your OK',
-    body: `Hi {firstName},
-
-The list and the four emails for your trial are still waiting for your OK: {approvalUrl}
-
-First send is {day1Date}. If I don't hear back by {silenceDate}, I'll take the emails as approved so the date holds.
-
-{ownerName}`,
-  },
-
-  approval_reminder_paid: {
     from: 'owner',
     subject: 'Still waiting for your OK',
     body: `Hi {firstName},
@@ -62,6 +35,7 @@ First send is {day1Date}. If I don't hear back by {silenceDate}, I'll take the e
 
 {ownerName}`,
   },
+
   approval_updated: {
     from: 'owner',
     subject: 'Your changes are made',
@@ -75,18 +49,6 @@ Approve it, or tell me what else to change. First send is {day1Date}.
   },
   approved_by_silence: {
     from: 'owner',
-    subject: 'Your trial emails are approved',
-    body: `Hi {firstName},
-
-I didn't hear back about the list and the emails, so as agreed I've taken them as approved. First send is {day1Date}.
-
-You can still see everything here: {approvalUrl}. If anything should change, reply before then and I'll change it.
-
-{ownerName}`,
-  },
-
-  approved_by_silence_paid: {
-    from: 'owner',
     subject: 'Your emails are approved',
     body: `Hi {firstName},
 
@@ -96,6 +58,7 @@ You can still see everything here: {approvalUrl}. If anything should change, rep
 
 {ownerName}`,
   },
+
   // ── The launch call (docs/LAUNCH-CALL.md; the `next_steps` email is in stage-a.js) ──
   // The launch invite replaces the plain approval email when the list and the copy are ready
   // (from the ONBOARDCALL inbox, so replies land where the machine reads them). {bookingLine} is
@@ -144,7 +107,7 @@ If that time no longer works, reply to this email and we'll find another.
     subject: 'First send moves to {day1Date}',
     body: `Hi {firstName},
 
-A change of date: the first send moves to {startWhen}, and Day 30 moves to {day30Date}.
+A change of date: the first send moves to {startWhen}.
 
 Why: {reason}. We only start when everything's ready, because a rushed start costs more replies than one day does.
 

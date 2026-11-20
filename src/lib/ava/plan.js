@@ -60,7 +60,6 @@ const SECTION_WORDS = [
   ['google', /\bgoogle meet\b|\bgoogle settings\b|\bmeet settings\b|\bconnect google\b/i],
   ['inboxes', /\binboxes (?:and|&) domains\b|\bcheapinboxes\b|\bauto-?buy settings\b/i],
   ['replybot', /\breply ?bot\b|\bauto-?reply\b/i],
-  ['demo', /\btest run\b|\bdemo\b/i],
   ['status', /\beverything running\b|\bhealth check\b|\bsystem status\b/i],
   ['advanced', /\badvanced\b|\bmission control\b|\bconfig\b/i],
   ['look', /\btheme\b|\bdark mode\b|\blight mode\b|\blight or dark\b/i],
@@ -72,8 +71,7 @@ const VIEW_WORDS = [
   ['activity', /\bactivity\b|\bwho signed in\b/i],
   ['calendar', /\bcalendar\b/i],
   ['team', /\bteam\b/i],
-  ['paying', /\bpaying\b|\bpaid clients\b/i],
-  ['trials', /\btrials?\b(?! run)/i],
+  ['paying', /\bpaying\b|\bpaid clients\b|\b(?:my |the |all )?clients\b(?! (?:page|tab))|\btrials?\b/i],
   ['settings', /\bsettings\b/i],
 ];
 
@@ -135,7 +133,7 @@ export function planQuestion(text, { page = {}, role = 'employee', voice = false
     if (NEEDS_RE.test(t)) add('list_clients', { filter: 'needs_you' });
     if (CAL_RE.test(t) && (live || /\bcalendar\b/i.test(t)) && !general) add('get_calendar', {});
     if (TEAM_RE.test(t) && (live || !general)) add('search_hub', { query: 'team' });
-    if (live && /\b(?:trials?|clients?|paying)\b/i.test(t) && !prefetch.some((p) => p.name === 'list_clients')) add('list_clients', { filter: /\bpaying\b/i.test(t) ? 'paying' : /\btrials?\b/i.test(t) ? 'trials' : 'all' });
+    if (live && /\b(?:trials?|clients?|paying)\b/i.test(t) && !prefetch.some((p) => p.name === 'list_clients')) add('list_clients', { filter: 'all' });
     if (live && TOTALS_RE.test(t) && !prefetch.length) add('get_numbers', { scope: 'all_clients' });
     if (live && !prefetch.length && !current) add('list_clients', { filter: 'all' });
   }

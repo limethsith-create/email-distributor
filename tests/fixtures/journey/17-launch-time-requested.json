@@ -27,10 +27,8 @@
     "source": "cronjob",
     "lastSendAt": null
    },
-   "activeTrials": 1,
-   "maxActiveTrials": 3,
-   "extensions": 0,
-   "openAlerts": 8,
+   "activeClients": 1,
+   "openAlerts": 10,
    "usage": {
     "redis": {
      "used": null,
@@ -57,16 +55,14 @@
     "healthchecks": false,
     "ownerInbox": true
    },
-   "queue": [],
    "others": []
   },
   "stages": [
    {
     "key": "intake",
-    "label": "Applied & queued",
+    "label": "Waiting for the sales call",
     "states": [
-     "applied",
-     "queued"
+     "applied"
     ],
     "clients": []
    },
@@ -99,12 +95,13 @@
       "id": "ridgelineit",
       "name": "Ridgeline IT",
       "state": "warming",
-      "plan": "trial",
+      "plan": "starter",
       "trialDay": -5,
       "day1Date": "2026-10-21",
-      "day30Date": "2026-11-19",
-      "health": "green",
-      "healthReasons": [],
+      "health": "yellow",
+      "healthReasons": [
+       "1 alert open"
+      ],
       "five": {
        "sent": 0,
        "replies": 0,
@@ -114,9 +111,9 @@
       },
       "inboxRate": 0.979,
       "lastJobAt": "2026-10-16T14:00:00.000Z",
-      "openAlerts": 6,
+      "openAlerts": 7,
       "urgentAlerts": 0,
-      "extension": false,
+      "demo": false,
       "stateLabel": "Warming up — Day -5 (Day 1 on 2026-10-21)",
       "simple": {
        "step": "warming_up",
@@ -130,14 +127,22 @@
        "needsReply": false
       },
       "fitScore": {
-       "score": 94,
+       "score": 93,
        "grade": "A",
        "label": "Strong fit",
-       "confidence": 97
+       "confidence": 82
+      },
+      "invoice": {
+       "number": "AV-202610-ridgelineit",
+       "amount": 2497,
+       "issuedAt": "2026-10-06T18:20:00.000Z",
+       "paidAt": null,
+       "status": "sent",
+       "plan": "starter"
       },
       "contactName": "Dana Whitfield",
       "contactEmail": "dana@ridgelineit.com",
-      "website": "https://www.ridgelineit.com/",
+      "website": "https://www.ridgelineit.com",
       "todo": [
        {
         "id": "meeting-request:ridgelineit",
@@ -152,7 +157,25 @@
          "view": "calendar",
          "clientId": "ridgelineit",
          "kind": "launch",
-         "meetingId": "mmvb2gidc989594ef25"
+         "meetingId": "mmvb2gidcdc003a5692"
+        }
+       },
+       {
+        "id": "invoice:ridgelineit",
+        "clientId": "ridgelineit",
+        "clientName": "Ridgeline IT",
+        "text": "Mark the month-one invoice paid when the money lands (AV-202610-ridgelineit)",
+        "detail": "Issued 2026-10-06 · $2,497",
+        "urgent": false,
+        "since": "2026-10-06T18:20:00.000Z",
+        "action": {
+         "type": "api",
+         "method": "POST",
+         "path": "/api/mc/clients/ridgelineit",
+         "body": {
+          "action": "markPaid"
+         },
+         "confirm": "Mark this invoice as paid?"
         }
        }
       ],
@@ -260,14 +283,14 @@
         "key": "reports",
         "label": "Reports & decision",
         "status": "ok",
-        "line": "2 Friday updates",
+        "line": "2 Friday updates · invoice unpaid since 2026-10-06",
         "detail": []
        },
        {
         "key": "closing",
         "label": "Close-out",
         "status": "off",
-        "line": "Runs after Day 30",
+        "line": "Runs only if they stop",
         "detail": []
        }
       ],
@@ -283,32 +306,14 @@
     "label": "Sending",
     "states": [
      "sending",
-     "paused",
-     "extension"
-    ],
-    "clients": []
-   },
-   {
-    "key": "decide",
-    "label": "Deciding",
-    "states": [
-     "deciding"
-    ],
-    "clients": []
-   },
-   {
-    "key": "won",
-    "label": "Converted",
-    "states": [
-     "converted"
+     "paused"
     ],
     "clients": []
    },
    {
     "key": "closing",
-    "label": "Not now & closing",
+    "label": "Stopped & closing",
     "states": [
-     "not_now",
      "retired"
     ],
     "clients": []
@@ -350,7 +355,7 @@
      "view": "calendar",
      "clientId": "ridgelineit",
      "kind": "launch",
-     "meetingId": "mmvb2gidc989594ef25"
+     "meetingId": "mmvb2gidcdc003a5692"
     }
    },
    {
@@ -381,13 +386,34 @@
       "action": "migrate"
      }
     }
+   },
+   {
+    "id": "invoice:ridgelineit",
+    "clientId": "ridgelineit",
+    "clientName": "Ridgeline IT",
+    "text": "Mark the month-one invoice paid when the money lands (AV-202610-ridgelineit)",
+    "detail": "Issued 2026-10-06 · $2,497",
+    "urgent": false,
+    "since": "2026-10-06T18:20:00.000Z",
+    "action": {
+     "type": "api",
+     "method": "POST",
+     "path": "/api/mc/clients/ridgelineit",
+     "body": {
+      "action": "markPaid"
+     },
+     "confirm": "Mark this invoice as paid?"
+    }
    }
   ],
   "inquiries": {
    "counts": {
     "new": 0,
+    "held": 0,
+    "no_show": 0,
     "contacted": 0,
-    "won": 0,
+    "proposal": 0,
+    "won": 1,
     "lost": 0
    },
    "open": 0,
@@ -395,7 +421,7 @@
   },
   "alerts": [
    {
-    "id": "1792161120250-19qc31",
+    "id": "1792161120250-tvti1d",
     "at": "2026-10-16T14:32:00.250Z",
     "key": "meeting_requested",
     "clientId": "ridgelineit",
@@ -404,7 +430,7 @@
     "delivered": true
    },
    {
-    "id": "1792160100250-gkqxnq",
+    "id": "1792160100250-b5h880",
     "at": "2026-10-16T14:15:00.250Z",
     "key": "bot_replied",
     "clientId": "ridgelineit",
@@ -413,7 +439,7 @@
     "delivered": true
    },
    {
-    "id": "1792155600250-byjcds",
+    "id": "1792155600250-z34opq",
     "at": "2026-10-16T13:00:00.250Z",
     "key": "launch_ready",
     "clientId": "ridgelineit",
@@ -422,7 +448,7 @@
     "delivered": true
    },
    {
-    "id": "1792117800000-5q4usv",
+    "id": "1792117800000-k58rti",
     "at": "2026-10-16T02:30:00.000Z",
     "key": "morning_digest",
     "clientId": null,
@@ -431,11 +457,20 @@
     "delivered": true
    },
    {
+    "id": "1791900000250-8b71j8",
+    "at": "2026-10-13T14:00:00.250Z",
+    "key": "invoice_unpaid",
+    "clientId": "ridgelineit",
+    "title": "Invoice still unpaid: Ridgeline IT (7 days)",
+    "urgent": false,
+    "delivered": true
+   },
+   {
     "id": "1791772200250-rxeomy",
     "at": "2026-10-12T02:30:00.250Z",
     "key": "monday_digest",
     "clientId": null,
-    "title": "Monday KPIs — 2026-10-12",
+    "title": "Monday summary — 2026-10-12",
     "urgent": false,
     "delivered": true
    },
@@ -465,6 +500,15 @@
     "title": "Auto-replied to Dana (Ridgeline IT): sent the booking link and the next open times",
     "urgent": false,
     "delivered": true
+   },
+   {
+    "id": "1790883603270-5oy551",
+    "at": "2026-10-01T19:40:03.270Z",
+    "key": "new_inquiry",
+    "clientId": null,
+    "title": "New plan inquiry: Ridgeline IT — call Friday, October 2, 2026 at 2:00 AM (your time)",
+    "urgent": true,
+    "delivered": true
    }
   ]
  },
@@ -473,12 +517,13 @@
    "id": "ridgelineit",
    "name": "Ridgeline IT",
    "state": "warming",
-   "plan": "trial",
+   "plan": "starter",
    "trialDay": -5,
    "day1Date": "2026-10-21",
-   "day30Date": "2026-11-19",
-   "health": "green",
-   "healthReasons": [],
+   "health": "yellow",
+   "healthReasons": [
+    "1 alert open"
+   ],
    "five": {
     "sent": 0,
     "replies": 0,
@@ -488,9 +533,9 @@
    },
    "inboxRate": 0.979,
    "lastJobAt": "2026-10-16T14:00:00.000Z",
-   "openAlerts": 6,
+   "openAlerts": 7,
    "urgentAlerts": 0,
-   "extension": false,
+   "demo": false,
    "stateLabel": "Warming up — Day -5 (Day 1 on 2026-10-21)",
    "simple": {
     "step": "warming_up",
@@ -504,14 +549,22 @@
     "needsReply": false
    },
    "fitScore": {
-    "score": 94,
+    "score": 93,
     "grade": "A",
     "label": "Strong fit",
-    "confidence": 97
+    "confidence": 82
+   },
+   "invoice": {
+    "number": "AV-202610-ridgelineit",
+    "amount": 2497,
+    "issuedAt": "2026-10-06T18:20:00.000Z",
+    "paidAt": null,
+    "status": "sent",
+    "plan": "starter"
    },
    "contactName": "Dana Whitfield",
    "contactEmail": "dana@ridgelineit.com",
-   "website": "https://www.ridgelineit.com/",
+   "website": "https://www.ridgelineit.com",
    "todo": [
     {
      "id": "meeting-request:ridgelineit",
@@ -526,7 +579,25 @@
       "view": "calendar",
       "clientId": "ridgelineit",
       "kind": "launch",
-      "meetingId": "mmvb2gidc989594ef25"
+      "meetingId": "mmvb2gidcdc003a5692"
+     }
+    },
+    {
+     "id": "invoice:ridgelineit",
+     "clientId": "ridgelineit",
+     "clientName": "Ridgeline IT",
+     "text": "Mark the month-one invoice paid when the money lands (AV-202610-ridgelineit)",
+     "detail": "Issued 2026-10-06 · $2,497",
+     "urgent": false,
+     "since": "2026-10-06T18:20:00.000Z",
+     "action": {
+      "type": "api",
+      "method": "POST",
+      "path": "/api/mc/clients/ridgelineit",
+      "body": {
+       "action": "markPaid"
+      },
+      "confirm": "Mark this invoice as paid?"
      }
     }
    ],
@@ -634,14 +705,14 @@
      "key": "reports",
      "label": "Reports & decision",
      "status": "ok",
-     "line": "2 Friday updates",
+     "line": "2 Friday updates · invoice unpaid since 2026-10-06",
      "detail": []
     },
     {
      "key": "closing",
      "label": "Close-out",
      "status": "off",
-     "line": "Runs after Day 30",
+     "line": "Runs only if they stop",
      "detail": []
     }
    ],
@@ -737,7 +808,9 @@
    "bookingTestedConfirmedUrl": "https://cal.com/ridgeline-it/intro"
   },
   "trial": {
-   "onboardingLink": "https://machine.test/c/TOKEN_1/onboard",
+   "dashboardLink": "https://machine.test/c/TOKEN_1/dashboard",
+   "dashboardLinkAt": "2026-10-01T19:40:29.390Z",
+   "onboardingLink": "https://machine.test/c/TOKEN_2/onboard",
    "onboardingLinkAt": "2026-10-02T03:30:00.000Z",
    "onboardingSentAt": "2026-10-02T03:30:00.000Z",
    "onboardingClosesOn": "2026-10-13",
@@ -747,16 +820,15 @@
    "agreementName": "Dana Whitfield",
    "agreementTitle": "Director of Client Success",
    "agreementIp": "98.24.1.7",
-   "agreementVersion": "2026-09-12",
-   "agreementHash": "9a24b00ef34ae52a2668adc7bd4cf34fdf2ddcc078376c3c859a9374c9b667c0",
-   "agreementText": "The Aviance 30-Day Trial — Agreement\nBetween Aviance (“we”) and Ridgeline IT (“you”). Effective 6 October 2026.\n\n1. What this is. A 30-day cold email trial. We build and run a small outbound campaign in your name, book sales calls onto your calendar, and hand you a written report of what your market said. It costs you nothing. It is not a paid plan; it is how you decide whether to buy one.\n\n2. What we do. Register one sending domain and two inboxes. Research and verify a list of 300–500 contacts matching the customer profile you approve. Write a three-email sequence you approve. Send for 30 days. Handle every reply. Book, confirm and remind every meeting, and chase no-shows for 14 days. Send you a written update every Friday, and on day 29 a report covering the numbers, every reply we received and what it means.\n\n3. What you do. Approve the customer profile and the copy on the kickoff call. Keep at least five open slots a week on the calendar you give us, and be able to take a booked meeting within five business days. Reply to any hot lead we hand you within one business day. Give us the postal address for the email footer. Authorise us to send email in your company’s name, from the trial domain, using only copy you approved.\n\n4. The two promises. First: we will contact the approved list and give you the written report — that is guaranteed. Second: if no qualified booked call has been held by the end of the 30 days, we keep sending at our cost until one is, for up to 30 further days, after which the trial ends. Both promises hold while you hold up clause 3. If you stop responding for five business days, the trial ends and the promises end with it.\n\n5. What counts as a qualified booked call. All four must be true: the company matches the approved profile; the attendee holds an approved title; they attended; they booked in response to outreach describing your offer. Budget, timeline, level of interest and whether they buy do not affect whether a call counts. No-shows do not count; we re-book them for 14 days. You may flag a call as not qualifying within 24 business hours, in writing, stating which criterion it failed.\n\n6. The exchange. The trial is free, so its price is proof. You agree to: (a) leave a review of the trial on Clutch, or a platform we both agree, within seven days of the day-30 call. That review may be positive or negative, must be your honest opinion, and must begin with the words “I received this service for free for my review.” We will never ask you to change or remove it; (b) if at least one qualified call was held, allow us to quote you by name, title and company, using words you approve in writing before publication; (c) allow us to publish the trial’s numbers — companies contacted, replies, calls booked — as a case study, anonymised if you prefer; (d) give us ten minutes at the end for an honest debrief, whatever the outcome. We will never publish anything you have not approved in writing, and we will never ask you to say anything you do not mean.\n\n7. Day 31. On the day-30 call you decide whether to continue on one of our plans: Starter $2,497 for 10 guaranteed booked calls a month, Growth $3,997 for 20, or Scale $8,497 for 50 — month to month, 14 days’ notice to cancel, no setup fee, on the terms published at aviance.online. We will recommend one of them based on what the trial measured and how many calls a week you told us you can handle. If you continue, the trial domain, inboxes and list carry into your plan and campaigns stay live. If you don’t, we retire the trial domain and inboxes within seven days and never use them for anyone else. There is no obligation to continue and nothing to cancel.\n\n8. Ownership and data. Your leads, replies and booked meetings are yours, exported on request, whether or not you continue. The sending domain and inboxes are registered by us and stay ours. Our methods, templates and tools stay ours. We do not sell or share your data.\n\n9. Limits. One trial per company. One profile, one sequence, one segment. We may end the trial if the outreach would breach Google’s sending rules or ours, or if clause 3 is not met.\n\n10. Where we are. Aviance is run from Sri Lanka. Working hours in your time zone: 09:00–17:00 US Eastern, Monday to Friday. Replies are handled inside those hours; hot leads the same day.\n\nSigned for Aviance: Limeth Sith\nSigned for Ridgeline IT: Dana Whitfield, Director of Client Success, 6 October 2026",
+   "agreementVersion": "plan-2026-09-28-draft",
+   "agreementHash": "10376d7bbb9017264fe7ef22b3e0be20695d8cc6397c1ee9dbe2490fb6ef7feb",
+   "agreementText": "Aviance — Starter Plan Agreement\nBetween Aviance (“we”) and Ridgeline IT (“you”). Effective 6 October 2026.\n\n1. What this is. A done-for-you cold email service on the Starter plan: $2,497 a month for 10 booked sales calls a month. We build and run outbound campaigns in your name and book sales calls onto your calendar.\n\n2. What we do. Register sending domains and inboxes for you. Research and verify contacts matching the customer profile you approve. Write email sequences you approve. Send them, handle every reply, and book, confirm and remind every meeting, chasing no-shows for 14 days. Send you a written update every Friday.\n\n3. What you do. Approve the customer profile and the copy. Keep enough open slots on the calendar you give us to take the calls your plan books, and be able to take a booked meeting within five business days. Reply to any hot lead we hand you within one business day. Give us the postal address for the email footer. Authorise us to send email in your company’s name, from the domains we set up, using only copy you approved.\n\n4. What counts as a booked call. All four must be true: the company matches the approved profile; the attendee holds an approved title; they attended; they booked in response to outreach describing your offer. No-shows do not count; we re-book them for 14 days. You may flag a call as not qualifying within 24 business hours, in writing, stating which criterion it failed.\n\n5. Price and term. $2,497 a month, month to month, billed monthly in advance. 14 days’ notice to cancel. No setup fee. On the terms published at aviance.online.\n\n6. Ownership and data. Your leads, replies and booked meetings are yours, exported on request. The sending domains and inboxes are registered by us and stay ours. Our methods, templates and tools stay ours. We do not sell or share your data.\n\n7. Limits. We may pause or end the service if the outreach would breach Google’s sending rules or ours, or if clause 3 is not met.\n\n8. Where we are. Aviance is run from Sri Lanka. Working hours in your time zone: 09:00–17:00 US Eastern, Monday to Friday. Replies are handled inside those hours; hot leads the same day.\n\nSigned for Aviance: Limeth Sith\nSigned for Ridgeline IT: Dana Whitfield, Director of Client Success, 6 October 2026",
    "signedDay": "2026-10-07",
    "day1Date": "2026-10-21",
-   "day30Date": "2026-11-19",
    "fridayCount": 2,
    "lastFridayAt": "2026-10-16T13:00:00.000Z",
    "buildCheckAt": "2026-10-14T13:00:00.000Z",
-   "approvalLink": "https://machine.test/c/TOKEN_2/approve",
+   "approvalLink": "https://machine.test/c/TOKEN_3/approve",
    "approvalLinkAt": "2026-10-16T14:20:00.300Z"
   },
   "domain": {
@@ -926,7 +998,7 @@
      "name": "Porkbun",
      "price": 10.37,
      "renewal": 11.08,
-     "seenAt": "2026-10-06T18:20:05.600Z",
+     "seenAt": "2026-10-06T18:20:05.850Z",
      "source": "live",
      "unconfirmed": false,
      "url": "https://porkbun.com/checkout/search?q=getridgelineit.com"
@@ -1005,7 +1077,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=getridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:05.600Z",
+       "confirmedAt": "2026-10-06T18:20:05.850Z",
        "source": "live"
       },
       {
@@ -1082,7 +1154,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=ridgelineithq.com",
-       "confirmedAt": "2026-10-06T18:20:05.600Z",
+       "confirmedAt": "2026-10-06T18:20:05.850Z",
        "source": "live"
       },
       {
@@ -1159,7 +1231,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=tryridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:05.600Z",
+       "confirmedAt": "2026-10-06T18:20:05.850Z",
        "source": "live"
       },
       {
@@ -1236,7 +1308,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=ridgelineitco.com",
-       "confirmedAt": "2026-10-06T18:20:05.600Z",
+       "confirmedAt": "2026-10-06T18:20:05.850Z",
        "source": "live"
       },
       {
@@ -1313,7 +1385,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=useridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:05.600Z",
+       "confirmedAt": "2026-10-06T18:20:05.850Z",
        "source": "live"
       },
       {
@@ -1390,7 +1462,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=ridgelineitusa.com",
-       "confirmedAt": "2026-10-06T18:20:05.600Z",
+       "confirmedAt": "2026-10-06T18:20:05.850Z",
        "source": "live"
       },
       {
@@ -1467,7 +1539,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=joinridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:05.600Z",
+       "confirmedAt": "2026-10-06T18:20:05.850Z",
        "source": "live"
       },
       {
@@ -1544,7 +1616,7 @@
        "renewal": 11.08,
        "promo": null,
        "url": "https://porkbun.com/checkout/search?q=heyridgelineit.com",
-       "confirmedAt": "2026-10-06T18:20:05.600Z",
+       "confirmedAt": "2026-10-06T18:20:05.850Z",
        "source": "live"
       },
       {
@@ -1647,8 +1719,8 @@
     "inboxesMonthly": 7,
     "firstMonth": 16.08
    },
-   "builtAt": "2026-10-06T18:20:05.600Z",
-   "sentAt": "2026-10-06T18:20:05.600Z",
+   "builtAt": "2026-10-06T18:20:05.850Z",
+   "sentAt": "2026-10-06T18:20:05.850Z",
    "boughtAt": "2026-10-07T02:42:00.000Z",
    "domain": {
     "name": "getridgelineit.com",
@@ -1672,7 +1744,7 @@
     "check:twostep": "{\"status\":\"pass\",\"detail\":\"app-password login works, so 2-Step is on\",\"checkedAt\":\"2026-10-07T09:40:00.000Z\"}",
     "check:loopback": "{\"status\":\"pass\",\"detail\":\"received in INBOX; dkim=pass spf=pass\",\"checkedAt\":\"2026-10-07T09:40:10.490Z\"}",
     "loopbackSentAt": "2026-10-07T09:40:00.000Z",
-    "loopbackToken": "AVL-6840ef9736",
+    "loopbackToken": "AVL-6335a61e3e",
     "loopbackFrom": "dana@getridgelineit.com",
     "loopbackTo": "dana.whitfield@getridgelineit.com",
     "spf": "pass",
@@ -1805,8 +1877,8 @@
    "qualified": 0,
    "noshows": 0,
    "wrongfit": 0,
-   "warmupSent": 122,
-   "warmupInbox": 120,
+   "warmupSent": 120,
+   "warmupInbox": 118,
    "warmupSpam": 2,
    "warmupRescued": 2,
    "companiesContacted": 0
@@ -1827,11 +1899,24 @@
     "blockedReason": ""
    }
   ],
-  "invoice": null,
+  "invoice": {
+   "number": "AV-202610-ridgelineit",
+   "plan": "starter",
+   "amount": 2497,
+   "calls": 10,
+   "bonus": false,
+   "status": "sent",
+   "issuedAt": "2026-10-06T18:20:00.000Z",
+   "sentAt": "2026-10-06T18:20:00.000Z",
+   "paidAt": null,
+   "dueDate": "2026-10-06",
+   "remindersSent": 2,
+   "blockedReason": null
+  },
   "promises": [
    {
     "id": "pmuqen92y2b8",
-    "text": "Answer the trial application within 1 business day",
+    "text": "Answer the client within 1 business day",
     "dueAt": "2026-10-02T23:59:00Z",
     "madeAt": "2026-10-02T03:30:00.250Z",
     "doneAt": "2026-10-02T03:30:00.250Z"
@@ -1842,21 +1927,6 @@
     "date": "2026-10-16",
     "time": "09:00 ET",
     "what": "Friday update"
-   },
-   {
-    "date": "2026-11-09",
-    "time": "09:00 ET",
-    "what": "Day 20 disposition sheet"
-   },
-   {
-    "date": "2026-11-18",
-    "time": "09:00 ET",
-    "what": "Day 29 Trial Report + Market Report"
-   },
-   {
-    "date": "2026-11-19",
-    "time": "09:00 ET",
-    "what": "Day 30 decision (or extension if 0 qualified)"
    }
   ],
   "events": [
@@ -1887,7 +1957,7 @@
     "system": "calendar",
     "event": "requested",
     "detail": {
-     "meetingId": "mmvb2gidc989594ef25",
+     "meetingId": "mmvb2gidcdc003a5692",
      "start": "2026-10-20T15:00:00.000Z"
     }
    },
@@ -1896,7 +1966,7 @@
     "system": "onboardcall",
     "event": "calendar_requested",
     "detail": {
-     "meetingId": "mmvb2gidc989594ef25",
+     "meetingId": "mmvb2gidcdc003a5692",
      "start": "2026-10-20T15:00:00.000Z",
      "call": "launch"
     }
@@ -2126,6 +2196,14 @@
     }
    },
    {
+    "at": "2026-10-14T11:00:00.000Z",
+    "system": "mailwatch",
+    "event": "opened",
+    "detail": {
+     "template": "invoice_reminder"
+    }
+   },
+   {
     "at": "2026-10-14T10:15:01.210Z",
     "system": "authguard",
     "event": "blacklist_checked",
@@ -2165,6 +2243,36 @@
        "reasons": []
       }
      ]
+    }
+   },
+   {
+    "at": "2026-10-13T14:00:00.500Z",
+    "system": "notify",
+    "event": "alert_sent",
+    "detail": {
+     "key": "invoice_unpaid",
+     "title": "Invoice still unpaid: Ridgeline IT (7 days)",
+     "channels": {
+      "email": "ok",
+      "push": "push not configured"
+     }
+    }
+   },
+   {
+    "at": "2026-10-13T14:00:00.250Z",
+    "system": "invoice",
+    "event": "invoice_reminder_sent",
+    "detail": {
+     "day": 7
+    }
+   },
+   {
+    "at": "2026-10-13T14:00:00.250Z",
+    "system": "notify",
+    "event": "client_email_sent",
+    "detail": {
+     "key": "invoice_reminder",
+     "to": "dana@ridgelineit.com"
     }
    },
    {
@@ -2292,62 +2400,9 @@
       }
      ]
     }
-   },
-   {
-    "at": "2026-10-10T11:00:00.000Z",
-    "system": "mailwatch",
-    "event": "opened",
-    "detail": {
-     "template": "friday_update"
-    }
-   },
-   {
-    "at": "2026-10-10T10:15:01.210Z",
-    "system": "authguard",
-    "event": "blacklist_checked",
-    "detail": {
-     "status": "clean",
-     "listed": [],
-     "warnings": [],
-     "unknown": []
-    }
-   },
-   {
-    "at": "2026-10-10T10:00:00.160Z",
-    "system": "authguard",
-    "event": "dns_checked",
-    "detail": {
-     "failed": []
-    }
-   },
-   {
-    "at": "2026-10-10T04:15:00.000Z",
-    "system": "ramp",
-    "event": "caps_set",
-    "detail": {
-     "sendingDay": 0,
-     "bounceRate": null,
-     "inboxes": [
-      {
-       "email": "dana@getridgelineit.com",
-       "cap": 0,
-       "stage": "pre-day1",
-       "reasons": []
-      },
-      {
-       "email": "dana.whitfield@getridgelineit.com",
-       "cap": 0,
-       "stage": "pre-day1",
-       "reasons": []
-      }
-     ]
-    }
    }
   ],
   "jobs": {
-   "aviance-send": null,
-   "aviance-replies": null,
-   "aviance-eod-report": null,
    "onboarding-nudge": {
     "at": "2026-10-06T15:40:00.550Z",
     "ms": 0,
@@ -2357,7 +2412,7 @@
    "research": null,
    "market": null,
    "pricescout": {
-    "at": "2026-10-06T18:20:07.900Z",
+    "at": "2026-10-06T18:20:08.150Z",
     "ms": 2300,
     "ok": true,
     "by": "check"
@@ -2444,7 +2499,11 @@
    },
    "day1-notice": null,
    "cancel-inboxes": null,
-   "invoice": null,
+   "invoice": {
+    "at": "2026-10-16T14:00:00.000Z",
+    "ms": 0,
+    "ok": true
+   },
    "wrapup": null,
    "friday": {
     "at": "2026-10-16T13:00:01.400Z",
@@ -2466,140 +2525,57 @@
   },
   "application": {
    "receivedAt": "2026-10-01T19:40:00.000Z",
-   "source": "website",
+   "source": "inquiry",
    "review": "approved",
    "decidedAt": "2026-10-02T03:30:00.000Z",
-   "decision": "approve",
+   "decision": "won",
    "declineReason": null,
    "answers": [
     {
-     "q": "Name",
-     "a": "Dana Whitfield"
+     "q": "Plan they asked for",
+     "a": "Starter"
     },
     {
-     "q": "Work email",
-     "a": "Dana@RidgelineIT.com"
-    },
-    {
-     "q": "Company website",
-     "a": "https://www.ridgelineit.com/"
-    },
-    {
-     "q": "City / state",
-     "a": "Charlotte, NC"
-    },
-    {
-     "q": "What do you sell, and who to?",
+     "q": "What they sell",
      "a": "Managed IT and cybersecurity for law firms and accounting firms with 10–75 staff in the Carolinas"
     },
     {
-     "q": "What is a new customer worth in the first year?",
-     "a": "$5,000–$20,000"
+     "q": "Website",
+     "a": "https://www.ridgelineit.com"
     },
     {
-     "q": "How many sales calls a week could you actually take?",
-     "a": "5–10 a week"
+     "q": "Call they booked",
+     "a": "Thursday, October 1 at 4:30 PM (America/New_York)"
     },
     {
-     "q": "Has anyone outside your network ever bought from you?",
-     "a": "Yes — cold buyers already"
+     "q": "Their role",
+     "a": "Founder / CEO"
     },
     {
-     "q": "Could you take a booked meeting within five business days?",
-     "a": "Yes"
+     "q": "Average deal size",
+     "a": "$5,000 – $25,000"
     },
     {
-     "q": "If the trial books you a call, what then?",
-     "a": "Move to Growth — 20 calls a month"
+     "q": "How they win customers today",
+     "a": "Referrals"
     },
     {
-     "q": "Anything we should know?",
-     "a": "We tried LinkedIn ads in 2024; not much came of it."
+     "q": "Sales calls a month they can take",
+     "a": "Around 10"
     },
     {
-     "q": "Agreed to the quote + honest review",
-     "a": "Yes"
-    },
-    {
-     "q": "Open to (optional)",
-     "a": "Intro to one peer"
+     "q": "When they want to start",
+     "a": "This month"
     }
    ],
    "fit": {
-    "verdict": "fit",
-    "summary": "Looks like a fit — 3 checks unknown",
-    "lines": [
-     {
-      "rule": "one_trial_ever",
-      "label": "First trial for this company",
-      "status": "pass",
-      "note": "ridgelineit.com has not had one"
-     },
-     {
-      "rule": "us_based",
-      "label": "US-based",
-      "status": "pass",
-      "note": "They sell from Charlotte, NC"
-     },
-     {
-      "rule": "employees",
-      "label": "5–50 people",
-      "status": "unknown",
-      "note": "The website form does not ask for headcount"
-     },
-     {
-      "rule": "deal_value",
-      "label": "Customer worth ≥ $2,000 in year one",
-      "status": "pass",
-      "note": "They said $5,000–$20,000"
-     },
-     {
-      "rule": "sold_to_strangers",
-      "label": "Has sold to strangers before",
-      "status": "pass",
-      "note": "They said \"Yes — cold buyers already\""
-     },
-     {
-      "rule": "dream_customers",
-      "label": "Three dream customers",
-      "status": "unknown",
-      "note": "Collected on the onboarding page"
-     },
-     {
-      "rule": "meet_within_5_days",
-      "label": "Can meet within five business days",
-      "status": "pass",
-      "note": "They said \"Yes\""
-     },
-     {
-      "rule": "slots_per_week",
-      "label": "At least 5 open slots a week",
-      "status": "pass",
-      "note": "They said 5–10 a week"
-     },
-     {
-      "rule": "nobody_else_emailing",
-      "label": "Nobody else cold-emailing for them",
-      "status": "unknown",
-      "note": "The website form does not ask"
-     },
-     {
-      "rule": "review_agreed",
-      "label": "Agreed to the quote + honest review",
-      "status": "pass",
-      "note": "Ticked the box"
-     },
-     {
-      "rule": "not_agency",
-      "label": "Not a lead-gen / outbound agency",
-      "status": "pass",
-      "note": "Website title and their answers checked"
-     }
-    ]
+    "verdict": "unknown",
+    "summary": "A booked sales call: read the fit score and the research before the call. Press Won on the booking to start onboarding.",
+    "lines": []
    },
    "research": {
     "status": "done",
-    "at": "2026-10-01T19:40:12.760Z",
+    "at": "2026-10-01T19:40:13.340Z",
     "error": null,
     "summary": "Ridgeline IT is a computer support and services in Charlotte, NC (4.8★, 61 Google reviews). The website lists services such as Managed IT services, Cybersecurity and Cloud backup and recovery, names Charlotte, NC and Raleigh, NC, says “Founded in 2012” and shows 4 people on the team page. A quick Google Maps count suggests at least 360 law firms and accounting firms in Charlotte, NC. Read 22 pages and 1 document (1,139 words): 125 facts — 4 named people, 3 named clients, 1 testimonial, 2 case studies, 8 certifications / partners, online since 2013.",
     "website": {
@@ -2653,11 +2629,13 @@
      }
     ],
     "score": {
-     "score": 94,
+     "score": 93,
+     "pointsScore": 93,
+     "capped": false,
      "grade": "A",
      "label": "Strong fit",
-     "confidence": 97,
-     "summary": "94/100 — strong fit (97 of 100 points checked). Strongest: sells to businesses; weakest: market.",
+     "confidence": 82,
+     "summary": "93/100 — strong fit (82 of 100 points checked). Strongest: sells to businesses; weakest: market.",
      "parts": [
       {
        "key": "b2b",
@@ -2697,7 +2675,7 @@
        "pct": 100,
        "items": [
         {
-         "text": "A new customer is worth $5,000–$20,000 in year one",
+         "text": "A new customer is worth $5,000 – $25,000 in year one",
          "status": "good",
          "max": 12,
          "evidence": null,
@@ -2757,18 +2735,18 @@
       {
        "key": "proof",
        "label": "Already wins strangers",
-       "points": 15.1,
-       "checked": 15.1,
+       "points": 9.8,
+       "checked": 9.8,
        "max": 15,
        "pct": 100,
        "items": [
         {
-         "text": "They already sell to strangers (“Yes — cold buyers already”)",
-         "status": "good",
+         "text": "Selling to strangers: not answered",
+         "status": "unknown",
          "max": 5.3,
          "evidence": null,
-         "known": true,
-         "points": 5.3
+         "known": false,
+         "points": null
         },
         {
          "text": "Website shows 1 testimonial, 2 case studies, 3 named clients",
@@ -2847,34 +2825,34 @@
       {
        "key": "ready",
        "label": "Ready for calls",
-       "points": 13.2,
-       "checked": 14.9,
+       "points": 3.6,
+       "checked": 5.3,
        "max": 15,
-       "pct": 89,
+       "pct": 68,
        "items": [
         {
-         "text": "Can take a meeting within five business days",
-         "status": "good",
+         "text": "Meeting within five days: not answered",
+         "status": "unknown",
          "max": 3.5,
          "evidence": null,
-         "known": true,
-         "points": 3.5
+         "known": false,
+         "points": null
         },
         {
-         "text": "Can take 5–10 calls a week",
-         "status": "good",
+         "text": "Open call slots a week: not answered",
+         "status": "unknown",
          "max": 3.5,
          "evidence": null,
-         "known": true,
-         "points": 3.5
+         "known": false,
+         "points": null
         },
         {
-         "text": "If it works: “Move to Growth — 20 calls a month”",
-         "status": "good",
+         "text": "What happens if it works: not answered",
+         "status": "unknown",
          "max": 2.6,
          "evidence": null,
-         "known": true,
-         "points": 2.6
+         "known": false,
+         "points": null
         },
         {
          "text": "Runs sales tools: HubSpot",
@@ -2898,7 +2876,11 @@
      "dealbreakers": [],
      "warnings": [],
      "questions": [
+      "Has anyone outside your network ever bought from you?",
       "Name three companies that would be perfect customers.",
+      "Can you take a booked meeting within five business days?",
+      "How many sales calls a week could you actually take?",
+      "If the trial books you good calls, what happens on day 31?",
       "Is anyone else cold-emailing this same list for you right now?"
      ]
     },
@@ -3200,8 +3182,7 @@
      "money": {
       "federal": {
        "searched": [
-        "Ridgeline IT",
-        "Ridgelineit"
+        "Ridgeline IT"
        ],
        "state": "NC",
        "ppp": [
@@ -3235,8 +3216,7 @@
        "source": "SEC EDGAR"
       },
       "names": [
-       "Ridgeline IT",
-       "Ridgelineit"
+       "Ridgeline IT"
       ],
       "states": [
        "NC"
@@ -3256,7 +3236,16 @@
         "year": 2019
        }
       ],
-      "benchmark": "IT services / MSPs"
+      "benchmark": "IT services / MSPs",
+      "estimate": {
+       "sure": "about",
+       "low": 2240000,
+       "high": 4000000,
+       "text": "about $2.2M–$4M a year",
+       "basis": [
+        "16 people × $140,000–$250,000 revenue per employee for IT services / MSPs (Census SUSB 2022 NAICS 541512/541513, Service Leadership)"
+       ]
+      }
      },
      "offers": {
       "ctas": [
@@ -3444,7 +3433,7 @@
      "facts": 125
     },
     "brief": {
-     "text": "Ridgeline IT sells Managed IT services, Cybersecurity, Cloud backup and recovery, and Compliance for law and CPA firms. They mostly serve law firms and accounting firms; named clients include Hollis & Grant Law, Carolina Tax Partners and Queen City Family Law. Ridgeline IT has been in business since 2012, and their website has been online since 2013. About 16 people work there (website lists 16 employees), from an office at 2100 South Blvd, Suite 300, Charlotte, NC 28203. Revenue is likely $2.2M–$4M a year (16 people × $140,000–$250,000 revenue per employee for IT services / MSPs); the public record shows a $118,400 PPP loan from April 2020. Their website shows 1 testimonial, 2 case studies, and 3 named clients; they name Microsoft Partner, Microsoft Solutions Partner, and SOC 2; Google rates them 4.8★ from 61 reviews. Offers they run: their main call to action is “Book a free network assessment”; they promise no long-term contracts, unlimited help desk, and 15-minute response; published plans: Essentials ($99 per user / month), Complete ($149 per user / month). On the 22 pages read, their website has no booking link. Their blog: about 6 posts a year, last one 58 days ago; the posts mostly talk about Microsoft 365 and phishing emails. In the news: “Ridgeline IT opens a Raleigh office & adds six staff” (Charlotte Business Journal, 15 Jun 2026) — it mentions a new office. Two angles for the call: website talks to businesses (37 mentions); and a new customer is worth $5,000–$20,000 in year one. Still open — ask them: Name three companies that would be perfect customers.",
+     "text": "Ridgeline IT sells Managed IT services, Cybersecurity, Cloud backup and recovery, and Compliance for law and CPA firms. They mostly serve law firms and accounting firms; named clients include Hollis & Grant Law, Carolina Tax Partners and Queen City Family Law. Ridgeline IT has been in business since 2012, and their website has been online since 2013. About 16 people work there (website lists 16 employees), from an office at 2100 South Blvd, Suite 300, Charlotte, NC 28203. Revenue is about $2.2M–$4M a year (16 people × $140,000–$250,000 revenue per employee for IT services / MSPs); the public record shows a $118,400 PPP loan from April 2020. Their website shows 1 testimonial, 2 case studies, and 3 named clients; they name Microsoft Partner, Microsoft Solutions Partner, and SOC 2; Google rates them 4.8★ from 61 reviews. Offers they run: their main call to action is “Book a free network assessment”; they promise no long-term contracts, unlimited help desk, and 15-minute response; published plans: Essentials ($99 per user / month), Complete ($149 per user / month). On the 22 pages read, their website has no booking link. Their blog: about 6 posts a year, last one 58 days ago; the posts mostly talk about Microsoft 365 and phishing emails. In the news: “Ridgeline IT opens a Raleigh office & adds six staff” (Charlotte Business Journal, 15 Jun 2026) — it mentions a new office. Two angles for the call: website talks to businesses (37 mentions); and a new customer is worth $5,000 – $25,000 in year one. Still open — ask them: Has anyone outside your network ever bought from you?",
      "sentences": [
       {
        "text": "Ridgeline IT sells Managed IT services, Cybersecurity, Cloud backup and recovery, and Compliance for law and CPA firms.",
@@ -3472,7 +3461,7 @@
        ]
       },
       {
-       "text": "Revenue is likely $2.2M–$4M a year (16 people × $140,000–$250,000 revenue per employee for IT services / MSPs); the public record shows a $118,400 PPP loan from April 2020.",
+       "text": "Revenue is about $2.2M–$4M a year (16 people × $140,000–$250,000 revenue per employee for IT services / MSPs); the public record shows a $118,400 PPP loan from April 2020.",
        "sources": [
         "https://www.census.gov/programs-surveys/susb.html",
         "Service Leadership (industry benchmark)",
@@ -3515,14 +3504,14 @@
        ]
       },
       {
-       "text": "Two angles for the call: website talks to businesses (37 mentions); and a new customer is worth $5,000–$20,000 in year one.",
+       "text": "Two angles for the call: website talks to businesses (37 mentions); and a new customer is worth $5,000 – $25,000 in year one.",
        "sources": [
         "https://www.ridgelineit.com/",
         "fit score"
        ]
       },
       {
-       "text": "Still open — ask them: Name three companies that would be perfect customers.",
+       "text": "Still open — ask them: Has anyone outside your network ever bought from you?",
        "sources": [
         "fit score"
        ]
@@ -3574,8 +3563,8 @@
    "requestedFor": null,
    "requestedAt": null,
    "proposedFor": null,
-   "meetingId": "mmur1805c91eb6a69da",
-   "meetLink": "https://meet.google.com/rdg-001-avc",
+   "meetingId": "mmur1805cfd16242a6e",
+   "meetLink": "https://meet.google.com/rdg-002-avc",
    "steps": [
     {
      "key": "sent",
@@ -3616,7 +3605,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Let's book your onboarding call",
-     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nFirst, a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_3/book\n\nThere's also one page with your details and the agreement. Fill it in before we talk if you like, or we'll do it together on the call: https://machine.test/c/TOKEN_1/onboard\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGood news: we'd love to work with Ridgeline IT on the Starter plan.\n\nFirst, a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_4/book\n\nThere's also one page with your details and the agreement. Fill it in before we talk if you like, or we'll do it together on the call: https://machine.test/c/TOKEN_2/onboard\n\nLimeth Sith",
      "kind": "acceptance",
      "auto": false,
      "rule": null,
@@ -3664,7 +3653,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: Let's book your onboarding call",
-     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_4/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_5/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
      "kind": "auto_reply",
      "auto": true,
      "rule": "wants_time",
@@ -3688,7 +3677,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: Let's book your onboarding call",
-     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_5/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_6/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -3712,7 +3701,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Confirmed: our call on Tue 6 Oct at 11:00 am ET",
-     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_6/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-002-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_7/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -3736,7 +3725,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Our onboarding call tomorrow",
-     "text": "Hi Dana,\n\nA reminder that our 30-minute onboarding call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nA reminder that our 30-minute onboarding call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-002-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
      "kind": "reminder",
      "auto": false,
      "rule": null,
@@ -3759,7 +3748,7 @@
      "at": "2026-10-06T15:40:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
-     "subject": "Your trial — what happens now",
+     "subject": "What happens now",
      "text": "Hi Dana,\n\nGood to talk with you today, thank you.\n\nHere's what happens now:\n\n- Right now we're researching your business and market, and building your offer.\n- This week we set up your sending address and inboxes.\n- Then two weeks of warm-up, so your emails land in the inbox.\n- We build your list of about 400 companies and write your emails in your words.\n- Every Friday you get a short note from me, quiet weeks too.\n- Near the end of warm-up, we have a 30-minute launch call, where you OK the list and the emails.\n- The first emails go out in about three weeks.\n\nNothing's needed from you until then.\n\nLimeth Sith",
      "kind": "next_steps",
      "auto": false,
@@ -3783,8 +3772,8 @@
      "at": "2026-10-06T18:20:00.250Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
-     "subject": "Your signed trial agreement",
-     "text": "Hi Dana,\n\nHere's a plain-text copy of the agreement you accepted for Ridgeline IT. Keep it for your records. Nothing else is needed from you.\n\nThe Aviance 30-Day Trial — Agreement\nBetween Aviance (“we”) and Ridgeline IT (“you”). Effective 6 October 2026.\n\n1. What this is. A 30-day cold email trial. We build and run a small outbound campaign in your name, book sales calls onto your calendar, and hand you a written report of what your market said. It costs you nothing. It is not a paid plan; it is how you decide whether to buy one.\n\n2. What we do. Register one sending domain and two inboxes. Research and verify a list of 300–500 contacts matching the customer profile you approve. Write a three-email sequence you approve. Send for 30 days. Handle every reply. Book, confirm and remind every meeting, and chase no-shows for 14 days. Send you a written update every Friday, and on day 29 a report covering the numbers, every reply we received and what it means.\n\n3. What you do. Approve the customer profile and the copy on the kickoff call. Keep at least five open slots a week on the calendar you give us, and be able to take a booked meeting within five business days. Reply to any hot lead we hand you within one business day. Give us the postal address for the email footer. Authorise us to send email in your company’s name, from the trial domain, using only copy you approved.\n\n4. The two promises. First: we will contact the approved list and give you the written report — that is guaranteed. Second: if no qualified booked call has been held by the end of the 30 days, we keep sending at our cost until one is, for up to 30 further days, after which the trial ends. Both promises hold while you hold up clause 3. If you stop responding for five business days, the trial ends and the promises end with it.\n\n5. What counts as a qualified booked call. All four must be true: the company matches the approved profile; the attendee holds an approved title; they attended; they booked in response to outreach describing your offer. Budget, timeline, level of interest and whether they buy do not affect whether a call counts. No-shows do not count; we re-book them for 14 days. You may flag a call as not qualifying within 24 business hours, in writing, stating which criterion it failed.\n\n6. The exchange. The trial is free, so its price is proof. You agree to: (a) leave a review of the trial on Clutch, or a platform we both agree, within seven days of the day-30 call. That review may be positive or negative, must be your honest opinion, and must begin with the words “I received this service for free for my review.” We will never ask you to change or remove it; (b) if at least one qualified call was held, allow us to quote you by name, title and company, using words you approve in writing before publication; (c) allow us to publish the trial’s numbers — companies contacted, replies, calls booked — as a case study, anonymised if you prefer; (d) give us ten minutes at the end for an honest debrief, whatever the outcome. We will never publish anything you have not approved in writing, and we will never ask you to say anything you do not mean.\n\n7. Day 31. On the day-30 call you decide whether to continue on one of our plans: Starter $2,497 for 10 guaranteed booked calls a month, Growth $3,997 for 20, or Scale $8,497 for 50 — month to month, 14 days’ notice to cancel, no setup fee, on the terms published at aviance.online. We will recommend one of them based on what the trial measured and how many calls a week you told us you can handle. If you continue, the trial domain, inboxes and list carry into your plan and campaigns stay live. If you don’t, we retire the trial domain and inboxes within seven days and never use them for anyone else. There is no obligation to continue and nothing to cancel.\n\n8. Ownership and data. Your leads, replies and booked meetings are yours, exported on request, whether or not you continue. The sending domain and inboxes are registered ",
+     "subject": "Your signed agreement",
+     "text": "Hi Dana,\n\nHere's a plain-text copy of the agreement you accepted for Ridgeline IT. Keep it for your records. Nothing else is needed from you.\n\nAviance — Starter Plan Agreement\nBetween Aviance (“we”) and Ridgeline IT (“you”). Effective 6 October 2026.\n\n1. What this is. A done-for-you cold email service on the Starter plan: $2,497 a month for 10 booked sales calls a month. We build and run outbound campaigns in your name and book sales calls onto your calendar.\n\n2. What we do. Register sending domains and inboxes for you. Research and verify contacts matching the customer profile you approve. Write email sequences you approve. Send them, handle every reply, and book, confirm and remind every meeting, chasing no-shows for 14 days. Send you a written update every Friday.\n\n3. What you do. Approve the customer profile and the copy. Keep enough open slots on the calendar you give us to take the calls your plan books, and be able to take a booked meeting within five business days. Reply to any hot lead we hand you within one business day. Give us the postal address for the email footer. Authorise us to send email in your company’s name, from the domains we set up, using only copy you approved.\n\n4. What counts as a booked call. All four must be true: the company matches the approved profile; the attendee holds an approved title; they attended; they booked in response to outreach describing your offer. No-shows do not count; we re-book them for 14 days. You may flag a call as not qualifying within 24 business hours, in writing, stating which criterion it failed.\n\n5. Price and term. $2,497 a month, month to month, billed monthly in advance. 14 days’ notice to cancel. No setup fee. On the terms published at aviance.online.\n\n6. Ownership and data. Your leads, replies and booked meetings are yours, exported on request. The sending domains and inboxes are registered by us and stay ours. Our methods, templates and tools stay ours. We do not sell or share your data.\n\n7. Limits. We may pause or end the service if the outreach would breach Google’s sending rules or ours, or if clause 3 is not met.\n\n8. Where we are. Aviance is run from Sri Lanka. Working hours in your time zone: 09:00–17:00 US Eastern, Monday to Friday. Replies are handled inside those hours; hot leads the same day.\n\nSigned for Aviance: Limeth Sith\nSigned for Ridgeline IT: Dana Whitfield, Director of Client Success, 6 October 2026\n\nAccepted by: Dana Whitfield, Director of Client Success, Ridgeline IT\nAccepted at: 2026-10-06 18:20 (UTC) from IP 98.24.1.7\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -3802,17 +3791,17 @@
      "statusText": "delivered · opened Wed 7 Oct, 8 pm"
     },
     {
-     "id": "out-a513a343bddbc101",
+     "id": "out-45eb575b0a0479db",
      "dir": "out",
-     "at": "2026-10-06T18:20:07.900Z",
+     "at": "2026-10-06T18:20:00.500Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
-     "subject": "Your trial setup has started",
-     "text": "Hi Dana,\n\nYour market check passed, so we're going ahead with Ridgeline IT. I'm setting up the sending domain and two inboxes now.\n\nOnce they pass their checks, they start warming up. When they're ready, I'll email you the exact day and time we start. Nothing's needed from you in the meantime.\n\nLimeth Sith",
+     "subject": "Invoice AV-202610-ridgelineit — Starter, month one",
+     "text": "Hi Dana,\n\nWelcome to Starter.\n\nInvoice AV-202610-ridgelineit · issued Tue 6 Oct · due today\nStarter: $2,497 a month for 10 guaranteed booked calls\nTotal due: $2,497\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nWe’re setting up your sending address and inboxes now; after about two weeks of warm-up the first emails go out. Month to month, 14 days’ notice, no setup fee.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
-     "template": "setup_in_progress",
+     "template": "invoice_plan_start",
      "accepted": true,
      "messageId": "<MSGID_10>",
      "openedAt": "2026-10-07T14:30:00.000Z",
@@ -3826,7 +3815,31 @@
      "statusText": "delivered · opened Wed 7 Oct, 8 pm"
     },
     {
-     "id": "out-bd329809e9b71958",
+     "id": "out-a072c1fed1bc8fd3",
+     "dir": "out",
+     "at": "2026-10-06T18:20:08.150Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your setup has started",
+     "text": "Hi Dana,\n\nYour market check passed, so we're going ahead with Ridgeline IT. I'm setting up the sending domain and inboxes now.\n\nOnce they pass their checks, they start warming up. When they're ready, I'll email you the exact day and time we start. Nothing's needed from you in the meantime.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "setup_in_progress",
+     "accepted": true,
+     "messageId": "<MSGID_11>",
+     "openedAt": "2026-10-07T14:30:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-07T14:30:00.000Z",
+     "statusText": "delivered · opened Wed 7 Oct, 8 pm"
+    },
+    {
+     "id": "out-2ab8a664abf468e8",
      "dir": "out",
      "at": "2026-10-09T13:00:00.250Z",
      "from": "hello@aviance.test",
@@ -3838,7 +3851,7 @@
      "rule": null,
      "template": "friday_update",
      "accepted": true,
-     "messageId": "<MSGID_11>",
+     "messageId": "<MSGID_12>",
      "openedAt": "2026-10-10T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -3850,13 +3863,61 @@
      "statusText": "delivered · opened Sat 10 Oct, 4:30 pm"
     },
     {
-     "id": "out-0a08c3ba7772c84c",
+     "id": "out-b073ef4fe6492aea",
+     "dir": "out",
+     "at": "2026-10-09T14:00:00.250Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Reminder: invoice AV-202610-ridgelineit",
+     "text": "Hi Dana,\n\nA reminder that invoice AV-202610-ridgelineit ($2,497, Starter) is still open.\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nIf it’s already on its way, ignore this, and thank you.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "invoice_reminder",
+     "accepted": true,
+     "messageId": "<MSGID_13>",
+     "openedAt": "2026-10-10T11:00:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-10T11:00:00.000Z",
+     "statusText": "delivered · opened Sat 10 Oct, 4:30 pm"
+    },
+    {
+     "id": "out-137b471dffed07b2",
+     "dir": "out",
+     "at": "2026-10-13T14:00:00.250Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Reminder: invoice AV-202610-ridgelineit",
+     "text": "Hi Dana,\n\nA reminder that invoice AV-202610-ridgelineit ($2,497, Starter) is still open.\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nIf it’s already on its way, ignore this, and thank you.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "invoice_reminder",
+     "accepted": true,
+     "messageId": "<MSGID_14>",
+     "openedAt": "2026-10-14T11:00:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-14T11:00:00.000Z",
+     "statusText": "delivered · opened Wed 4:30 pm"
+    },
+    {
+     "id": "out-61666b1d883bf200",
      "dir": "out",
      "at": "2026-10-16T13:00:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Your list is ready",
-     "text": "Hi Dana,\n\nYour list of companies and the four emails that will go out in your name are ready. Warm-up is nearly done, so the next step is a 30-minute launch call. We go through the list and the emails together, you give the OK, and the first emails go out about Wednesday 21 October.\n\nBook a time that suits you: https://machine.test/c/TOKEN_7/book\n\nIf you'd rather read it all first, it's on one page: https://machine.test/c/TOKEN_2/approve. You can approve each part there too, and then the call is optional.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nYour list of companies and the four emails that will go out in your name are ready. Warm-up is nearly done, so the next step is a 30-minute launch call. We go through the list and the emails together, you give the OK, and the first emails go out about Wednesday 21 October.\n\nBook a time that suits you: https://machine.test/c/TOKEN_8/book\n\nIf you'd rather read it all first, it's on one page: https://machine.test/c/TOKEN_3/approve. You can approve each part there too, and then the call is optional.\n\nLimeth Sith",
      "kind": "launch_invite",
      "auto": false,
      "rule": null,
@@ -3874,19 +3935,19 @@
      "statusText": "replied Fri 7:30 pm"
     },
     {
-     "id": "out-dd6d810866619e42",
+     "id": "out-b0b957f64dafad7a",
      "dir": "out",
      "at": "2026-10-16T13:00:01.150Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Test your booking link",
-     "text": "Hi Dana,\n\nBefore the first send, I want to be sure a prospect who says yes can book. It takes about 60 seconds. Please do this once:\n\n1. Open https://cal.com/ridgeline-it/intro from a personal email address, not your work one.\n2. Book the first slot it offers.\n3. Tap \"It worked\" below.\n4. Cancel the test booking.\n\nIt worked: https://machine.test/c/TOKEN_8/booking-ok\n\nIf anything went wrong, reply and tell me what you saw.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nBefore the first send, I want to be sure a prospect who says yes can book. It takes about 60 seconds. Please do this once:\n\n1. Open https://cal.com/ridgeline-it/intro from a personal email address, not your work one.\n2. Book the first slot it offers.\n3. Tap \"It worked\" below.\n4. Cancel the test booking.\n\nIt worked: https://machine.test/c/TOKEN_9/booking-ok\n\nIf anything went wrong, reply and tell me what you saw.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "booking_test_request",
      "accepted": true,
-     "messageId": "<MSGID_12>",
+     "messageId": "<MSGID_15>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -3898,7 +3959,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-61666b1d883bf200",
+     "id": "out-8e86da833676f9b9",
      "dir": "out",
      "at": "2026-10-16T13:00:01.400Z",
      "from": "hello@aviance.test",
@@ -3910,7 +3971,7 @@
      "rule": null,
      "template": "friday_update",
      "accepted": true,
-     "messageId": "<MSGID_13>",
+     "messageId": "<MSGID_16>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -3946,13 +4007,13 @@
      "statusText": null
     },
     {
-     "id": "out-f33d5e9e9db22bb0",
+     "id": "out-73df310af58c6b93",
      "dir": "out",
      "at": "2026-10-16T14:15:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: Your list is ready",
-     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_9/book\n\nThe next open times (your time):\n• Mon 19 Oct at 9:00 am ET\n• Tue 20 Oct at 9:00 am ET\n• Wed 21 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_10/book\n\nThe next open times (your time):\n• Mon 19 Oct at 9:00 am ET\n• Tue 20 Oct at 9:00 am ET\n• Wed 21 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
      "kind": "auto_reply",
      "auto": true,
      "rule": "wants_time",
@@ -3970,19 +4031,19 @@
      "statusText": "delivered"
     },
     {
-     "id": "out-3fa6805bff9682e5",
+     "id": "out-8dd68f81d1d722a5",
      "dir": "out",
      "at": "2026-10-16T14:32:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: Your list is ready",
-     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 20 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_10/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 20 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_11/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_14>",
+     "messageId": "<MSGID_17>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -4022,12 +4083,12 @@
    "requestedFor": "2026-10-20T15:00:00.000Z",
    "requestedAt": "2026-10-16T14:32:00.000Z",
    "proposedFor": null,
-   "meetingId": "mmvb2gidc989594ef25",
+   "meetingId": "mmvb2gidcdc003a5692",
    "meetLink": null,
    "approvedOnCall": null,
    "approvedOnPage": null,
    "skipped": null,
-   "approvalUrl": "https://machine.test/c/TOKEN_2/approve",
+   "approvalUrl": "https://machine.test/c/TOKEN_3/approve",
    "steps": [
     {
      "key": "sent",
@@ -4068,7 +4129,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Let's book your onboarding call",
-     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nFirst, a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_3/book\n\nThere's also one page with your details and the agreement. Fill it in before we talk if you like, or we'll do it together on the call: https://machine.test/c/TOKEN_1/onboard\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGood news: we'd love to work with Ridgeline IT on the Starter plan.\n\nFirst, a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_4/book\n\nThere's also one page with your details and the agreement. Fill it in before we talk if you like, or we'll do it together on the call: https://machine.test/c/TOKEN_2/onboard\n\nLimeth Sith",
      "kind": "acceptance",
      "auto": false,
      "rule": null,
@@ -4116,7 +4177,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: Let's book your onboarding call",
-     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_4/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_5/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
      "kind": "auto_reply",
      "auto": true,
      "rule": "wants_time",
@@ -4140,7 +4201,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: Let's book your onboarding call",
-     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_5/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_6/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -4164,7 +4225,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Confirmed: our call on Tue 6 Oct at 11:00 am ET",
-     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_6/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-002-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_7/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -4188,7 +4249,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Our onboarding call tomorrow",
-     "text": "Hi Dana,\n\nA reminder that our 30-minute onboarding call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nA reminder that our 30-minute onboarding call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-002-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
      "kind": "reminder",
      "auto": false,
      "rule": null,
@@ -4211,7 +4272,7 @@
      "at": "2026-10-06T15:40:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
-     "subject": "Your trial — what happens now",
+     "subject": "What happens now",
      "text": "Hi Dana,\n\nGood to talk with you today, thank you.\n\nHere's what happens now:\n\n- Right now we're researching your business and market, and building your offer.\n- This week we set up your sending address and inboxes.\n- Then two weeks of warm-up, so your emails land in the inbox.\n- We build your list of about 400 companies and write your emails in your words.\n- Every Friday you get a short note from me, quiet weeks too.\n- Near the end of warm-up, we have a 30-minute launch call, where you OK the list and the emails.\n- The first emails go out in about three weeks.\n\nNothing's needed from you until then.\n\nLimeth Sith",
      "kind": "next_steps",
      "auto": false,
@@ -4235,8 +4296,8 @@
      "at": "2026-10-06T18:20:00.250Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
-     "subject": "Your signed trial agreement",
-     "text": "Hi Dana,\n\nHere's a plain-text copy of the agreement you accepted for Ridgeline IT. Keep it for your records. Nothing else is needed from you.\n\nThe Aviance 30-Day Trial — Agreement\nBetween Aviance (“we”) and Ridgeline IT (“you”). Effective 6 October 2026.\n\n1. What this is. A 30-day cold email trial. We build and run a small outbound campaign in your name, book sales calls onto your calendar, and hand you a written report of what your market said. It costs you nothing. It is not a paid plan; it is how you decide whether to buy one.\n\n2. What we do. Register one sending domain and two inboxes. Research and verify a list of 300–500 contacts matching the customer profile you approve. Write a three-email sequence you approve. Send for 30 days. Handle every reply. Book, confirm and remind every meeting, and chase no-shows for 14 days. Send you a written update every Friday, and on day 29 a report covering the numbers, every reply we received and what it means.\n\n3. What you do. Approve the customer profile and the copy on the kickoff call. Keep at least five open slots a week on the calendar you give us, and be able to take a booked meeting within five business days. Reply to any hot lead we hand you within one business day. Give us the postal address for the email footer. Authorise us to send email in your company’s name, from the trial domain, using only copy you approved.\n\n4. The two promises. First: we will contact the approved list and give you the written report — that is guaranteed. Second: if no qualified booked call has been held by the end of the 30 days, we keep sending at our cost until one is, for up to 30 further days, after which the trial ends. Both promises hold while you hold up clause 3. If you stop responding for five business days, the trial ends and the promises end with it.\n\n5. What counts as a qualified booked call. All four must be true: the company matches the approved profile; the attendee holds an approved title; they attended; they booked in response to outreach describing your offer. Budget, timeline, level of interest and whether they buy do not affect whether a call counts. No-shows do not count; we re-book them for 14 days. You may flag a call as not qualifying within 24 business hours, in writing, stating which criterion it failed.\n\n6. The exchange. The trial is free, so its price is proof. You agree to: (a) leave a review of the trial on Clutch, or a platform we both agree, within seven days of the day-30 call. That review may be positive or negative, must be your honest opinion, and must begin with the words “I received this service for free for my review.” We will never ask you to change or remove it; (b) if at least one qualified call was held, allow us to quote you by name, title and company, using words you approve in writing before publication; (c) allow us to publish the trial’s numbers — companies contacted, replies, calls booked — as a case study, anonymised if you prefer; (d) give us ten minutes at the end for an honest debrief, whatever the outcome. We will never publish anything you have not approved in writing, and we will never ask you to say anything you do not mean.\n\n7. Day 31. On the day-30 call you decide whether to continue on one of our plans: Starter $2,497 for 10 guaranteed booked calls a month, Growth $3,997 for 20, or Scale $8,497 for 50 — month to month, 14 days’ notice to cancel, no setup fee, on the terms published at aviance.online. We will recommend one of them based on what the trial measured and how many calls a week you told us you can handle. If you continue, the trial domain, inboxes and list carry into your plan and campaigns stay live. If you don’t, we retire the trial domain and inboxes within seven days and never use them for anyone else. There is no obligation to continue and nothing to cancel.\n\n8. Ownership and data. Your leads, replies and booked meetings are yours, exported on request, whether or not you continue. The sending domain and inboxes are registered ",
+     "subject": "Your signed agreement",
+     "text": "Hi Dana,\n\nHere's a plain-text copy of the agreement you accepted for Ridgeline IT. Keep it for your records. Nothing else is needed from you.\n\nAviance — Starter Plan Agreement\nBetween Aviance (“we”) and Ridgeline IT (“you”). Effective 6 October 2026.\n\n1. What this is. A done-for-you cold email service on the Starter plan: $2,497 a month for 10 booked sales calls a month. We build and run outbound campaigns in your name and book sales calls onto your calendar.\n\n2. What we do. Register sending domains and inboxes for you. Research and verify contacts matching the customer profile you approve. Write email sequences you approve. Send them, handle every reply, and book, confirm and remind every meeting, chasing no-shows for 14 days. Send you a written update every Friday.\n\n3. What you do. Approve the customer profile and the copy. Keep enough open slots on the calendar you give us to take the calls your plan books, and be able to take a booked meeting within five business days. Reply to any hot lead we hand you within one business day. Give us the postal address for the email footer. Authorise us to send email in your company’s name, from the domains we set up, using only copy you approved.\n\n4. What counts as a booked call. All four must be true: the company matches the approved profile; the attendee holds an approved title; they attended; they booked in response to outreach describing your offer. No-shows do not count; we re-book them for 14 days. You may flag a call as not qualifying within 24 business hours, in writing, stating which criterion it failed.\n\n5. Price and term. $2,497 a month, month to month, billed monthly in advance. 14 days’ notice to cancel. No setup fee. On the terms published at aviance.online.\n\n6. Ownership and data. Your leads, replies and booked meetings are yours, exported on request. The sending domains and inboxes are registered by us and stay ours. Our methods, templates and tools stay ours. We do not sell or share your data.\n\n7. Limits. We may pause or end the service if the outreach would breach Google’s sending rules or ours, or if clause 3 is not met.\n\n8. Where we are. Aviance is run from Sri Lanka. Working hours in your time zone: 09:00–17:00 US Eastern, Monday to Friday. Replies are handled inside those hours; hot leads the same day.\n\nSigned for Aviance: Limeth Sith\nSigned for Ridgeline IT: Dana Whitfield, Director of Client Success, 6 October 2026\n\nAccepted by: Dana Whitfield, Director of Client Success, Ridgeline IT\nAccepted at: 2026-10-06 18:20 (UTC) from IP 98.24.1.7\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4254,17 +4315,17 @@
      "statusText": "delivered · opened Wed 7 Oct, 8 pm"
     },
     {
-     "id": "out-a513a343bddbc101",
+     "id": "out-45eb575b0a0479db",
      "dir": "out",
-     "at": "2026-10-06T18:20:07.900Z",
+     "at": "2026-10-06T18:20:00.500Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
-     "subject": "Your trial setup has started",
-     "text": "Hi Dana,\n\nYour market check passed, so we're going ahead with Ridgeline IT. I'm setting up the sending domain and two inboxes now.\n\nOnce they pass their checks, they start warming up. When they're ready, I'll email you the exact day and time we start. Nothing's needed from you in the meantime.\n\nLimeth Sith",
+     "subject": "Invoice AV-202610-ridgelineit — Starter, month one",
+     "text": "Hi Dana,\n\nWelcome to Starter.\n\nInvoice AV-202610-ridgelineit · issued Tue 6 Oct · due today\nStarter: $2,497 a month for 10 guaranteed booked calls\nTotal due: $2,497\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nWe’re setting up your sending address and inboxes now; after about two weeks of warm-up the first emails go out. Month to month, 14 days’ notice, no setup fee.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
-     "template": "setup_in_progress",
+     "template": "invoice_plan_start",
      "accepted": true,
      "messageId": "<MSGID_10>",
      "openedAt": "2026-10-07T14:30:00.000Z",
@@ -4278,7 +4339,31 @@
      "statusText": "delivered · opened Wed 7 Oct, 8 pm"
     },
     {
-     "id": "out-bd329809e9b71958",
+     "id": "out-a072c1fed1bc8fd3",
+     "dir": "out",
+     "at": "2026-10-06T18:20:08.150Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your setup has started",
+     "text": "Hi Dana,\n\nYour market check passed, so we're going ahead with Ridgeline IT. I'm setting up the sending domain and inboxes now.\n\nOnce they pass their checks, they start warming up. When they're ready, I'll email you the exact day and time we start. Nothing's needed from you in the meantime.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "setup_in_progress",
+     "accepted": true,
+     "messageId": "<MSGID_11>",
+     "openedAt": "2026-10-07T14:30:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-07T14:30:00.000Z",
+     "statusText": "delivered · opened Wed 7 Oct, 8 pm"
+    },
+    {
+     "id": "out-2ab8a664abf468e8",
      "dir": "out",
      "at": "2026-10-09T13:00:00.250Z",
      "from": "hello@aviance.test",
@@ -4290,7 +4375,7 @@
      "rule": null,
      "template": "friday_update",
      "accepted": true,
-     "messageId": "<MSGID_11>",
+     "messageId": "<MSGID_12>",
      "openedAt": "2026-10-10T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4302,13 +4387,61 @@
      "statusText": "delivered · opened Sat 10 Oct, 4:30 pm"
     },
     {
-     "id": "out-0a08c3ba7772c84c",
+     "id": "out-b073ef4fe6492aea",
+     "dir": "out",
+     "at": "2026-10-09T14:00:00.250Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Reminder: invoice AV-202610-ridgelineit",
+     "text": "Hi Dana,\n\nA reminder that invoice AV-202610-ridgelineit ($2,497, Starter) is still open.\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nIf it’s already on its way, ignore this, and thank you.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "invoice_reminder",
+     "accepted": true,
+     "messageId": "<MSGID_13>",
+     "openedAt": "2026-10-10T11:00:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-10T11:00:00.000Z",
+     "statusText": "delivered · opened Sat 10 Oct, 4:30 pm"
+    },
+    {
+     "id": "out-137b471dffed07b2",
+     "dir": "out",
+     "at": "2026-10-13T14:00:00.250Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Reminder: invoice AV-202610-ridgelineit",
+     "text": "Hi Dana,\n\nA reminder that invoice AV-202610-ridgelineit ($2,497, Starter) is still open.\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nIf it’s already on its way, ignore this, and thank you.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "invoice_reminder",
+     "accepted": true,
+     "messageId": "<MSGID_14>",
+     "openedAt": "2026-10-14T11:00:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-14T11:00:00.000Z",
+     "statusText": "delivered · opened Wed 4:30 pm"
+    },
+    {
+     "id": "out-61666b1d883bf200",
      "dir": "out",
      "at": "2026-10-16T13:00:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Your list is ready",
-     "text": "Hi Dana,\n\nYour list of companies and the four emails that will go out in your name are ready. Warm-up is nearly done, so the next step is a 30-minute launch call. We go through the list and the emails together, you give the OK, and the first emails go out about Wednesday 21 October.\n\nBook a time that suits you: https://machine.test/c/TOKEN_7/book\n\nIf you'd rather read it all first, it's on one page: https://machine.test/c/TOKEN_2/approve. You can approve each part there too, and then the call is optional.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nYour list of companies and the four emails that will go out in your name are ready. Warm-up is nearly done, so the next step is a 30-minute launch call. We go through the list and the emails together, you give the OK, and the first emails go out about Wednesday 21 October.\n\nBook a time that suits you: https://machine.test/c/TOKEN_8/book\n\nIf you'd rather read it all first, it's on one page: https://machine.test/c/TOKEN_3/approve. You can approve each part there too, and then the call is optional.\n\nLimeth Sith",
      "kind": "launch_invite",
      "auto": false,
      "rule": null,
@@ -4326,19 +4459,19 @@
      "statusText": "replied Fri 7:30 pm"
     },
     {
-     "id": "out-dd6d810866619e42",
+     "id": "out-b0b957f64dafad7a",
      "dir": "out",
      "at": "2026-10-16T13:00:01.150Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Test your booking link",
-     "text": "Hi Dana,\n\nBefore the first send, I want to be sure a prospect who says yes can book. It takes about 60 seconds. Please do this once:\n\n1. Open https://cal.com/ridgeline-it/intro from a personal email address, not your work one.\n2. Book the first slot it offers.\n3. Tap \"It worked\" below.\n4. Cancel the test booking.\n\nIt worked: https://machine.test/c/TOKEN_8/booking-ok\n\nIf anything went wrong, reply and tell me what you saw.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nBefore the first send, I want to be sure a prospect who says yes can book. It takes about 60 seconds. Please do this once:\n\n1. Open https://cal.com/ridgeline-it/intro from a personal email address, not your work one.\n2. Book the first slot it offers.\n3. Tap \"It worked\" below.\n4. Cancel the test booking.\n\nIt worked: https://machine.test/c/TOKEN_9/booking-ok\n\nIf anything went wrong, reply and tell me what you saw.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "booking_test_request",
      "accepted": true,
-     "messageId": "<MSGID_12>",
+     "messageId": "<MSGID_15>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -4350,7 +4483,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-61666b1d883bf200",
+     "id": "out-8e86da833676f9b9",
      "dir": "out",
      "at": "2026-10-16T13:00:01.400Z",
      "from": "hello@aviance.test",
@@ -4362,7 +4495,7 @@
      "rule": null,
      "template": "friday_update",
      "accepted": true,
-     "messageId": "<MSGID_13>",
+     "messageId": "<MSGID_16>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -4398,13 +4531,13 @@
      "statusText": null
     },
     {
-     "id": "out-f33d5e9e9db22bb0",
+     "id": "out-73df310af58c6b93",
      "dir": "out",
      "at": "2026-10-16T14:15:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: Your list is ready",
-     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_9/book\n\nThe next open times (your time):\n• Mon 19 Oct at 9:00 am ET\n• Tue 20 Oct at 9:00 am ET\n• Wed 21 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_10/book\n\nThe next open times (your time):\n• Mon 19 Oct at 9:00 am ET\n• Tue 20 Oct at 9:00 am ET\n• Wed 21 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
      "kind": "auto_reply",
      "auto": true,
      "rule": "wants_time",
@@ -4422,19 +4555,19 @@
      "statusText": "delivered"
     },
     {
-     "id": "out-3fa6805bff9682e5",
+     "id": "out-8dd68f81d1d722a5",
      "dir": "out",
      "at": "2026-10-16T14:32:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: Your list is ready",
-     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 20 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_10/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 20 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_11/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_14>",
+     "messageId": "<MSGID_17>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -4517,7 +4650,7 @@
     {
      "email": "dana.whitfield@getridgelineit.com",
      "day": 10,
-     "sentToday": 9,
+     "sentToday": 6,
      "quota": 15,
      "inboxRate7d": 0.979,
      "ready": false
@@ -4535,7 +4668,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Let's book your onboarding call",
-     "text": "Hi Dana,\n\nGood news: we'd like to run your free 30-day trial for Ridgeline IT.\n\nFirst, a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_3/book\n\nThere's also one page with your details and the agreement. Fill it in before we talk if you like, or we'll do it together on the call: https://machine.test/c/TOKEN_1/onboard\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGood news: we'd love to work with Ridgeline IT on the Starter plan.\n\nFirst, a 30-minute onboarding call, so I can hear how you sell and who you'd like to reach. Book a time that suits you: https://machine.test/c/TOKEN_4/book\n\nThere's also one page with your details and the agreement. Fill it in before we talk if you like, or we'll do it together on the call: https://machine.test/c/TOKEN_2/onboard\n\nLimeth Sith",
      "kind": "acceptance",
      "auto": false,
      "rule": null,
@@ -4583,7 +4716,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: Let's book your onboarding call",
-     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_4/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_5/book\n\nThe next open times (your time):\n• Mon 5 Oct at 9:00 am ET\n• Tue 6 Oct at 9:00 am ET\n• Wed 7 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
      "kind": "auto_reply",
      "auto": true,
      "rule": "wants_time",
@@ -4607,7 +4740,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: Let's book your onboarding call",
-     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_5/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 6 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_6/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -4631,7 +4764,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Confirmed: our call on Tue 6 Oct at 11:00 am ET",
-     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_6/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nConfirmed: our 30-minute call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-002-avc\n\nI've attached a calendar invite. If the time stops working, pick another here: https://machine.test/c/TOKEN_7/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
@@ -4655,7 +4788,7 @@
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Our onboarding call tomorrow",
-     "text": "Hi Dana,\n\nA reminder that our 30-minute onboarding call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-001-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nA reminder that our 30-minute onboarding call is Tuesday 6 October at 11:00 am Eastern Time.\n\nJoin here: https://meet.google.com/rdg-002-avc\n\nIf that time no longer works, reply to this email and we'll find another.\n\nLimeth Sith",
      "kind": "reminder",
      "auto": false,
      "rule": null,
@@ -4678,7 +4811,7 @@
      "at": "2026-10-06T15:40:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
-     "subject": "Your trial — what happens now",
+     "subject": "What happens now",
      "text": "Hi Dana,\n\nGood to talk with you today, thank you.\n\nHere's what happens now:\n\n- Right now we're researching your business and market, and building your offer.\n- This week we set up your sending address and inboxes.\n- Then two weeks of warm-up, so your emails land in the inbox.\n- We build your list of about 400 companies and write your emails in your words.\n- Every Friday you get a short note from me, quiet weeks too.\n- Near the end of warm-up, we have a 30-minute launch call, where you OK the list and the emails.\n- The first emails go out in about three weeks.\n\nNothing's needed from you until then.\n\nLimeth Sith",
      "kind": "next_steps",
      "auto": false,
@@ -4702,8 +4835,8 @@
      "at": "2026-10-06T18:20:00.250Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
-     "subject": "Your signed trial agreement",
-     "text": "Hi Dana,\n\nHere's a plain-text copy of the agreement you accepted for Ridgeline IT. Keep it for your records. Nothing else is needed from you.\n\nThe Aviance 30-Day Trial — Agreement\nBetween Aviance (“we”) and Ridgeline IT (“you”). Effective 6 October 2026.\n\n1. What this is. A 30-day cold email trial. We build and run a small outbound campaign in your name, book sales calls onto your calendar, and hand you a written report of what your market said. It costs you nothing. It is not a paid plan; it is how you decide whether to buy one.\n\n2. What we do. Register one sending domain and two inboxes. Research and verify a list of 300–500 contacts matching the customer profile you approve. Write a three-email sequence you approve. Send for 30 days. Handle every reply. Book, confirm and remind every meeting, and chase no-shows for 14 days. Send you a written update every Friday, and on day 29 a report covering the numbers, every reply we received and what it means.\n\n3. What you do. Approve the customer profile and the copy on the kickoff call. Keep at least five open slots a week on the calendar you give us, and be able to take a booked meeting within five business days. Reply to any hot lead we hand you within one business day. Give us the postal address for the email footer. Authorise us to send email in your company’s name, from the trial domain, using only copy you approved.\n\n4. The two promises. First: we will contact the approved list and give you the written report — that is guaranteed. Second: if no qualified booked call has been held by the end of the 30 days, we keep sending at our cost until one is, for up to 30 further days, after which the trial ends. Both promises hold while you hold up clause 3. If you stop responding for five business days, the trial ends and the promises end with it.\n\n5. What counts as a qualified booked call. All four must be true: the company matches the approved profile; the attendee holds an approved title; they attended; they booked in response to outreach describing your offer. Budget, timeline, level of interest and whether they buy do not affect whether a call counts. No-shows do not count; we re-book them for 14 days. You may flag a call as not qualifying within 24 business hours, in writing, stating which criterion it failed.\n\n6. The exchange. The trial is free, so its price is proof. You agree to: (a) leave a review of the trial on Clutch, or a platform we both agree, within seven days of the day-30 call. That review may be positive or negative, must be your honest opinion, and must begin with the words “I received this service for free for my review.” We will never ask you to change or remove it; (b) if at least one qualified call was held, allow us to quote you by name, title and company, using words you approve in writing before publication; (c) allow us to publish the trial’s numbers — companies contacted, replies, calls booked — as a case study, anonymised if you prefer; (d) give us ten minutes at the end for an honest debrief, whatever the outcome. We will never publish anything you have not approved in writing, and we will never ask you to say anything you do not mean.\n\n7. Day 31. On the day-30 call you decide whether to continue on one of our plans: Starter $2,497 for 10 guaranteed booked calls a month, Growth $3,997 for 20, or Scale $8,497 for 50 — month to month, 14 days’ notice to cancel, no setup fee, on the terms published at aviance.online. We will recommend one of them based on what the trial measured and how many calls a week you told us you can handle. If you continue, the trial domain, inboxes and list carry into your plan and campaigns stay live. If you don’t, we retire the trial domain and inboxes within seven days and never use them for anyone else. There is no obligation to continue and nothing to cancel.\n\n8. Ownership and data. Your leads, replies and booked meetings are yours, exported on request, whether or not you continue. The sending domain and inboxes are registered ",
+     "subject": "Your signed agreement",
+     "text": "Hi Dana,\n\nHere's a plain-text copy of the agreement you accepted for Ridgeline IT. Keep it for your records. Nothing else is needed from you.\n\nAviance — Starter Plan Agreement\nBetween Aviance (“we”) and Ridgeline IT (“you”). Effective 6 October 2026.\n\n1. What this is. A done-for-you cold email service on the Starter plan: $2,497 a month for 10 booked sales calls a month. We build and run outbound campaigns in your name and book sales calls onto your calendar.\n\n2. What we do. Register sending domains and inboxes for you. Research and verify contacts matching the customer profile you approve. Write email sequences you approve. Send them, handle every reply, and book, confirm and remind every meeting, chasing no-shows for 14 days. Send you a written update every Friday.\n\n3. What you do. Approve the customer profile and the copy. Keep enough open slots on the calendar you give us to take the calls your plan books, and be able to take a booked meeting within five business days. Reply to any hot lead we hand you within one business day. Give us the postal address for the email footer. Authorise us to send email in your company’s name, from the domains we set up, using only copy you approved.\n\n4. What counts as a booked call. All four must be true: the company matches the approved profile; the attendee holds an approved title; they attended; they booked in response to outreach describing your offer. No-shows do not count; we re-book them for 14 days. You may flag a call as not qualifying within 24 business hours, in writing, stating which criterion it failed.\n\n5. Price and term. $2,497 a month, month to month, billed monthly in advance. 14 days’ notice to cancel. No setup fee. On the terms published at aviance.online.\n\n6. Ownership and data. Your leads, replies and booked meetings are yours, exported on request. The sending domains and inboxes are registered by us and stay ours. Our methods, templates and tools stay ours. We do not sell or share your data.\n\n7. Limits. We may pause or end the service if the outreach would breach Google’s sending rules or ours, or if clause 3 is not met.\n\n8. Where we are. Aviance is run from Sri Lanka. Working hours in your time zone: 09:00–17:00 US Eastern, Monday to Friday. Replies are handled inside those hours; hot leads the same day.\n\nSigned for Aviance: Limeth Sith\nSigned for Ridgeline IT: Dana Whitfield, Director of Client Success, 6 October 2026\n\nAccepted by: Dana Whitfield, Director of Client Success, Ridgeline IT\nAccepted at: 2026-10-06 18:20 (UTC) from IP 98.24.1.7\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
@@ -4721,17 +4854,17 @@
      "statusText": "delivered · opened Wed 7 Oct, 8 pm"
     },
     {
-     "id": "out-a513a343bddbc101",
+     "id": "out-45eb575b0a0479db",
      "dir": "out",
-     "at": "2026-10-06T18:20:07.900Z",
+     "at": "2026-10-06T18:20:00.500Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
-     "subject": "Your trial setup has started",
-     "text": "Hi Dana,\n\nYour market check passed, so we're going ahead with Ridgeline IT. I'm setting up the sending domain and two inboxes now.\n\nOnce they pass their checks, they start warming up. When they're ready, I'll email you the exact day and time we start. Nothing's needed from you in the meantime.\n\nLimeth Sith",
+     "subject": "Invoice AV-202610-ridgelineit — Starter, month one",
+     "text": "Hi Dana,\n\nWelcome to Starter.\n\nInvoice AV-202610-ridgelineit · issued Tue 6 Oct · due today\nStarter: $2,497 a month for 10 guaranteed booked calls\nTotal due: $2,497\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nWe’re setting up your sending address and inboxes now; after about two weeks of warm-up the first emails go out. Month to month, 14 days’ notice, no setup fee.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
-     "template": "setup_in_progress",
+     "template": "invoice_plan_start",
      "accepted": true,
      "messageId": "<MSGID_10>",
      "openedAt": "2026-10-07T14:30:00.000Z",
@@ -4745,7 +4878,31 @@
      "statusText": "delivered · opened Wed 7 Oct, 8 pm"
     },
     {
-     "id": "out-bd329809e9b71958",
+     "id": "out-a072c1fed1bc8fd3",
+     "dir": "out",
+     "at": "2026-10-06T18:20:08.150Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Your setup has started",
+     "text": "Hi Dana,\n\nYour market check passed, so we're going ahead with Ridgeline IT. I'm setting up the sending domain and inboxes now.\n\nOnce they pass their checks, they start warming up. When they're ready, I'll email you the exact day and time we start. Nothing's needed from you in the meantime.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "setup_in_progress",
+     "accepted": true,
+     "messageId": "<MSGID_11>",
+     "openedAt": "2026-10-07T14:30:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-07T14:30:00.000Z",
+     "statusText": "delivered · opened Wed 7 Oct, 8 pm"
+    },
+    {
+     "id": "out-2ab8a664abf468e8",
      "dir": "out",
      "at": "2026-10-09T13:00:00.250Z",
      "from": "hello@aviance.test",
@@ -4757,7 +4914,7 @@
      "rule": null,
      "template": "friday_update",
      "accepted": true,
-     "messageId": "<MSGID_11>",
+     "messageId": "<MSGID_12>",
      "openedAt": "2026-10-10T11:00:00.000Z",
      "bouncedAt": null,
      "bounceReason": null,
@@ -4769,13 +4926,61 @@
      "statusText": "delivered · opened Sat 10 Oct, 4:30 pm"
     },
     {
-     "id": "out-0a08c3ba7772c84c",
+     "id": "out-b073ef4fe6492aea",
+     "dir": "out",
+     "at": "2026-10-09T14:00:00.250Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Reminder: invoice AV-202610-ridgelineit",
+     "text": "Hi Dana,\n\nA reminder that invoice AV-202610-ridgelineit ($2,497, Starter) is still open.\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nIf it’s already on its way, ignore this, and thank you.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "invoice_reminder",
+     "accepted": true,
+     "messageId": "<MSGID_13>",
+     "openedAt": "2026-10-10T11:00:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-10T11:00:00.000Z",
+     "statusText": "delivered · opened Sat 10 Oct, 4:30 pm"
+    },
+    {
+     "id": "out-137b471dffed07b2",
+     "dir": "out",
+     "at": "2026-10-13T14:00:00.250Z",
+     "from": "hello@aviance.test",
+     "to": "dana@ridgelineit.com",
+     "subject": "Reminder: invoice AV-202610-ridgelineit",
+     "text": "Hi Dana,\n\nA reminder that invoice AV-202610-ridgelineit ($2,497, Starter) is still open.\n\nPay by:\nPayPal: https://paypal.me/aviance/2497USD\n\nIf it’s already on its way, ignore this, and thank you.\n\nLimeth Sith",
+     "kind": "system",
+     "auto": false,
+     "rule": null,
+     "template": "invoice_reminder",
+     "accepted": true,
+     "messageId": "<MSGID_14>",
+     "openedAt": "2026-10-14T11:00:00.000Z",
+     "bouncedAt": null,
+     "bounceReason": null,
+     "repliedAt": null,
+     "milestone": false,
+     "unopenedAt": null,
+     "status": "opened",
+     "statusAt": "2026-10-14T11:00:00.000Z",
+     "statusText": "delivered · opened Wed 4:30 pm"
+    },
+    {
+     "id": "out-61666b1d883bf200",
      "dir": "out",
      "at": "2026-10-16T13:00:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Your list is ready",
-     "text": "Hi Dana,\n\nYour list of companies and the four emails that will go out in your name are ready. Warm-up is nearly done, so the next step is a 30-minute launch call. We go through the list and the emails together, you give the OK, and the first emails go out about Wednesday 21 October.\n\nBook a time that suits you: https://machine.test/c/TOKEN_7/book\n\nIf you'd rather read it all first, it's on one page: https://machine.test/c/TOKEN_2/approve. You can approve each part there too, and then the call is optional.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nYour list of companies and the four emails that will go out in your name are ready. Warm-up is nearly done, so the next step is a 30-minute launch call. We go through the list and the emails together, you give the OK, and the first emails go out about Wednesday 21 October.\n\nBook a time that suits you: https://machine.test/c/TOKEN_8/book\n\nIf you'd rather read it all first, it's on one page: https://machine.test/c/TOKEN_3/approve. You can approve each part there too, and then the call is optional.\n\nLimeth Sith",
      "kind": "launch_invite",
      "auto": false,
      "rule": null,
@@ -4793,19 +4998,19 @@
      "statusText": "replied Fri 7:30 pm"
     },
     {
-     "id": "out-dd6d810866619e42",
+     "id": "out-b0b957f64dafad7a",
      "dir": "out",
      "at": "2026-10-16T13:00:01.150Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Test your booking link",
-     "text": "Hi Dana,\n\nBefore the first send, I want to be sure a prospect who says yes can book. It takes about 60 seconds. Please do this once:\n\n1. Open https://cal.com/ridgeline-it/intro from a personal email address, not your work one.\n2. Book the first slot it offers.\n3. Tap \"It worked\" below.\n4. Cancel the test booking.\n\nIt worked: https://machine.test/c/TOKEN_8/booking-ok\n\nIf anything went wrong, reply and tell me what you saw.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nBefore the first send, I want to be sure a prospect who says yes can book. It takes about 60 seconds. Please do this once:\n\n1. Open https://cal.com/ridgeline-it/intro from a personal email address, not your work one.\n2. Book the first slot it offers.\n3. Tap \"It worked\" below.\n4. Cancel the test booking.\n\nIt worked: https://machine.test/c/TOKEN_9/booking-ok\n\nIf anything went wrong, reply and tell me what you saw.\n\nLimeth Sith",
      "kind": "system",
      "auto": false,
      "rule": null,
      "template": "booking_test_request",
      "accepted": true,
-     "messageId": "<MSGID_12>",
+     "messageId": "<MSGID_15>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -4817,7 +5022,7 @@
      "statusText": "delivered · not opened yet"
     },
     {
-     "id": "out-61666b1d883bf200",
+     "id": "out-8e86da833676f9b9",
      "dir": "out",
      "at": "2026-10-16T13:00:01.400Z",
      "from": "hello@aviance.test",
@@ -4829,7 +5034,7 @@
      "rule": null,
      "template": "friday_update",
      "accepted": true,
-     "messageId": "<MSGID_13>",
+     "messageId": "<MSGID_16>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -4865,13 +5070,13 @@
      "statusText": null
     },
     {
-     "id": "out-f33d5e9e9db22bb0",
+     "id": "out-73df310af58c6b93",
      "dir": "out",
      "at": "2026-10-16T14:15:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: Your list is ready",
-     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_9/book\n\nThe next open times (your time):\n• Mon 19 Oct at 9:00 am ET\n• Tue 20 Oct at 9:00 am ET\n• Wed 21 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nHappy to. Pick any time that suits you here: https://machine.test/c/TOKEN_10/book\n\nThe next open times (your time):\n• Mon 19 Oct at 9:00 am ET\n• Tue 20 Oct at 9:00 am ET\n• Wed 21 Oct at 9:00 am ET\nOr reply with the one that suits you.\n\nLimeth Sith",
      "kind": "auto_reply",
      "auto": true,
      "rule": "wants_time",
@@ -4889,19 +5094,19 @@
      "statusText": "delivered"
     },
     {
-     "id": "out-3fa6805bff9682e5",
+     "id": "out-8dd68f81d1d722a5",
      "dir": "out",
      "at": "2026-10-16T14:32:00.000Z",
      "from": "hello@aviance.test",
      "to": "dana@ridgelineit.com",
      "subject": "Re: Your list is ready",
-     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 20 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_10/book\n\nLimeth Sith",
+     "text": "Hi Dana,\n\nGot it — you asked for Tuesday 20 October at 11:00 am Eastern Time. I'll confirm shortly.\n\nIf you'd rather change it, pick another time here: https://machine.test/c/TOKEN_11/book\n\nLimeth Sith",
      "kind": "booking",
      "auto": false,
      "rule": null,
      "template": null,
      "accepted": true,
-     "messageId": "<MSGID_14>",
+     "messageId": "<MSGID_17>",
      "openedAt": null,
      "bouncedAt": null,
      "bounceReason": null,
@@ -5450,7 +5655,12 @@
    "builtAt": "2026-10-16T04:15:00.000Z"
   },
   "links": {
-   "approval": "https://machine.test/c/TOKEN_2/approve"
+   "approval": "https://machine.test/c/TOKEN_3/approve",
+   "dashboard": "https://machine.test/c/TOKEN_1/dashboard"
+  },
+  "dashboardAccess": {
+   "sharedWith": [],
+   "url": "https://machine.test/c/TOKEN_1/dashboard"
   },
   "virtualNow": null
  },
@@ -5458,7 +5668,7 @@
   "calendar": {
    "meetings": [
     {
-     "id": "mmvb2gidc989594ef25",
+     "id": "mmvb2gidcdc003a5692",
      "clientId": "ridgelineit",
      "company": "Ridgeline IT",
      "person": "Dana Whitfield",
@@ -5500,7 +5710,7 @@
    ],
    "requests": [
     {
-     "id": "mmvb2gidc989594ef25",
+     "id": "mmvb2gidcdc003a5692",
      "clientId": "ridgelineit",
      "company": "Ridgeline IT",
      "person": "Dana Whitfield",

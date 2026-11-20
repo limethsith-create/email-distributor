@@ -65,8 +65,8 @@ const title = (a) => fill(`alert:${a.key}`, ALERTS[a.key].title, a.vars);
 
 /** An approved applicant: the one accepted_call email went. → the acceptance Message-ID ('<…>'). */
 async function approved({ id = ID, email = SAM, name = 'Sam Test', company = 'eCreek IT', now = MON, state = null } = {}) {
-  await createClient(id, { name: company, contactName: name, contactEmail: email, mainDomain: `${id}.com`, website: `https://${id}.com`, state: 'applied', source: 'website' });
-  await kv.hset(K.application(id), { review: 'pending', mainDomain: `${id}.com`, receivedAt: '2026-10-05T12:00:00Z', source: 'website', ...(state ? { web_state: state } : {}) });
+  await createClient(id, { name: company, contactName: name, contactEmail: email, mainDomain: `${id}.com`, website: `https://${id}.com`, state: 'applied', source: 'inquiry' });
+  await kv.hset(K.application(id), { review: 'pending', mainDomain: `${id}.com`, receivedAt: '2026-10-05T12:00:00Z', source: 'inquiry', ...(state ? { web_state: state } : {}) });
   assert.equal((await approveApplication(id, { now })).outcome, 'onboarding');
   return JSON.parse((await readCall(id)).messageIds)[0];
 }
@@ -90,7 +90,7 @@ async function messages(id, body) {
   return { status: res.status, body: await res.json() };
 }
 
-const Q = '\n\nOn Mon, Oct 5, 2026 at 10:00 AM Limeth Sith <onboard@aviance.test> wrote:\n> Good news: we would like to run your free 30-day trial.\n> How much does it cost? Not interested? Tuesday at 2pm? What do you need?';
+const Q = '\n\nOn Mon, Oct 5, 2026 at 10:00 AM Limeth Sith <onboard@aviance.test> wrote:\n> Good news: we would love to work with you on the Starter plan.\n> How much does it cost? Not interested? Tuesday at 2pm? What do you need?';
 
 // ── the rules (pure) ─────────────────────────────────────────────────────────
 
@@ -184,7 +184,8 @@ test('answers: slots filled, an empty {times} drops its paragraph, an unknown {s
     assert.match(text, /\n\n\{ownerName\}$/, `${rule} is signed like the owner`);
     assert.doesNotMatch(text, /\$|£|€|\d+\s*(usd|dollars|per month|\/mo)/i, `${rule} names no price`);
   }
-  assert.match(DEFAULTS.REPLYBOT.answers.price, /free: no card, nothing to pay\. The one thing I ask in return is an honest review/);
+  assert.match(DEFAULTS.REPLYBOT.answers.price, /You're on the \{planName\} plan/);
+  assert.doesNotMatch(Object.values(DEFAULTS.REPLYBOT.answers).join('\n'), /trial|free/i);
   // Nearest times either side, one per day for "what times".
   const open = ['2026-10-06T16:30:00.000Z', '2026-10-06T17:00:00.000Z', '2026-10-06T19:30:00.000Z', '2026-10-07T13:00:00.000Z'].map((start) => ({ start }));
   assert.deepEqual(nearestTimes(open, TUE_2PM_ET, 3), ['2026-10-06T16:30:00.000Z', '2026-10-06T17:00:00.000Z', '2026-10-06T19:30:00.000Z']);
@@ -307,12 +308,12 @@ test('reschedule: the booking page, the booked call stays; price, what_needed: f
   assert.equal(alerts.at(-1).vars.did, 'sent the booking link to pick another time');
 
   // price, in a new thread with its own subject.
-  inbox.push(mail("What's the catch? How much does it cost after the 30 days?", { at: '2026-10-05T16:00:00Z', subject: 'Question about the trial' }));
+  inbox.push(mail("What's the catch? How much does it cost?", { at: '2026-10-05T16:00:00Z', subject: 'Question about the plan' }));
   await check('2026-10-05T16:05:00Z');
   const p = toSam()[2];
-  assert.equal(p.subject, 'Re: Question about the trial');
+  assert.equal(p.subject, 'Re: Question about the plan');
   assert.equal(p.inReplyTo, inbox[1].messageId);
-  assert.equal(p.text, "Hi Sam,\n\nGood question. The 30-day trial is free: no card, nothing to pay. The one thing I ask in return is an honest review at the end.\n\nIf you'd like to keep going after the trial, we'll go through the plans together on the call.\n\nLimeth Sith");
+  assert.equal(p.text, "Hi Sam,\n\nGood question. You're on the Starter plan, and we'll go through exactly what's included and how billing works on the call.\n\nLimeth Sith");
 
   // what_needed: the onboarding page link (a fresh, valid token).
   inbox.push(mail('What do you need from me before the call?', { at: '2026-10-05T17:00:00Z', acceptId }));
@@ -389,7 +390,7 @@ test('no rule: no reply, onboard_reply as before; needsReply true in the convers
 // ── who_are_you and later (docs/IMPROVE-PASS.md §B) ──────────────────────────
 
 test('who_are_you and later: the rules on real emails, in order; "who" only with a source it can name; "later" only while nothing is booked and no time is named', () => {
-  const ctx = { now: MON, zone: 'America/New_York', canBook: true, ownPage: true, openMeeting: null, booked: false, names: ['Sam Test', 'Limeth'], source: 'website' };
+  const ctx = { now: MON, zone: 'America/New_York', canBook: true, ownPage: true, openMeeting: null, booked: false, names: ['Sam Test', 'Limeth'], source: 'inquiry' };
   const rule = (text, over = {}) => classify(stripQuotedReply(text), { ...ctx, ...over }).rule;
   // who_are_you
   assert.equal(rule(`Sorry, who is this?${Q}`), 'who_are_you');
@@ -420,14 +421,14 @@ test('who_are_you and later: the rules on real emails, in order; "who" only with
   assert.equal(normaliseBot({ laterWeeks: 0 }).laterWeeks, 4, 'a broken number falls back to the default');
   assert.equal(normaliseBot({ laterWeeks: 6 }).laterWeeks, 6);
   assert.equal(DEFAULTS.REPLYBOT.laterWeeks, 4);
-  assert.ok(HOW_LINES.website && !HOW_LINES.owner);
+  assert.ok(HOW_LINES.inquiry && !HOW_LINES.website && !HOW_LINES.owner);
 });
 
 test('who_are_you: one honest line on how their email reached us + the website; an owner-added client\'s question goes to the owner', async () => {
   const acceptId = await approved();
   inbox = [mail(`Hi, sorry — who is this? How did you get my email?${Q}`, { acceptId })];
   await check(AFTER);
-  assert.equal(toSam()[1].text, "Hi Sam,\n\nFair question. I'm Limeth Sith from Aviance. You applied for our free 30-day trial on our website, and that's where your email came from.\n\nMore about us: https://www.aviance.online\n\nLimeth Sith");
+  assert.equal(toSam()[1].text, "Hi Sam,\n\nFair question. I'm Limeth Sith from Aviance. You sent us a note through the form on our website, and that's where your email came from.\n\nMore about us: https://www.aviance.online\n\nLimeth Sith");
   assert.deepEqual(alertKeys(), ['bot_replied']);
   assert.equal(alerts[0].vars.did, 'they asked who we are — sent one honest line on how their email reached us, and the website');
   assert.equal((await onboardCallFor(ID, { now: new Date(AFTER) })).status, 'replied', 'nothing stopped');
@@ -635,7 +636,7 @@ test('every email to their contact is in the conversation (system templates too)
   assert.deepEqual(t.map((e) => [e.dir, e.kind, e.template || null]), [['out', 'acceptance', null], ['out', 'system', 'setup_in_progress']]);
   const c = await conversationFor(ID);
   assert.deepEqual(c.thread.map((e) => e.template), [null, 'setup_in_progress']);
-  assert.equal(c.thread[1].subject, 'Your trial setup has started');
+  assert.equal(c.thread[1].subject, 'Your setup has started');
   assert.equal(c.thread[1].from, 'owner@aviance.test');
   assert.equal(c.thread[1].at, '2026-10-05T15:00:00.000Z');
 });

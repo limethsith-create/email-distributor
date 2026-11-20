@@ -1,22 +1,21 @@
 /**
- * Plan inquiries: people who want a paid plan (Starter / Growth / Scale)
- * without a trial. The website's "Book a call" form (aviance.online) posts
- * here; each inquiry lands in the hub's Inquiries section and pops up on the
- * owner's phone. The owner moves it along: new → contacted → won / lost, can
- * add notes, or turn it into a trial (runs the Gatekeeper, pre-approved).
+ * Website bookings ("Book a call" on aviance.online): the only way a new
+ * client comes in. Each booking lands in the hub's Plan call requests,
+ * goes in the Calendar as a sales call with a confirmation email and
+ * reminders (systems/salescall.js), and pops up on the owner's phone.
  *
  * Stages (the owner's pipeline, in order): new = Booked (the call is on the
  * calendar) → held = Call done / no_show = No-show → contacted = Following up →
  * proposal = Proposal sent → won / lost. Moving one to Call done / No-show
  * marks its Calendar meeting too, and the Calendar's buttons move it back here.
  *
- * Storage: `inquiries` hash (id → record) + `inquiries:order` list (newest
- * first, capped). An inquiry with a time also becomes a confirmed sales call in
- * the Calendar and gets a confirmation email + reminders (systems/salescall.js).
+ * A booking with a website also gets a client record held for the sales call
+ * (holdForSalesCall): researched and scored so the owner sees "What we found"
+ * before the call, but not a client yet and never emailed. **Won** makes them
+ * a paying client and starts onboarding; **Lost** closes the record.
  *
- * A request with a website also becomes a paid application (inquiryToApplication): a client on
- * the plan they picked, researched and scored like a trial application, answered in the hub's
- * Paying clients tab. "Say yes" there is what emails them.
+ * Storage: `inquiries` hash (id → record) + `inquiries:order` list (newest
+ * first, capped).
  */
 
 import { kv } from '@vercel/kv';
@@ -253,8 +252,8 @@ async function holdSlot(id, inq, now) {
 }
 
 /**
- * Everything after the visitor's answer: with a website the request becomes a paid application (research +
- * fit score, its own alert); otherwise the owner's new_inquiry alert. Never throws. → { clientId } | {}
+ * Everything after the visitor's answer: with a website, a client record held for the sales call (research +
+ * fit score); then the owner's new_inquiry alert. Never throws. → { clientId } | {}
  */
 async function afterSaved(id, rec, booked, { now = new Date() } = {}) {
   const inq = rec;
@@ -263,14 +262,10 @@ async function afterSaved(id, rec, booked, { now = new Date() } = {}) {
       ? `\n\nIn your Calendar as a sales call. They were sent a confirmation email with a calendar invite; reminders go the day before and an hour before.${booked.clash ? `\nHeads up: it overlaps "${booked.clash.title}".` : ''}`
       : `\n\n${booked?.meeting ? 'In your Calendar as a sales call, but the' : 'The'} confirmation email did NOT go: ${booked?.error || 'unknown error'}. Write to them yourself.`;
 
-    // With a website, the request becomes a paid application the owner answers in the hub's Paying
-    // clients tab: the same research and fit score as a trial application, held until "Say yes"
-    // (which emails them the onboarding call) or "Say no". That application's alert replaces the one below.
-    const app = await inquiryToApplication(id, rec, { now });
-    if (app?.clientId) {
-      if (booked?.meeting) { try { await (await import('@/lib/systems/calendar')).patchMeeting(booked.meeting.id, { linkedClientId: app.clientId }, { now }); } catch {} }
-      return { clientId: app.clientId };
-    }
+    // With a website: a client record held for the sales call (research + fit score for the hub; nothing
+    // goes to them). The owner's alert below is the one alert either way.
+    const app = await holdForSalesCall(id, rec, { now });
+    if (app?.clientId && booked?.meeting) { try { await (await import('@/lib/systems/calendar')).patchMeeting(booked.meeting.id, { linkedClientId: app.clientId }, { now }); } catch {} }
 
     const when = inq.whenHost ? `${inq.whenHost} (your time)` : 'no time picked';
     // Where they came from goes near the top, so it survives the phone's short preview too.
@@ -280,8 +275,9 @@ async function afterSaved(id, rec, booked, { now = new Date() } = {}) {
       url: `/#inquiry/${id}`,
       vars: { company: inq.company, when },
       body: `${inq.name} <${inq.email}> from ${inq.company}${inq.plan ? ` asked about ${inq.plan[0].toUpperCase()}${inq.plan.slice(1)}` : ' asked about a plan'}.${came ? `\nCame from: ${came}` : ''}\nCall: ${when}${inq.whenTheirs ? ` — their time ${inq.whenTheirs}` : ''}\nThey sell: ${inq.sells}${inq.website ? `\nWebsite: ${inq.website}` : inq.noWebsite ? '\nWebsite: does not have one yet' : ''}${answersText(inq)}${bookedLine}`,
-      did: booked?.emailed ? 'Saved under Inquiries in the hub (stage: Booked) and sent them the confirmation.' : 'Saved under Inquiries in the hub (stage: Booked).',
+      did: booked?.emailed ? 'Saved under Plan call requests in the hub (stage: Booked) and sent them the confirmation. Press Won after the call to start onboarding.' : 'Saved under Plan call requests in the hub (stage: Booked). Press Won after the call to start onboarding.',
     }).catch(() => {});
+    return app?.clientId ? { clientId: app.clientId } : {};
   } catch (err) {
     await logEvent(null, 'inquiries', 'after_save_failed', { id, error: String(err?.message || err).slice(0, 200) }).catch(() => {});
   }
@@ -316,28 +312,49 @@ export function inquiryAnswers(inq) {
 }
 
 /**
- * A paid request with a website → a client on that plan in `applied`, held for the owner's review
- * (systems/gatekeeper.js applyForTrial with `plan` + `review`). Never throws: the inquiry stays
- * saved either way, and without a website (or on any error) it is a plain inquiry as before.
+ * A booking with a website → a client record on the plan they asked about, in `applied`, held for the sales
+ * call (systems/gatekeeper.js addClient with `review`). Never throws: the booking stays saved either way, and
+ * without a website (or on any error) it is a plain booking.
  */
-export async function inquiryToApplication(id, inq, { now = new Date() } = {}) {
+export async function holdForSalesCall(id, inq, { now = new Date() } = {}) {
   if (!inq.website) return null;
   try {
-    const { applyForTrial } = await import('@/lib/systems/gatekeeper');
-    const r = await applyForTrial(
+    const { addClient } = await import('@/lib/systems/gatekeeper');
+    const r = await addClient(
       { companyName: inq.company, contactName: inq.name, contactEmail: inq.email, website: inq.website, notes: inq.sells },
-      { source: 'inquiry', plan: inferPlan(inq) || 'starter', now, review: { answers: inquiryAnswers(inq), fit: { verdict: 'unknown', summary: 'A paid-plan request: read the fit score and the research, then say yes or no.', lines: [] } } },
+      { source: 'inquiry', plan: inferPlan(inq) || 'starter', now, review: { answers: inquiryAnswers(inq), fit: { verdict: 'unknown', summary: 'A booked sales call: read the fit score and the research before the call. Press Won on the booking to start onboarding.', lines: [] } } },
     );
     if (!r.ok || !r.clientId) return null;
     const extras = applicationExtras(inq);
     if (!r.duplicate && Object.keys(extras).length) { try { await kv.hset(K.application(r.clientId), extras); } catch { /* the score just asks instead */ } }
-    await patch(id, { clientId: r.clientId, trialOutcome: r.outcome || null, paid: true });
-    await logEvent(null, 'inquiries', 'to_application', { id, clientId: r.clientId, outcome: r.outcome });
+    await patch(id, { clientId: r.clientId, paid: true });
+    await logEvent(null, 'inquiries', 'held_for_call', { id, clientId: r.clientId, outcome: r.outcome });
     return r;
   } catch (err) {
-    await logEvent(null, 'inquiries', 'to_application_failed', { id, error: String(err?.message || err).slice(0, 200) });
+    await logEvent(null, 'inquiries', 'hold_failed', { id, error: String(err?.message || err).slice(0, 200) });
     return null;
   }
+}
+
+/**
+ * Won: they become a paying client and onboarding starts (the one accepted_call email). The record held for
+ * the call is used when there is one; otherwise one is made from the booking (it needs their website).
+ * Throws when it cannot start — the booking then stays where it was. → { clientId, outcome, already? }
+ */
+export async function startClientFrom(inq, { now = new Date() } = {}) {
+  const gk = await import('@/lib/systems/gatekeeper');
+  if (inq.clientId) {
+    const { getClient } = await import('@/lib/db/client');
+    const c = await getClient(inq.clientId);
+    if (c && c.state !== 'applied') return { clientId: inq.clientId, outcome: c.state, already: true };
+    if (c) return { clientId: inq.clientId, ...(await gk.approveApplication(inq.clientId, { now })) };
+  }
+  if (!inq.website) throw new Error('This booking has no website. Add them with “Add a paying client” instead, with their website.');
+  const r = await gk.addClient({ companyName: inq.company, contactName: inq.name, contactEmail: inq.email, website: inq.website, notes: inq.sells }, { source: 'inquiry', plan: inferPlan(inq) || 'starter', now });
+  if (!r.ok) throw new Error(Object.values(r.errors || {})[0] || 'the client could not be made');
+  if (r.duplicate) throw new Error('A client for this website was just made — reload and try again.');
+  if (r.outcome === 'manual') throw new Error('The client was saved but onboarding did not start — see the alert.');
+  return { clientId: r.clientId, outcome: r.outcome };
 }
 
 export async function getInquiry(id) {
@@ -370,8 +387,17 @@ export async function setInquiryStatus(id, status, note = '', { now = new Date()
   if (!STATUSES.includes(status)) throw new Error(`status must be one of ${STATUSES.join(', ')}`);
   const cur = await getInquiry(id);
   if (!cur) throw new Error('inquiry not found');
+  // Won starts their onboarding first: if that fails, the booking stays where it was and the error goes back.
+  let started = null;
+  if (status === 'won' && cur.status !== 'won') started = await startClientFrom(cur, { now });
+  if (status === 'lost' && cur.status !== 'lost' && cur.clientId) {
+    try {
+      const { getClient } = await import('@/lib/db/client');
+      if ((await getClient(cur.clientId))?.state === 'applied') await (await import('@/lib/systems/gatekeeper')).declineApplication(cur.clientId, note, { now });
+    } catch { /* the record stays; the booking still moves */ }
+  }
   const notes = note ? [...(cur.notes || []), { at: now.toISOString(), text: s(note, 1000) }] : cur.notes || [];
-  const rec = await patch(id, { status, statusAt: now.toISOString(), notes, stageHistory: [...(cur.stageHistory || []), { at: now.toISOString(), from: cur.status, to: status }].slice(-30) });
+  const rec = await patch(id, { ...(started?.clientId ? { clientId: started.clientId } : {}), status, statusAt: now.toISOString(), notes, stageHistory: [...(cur.stageHistory || []), { at: now.toISOString(), from: cur.status, to: status }].slice(-30) });
   await logEvent(null, 'inquiries', 'status', { id, status });
   // Call done / No-show here marks the sales call in the Calendar too (the Calendar's own buttons came the other way).
   if (!fromCalendar && (status === 'held' || status === 'no_show') && rec.meetingId) {
@@ -388,19 +414,6 @@ export async function addInquiryNote(id, text, { now = new Date() } = {}) {
   return patch(id, { notes: [...(cur.notes || []), { at: now.toISOString(), text: t }] });
 }
 
-/** Turn an inquiry into a trial (pre-approved): the Gatekeeper sends the onboarding link or queues it. */
-export async function inquiryToTrial(id) {
-  const cur = await getInquiry(id);
-  if (!cur) throw new Error('inquiry not found');
-  if (cur.clientId) return { ok: true, clientId: cur.clientId, already: true };
-  const { applyForTrial } = await import('@/lib/systems/gatekeeper');
-  const r = await applyForTrial({ companyName: cur.company, contactName: cur.name, contactEmail: cur.email, website: cur.website }, { preApproved: true, source: 'inquiry' });
-  if (!r.ok) return r;
-  await patch(id, { clientId: r.clientId || null, trialOutcome: r.outcome || null });
-  await logEvent(null, 'inquiries', 'to_trial', { id, clientId: r.clientId, outcome: r.outcome });
-  return r;
-}
-
 /** Board summary for the hub: counts + the newest open ones. */
 export async function inquirySummary() {
   const { inquiries, counts } = await listInquiries({ limit: 100 });
@@ -409,9 +422,8 @@ export async function inquirySummary() {
 }
 
 /**
- * The website request behind a paid application moves with it, so the Inquiries list never shows it as
- * "new" after the owner answered it: Say yes → contacted, the plan agreement signed → won, Say no → lost.
- * Only forward (a won or lost request stays as it is). Never throws.
+ * The booking behind a client moves with it (a client added by hand from a booking's email, say): the plan
+ * agreement signed → won. Only forward (a won or lost booking stays as it is); never starts anything. Never throws.
  */
 export async function settleInquiryFor(clientId, status, note = '', { now = new Date() } = {}) {
   try {

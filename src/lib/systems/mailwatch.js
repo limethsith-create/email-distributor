@@ -51,8 +51,7 @@ export const WATCH = { retryMinutes: 10, bounceLookMinutes: 20, unopenedHours: 4
 
 /**
  * The milestone emails (template key → how the owner names it: "{firstName}
- * hasn't opened the {what} email"). `report_day29` is trial_report(_zero),
- * `decision` is decision_link(_zero).
+ * hasn't opened the {what} email").
  */
 export const MILESTONES = {
   accepted_call: { what: 'acceptance' },
@@ -60,10 +59,6 @@ export const MILESTONES = {
   launch_invite: { what: 'launch-call invite' },
   welcome_two_dates: { what: '“we start on”' },
   day1_moved: { what: 'new start date' },
-  trial_report: { what: 'Day 29 report' },
-  trial_report_zero: { what: 'Day 29 report' },
-  decision_link: { what: 'decision' },
-  decision_link_zero: { what: 'decision' },
 };
 export const isMilestone = (key) => Object.prototype.hasOwnProperty.call(MILESTONES, key);
 export const whatOf = (key) => MILESTONES[key]?.what || String(key || 'last');
@@ -492,7 +487,6 @@ const RETRY = {
   async accepted_call(id, spec, now) {
     const c = await getClient(id);
     if (!c) return { skipped: 'the client is gone' };
-    if (c.state === 'queued') { await (await import('@/lib/systems/gatekeeper')).startOnboarding(id, { now }); return { retried: true }; }
     if (c.state === 'onboarding') {
       const oc = await import('@/lib/systems/onboardcall');
       const raw = await oc.readCall(id);
@@ -519,25 +513,19 @@ const RETRY = {
     if (r.waiting) return { later: r.waiting };
     return { skipped: r.skipped || 'Day 1 is not fixed' };
   },
-  async trial_report(id, spec, now) {
-    const r = await (await import('@/lib/systems/trialmanager')).sendTrialReport(id, now);
-    return r.held ? { skipped: `the report is held (${r.held})` } : { retried: true };
-  },
 };
-RETRY.trial_report_zero = RETRY.trial_report;
 
-/** The same template with the same words, links and thread (the decision email, the Day 1 move). */
+/** The same template with the same words, links and thread (the Day 1 move). */
 async function resendAsIs(id, spec, now) {
   const { notifyClient } = await import('@/lib/notify');
   const res = await notifyClient(id, spec.key, spec.vars || {}, { ...(spec.opts || {}), now });
   if (res?.deduped) return { already: true };
   if (res?.error) throw new Error(res.error);
-  if (String(spec.key).startsWith('decision_link')) await kv.hset(K.trial(id), { decisionEmailAt: now.toISOString() });
   return { retried: true };
 }
 
 const FIX_HINT = {
-  accepted_call: 'check the sending inbox in Settings, then press Approve again (or Send it again on their trial)',
+  accepted_call: 'check the sending inbox in Settings, then press Send it again on their page',
   launch_invite: 'check the sending inbox in Settings, then press Send the invite again on their trial',
 };
 
@@ -593,8 +581,8 @@ async function evidenceFor(clientId, rec) {
   return out;
 }
 
-/** Client states in which a "hasn't opened" to-do no longer matters (the trial is over). */
-const TRIAL_OVER = new Set(['declined', 'closed_silent', 'deleted', 'retired', 'not_now', 'converted']);
+/** Client states in which a "hasn't opened" to-do no longer matters (the client is gone). */
+const TRIAL_OVER = new Set(['declined', 'closed_silent', 'deleted', 'retired']);
 
 /** One client's watch: retries due, milestone emails due, then when to look next. */
 async function watchClient(client, now) {

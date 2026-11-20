@@ -26,7 +26,7 @@ test('client dashboard: one lasting link per client (the hub shows it), a read-o
   assert.equal((await dashboardView('nonsense-token-that-is-long-enough')).ok, false);
   // a trial client's dashboard says so
   await createClient('elm-dental', { name: 'Elm Dental', contactEmail: 'eli@elmdental.com', mainDomain: 'elmdental.com', plan: 'trial', state: 'applied' });
-  assert.equal((await dashboardView(tokenOf(await dashboardLink('elm-dental')))).plan, '30-day trial');
+  assert.equal((await dashboardView(tokenOf(await dashboardLink('elm-dental')))).plan, 'Starter plan');
   // the API
   const { GET } = await import('@/app/api/c/dashboard/route');
   assert.equal((await GET(new Request(`http://x/api/c/dashboard?token=${tokenOf(url2)}`))).status, 200);

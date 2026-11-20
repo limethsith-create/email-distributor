@@ -75,11 +75,11 @@ const pixelOf = (m) => { const src = /src="([^"]+\/api\/track\/open\?t=[^"]+)"/.
 const imgs = (m) => (String(m.html || '').match(/<img /g) || []).length;
 const FRIDAY = { title: 'Your week', body: 'Warm-up is on day 9.', ownerName: 'Limeth Sith' };
 const START = { startWhen: 'Wednesday 21 October at 8:00 am Central Time (9:00 am Eastern)', senderName: 'Sam Test', inboxes: 'sam@trysamtest.com and sam.test@trysamtest.com', sendWindow: "between 9:00 am and 5:00 pm on weekdays, in each prospect's own time zone" };
-const MOVED = { firstName: 'Sam', day1Date: 'Wednesday 21 October', day30Date: 'Thursday 19 November', reason: 'the list is still being built', waitingLine: 'Nothing is needed from you.', ownerName: 'Limeth Sith', ...START };
+const MOVED = { firstName: 'Sam', day1Date: 'Wednesday 21 October', reason: 'the list is still being built', waitingLine: 'Nothing is needed from you.', ownerName: 'Limeth Sith', ...START };
 const THUNDERBIRD = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Thunderbird/128.0';
 
 async function client(state = 'sending', over = {}) {
-  await createClient(ID, { state, name: 'eCreek IT', contactName: 'Sam Test', contactEmail: SAM, mainDomain: 'ecreek.com', ...over });
+  await createClient(ID, { state, name: 'eCreek IT', contactName: 'Sam Test', contactEmail: SAM, mainDomain: 'ecreek.com', createdAt: '2026-10-01T12:00:00Z', ...over }); // a fixed date: messages are read only after it
 }
 async function hit(url, ua = THUNDERBIRD) {
   const { GET } = await import('@/app/api/track/open/route');
@@ -111,7 +111,7 @@ test('every email to the client carries one open pixel (purpose mail, its own ke
   assert.equal(imgs(sent.find((x) => x.to === 'lead@dental1.com')), 0);
   assert.equal(Object.keys(await readTrack(ID)).length, 1);
   // The owner's own words: tracked, never a pixel.
-  await notifyClient(ID, 'onboard_owner_reply', { threadSubject: 'Your trial', text: 'Hi Sam,\n\nSee you Tuesday.\n\nLimeth Sith' }, { dedupe: null, now: FRI });
+  await notifyClient(ID, 'onboard_owner_reply', { threadSubject: 'Your onboarding', text: 'Hi Sam,\n\nSee you Tuesday.\n\nLimeth Sith' }, { dedupe: null, now: FRI });
   assert.equal(imgs(toSam().at(-1)), 0);
   assert.equal((await recOf(toSam().at(-1))).pixel, false);
   // OPEN_TRACKING=off: no pixel at all; the entry then reads just "delivered".
@@ -269,7 +269,7 @@ test('the plan email that failed after the call is retried by its own sender (it
   assert.equal((await kv.hgetall(K.trial(ID)))?.nextStepsSentAt, undefined);
   await check(at(FRI, 11 / 60));
   assert.equal(toSam().length, 1);
-  assert.equal(toSam()[0].subject, 'Your trial — what happens now');
+  assert.equal(toSam()[0].subject, 'What happens now');
   const trial = await kv.hgetall(K.trial(ID));
   assert.ok(trial.nextStepsSentAt);
   assert.equal(trial.nextStepsMoment, 'call');
@@ -278,7 +278,7 @@ test('the plan email that failed after the call is retried by its own sender (it
 
 test('not opened in 48 business hours → the to-do "Sam hasn\'t opened the … email — call or text them?" + a quiet alert; an open clears it', async () => {
   await client('ready');
-  await notifyClient(ID, 'welcome_two_dates', { firstName: 'Sam', ownerName: 'Limeth Sith', day1Date: 'Wednesday 21 October', day30Date: 'Thursday 19 November', callMinutes: 30, ...START }, { dedupe: 'w1', now: FRI });
+  await notifyClient(ID, 'welcome_two_dates', { firstName: 'Sam', ownerName: 'Limeth Sith', day1Date: 'Wednesday 21 October', callMinutes: 30, ...START }, { dedupe: 'w1', now: FRI });
   const m = toSam()[0];
   const w = (await recOf(m)).watch;
   assert.equal(w.unopenedDueAt, '2026-10-20T14:00:00.000Z', 'Fri 10:00 ET + 48 business hours = Tue 10:00 ET (the weekend does not count)');
@@ -313,12 +313,12 @@ test('not opened in 48 business hours → the to-do "Sam hasn\'t opened the … 
 test('the unopened to-do: the owner\'s "done" clears it and acknowledges its alert; a message from them means no to-do at all', async () => {
   io.alertOwner = alertOwner; // the real log, to see the acknowledgement
   await client('sending');
-  await notifyClient(ID, 'decision_link', { decisionUrl: 'https://app.test/c/x/decide', recommendationLine: 'My one recommendation: Growth.', bonusLine: '22 calls for the price of 20', bonusExpires: 'Sat, 17 Oct 2026 14:00 UTC', ownerName: 'Limeth Sith' }, { dedupe: 'd', now: FRI });
+  await notifyClient(ID, 'day1_moved', MOVED, { dedupe: 'd', now: FRI });
   await check(new Date('2026-10-20T14:05:00Z'));
   assert.ok((await getClient(ID)).mailUnopened);
   const open = (await getAlertLog()).filter((a) => a.key === 'client_email_unopened');
   assert.equal(open.length, 1);
-  assert.equal(open[0].title, 'Sam hasn\'t opened the decision email');
+  assert.equal(open[0].title, 'Sam hasn\'t opened the new start date email');
   const { POST } = await import('@/app/api/mc/clients/[id]/messages/route');
   const res = await POST(new Request('http://x', { method: 'POST', body: JSON.stringify({ action: 'unopenedDone' }) }), { params: { id: ID } });
   assert.equal(res.status, 200);
@@ -329,16 +329,16 @@ test('the unopened to-do: the owner\'s "done" clears it and acknowledges its ale
   __reset(); sent = [];
   await kv.hset('system:config', { 'OWNER.signerName': JSON.stringify('Limeth Sith'), 'REPLYBOT.enabled': JSON.stringify(false), 'ONBOARDCALL.inbox': JSON.stringify('onboard@aviance.test') });
   await client('sending');
-  await notifyClient(ID, 'decision_link', { decisionUrl: 'https://app.test/c/x/decide', recommendationLine: 'x', bonusLine: 'y', bonusExpires: 'z', ownerName: 'Limeth Sith' }, { dedupe: 'd', now: FRI });
+  await notifyClient(ID, 'day1_moved', MOVED, { dedupe: 'd', now: FRI });
   inbox = [{ uid: 3, folder: 'INBOX', inbox: 'onboard@aviance.test', messageId: '<q@ecreek.com>', from: SAM, to: ['onboard@aviance.test'], subject: 'Quick question', date: at(FRI, 5).toISOString(), threadIds: [], kind: 'human', hasIcs: false, text: 'Can we talk Monday?' }];
   await check(at(FRI, 6));
   await check(new Date('2026-10-20T14:05:00Z'));
   assert.equal((await getClient(ID)).mailUnopened, undefined);
   assert.ok(!(await getAlertLog()).some((a) => a.key === 'client_email_unopened' && a.clientId === ID && !a.acknowledged));
 
-  // Test Mode (`_test`: the "client" is the owner himself) is tracked but never gets the to-do.
+  // `_test` (the "client" is the owner himself) is tracked but never gets the to-do.
   await createClient('_test', { state: 'sending', name: 'Test', contactName: 'Limeth Sith', contactEmail: 'owner@aviance.test' });
-  await notifyClient('_test', 'decision_link', { decisionUrl: 'https://app.test/c/x/decide', recommendationLine: 'x', bonusLine: 'y', bonusExpires: 'z', ownerName: 'Limeth Sith' }, { dedupe: 'd', now: FRI });
+  await notifyClient('_test', 'day1_moved', MOVED, { dedupe: 'd', now: FRI });
   const t = Object.values(await readTrack('_test'))[0];
   assert.deepEqual([t.milestone, t.watch.unopenedDueAt], [true, null]);
 });
@@ -347,7 +347,7 @@ test('the unopened to-do: the owner\'s "done" clears it and acknowledges its ale
 
 const PROFILE = { senderName: 'Sam Test', postalAddress: '100 Main St, Dallas, TX 75201' };
 
-async function readyClient({ state = 'ready', trial = { day1Date: '2026-10-21', day30Date: '2026-11-19' } } = {}) {
+async function readyClient({ state = 'ready', trial = { day1Date: '2026-10-21' } } = {}) {
   await client(state);
   await kv.hset(K.profile(ID), PROFILE);
   await kv.hset(K.trial(ID), trial);
@@ -379,8 +379,8 @@ test('the "we start on" email: once Day 1 is fixed, in their daytime, naming the
   assert.equal(seen[0].key, 'welcome_two_dates');
   assert.equal(seen[0].opts.dedupe, 'welcome_two_dates:2026-10-21');
   assert.deepEqual(
-    [v.firstName, v.ownerName, v.day1Date, v.day30Date, v.callMinutes],
-    ['Sam', 'Limeth Sith', 'Wednesday 21 October', 'Thursday 19 November', 30], 'the kept vars',
+    [v.firstName, v.ownerName, v.day1Date, v.callMinutes],
+    ['Sam', 'Limeth Sith', 'Wednesday 21 October', 30], 'the kept vars',
   );
   assert.deepEqual(
     [v.startWhen, v.startTime, v.theirZoneName, v.sendWindow, v.windowStart, v.windowEnd, v.senderName, v.inboxName, v.inboxAddress, v.inboxes],
@@ -403,7 +403,7 @@ test('the "we start on" email: once Day 1 is fixed, in their daytime, naming the
 });
 
 test('readiness: green → ready and the "we start on" email; a Day 1 that moves → day1_moved with the same facts', async () => {
-  await readyClient({ state: 'warming', trial: { signedDay: '2026-10-06', day1Date: '2026-10-21', day30Date: '2026-11-19' } });
+  await readyClient({ state: 'warming', trial: { signedDay: '2026-10-06', day1Date: '2026-10-21' } });
   const notes = [];
   const deps = { notify: async (id, key, vars, opts) => { notes.push({ key, vars, dedupe: opts.dedupe }); return { sent: true }; } };
   // Day 1 morning, the gate still red → Day 1 slides; day1_moved names the new start the same way.
@@ -483,11 +483,11 @@ test('pure: business hours, the status and its words, matching bounces and repli
   assert.deepEqual(watchStep({ ...w, watch: { bounceLookAt: w.watch.bounceLookAt, unopenedDueAt: null } }, new Date('2026-10-16T15:00:00Z')), { done: 'no open pixel' });
 
   // Every milestone the brief names.
-  assert.deepEqual(Object.keys(MILESTONES).sort(), ['accepted_call', 'day1_moved', 'decision_link', 'decision_link_zero', 'launch_invite', 'next_steps', 'trial_report', 'trial_report_zero', 'welcome_two_dates']);
+  assert.deepEqual(Object.keys(MILESTONES).sort(), ['accepted_call', 'day1_moved', 'launch_invite', 'next_steps', 'welcome_two_dates']);
 
   // The start facts without the Calendar's words: Eastern.
   const f = startFacts({ day1Date: '2026-10-21', window: ['09:00', '17:00'], senderName: '', inboxes: ['b@x.com', 'a@x.com'] });
-  assert.deepEqual([f.day1Date, f.day30Date, f.startWhen, f.inboxName, f.inboxes], ['Wednesday 21 October', 'Thursday 19 November', 'Wednesday 21 October at 9:00 am Eastern Time', 'b@x.com', 'b@x.com and a@x.com']);
+  assert.deepEqual([f.day1Date, f.startWhen, f.inboxName, f.inboxes], ['Wednesday 21 October', 'Wednesday 21 October at 9:00 am Eastern Time', 'b@x.com', 'b@x.com and a@x.com']);
   assert.deepEqual([clockWord('09:00'), clockWord('17:30'), clockWord('00:05'), clockWord('12:00')], ['9:00 am', '5:30 pm', '12:05 am', '12:00 pm']);
   assert.equal(inTheirDaytime(new Date('2026-10-20T12:30:00Z'), 'America/New_York'), true);
   assert.equal(inTheirDaytime(new Date('2026-10-20T12:30:00Z'), 'America/Los_Angeles'), false);
@@ -502,7 +502,7 @@ test('startVars reads their zone from the profile, the Sender\'s window and the 
 
 test('a reply counts as the first open: the image loading a day later never puts "opened" after "replied"', async () => {
   await client('ready');
-  await notifyClient(ID, 'welcome_two_dates', { firstName: 'Sam', ownerName: 'Limeth Sith', day1Date: 'Wednesday 21 October', day30Date: 'Thursday 19 November', callMinutes: 30, ...START }, { dedupe: 'w-open', now: FRI });
+  await notifyClient(ID, 'welcome_two_dates', { firstName: 'Sam', ownerName: 'Limeth Sith', day1Date: 'Wednesday 21 October', callMinutes: 30, ...START }, { dedupe: 'w-open', now: FRI });
   const m = toSam()[0];
   const replyAt = at(FRI, 2);
   await noteReply(ID, { threadIds: [normId(m.messageId)], at: replyAt.toISOString(), now: replyAt });
@@ -521,7 +521,7 @@ test('the owner\'s "send it again": the "we start on" email once more, at once; 
   await client('warming');
   await saveInbox(ID, { email: 'sam@trysamtest.com', password: 'pw', provider: 'google', displayName: 'Sam Test' });
   await patchInbox(ID, 'sam@trysamtest.com', { enabled: '1' });
-  await kv.hset(K.trial(ID), { day1Date: '2026-10-21', day30Date: '2026-11-19' });
+  await kv.hset(K.trial(ID), { day1Date: '2026-10-21' });
   assert.deepEqual(await sendStartEmail(ID, { now: FRI, resend: true }), { skipped: 'Day 1 is not fixed yet' });
   await updateClient(ID, { state: 'ready' });
   const first = await sendStartEmail(ID, { now: FRI });

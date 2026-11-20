@@ -27,7 +27,7 @@ import { logEvent } from '@/lib/db/events';
 import { varsFor, renderTouch, TemplateError } from '@/lib/systems/sequence';
 import { keepColdText } from '@/lib/systems/maillog';
 import { getInboxHealth, recordSendSuccess, recordSendFailure, updateInboxHealth, shouldSkipInbox } from '@/lib/inbox-health';
-import { partsIn, dayKeyIn, ET, isWeekday, hhmmToMin, trialDay, addDays } from '@/lib/time';
+import { partsIn, dayKeyIn, ET, isWeekday, hhmmToMin, trialDay } from '@/lib/time';
 import { guardOutbound, unsubscribeHeaders } from '@/lib/systems/compliance';
 import { checkEmail } from '@/lib/systems/copycheck';
 import { leadVars, clientVars, exemptWordsFor } from '@/lib/systems/copy';
@@ -200,7 +200,6 @@ async function markFirstSend(clientId, now) {
   const fields = { firstSendAt: now.toISOString() };
   if (trial.day1Date !== today) {
     fields.day1Date = today;
-    fields.day30Date = addDays(today, 29);
     fields.day1MovedFrom = trial.day1Date || '';
   }
   await kv.hset(K.trial(clientId), fields);

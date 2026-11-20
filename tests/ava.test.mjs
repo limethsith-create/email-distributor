@@ -112,7 +112,7 @@ beforeEach(() => {
   install();
 });
 
-const ask = (text, user = OWNER, page = { view: 'trials' }, extra = {}) => avaChat({ messages: [{ role: 'user', content: text }], page, ...extra }, user);
+const ask = (text, user = OWNER, page = { view: 'paying' }, extra = {}) => avaChat({ messages: [{ role: 'user', content: text }], page, ...extra }, user);
 const LONG = `Please explain to me in detail how the whole trial works from the first application to the invoice, and what I should do at each step so that nothing is missed along the way ${'really '.repeat(10)}`;
 const sysOf = (c) => c.body.messages[0].content;
 
@@ -307,8 +307,8 @@ test('BM25 retrieval: the right chunk wins; the current page is boosted; long se
   assert.equal(idx.search('calls booked', { boostPages: ['client'] })[0].chunk.id, '2');
   assert.equal(idx.search('calls booked', { boostPages: ['calendar'] })[0].chunk.id, '1');
   // Long sections are cut into pieces that keep their title.
-  const long = chunkGuide(`## Big\n<!-- pages: trials -->\n${'Word one two three four five. '.repeat(120)}`);
-  assert.ok(long.length >= 3 && long.every((c) => c.title === 'Big' && c.pages[0] === 'trials'));
+  const long = chunkGuide(`## Big\n<!-- pages: paying -->\n${'Word one two three four five. '.repeat(120)}`);
+  assert.ok(long.length >= 3 && long.every((c) => c.title === 'Big' && c.pages[0] === 'paying'));
   // The owner's facts.
   const f = retrieve('what hours does the owner work', { facts: 'The owner works 6 pm to 2 am Sri Lanka time, Monday to Friday.\n\nWe never promise a fixed number of sales.' });
   assert.match(f[0].title, /Business facts/);
@@ -394,7 +394,7 @@ test('JSON fallback: a brain that refuses tools gets them described in the promp
 
 test('a team member: no money scope, no money in answers, only their own actions', async () => {
   const empDefs = toolDefs('employee');
-  assert.deepEqual(empDefs.find((t) => t.function.name === 'get_numbers').function.parameters.properties.scope.enum, ['my_outreach', 'all_clients']);
+  assert.deepEqual(empDefs.find((t) => t.function.name === 'get_numbers').function.parameters.properties.scope.enum, ['all_clients']);
   assert.ok(toolDefs('admin').find((t) => t.function.name === 'get_numbers').function.parameters.properties.scope.enum.includes('money'));
   const ctx = toolContext({ role: 'employee' });
   assert.deepEqual(await runTool('get_numbers', { scope: 'money' }, ctx), { error: 'Money is only for the owner.' });
@@ -422,7 +422,7 @@ test('a team member: no money scope, no money in answers, only their own actions
 });
 
 test('money for the owner (get_numbers money) and get_client with calls and money', async () => {
-  await kv.hset(K.client('acme'), { name: 'Acme Plumbing', state: 'converted', plan: 'starter', contactName: 'Ann Lee', contactEmail: 'ann@acme.com', createdAt: '2026-09-01T00:00:00Z' });
+  await kv.hset(K.client('acme'), { name: 'Acme Plumbing', state: 'sending', plan: 'starter', contactName: 'Ann Lee', contactEmail: 'ann@acme.com', createdAt: '2026-09-01T00:00:00Z' });
   await kv.sadd(K.clients(), 'acme');
   await kv.hset(K.invoice('acme'), { number: 'AV-1', amount: 2497, issuedAt: new Date(clockMs - 86400e3).toISOString(), paidAt: new Date(clockMs - 3600e3).toISOString(), status: 'paid', plan: 'starter' });
   const ctx = toolContext({ role: 'admin', now: () => new Date(clockMs) });
@@ -542,7 +542,7 @@ test('streaming a JSON-shaped (old style) answer: the reply is sent as one delta
 });
 
 test('voice: 1–3 short spoken sentences, no markdown, a smaller answer', async () => {
-  await ask('How is Summit doing?', OWNER, { view: 'trials' }, { voice: true });
+  await ask('How is Summit doing?', OWNER, { view: 'paying' }, { voice: true });
   assert.match(sysOf(calls[0]), /SPOKEN\. Answer in 1–3 short, natural sentences\. No lists, no markdown/);
   assert.equal(calls[0].body.max_tokens, 250);
   calls = [];
@@ -776,9 +776,9 @@ test('Mistral and Ollama Cloud: model discovery, key cards, and the fallback ord
 
 test('navigate: every view, client tab and Settings section is checked (old names mapped, wrong ones dropped); read comes last', () => {
   const nav = (a, role = 'admin') => cleanActions([{ type: 'navigate', ...a }], role)[0] || null;
-  for (const v of ['trials', 'paying', 'calendar', 'team', 'mystats', 'activity', 'inquiries', 'behind', 'settings']) assert.deepEqual(nav({ view: v }), { type: 'navigate', view: v });
+  for (const v of ['paying', 'calendar', 'team', 'activity', 'inquiries', 'behind', 'settings']) assert.deepEqual(nav({ view: v }), { type: 'navigate', view: v });
   for (const t of ['overview', 'conversations', 'sent', 'calls', 'messages', 'money', 'health', 'leads', 'setup']) assert.equal(nav({ view: 'client', id: 'acme', tab: t }).tab, t);
-  for (const s of ['alerts', 'phone', 'details', 'keys', 'ava', 'google', 'inboxes', 'warmup', 'replybot', 'demo', 'status', 'behind', 'advanced', 'look', 'account']) assert.deepEqual(nav({ view: 'settings', section: s }), { type: 'navigate', view: 'settings', section: s });
+  for (const s of ['alerts', 'phone', 'details', 'keys', 'ava', 'google', 'inboxes', 'warmup', 'replybot', 'status', 'behind', 'advanced', 'look', 'account']) assert.deepEqual(nav({ view: 'settings', section: s }), { type: 'navigate', view: 'settings', section: s });
   assert.equal(nav({ view: 'client', id: 'acme', tab: 'emails' }).tab, 'sent');
   assert.equal(nav({ view: 'client', id: 'acme', tab: 'history' }).tab, 'setup');
   assert.equal(nav({ view: 'client', id: 'acme', tab: 'deliverability' }).tab, 'health');
@@ -795,7 +795,7 @@ test('navigate: every view, client tab and Settings section is checked (old name
   for (const t of ['money', 'health', 'leads', 'setup']) assert.deepEqual(nav({ view: 'client', id: 'acme', tab: t }, 'employee'), { type: 'navigate', view: 'client', id: 'acme' });
   assert.equal(nav({ view: 'client', id: 'acme', tab: 'calls' }, 'employee').tab, 'calls');
   // read: only {what:'page'}, once, after the navigate.
-  assert.deepEqual(cleanActions([{ type: 'read', what: 'page' }, { type: 'navigate', view: 'mystats' }, { type: 'read' }], 'employee'), [{ type: 'navigate', view: 'mystats' }, { type: 'read', what: 'page' }]);
+  assert.deepEqual(cleanActions([{ type: 'read', what: 'page' }, { type: 'navigate', view: 'calendar' }, { type: 'read' }], 'employee'), [{ type: 'navigate', view: 'calendar' }, { type: 'read', what: 'page' }]);
   assert.deepEqual(cleanActions([{ type: 'read', what: 'passwords' }], 'admin'), []);
 });
 
@@ -808,13 +808,12 @@ test('the planner (no AI call): general → direct; live data → tools with the
     assert.deepEqual(p.prefetch, [], t);
   }
   const cases = [
-    ['How many trials are running?', [['list_clients', { filter: 'trials' }]]],
+    ['How many clients are running?', [['list_clients', { filter: 'all' }]]],
     ['What needs me today?', [['list_clients', { filter: 'needs_you' }]]],
     ['What calls do I have tomorrow?', [['get_calendar', {}]]],
     ['How much did we make this month?', [['get_numbers', { scope: 'money' }]]],
     ['How is Lakeveiw doing?', [['get_client', { id: 'lakeview-pt' }]]],
     ["Who's online in the team right now?", [['search_hub', { query: 'team' }]]],
-    ['How are my stats this week?', [['get_numbers', { scope: 'my_outreach' }]]],
     ['How is Summit doing and what calls are on the calendar tomorrow?', [['get_client', { id: 'summit' }]]],
   ];
   for (const [t, want] of cases) {
@@ -830,8 +829,7 @@ test('the planner (no AI call): general → direct; live data → tools with the
   assert.deepEqual(nav("open Lakeview's money"), ['tools', { view: 'client', id: 'lakeview-pt', tab: 'money' }, false]);
   assert.deepEqual(nav('take me to the keys'), ['direct', { view: 'settings', section: 'keys' }, false]);
   assert.deepEqual(nav('show the warm-up settings'), ['direct', { view: 'settings', section: 'warmup' }, false]);
-  assert.deepEqual(nav('open my stats and read it'), ['direct', { view: 'mystats' }, true]);
-  assert.deepEqual(P('open my stats and read it').prefetch, [{ name: 'get_numbers', args: { scope: 'my_outreach' } }]);
+  assert.deepEqual(nav('open the calendar and read it'), ['direct', { view: 'calendar' }, true]);
   assert.deepEqual(nav('open the calendar'), ['direct', { view: 'calendar' }, false]);
   assert.deepEqual(nav('go to plan call requests'), ['direct', { view: 'inquiries' }, false]);
   assert.deepEqual(nav('open Summit and read me the conversations'), ['tools', { view: 'client', id: 'summit', tab: 'conversations' }, true]);
@@ -846,18 +844,17 @@ test('the planner (no AI call): general → direct; live data → tools with the
 });
 
 test('"open X and read it": one call, no tool round; navigate + read for the hub; a team member never reaches owner-only places', async () => {
-  await kv.hset(K.client('lakeview-pt'), { name: 'Lakeview Physical Therapy', state: 'converted', plan: 'starter', createdAt: '2026-09-01T00:00:00Z' });
+  await kv.hset(K.client('lakeview-pt'), { name: 'Lakeview Physical Therapy', state: 'sending', plan: 'starter', createdAt: '2026-09-01T00:00:00Z' });
   await kv.sadd(K.clients(), 'lakeview-pt');
   script.groq = () => final('Opening Lakeview’s money now.');
-  const r = await ask("open Lakeview's money and read it", OWNER, { view: 'trials' });
+  const r = await ask("open Lakeview's money and read it", OWNER, { view: 'paying' });
   // It names Lakeview, so its whole picture is looked up first (tools mode) — the model can answer at once.
   assert.deepEqual(r.actions, [{ type: 'navigate', view: 'client', id: 'lakeview-pt', tab: 'money' }, { type: 'read', what: 'page' }]);
   calls = [];
-  script.groq = (body) => { assert.equal(body.tools, undefined); assert.match(sysOf({ body }), /opening My stats/); return final('Here are your stats.'); };
-  const s = await ask('open my stats and read it');
+  script.groq = (body) => { assert.equal(body.tools, undefined); return final('Here is the calendar.'); };
+  const s = await ask('open the calendar and read it');
   assert.equal(calls.length, 1, 'no tool round');
-  assert.deepEqual(s.actions, [{ type: 'navigate', view: 'mystats' }, { type: 'read', what: 'page' }]);
-  assert.ok(calls[0].body.messages.some((m) => /Result of get_numbers/.test(m.content || '')), 'the numbers (no names) came with the question');
+  assert.deepEqual(s.actions, [{ type: 'navigate', view: 'calendar' }, { type: 'read', what: 'page' }]);
   const k = await ask('take me to the keys');
   assert.deepEqual(k.actions, [{ type: 'navigate', view: 'settings', section: 'keys' }]);
   const w = await ask('show the warm-up settings');
@@ -880,7 +877,7 @@ test('faster first word: a general question streams from the first call (no tool
   await kv.sadd(K.clients(), 'summit');
   script.groq = (body) => { assert.equal(body.tools, undefined); assert.equal(body.stream, true); return sse(['Warm-up ', 'takes two weeks.']); };
   const { POST } = await import('@/app/api/mc/ava/chat/route');
-  const res = await POST(new Request('https://m.test/api/mc/ava/chat?stream=1', { method: 'POST', headers: { 'x-hub-role': 'admin' }, body: JSON.stringify({ messages: [{ role: 'user', content: 'What is warm-up?' }], page: { view: 'trials' }, voice: true }) }));
+  const res = await POST(new Request('https://m.test/api/mc/ava/chat?stream=1', { method: 'POST', headers: { 'x-hub-role': 'admin' }, body: JSON.stringify({ messages: [{ role: 'user', content: 'What is warm-up?' }], page: { view: 'paying' }, voice: true }) }));
   const text = await res.text();
   const done = JSON.parse(text.match(/event: done\ndata: (.*)\n/)[1]);
   assert.equal(calls.length, 1);

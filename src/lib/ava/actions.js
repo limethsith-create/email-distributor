@@ -10,7 +10,9 @@
  * tabs or buttons.
  */
 
-export const VIEWS = ['trials', 'paying', 'calendar', 'team', 'activity', 'inquiries', 'behind', 'settings', 'client'];
+export const VIEWS = ['paying', 'calendar', 'team', 'activity', 'inquiries', 'behind', 'settings', 'client'];
+/** Old view names (an older answer) → the view that holds them now. */
+export const VIEW_ALIAS = { trials: 'paying', clients: 'paying' };
 export const OWNER_VIEWS = new Set(['activity', 'settings']);
 /** A client's email system: five shared tabs (the client sees them too) and four "Only you" tabs (the owner's). */
 export const SHARED_TABS = ['overview', 'conversations', 'sent', 'calls', 'messages'];
@@ -26,8 +28,8 @@ export const TAB_ALIAS = {
   systems: 'setup', parts: 'setup', timeline: 'setup', history: 'setup', actions: 'setup', application: 'setup', access: 'setup',
 };
 /** Settings sections (the hub's TK_SETTINGS). All owner-only (Settings is). */
-export const SETTINGS_SECTIONS = ['alerts', 'phone', 'details', 'keys', 'ava', 'google', 'inboxes', 'warmup', 'replybot', 'demo', 'status', 'behind', 'advanced', 'look', 'account'];
-export const SECTION_ALIAS = { theme: 'look', dark: 'look', light: 'look', meet: 'google', 'test-run': 'demo', testrun: 'demo', 'warm-up': 'warmup', helpers: 'warmup', 'reply-bot': 'replybot', notifications: 'phone', health: 'status', running: 'status' };
+export const SETTINGS_SECTIONS = ['alerts', 'phone', 'details', 'keys', 'ava', 'google', 'inboxes', 'warmup', 'replybot', 'status', 'behind', 'advanced', 'look', 'account'];
+export const SECTION_ALIAS = { theme: 'look', dark: 'look', light: 'look', meet: 'google', 'warm-up': 'warmup', helpers: 'warmup', 'reply-bot': 'replybot', notifications: 'phone', health: 'status', running: 'status' };
 /** What `read` may read: the page on screen (the hub reads its own screen out loud — nothing comes to the machine). */
 export const READ_WHAT = ['page'];
 /**
@@ -36,13 +38,12 @@ export const READ_WHAT = ['page'];
  */
 export const PLACES = {
   views: {
-    trials: 'Trials — every trial client: Needs you, In progress, Done; stage tiles; add a trial client',
-    paying: 'Paying clients — Starter/Growth/Scale clients, new paid applications, money received (owner)',
+    paying: 'Clients — every client (Starter/Growth/Scale): Needs you, In progress, Done; stage tiles; add a client; money received (owner)',
     calendar: 'Calendar — every call (Sri Lanka + US Eastern), call times waiting for a yes',
     team: 'Team — who is in the hub, their status line, who looks after which clients',
     activity: 'Activity (owner) — sign-ins, what people opened, accounts waiting for approval',
-    inquiries: 'Plan call requests — people who booked a call for a paid plan (Open, Won, Lost)',
-    behind: 'Behind the scenes — every to-do, every trial by stage, the waiting list',
+    inquiries: 'Plan call requests — people who booked a sales call (Booked … Won, Lost); Won makes them a client',
+    behind: 'Behind the scenes — every to-do, every client by stage',
     settings: 'Settings (owner) — the sections below',
     client: "One client (id) — the client page and their email system's tabs below",
   },
@@ -67,7 +68,6 @@ export const PLACES = {
     inboxes: 'Inboxes & domains — CheapInboxes auto-buy',
     warmup: 'Warm-up — warm-up helper inboxes',
     replybot: 'Reply bot — automatic replies',
-    demo: 'Test run — load or remove example clients',
     status: 'Is everything running? — the health check',
     behind: 'Behind the scenes — the machine board',
     advanced: 'Advanced — Mission Control, config',
@@ -86,7 +86,7 @@ export function placesMap(role) {
   return L.join('\n');
 }
 
-export const CONFIRMS = ['open_add_trial', 'open_add_paid', 'open_client', 'mark_todo_seen', 'give_access', 'load_test_run', 'remove_test_run', 'set_my_status', 'add_change_request'];
+export const CONFIRMS = ['open_add_paid', 'open_client', 'mark_todo_seen', 'give_access', 'set_my_status', 'add_change_request'];
 export const EMPLOYEE_CONFIRMS = new Set(['open_client', 'set_my_status', 'add_change_request']);
 
 const key = (v) => String(v ?? '').trim().toLowerCase().replace(/[\s_]+/g, '-');
@@ -115,7 +115,7 @@ export function cleanActions(list, role) {
   for (const a of Array.isArray(list) ? list : []) {
     if (!a || typeof a !== 'object') continue;
     if (a.type === 'navigate') {
-      const view = String(a.view || '');
+      const view = VIEW_ALIAS[String(a.view || '')] || String(a.view || '');
       if (!VIEWS.includes(view) || (!owner && OWNER_VIEWS.has(view))) continue;
       const nav = { type: 'navigate', view };
       if (a.id != null && ID_RE.test(String(a.id))) nav.id = String(a.id);

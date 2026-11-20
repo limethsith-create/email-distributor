@@ -183,7 +183,7 @@ const leadfinderRefill = {
   scope: 'client',
   cost: 3,
   async due({ client, now }) {
-    if (!trialClient(client) || !['warming', 'ready', 'sending', 'extension', 'converted'].includes(client.state)) return null;
+    if (!trialClient(client) || !['warming', 'ready', 'sending'].includes(client.state)) return null;
     return dailyAt(partsIn(ET, now), await cfg(client.id, 'BUILD.refillAt'));
   },
   async run(ctx) {

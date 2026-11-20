@@ -106,7 +106,7 @@ test('Approve sends exactly one accepted_call email from the ONBOARDCALL inbox, 
   assert.match(m.from, /<onboard@aviance\.test>$/);
   assert.equal(m.user, 'onboard@aviance.test', 'sent through the onboarding inbox itself');
   assert.match(m.text, /^Hi Sam,/);
-  assert.match(m.text, /free 30-day trial for eCreek IT/);
+  assert.match(m.text, /work with eCreek IT on the Starter plan\./);
   assert.match(m.text, /30-minute onboarding call/);
   assert.match(m.text, /Book a time that suits you: https:\/\/cal\.com\/limeth\/onboarding/);
   assert.match(m.text, /one page with your details and the agreement\. Fill it in before we talk if you like, or we'll do it together on the call: https:\/\/app\.test\/c\/[^/\s]+\/onboard\n/);
@@ -137,7 +137,7 @@ test('Approve sends exactly one accepted_call email from the ONBOARDCALL inbox, 
   assert.deepEqual(oc.thread.map((t) => [t.dir, t.kind]), [['out', 'acceptance']]);
   assert.deepEqual(oc.steps.map((s) => [s.key, s.done]), [['sent', true], ['opened', false], ['replied', false], ['booked', false], ['held', false]]);
   // A second Approve cannot happen; a retried startOnboarding would not resend.
-  await assert.rejects(() => approveApplication(ID, { now: MON }), /not waiting for a review/);
+  await assert.rejects(() => approveApplication(ID, { now: MON }), /not waiting for its sales call/);
   assert.equal(toSam().length, 1);
 });
 
@@ -292,7 +292,7 @@ test('reminders at 24 h and 72 h while not booked, in the same thread, never twi
   const r1 = toSam()[1];
   assert.equal(r1.subject, `Re: ${SUBJECT}`);
   assert.equal(r1.inReplyTo, toSam()[0].messageId, 'threads under the acceptance email');
-  assert.match(r1.text, /starts with a 30-minute onboarding call, and we haven't booked it yet\./);
+  assert.match(r1.text, /Getting eCreek IT started on the Starter plan begins with a 30-minute onboarding call, and we haven't booked it yet\./);
   assert.equal((await check(48)).remindersSent, 0);
   // Wed 10:00 ET, 48 business hours: the acceptance email is still unopened (delivery monitoring,
   // docs/IMPROVE-PASS.md C.2) — a quiet alert and a to-do; the call's own rules below are unchanged.
@@ -516,7 +516,7 @@ const simple = (over) => simpleFor(base(over));
 
 test('simple: one plain status per step, and needsYou only when the owner must act', () => {
   let s = simple({ client: { id: 'acme', name: 'Acme', state: 'applied', contactName: 'Ann Lee' }, application: { review: 'pending', receivedAt: '2026-10-20T10:00:00Z' } });
-  assert.deepEqual([s.step, s.label, s.needsYou, s.since, s.person, s.company, s.dayOf30], ['new', 'New application — read it and say yes or no', true, '2026-10-20T10:00:00Z', 'Ann Lee', 'Acme', null]);
+  assert.deepEqual([s.step, s.label, s.needsYou, s.since, s.person, s.company, s.dayOf30], ['new', 'Booked a sales call — not a client yet', false, '2026-10-20T10:00:00Z', 'Ann Lee', 'Acme', null]);
 
   s = simple({ client: { id: 'acme', name: 'Acme', state: 'onboarding' }, onboardCall: call({}) });
   assert.deepEqual([s.step, s.label, s.needsYou], ['accepted', 'Accepted — waiting for them to book the call', false]);
@@ -551,16 +551,11 @@ test('simple: one plain status per step, and needsYou only when the owner must a
   assert.deepEqual([s.step, s.label, s.needsYou], ['warming_up', 'Warming up their inboxes — first emails on Monday 26 October', false]);
 
   s = simple({ counters: { booked: 2 } });
-  assert.deepEqual([s.step, s.label, s.dayOf30, s.needsYou], ['sending', 'Sending — day 12 of 30, 2 calls booked', 12, false]);
-  assert.equal(simple({ counters: {} }).label, 'Sending — day 12 of 30', 'a missing counter is left out, never 0');
+  assert.deepEqual([s.step, s.label, s.dayOf30, s.needsYou], ['sending', 'Sending — day 12, 2 calls booked', 12, false]);
+  assert.equal(simple({ counters: {} }).label, 'Sending — day 12', 'a missing counter is left out, never 0');
 
-  s = simple({ client: { id: 'acme', name: 'Acme', state: 'converted', paidAt: '2026-10-19T00:00:00Z' } });
-  assert.deepEqual([s.step, s.label], ['finished', 'Finished — became a client']);
   s = simple({ client: { id: 'acme', name: 'Acme', state: 'declined' } });
   assert.deepEqual([s.step, s.label, s.needsYou], ['declined', 'Declined', false]);
-  s = simple({ client: { id: 'acme', name: 'Acme', state: 'queued', queueExpectedDate: '2026-11-26' } });
-  assert.deepEqual([s.step, s.label, s.needsYou], ['queued', 'In the queue — waiting for a free trial slot', false]);
-  assert.equal(s.next, 'Nothing for you: they start when a slot opens (about Thursday 26 November)');
 
   // Anything the to-do list marks urgent turns the dot on (a legal hold while sending).
   const ctx = base({ client: { id: 'acme', name: 'Acme', state: 'sending', legalHoldAt: '2026-10-19T00:00:00Z' } });

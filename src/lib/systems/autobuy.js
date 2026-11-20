@@ -821,7 +821,7 @@ async function unlink(client, { now }) {
     const e = index[rec.domain];
     if (e && e.clientId === client.id) {
       const { clientId, linkedAt, linkedBy, ...rest } = e;
-      // alertedAt: the owner is looking at it right now — no "which trial is it for?" alert.
+      // alertedAt: the owner is looking at it right now — no "which client is it for?" alert.
       index[rec.domain] = { ...rest, clientId: null, blocked: [...new Set([...(e.blocked || []), client.id])], unlinkedAt: iso(now), alertedAt: e.alertedAt || iso(now) };
     }
     await ci.writeDomainIndex(index, before);

@@ -9,9 +9,9 @@
  *   rerunBookingTest        test the calendar link now
  *   resendWelcome           the "we start on …" email again (once Day 1 is fixed) → { sent, again } | { skipped }
  *   rerunResearch           research the applicant again (website + Google listing)
- *   approveApplication      owner approves a website application (→ onboarding with the one
- *                           accepted_call email, or the queue); the onboarding-call check runs in after()
- *   declineApplication {reason}  owner declines it; the reason is emailed to the applicant
+ *   approveApplication      the booking was won (→ onboarding with the one accepted_call email);
+ *                           the onboarding-call check runs in after(). Normally pressed as Won on the booking.
+ *   declineApplication {reason}  the booking was lost: the record closes, nothing is emailed
  */
 
 import { kv } from '@vercel/kv';
@@ -27,7 +27,6 @@ import { approveApplication, declineApplication } from '@/lib/systems/gatekeeper
 import { after } from 'next/server';
 import { rerunResearch, researchToEnd } from '@/lib/systems/research';
 import { checkOnboardCallsQuietly } from '@/lib/systems/onboardcall';
-import { demoRefusal } from '@/lib/systems/demo';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -55,8 +54,6 @@ export async function GET(_req, { params }) {
 }
 
 export async function POST(request, { params }) {
-  const refused = demoRefusal((await params)?.id);
-  if (refused) return refused;
   const id = assertClientId(params.id);
   const client = await getClient(id);
   if (!client) return Response.json({ error: 'not found' }, { status: 404 });
@@ -80,7 +77,6 @@ export async function POST(request, { params }) {
         return Response.json({ ok: true, ...result });
       }
       case 'declineApplication':
-        if (!String(body.reason || '').trim()) return Response.json({ error: 'Write the reason — it goes to the applicant.' }, { status: 400 });
         return Response.json({ ok: true, ...(await declineApplication(id, body.reason)) });
       case 'marketOverride':
         return Response.json({ ok: true, result: await overrideMarket(id, { note: body.note || '' }) });

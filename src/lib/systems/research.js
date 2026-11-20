@@ -1412,7 +1412,7 @@ async function finish(clientId, client, s, { now, R }) {
   });
   await updateClient(clientId, { researchStep: '' });
   await logEvent(clientId, SYSTEM, 'done', { pagesRead: s.pagesRead, deepPages: s.deepRead || 0, facts: deep?.facts ?? null, business: Boolean(s.business), market: s.market?.estimate ?? null, flags: flags.length, prefilled, score: score?.score ?? null, grade: score?.grade ?? null, brief: brief?.sentences.length ?? 0 });
-  // The owner already had the application alert without the score (research ran past the request): send the score now.
+  // The owner already had the booking's alert without the score (research ran past the request): send the score now.
   if (score && application.alertedAt && application.review === 'pending' && client.state === 'applied') {
     await io.alertOwner('application_scored', {
       clientId,
@@ -1547,7 +1547,7 @@ export function deepLine(d) {
 export async function prefill(clientId, { business, website, customers }) {
   try {
     const client = await getClient(clientId);
-    if (!['applied', 'queued', 'onboarding'].includes(client?.state)) return [];
+    if (!['applied', 'onboarding'].includes(client?.state)) return [];
     const trial = await getTrial(clientId);
     if (trial.agreementAcceptedAt) return [];
     const profile = await getProfile(clientId);

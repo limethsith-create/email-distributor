@@ -1,9 +1,9 @@
 /**
  * Scheduler jobs for Stage D (SPEC §5). Job shape: see src/lib/jobs.js.
  *
- * Per-client jobs skip `aviance` (it has no trial) and read the client's own
- * clock, so the `_test` client runs a whole trial on its scaled clock
- * (src/lib/testclock.js). The two digests are global and include aviance.
+ * Per-client jobs skip `aviance` (the owner's own record, not a client) and
+ * read the client's own clock (src/lib/testclock.js). The two digests are
+ * global and include aviance.
  */
 
 import { kv } from '@vercel/kv';
@@ -14,7 +14,7 @@ import { clientNow } from '@/lib/testclock';
 import { getTrial } from '@/lib/db/client';
 import { dailyAt, bucketKey } from '@/lib/joblist/helpers';
 
-const trialClient = (client) => client && client.id !== 'aviance';
+const realClient = (client) => client && client.id !== 'aviance';
 const etParts = (client, now) => partsIn(ET, clientNow(client, now));
 
 const dayJobs = {
@@ -24,7 +24,7 @@ const dayJobs = {
   minBudgetMs: 8000,
   claimTtl: 3 * 86400,
   async due({ client, now }) {
-    if (!trialClient(client)) return null;
+    if (!realClient(client)) return null;
     const { DAYJOB_STATES } = await import('@/lib/systems/trialmanager');
     if (!DAYJOB_STATES.has(client.state)) return null;
     return dailyAt(etParts(client, now), await cfg(client.id, 'DAYJOBS.at'));
@@ -41,7 +41,7 @@ const day1Notice = {
   cost: 2,
   claimTtl: 3600,
   async due({ client, now }) {
-    if (!trialClient(client) || !['sending', 'paused', 'extension'].includes(client.state)) return null;
+    if (!realClient(client) || !['sending', 'paused'].includes(client.state)) return null;
     // client.day1NoticeDone (set through the tick's own write) ends the polling;
     // until then the run reads the trial hash every 15 minutes.
     if (client.day1NoticeDone === '1') return null;
@@ -62,7 +62,7 @@ const friday = {
   minBudgetMs: 6000,
   claimTtl: 3 * 86400,
   async due({ client, now }) {
-    if (!trialClient(client)) return null;
+    if (!realClient(client)) return null;
     const { FRIDAY_STATES } = await import('@/lib/systems/friday');
     if (!FRIDAY_STATES.has(client.state)) return null;
     const p = etParts(client, now);
@@ -80,7 +80,8 @@ const invoiceJob = {
   cost: 3,
   claimTtl: 3 * 86400,
   async due({ client, now }) {
-    if (!trialClient(client) || client.state !== 'converted') return null;
+    // A paying client's invoice: a held one is retried, an unpaid one gets its reminders.
+    if (!realClient(client) || ['applied', 'declined', 'closed_silent', 'deleted'].includes(client.state)) return null;
     return dailyAt(etParts(client, now), '10:00');
   },
   async run({ clientId, now }) {
@@ -95,7 +96,7 @@ const cancelInboxes = {
   cost: 2,
   claimTtl: 3 * 86400,
   async due({ client, now }) {
-    if (!trialClient(client) || client.state !== 'retired') return null;
+    if (!realClient(client) || client.state !== 'retired') return null;
     return dailyAt(etParts(client, now), '09:30');
   },
   async run({ clientId }) {
@@ -111,7 +112,7 @@ const wrapup = {
   minBudgetMs: 8000,
   claimTtl: 3 * 86400,
   async due({ client, now }) {
-    if (!trialClient(client) || client.state !== 'retired') return null;
+    if (!realClient(client) || client.state !== 'retired') return null;
     return dailyAt(etParts(client, now), '09:15');
   },
   async run({ clientId, client, now }) {

@@ -1,16 +1,15 @@
 /**
  * Wrap-up (SPEC §9.7, §3 Deletion).
  *
- * Retire (Day 45 in `not_now`, or DAYJOBS.stopRetireDays after "Stop the
- * trial"): disable the inboxes, set domain.retiredAt, take the inboxes out of
+ * Retire (DAYJOBS.stopRetireDays after the client stops, or Client Watch's
+ * quiet end): disable the inboxes, set domain.retiredAt, take the inboxes out of
  * warmup:pool, set trial.endedAt (if not yet set) and dataDeleteAt = endedAt
  * + DELETE.afterEndDays, state `retired`, owner alert `cancel_inboxes` — and
  * that alert repeats daily until the owner ticks "done" in Mission Control.
  *
  * Delete (on dataDeleteAt): remove every client:{id}:* / inbox:{id}:* /
  * pacing:{id} / lead:{id}:* key via SCAN, keep the stub `client:{id}` with
- * state `deleted`, mainDomain (one trial per company, ever) and what the
- * 90-day win-back needs; learning:* is never touched (no personal data).
+ * state `deleted` and mainDomain; learning:* is never touched (no personal data).
  */
 
 import { kv } from '@vercel/kv';
@@ -24,7 +23,7 @@ import { addDays, dayKeyIn, ET } from '@/lib/time';
 import { patchTrial, recordLedger } from '@/lib/systems/dshared';
 
 /** Fields kept on the stub after deletion. */
-export const STUB_FIELDS = ['name', 'contactName', 'contactEmail', 'mainDomain', 'state', 'plan', 'createdAt', 'endedAt', 'winbackAt', 'winbackSentAt', 'deletedAt', 'stateChangedAt', 'updatedAt'];
+export const STUB_FIELDS = ['name', 'contactName', 'contactEmail', 'mainDomain', 'state', 'plan', 'createdAt', 'endedAt', 'deletedAt', 'stateChangedAt', 'updatedAt'];
 
 async function removeFromPool(clientId, emails) {
   const members = [];
@@ -32,10 +31,10 @@ async function removeFromPool(clientId, emails) {
   try { if (members.length) await kv.srem(K.warmupPool(), ...members); } catch {}
 }
 
-export async function retireClient(clientId, { now = new Date(), reason = 'day45' } = {}) {
+export async function retireClient(clientId, { now = new Date(), reason = 'stopped' } = {}) {
   const client = await getClient(clientId);
   if (!client) return { skipped: 'no client' };
-  if (['retired', 'deleted', 'converted'].includes(client.state)) return { skipped: client.state };
+  if (['retired', 'deleted'].includes(client.state)) return { skipped: client.state };
   const trial = await getTrial(clientId);
   const at = now.toISOString();
   const inboxes = await getInboxRecords(clientId);
@@ -45,16 +44,11 @@ export async function retireClient(clientId, { now = new Date(), reason = 'day45
   const endedAt = trial.endedAt || at;
   const endDay = dayKeyIn(ET, new Date(endedAt));
   const dataDeleteAt = addDays(endDay, await cfg(clientId, 'DELETE.afterEndDays'));
-  const winbackAt = addDays(endDay, await cfg(clientId, 'WINBACK.days'));
-  await patchTrial(clientId, { endedAt, endReason: trial.endReason || reason, dataDeleteAt, winbackAt });
-  await updateClient(clientId, { endedAt, winbackAt });
-  if (client.state === 'not_now') {
-    await setState(clientId, 'retired', reason);
-  } else {
-    // An early stop (Stop the trial / client quiet) ends from a running state:
-    // the state machine has no direct edge, so this is a logged forced move.
-    await setState(clientId, 'retired', `${reason} (early end from ${client.state})`, { force: true });
-  }
+  await patchTrial(clientId, { endedAt, endReason: trial.endReason || reason, dataDeleteAt });
+  await updateClient(clientId, { endedAt });
+  // A stop (their Stop button / client quiet) ends from sending or paused; any other state is a logged forced move.
+  if (['sending', 'paused'].includes(client.state)) await setState(clientId, 'retired', reason);
+  else await setState(clientId, 'retired', `${reason} (stopped from ${client.state})`, { force: true });
   await recordLedger(clientId, { retiredAt: at, endReason: trial.endReason || reason });
   await logEvent(clientId, 'wrapup', 'retired', { inboxes: inboxes.length, dataDeleteAt, reason });
   await cancelInboxesReminder(clientId, { inboxes: inboxes.map((i) => i.email) });

@@ -1,5 +1,5 @@
 /**
- * Hub view (docs/HUB-API.md): what the Aviance Hub's Trials section shows.
+ * Hub view (docs/HUB-API.md): what the Aviance Hub's client screens show.
  *
  * For every client it turns the stored state of the thirteen systems into
  * one card each (status + one line), and derives the owner's to-do list —
@@ -31,7 +31,6 @@ import { getState as leadfinderState } from '@/lib/systems/leadfinder';
 import { getApproval } from '@/lib/systems/approval';
 import { getPaceLog } from '@/lib/systems/pace';
 import { getRunState } from '@/lib/systems/stagec-common';
-import { listQueue, isPaidPlan } from '@/lib/systems/gatekeeper';
 import { overduePromises } from '@/lib/systems/health';
 import { jobRecords } from '@/lib/scheduler';
 import { loadAccounts } from '@/lib/smtp-accounts';
@@ -47,21 +46,19 @@ import { nextSendingDay } from '@/lib/systems/readiness';
 import { sharedWith as dashboardSharedWith, dashboardLink } from '@/lib/systems/clientdash';
 
 export const STATE_LABELS = {
-  applied: 'Applied', queued: 'In the queue', onboarding: 'Onboarding', awaiting_purchase: 'Waiting for you to buy',
+  applied: 'Booked a sales call', onboarding: 'Onboarding', awaiting_purchase: 'Waiting for you to buy',
   setup_check: 'Checking the setup', warming: 'Warming up', ready: 'Ready for Day 1', sending: 'Sending', paused: 'Paused',
-  extension: 'Free extension', deciding: 'Deciding', converted: 'Converted', not_now: 'Not now', retired: 'Retired',
+  retired: 'Stopped',
   deleted: 'Deleted', declined: 'Declined', closed_silent: 'Never finished onboarding',
 };
 
 export const STAGES = [
-  { key: 'intake', label: 'Applied & queued', states: ['applied', 'queued'] },
+  { key: 'intake', label: 'Waiting for the sales call', states: ['applied'] },
   { key: 'onboard', label: 'Onboarding', states: ['onboarding'] },
   { key: 'setup', label: 'Buying & setup', states: ['awaiting_purchase', 'setup_check'] },
   { key: 'build', label: 'Warm-up & build', states: ['warming', 'ready'] },
-  { key: 'live', label: 'Sending', states: ['sending', 'paused', 'extension'] },
-  { key: 'decide', label: 'Deciding', states: ['deciding'] },
-  { key: 'won', label: 'Converted', states: ['converted'] },
-  { key: 'closing', label: 'Not now & closing', states: ['not_now', 'retired'] },
+  { key: 'live', label: 'Sending', states: ['sending', 'paused'] },
+  { key: 'closing', label: 'Stopped & closing', states: ['retired'] },
   { key: 'ended', label: 'Ended', states: ['declined', 'closed_silent', 'deleted'] },
 ];
 
@@ -140,19 +137,14 @@ export function ownerAndEastern(iso) {
 export function stateLabelFor(ctx) {
   const { client, trial = {}, day, shopping = {}, now } = ctx;
   const base = STATE_LABELS[client.state] || client.state;
-  if (underReview(ctx)) return `${base} — waiting for your review`;
+  if (underReview(ctx)) return `${base} — waiting for the call`;
   switch (client.state) {
-    case 'queued': return client.queueExpectedDate ? `${base} — expected ${client.queueExpectedDate}` : base;
     case 'onboarding': return trial.onboardingSentAt ? `${base} — link sent ${ago(trial.onboardingSentAt, now)}` : base;
     case 'awaiting_purchase': return shopping.sentAt ? `${base} — ${ago(shopping.sentAt, now)}` : base;
     case 'warming': return trial.day1Date ? `${base} — Day ${day} (Day 1 on ${trial.day1Date})` : base;
     case 'ready': return trial.day1Date ? `${base} — Day 1 on ${trial.day1Date}` : base;
-    case 'sending': return day != null ? `${base} — Day ${day}${isPaidPlan(client.plan) ? '' : ' of 30'}` : base;
+    case 'sending': return day != null ? `${base} — Day ${day}` : base;
     case 'paused': return client.pausedReason ? `${base} — ${client.pausedReason}` : base;
-    case 'extension': return day != null ? `${base} — Day ${day}` : base;
-    case 'deciding': return trial.bonusExpiresAt ? `${base} — bonus until ${ownerAndEastern(trial.bonusExpiresAt)}` : base;
-    case 'converted': return client.paidAt ? `${base} — paid` : client.planStartedAt ? `${base} — invoice out` : base;
-    case 'not_now': return day != null ? `${base} — Day ${day}` : base;
     case 'retired': return trial.dataDeleteAt ? `${base} — data deleted on ${trial.dataDeleteAt}` : base;
     case 'declined': return client.declineReason ? `${base} — ${client.declineReason}` : base;
     default: return base;
@@ -161,7 +153,7 @@ export function stateLabelFor(ctx) {
 
 // ─── the thirteen systems ─────────────────────────────────────────────────────
 
-const STATE_INDEX = ['applied', 'queued', 'onboarding', 'awaiting_purchase', 'setup_check', 'warming', 'ready', 'sending', 'paused', 'extension', 'deciding', 'converted', 'not_now', 'retired', 'deleted'];
+const STATE_INDEX = ['applied', 'onboarding', 'awaiting_purchase', 'setup_check', 'warming', 'ready', 'sending', 'paused', 'retired', 'deleted'];
 const past = (state, target) => STATE_INDEX.indexOf(state) > STATE_INDEX.indexOf(target);
 const ENDED = new Set(['declined', 'closed_silent']);
 
@@ -172,9 +164,8 @@ export function systemsFor(ctx) {
 
   // 1. Intake
   const app = ctx.application;
-  if (underReview(ctx)) out.push(sys('intake', 'waiting', `${app.source === 'website' ? 'Website application' : 'Application'} — waiting for your review${app.fit?.summary ? ` · ${app.fit.summary}` : ''}`, (app.fit?.lines || []).filter((l) => l.status !== 'pass').map((l) => `${l.label}: ${l.status} — ${l.note}`)));
-  else if (st === 'applied') out.push(sys('intake', 'working', 'Application received · fit check running'));
-  else if (st === 'queued') out.push(sys('intake', 'waiting', `In the queue${client.queueExpectedDate ? ` · expected ${client.queueExpectedDate}` : ''}`));
+  if (underReview(ctx)) out.push(sys('intake', 'waiting', `Booked a sales call — Won on the booking starts onboarding${app.fit?.summary ? ` · ${app.fit.summary}` : ''}`, (app.fit?.lines || []).filter((l) => l.status !== 'pass').map((l) => `${l.label}: ${l.status} — ${l.note}`)));
+  else if (st === 'applied') out.push(sys('intake', 'working', 'Booked a sales call · research running'));
   else if (st === 'declined') out.push(sys('intake', 'off', `Declined${client.declineReason ? ` · ${client.declineReason}` : ''}`));
   else if (st === 'closed_silent') out.push(sys('intake', 'off', 'Never finished onboarding'));
   else if (st === 'onboarding') out.push(sys('intake', 'waiting', `Onboarding link sent ${ago(trial.onboardingSentAt, now) || '—'} · waiting for the form and agreement`, [trial.onboardingRemindersSent ? `${trial.onboardingRemindersSent} reminder(s) sent` : null, ctx.onboardCall ? `Onboarding call: ${ctx.onboardCall.label}` : null]));
@@ -261,11 +252,11 @@ export function systemsFor(ctx) {
   else if (truthy(client.emergencyActive)) out.push(sys('sending', 'blocked', 'Emergency stop — deliverability problem; the machine is re-verifying and will resume on 3 green days', [sendLine]));
   else if (client.sendHold) out.push(sys('sending', 'blocked', `On hold: ${client.sendHold}`, [sendLine]));
   else if (st === 'paused') out.push(sys('sending', 'waiting', `Paused: ${client.pausedReason || 'by you'}`, [sendLine]));
-  else if (['sending', 'extension', 'converted'].includes(st)) {
+  else if (['sending'].includes(st)) {
     const smoke = runState.smokeReachedAt && !runState.smokeClearedAt;
     out.push(sys('sending', smoke ? 'working' : 'ok', smoke ? `First-50 check: ${runState.smokeFailedAt ? 'bounce rate too high — emergency' : 'waiting for the bounce scan'}` : sendLine, smoke ? [sendLine] : [truthy(client.emergencyHalved) ? 'caps halved after an emergency' : null]));
   } else if (st === 'ready') out.push(sys('sending', 'waiting', `Ready — first send on ${trial.day1Date || 'the next US weekday'}`));
-  else if (['deciding', 'not_now', 'retired', 'deleted'].includes(st)) out.push(sys('sending', 'off', `Finished · ${sendLine}`));
+  else if (['retired', 'deleted'].includes(st)) out.push(sys('sending', 'off', `Finished · ${sendLine}`));
   else out.push(sys('sending', 'off', 'Starts on Day 1'));
 
   // 10. Replies
@@ -287,35 +278,27 @@ export function systemsFor(ctx) {
   else if (untapped.length) out.push(sys('calls', 'waiting', `${untapped.length} call${untapped.length === 1 ? '' : 's'} waiting for the client's tap · ${callLine}`));
   else out.push(sys('calls', 'ok', callLine));
 
-  // 12. Reports & decision
+  // 12. Friday updates & invoice
   const fridays = reports.filter((r) => String(r.name).startsWith('friday')).length;
   const blockedReports = reports.filter((r) => r.blockedReason);
-  const day29 = reports.find((r) => ['day29', 'trial_report', 'final'].includes(r.name));
   const bits = [`${fridays} Friday update${fridays === 1 ? '' : 's'}`];
-  if (day29) bits.push(`Day 29 report ${day29.renderedAt ? 'sent' : 'blocked'}`);
-  if (trial.decisionSentAt) bits.push(`decision page sent ${dateOf(trial.decisionSentAt)}`);
-  if (trial.decision && trial.decision !== 'none') bits.push(`decision: ${trial.decision}`);
   if (invoice?.issuedAt) bits.push(invoice.paidAt ? `invoice paid ${dateOf(invoice.paidAt)}` : `invoice unpaid since ${dateOf(invoice.issuedAt)}`);
   if (blockedReports.length) out.push(sys('reports', 'blocked', `${blockedReports.length} report(s) blocked — a counter is missing`, blockedReports.map((r) => `${r.name}: ${r.blockedReason}`)));
-  else if (!past(st, 'setup_check')) out.push(sys('reports', 'off', 'Friday updates start at Day −14'));
-  else out.push(sys('reports', trial.talkRequestedAt ? 'waiting' : 'ok', bits.join(' · '), [trial.talkRequestedAt ? `Client pressed "Talk to someone" ${ago(trial.talkRequestedAt, now)}` : null]));
+  else if (!past(st, 'setup_check')) out.push(sys('reports', 'off', 'Friday updates start once setup begins'));
+  else out.push(sys('reports', 'ok', bits.join(' · ')));
 
   // 13. Close-out
-  if (['not_now', 'retired', 'deleted', 'converted', 'deciding'].includes(st) || trial.endedAt) {
+  if (['retired', 'deleted'].includes(st) || trial.endedAt) {
     const lines = [];
     if (trial.retireAt && !domain.retiredAt) lines.push(`retires on ${trial.retireAt}`);
     if (domain.retiredAt) lines.push(`domain retired ${dateOf(domain.retiredAt)}`);
     if (domain.retiredAt && !trial.inboxesCancelledAt) lines.push('inboxes NOT cancelled yet');
     if (trial.inboxesCancelledAt) lines.push(`inboxes cancelled ${dateOf(trial.inboxesCancelledAt)}`);
-    if (trial.reviewCapturedAt) lines.push('review captured');
-    if (trial.exitReason) lines.push(`exit reason: "${String(trial.exitReason).slice(0, 80)}"`);
     if (trial.dataDeleteAt) lines.push(`data deleted on ${trial.dataDeleteAt}`);
-    if (client.winbackAt || trial.winbackAt) lines.push(`win-back ${client.winbackAt || trial.winbackAt}`);
-    if (st === 'converted') lines.unshift(`plan ${client.plan || ''}${client.paidAt ? ' · paid' : ' · unpaid'}`);
-    const status = domain.retiredAt && !trial.inboxesCancelledAt ? 'waiting' : st === 'deciding' ? 'working' : 'ok';
-    out.push(sys('closing', status, lines.join(' · ') || (st === 'deciding' ? 'Waiting for the client to decide' : 'Closing steps run on schedule')));
-  } else if (ENDED.has(st)) out.push(sys('closing', 'off', 'Ended before the trial started'));
-  else out.push(sys('closing', 'off', 'Runs after Day 30'));
+    const status = domain.retiredAt && !trial.inboxesCancelledAt ? 'waiting' : 'ok';
+    out.push(sys('closing', status, lines.join(' · ') || 'Closing steps run on schedule'));
+  } else if (ENDED.has(st)) out.push(sys('closing', 'off', 'Ended before sending started'));
+  else out.push(sys('closing', 'off', 'Runs only if they stop'));
 
   return SYSTEM_ORDER.map((k) => out.find((s) => s.key === k)).filter(Boolean);
 }
@@ -323,8 +306,8 @@ export function systemsFor(ctx) {
 // ─── the owner's to-do list ───────────────────────────────────────────────────
 
 const api = (path, body, confirm = null) => ({ type: 'api', method: 'POST', path, body, ...(confirm ? { confirm } : {}) });
-/** States in which a "hasn't opened" to-do no longer matters (the trial is over). */
-const UNOPENED_OFF = new Set(['declined', 'closed_silent', 'deleted', 'retired', 'not_now', 'converted']);
+/** States in which a "hasn't opened" to-do no longer matters (the client is gone). */
+const UNOPENED_OFF = new Set(['declined', 'closed_silent', 'deleted', 'retired']);
 const view = (v, clientId, section = null) => ({ type: 'view', view: v, clientId, ...(section ? { section } : {}) });
 const mc = (path) => ({ type: 'mc', path });
 
@@ -335,13 +318,7 @@ export function todosFor(ctx) {
   const t = [];
   const push = (key, text, detail, urgent, since, action) => t.push({ id: `${key}:${id}`, clientId: id, clientName: client.name || id, text, detail: detail || '', urgent: Boolean(urgent), since: since || null, action });
 
-  if (underReview(ctx)) {
-    const a = ctx.application;
-    const since = a.receivedAt || client.createdAt;
-    push('review', `Review ${client.name || id}'s trial application`,
-      `${a.source === 'website' ? 'From the website' : 'Application'} ${ago(since, now)}${ctx.fitScore ? ` · ${badgeText(ctx.fitScore)}` : ''}${a.fit?.summary ? ` · ${a.fit.summary.charAt(0).toLowerCase()}${a.fit.summary.slice(1)}` : ''}`,
-      Boolean(since) && now.getTime() - Date.parse(since) > 12 * 3600e3, since, view('detail', id, 'application'));
-  }
+  // A record held for its sales call has no to-do of its own: the booking's to-do (Won / Lost) covers it.
   // Onboarding call (docs/ONBOARD-CALL.md): a reply to answer, a booking gone overdue, a call to mark.
   const oc = ctx.onboardCall;
   if (oc) {
@@ -409,9 +386,6 @@ export function todosFor(ctx) {
       push(`dispute-${b.id}`, `Decide the dispute on ${b.leadEmail || 'a call'}`, `Reason given: ${b.disputeReason || 'none'} · auto-upheld after 48 h`, false, b.disputedAt, view('detail', id, 'calls'));
     }
   }
-  if (trial.talkRequestedAt && st === 'deciding') {
-    push('talk', `Call ${client.contactName || client.name} — they pressed "Talk to someone"`, `${ago(trial.talkRequestedAt, now)} · ${client.contactEmail || ''}`, true, trial.talkRequestedAt, view('detail', id));
-  }
   if (client.legalHoldAt) {
     // Who wrote, when (the owner's clock) and their first line — never the reply's id.
     const rep = (ctx.replies || []).find((x) => x && x.id === client.legalHoldReply) || null;
@@ -428,7 +402,7 @@ export function todosFor(ctx) {
     push('invoice', `Mark the month-one invoice paid when the money lands${invoice.number ? ` (${invoice.number})` : ''}`, `Issued ${dateOf(invoice.issuedAt)}${has(invoice.amount) ? ` · $${Number(invoice.amount).toLocaleString('en-US')}` : ''}`, false, invoice.issuedAt, api(`/api/mc/clients/${id}`, { action: 'markPaid' }, 'Mark this invoice as paid?'));
   }
   if (domain.retiredAt && !trial.inboxesCancelledAt) {
-    push('cancel-inboxes', 'Cancel the trial inboxes at the provider, then tick done', `Domain retired ${dateOf(domain.retiredAt)} · reminded daily until done`, true, domain.retiredAt, api(`/api/mc/clients/${id}`, { action: 'inboxesCancelled' }, 'Confirm the inboxes are cancelled at the provider?'));
+    push('cancel-inboxes', 'Cancel their inboxes at the provider, then tick done', `Domain retired ${dateOf(domain.retiredAt)} · reminded daily until done`, true, domain.retiredAt, api(`/api/mc/clients/${id}`, { action: 'inboxesCancelled' }, 'Confirm the inboxes are cancelled at the provider?'));
   }
   for (const p of overduePromises(promises, now)) {
     push(`promise-${p.id}`, `Promise overdue: ${p.text}`, `Due ${String(p.dueAt).slice(0, 10)}`, false, p.dueAt, api(`/api/mc/clients/${id}`, { action: 'completePromise', promiseId: p.id }, 'Mark this promise done?'));
@@ -498,8 +472,8 @@ const ALERT_NEXT = {
   autobuy_problem: 'Fix the inbox setup problem named in the alert, then mark it as seen',
   emergency: 'Read the deliverability alert and mark it as seen',
   hot_lead_failed: 'Send the hot lead to {person} by hand, then mark the alert as seen',
-  paused_quiet: 'Write to {person} — the trial is paused until they answer',
-  trial_ended_quiet: 'Write to {person} — the trial ended because they went quiet',
+  paused_quiet: 'Write to {person} — sending is paused until they answer',
+  trial_ended_quiet: 'Write to {person} — sending stopped because they went quiet',
   client_email_failed: 'Reach {person} another way — an email to them could not be sent — then mark the alert as seen',
   client_email_bounced: "Check {person}'s email address — an email to them bounced — then mark the alert as seen",
 };
@@ -526,10 +500,7 @@ function simpleBase(ctx) {
 
   switch (st) {
     case 'applied':
-      if (underReview(ctx)) return r('new', 'New application — read it and say yes or no', 'Open it and press “Say yes” or “Say no”', true, ctx.application.receivedAt);
-      return r('new', 'New application — being checked', 'Nothing for you yet');
-    case 'queued':
-      return r('queued', 'In the queue — waiting for a free trial slot', `Nothing for you: they start when a slot opens${client.queueExpectedDate ? ` (about ${formatDay(client.queueExpectedDate)})` : ''}`, false, client.queuedAt);
+      return r('new', 'Booked a sales call — not a client yet', 'Press Won on their booking after the call to start onboarding', false, ctx.application?.receivedAt);
     case 'onboarding':
       return onboardingSimple(ctx, r);
     case 'awaiting_purchase':
@@ -549,22 +520,11 @@ function simpleBase(ctx) {
       if (launchDone(ctx.launchCall)) return r('warming_up', `Launch call done — first emails${on(trial.day1Date)}`, 'Nothing for you');
       return r('warming_up', `Ready — first emails${on(trial.day1Date)}`, 'Nothing for you');
     case 'sending':
-      // a paying client has no Day 30: just the sending day
-      if (isPaidPlan(ctx.client.plan)) return heldSimple(ctx, r) || r('sending', `Sending — day ${ctx.day ?? '—'}${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, null);
-      return heldSimple(ctx, r) || r('sending', `Sending — day ${ctx.day ?? '—'} of 30${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, ctx.day ?? null);
-    case 'extension':
-      return heldSimple(ctx, r) || r('sending', `Free extension — day ${ctx.day ?? '—'}${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, ctx.day ?? null);
+      return heldSimple(ctx, r) || r('sending', `Sending — day ${ctx.day ?? '—'}${calls}`, 'Nothing for you: replies and booked calls come to you as alerts', false, since0, ctx.day ?? null);
     case 'paused':
       return r('sending', `Paused — ${client.pausedReason || 'by you'}`, 'No emails go out until it is cleared', false, since0, ctx.day ?? null);
-    case 'deciding': {
-      // Day 30 → their click: its own step (the hub draws it at ⑤ like `finished`), plain words on who decides.
-      const who = firstOf(client.contactName);
-      return r('deciding', 'Trial finished — waiting for their decision', trial.talkRequestedAt ? `Call ${client.contactName || 'them'} — they asked to talk` : `Nothing. ${who ? `${who} chooses` : 'They choose'} on the decision page.`, Boolean(trial.talkRequestedAt));
-    }
-    case 'converted':
-      return r('finished', 'Finished — became a client', client.paidAt ? 'Nothing for you' : 'Mark the invoice paid when the money lands');
-    case 'not_now': case 'retired': case 'deleted':
-      return r('finished', 'Finished — not a client for now', 'Nothing for you');
+    case 'retired': case 'deleted':
+      return r('finished', 'Stopped — no longer a client', 'Nothing for you');
     case 'declined':
       return r('declined', 'Declined', 'Nothing for you');
     case 'closed_silent':
@@ -750,7 +710,7 @@ export async function hubRow(client, { alerts, now = new Date(), onboard = null,
 }
 
 export async function hubBoard({ now = new Date() } = {}) {
-  const [board, clients, queue] = await Promise.all([boardData(now, { includeDemo: true }), getAllClients(null, { includeDemo: true }), listQueue().catch(() => ({ rows: [] }))]);
+  const [board, clients] = await Promise.all([boardData(now, { includeDemo: true }), getAllClients(null, { includeDemo: true })]);
   const alerts = await getAlertLog(500);
   // ONBOARDCALL (+ LAUNCH) settings once per board (one read), only when some trial has a call.
   const onboard = clients.some((c) => c.onboardCallSentAt || c.launchCallSentAt) ? await onboardSettings().catch(() => null) : null;
@@ -768,19 +728,19 @@ export async function hubBoard({ now = new Date() } = {}) {
   const others = ['aviance', '_test'].map((id) => byId.get(id)).filter(Boolean).map(strip);
   const todos = oneHelpersTodo(rows.filter((r) => r.id !== '_test').flatMap((r) => r.todo));
   const inquiries = await inquirySummary().catch(() => null);
-  // A request that became a paid application is on that application's own to-do (Say yes / Say no).
-  // A booked call still ahead is a calm reminder; once its time has passed (or with no time) it is urgent: say how it went.
+  // A booked call still ahead is a calm reminder; once its time has passed (or with no time) it is urgent: say how it went
+  // (Won starts their onboarding).
   const nowMs = Date.now();
-  for (const q of (inquiries?.latest || []).filter((x) => x.status === 'new' && !x.clientId)) {
+  for (const q of (inquiries?.latest || []).filter((x) => x.status === 'new')) {
     const at = Date.parse(q.slotStart || '');
     const ahead = Number.isFinite(at) && at + 20 * 60e3 > nowMs;
     const passed = Number.isFinite(at) && !ahead;
     todos.push({ id: `inquiry:${q.id}`, clientId: null, clientName: q.company,
-      text: ahead ? `Sales call with ${q.company} is booked` : passed ? `How did the call with ${q.company} go? Move them to the next stage` : `New plan inquiry from ${q.company} — call them back`,
+      text: ahead ? `Sales call with ${q.company} is booked` : passed ? `How did the call with ${q.company} go? Mark it Won, Lost or the next stage` : `New plan inquiry from ${q.company} — call them back`,
       detail: `${q.name}${q.plan ? ` · ${q.plan[0].toUpperCase()}${q.plan.slice(1)}` : ''}${q.whenHost ? ` · ${ahead ? '' : 'booked for '}${q.whenHost}` : ''}`,
       urgent: !ahead, since: q.at, action: { type: 'view', view: 'inquiry', inquiryId: q.id } });
   }
-  todos.push(...(await machineTodos(board, queue, { cheapInboxes: ciOn })));
+  todos.push(...(await machineTodos(board, { cheapInboxes: ciOn })));
   todos.sort((a, b) => Number(b.urgent) - Number(a.urgent) || String(a.since || '').localeCompare(String(b.since || '')));
   const migrations = (await kv.hgetall(K.migrations()).catch(() => ({}))) || {};
   return {
@@ -788,7 +748,7 @@ export async function hubBoard({ now = new Date() } = {}) {
       ok: true,
       baseUrl: baseUrl(),
       heartbeat: board.heartbeat,
-      activeTrials: board.activeTrials, maxActiveTrials: board.maxActiveTrials, extensions: board.extensions,
+      activeClients: board.activeClients,
       openAlerts: board.openAlerts,
       usage: board.usage,
       setup: {
@@ -799,7 +759,6 @@ export async function hubBoard({ now = new Date() } = {}) {
         healthchecks: Boolean(process.env.HC_PING_URL),
         ownerInbox: Boolean(process.env.OWNER_INBOX) || (await loadAccounts().catch(() => [])).length > 0,
       },
-      queue: (queue.rows || []).map((q, i) => ({ id: q.id, name: q.name, position: i + 1, expectedDate: q.expectedDate || null })),
       others,
     },
     stages,
@@ -818,13 +777,13 @@ function oneHelpersTodo(todos) {
   return [...todos.filter((t) => !t.id.startsWith('warmup-helpers:')), one];
 }
 
-/** Machine-level to-dos (no client): setup still missing, first-time setup, queue with a free slot. */
-async function machineTodos(board, queue, { cheapInboxes = false } = {}) {
+/** Machine-level to-dos (no client): setup still missing, first-time setup. */
+async function machineTodos(board, { cheapInboxes = false } = {}) {
   const t = [];
   // A CheapInboxes purchase no trial claims (docs/AUTO-BUY.md §3): he picks the trial in Settings.
   if (cheapInboxes) {
     for (const u of unmatchedOf(await readDomainIndex().catch(() => ({})))) {
-      t.push({ id: `unmatched:${u.domain}`, clientId: null, clientName: 'CheapInboxes', text: `You bought ${u.domain} — which trial is it for? Pick in Settings`,
+      t.push({ id: `unmatched:${u.domain}`, clientId: null, clientName: 'CheapInboxes', text: `You bought ${u.domain} — which client is it for? Pick in Settings`,
         detail: `${u.mailboxes != null ? `${u.mailboxes} inbox${u.mailboxes === 1 ? '' : 'es'} · ` : ''}bought ${u.boughtAt ? ago(u.boughtAt, new Date()) : 'recently'} · we connect it by ourselves once you pick`,
         urgent: true, since: u.boughtAt, action: { type: 'view', view: 'settings', section: 'inboxes', domain: u.domain } });
     }
@@ -840,10 +799,6 @@ async function machineTodos(board, queue, { cheapInboxes = false } = {}) {
   const migrations = (await kv.hgetall(K.migrations()).catch(() => ({}))) || {};
   if (!migrations.phase1) t.push({ id: 'machine-migrate', clientId: null, clientName: 'Machine', text: 'Run first-time setup (moves the Aviance inboxes into the database)', detail: '', urgent: false, since: null, action: api('/api/mc/setup', { action: 'migrate' }) });
   if (board.heartbeat.ageSec != null && board.heartbeat.ageSec > 900) t.push({ id: 'machine-heartbeat', clientId: null, clientName: 'Machine', text: `No heartbeat for ${Math.round(board.heartbeat.ageSec / 60)} minutes — check cron-job.org`, detail: '', urgent: true, since: board.heartbeat.lastTickAt, action: { type: 'none' } });
-  if ((queue.rows || []).length && board.activeTrials < board.maxActiveTrials && !board.extensions) {
-    const q = queue.rows[0];
-    t.push({ id: `promote-${q.id}`, clientId: q.id, clientName: q.name || q.id, text: `A trial slot is free — promote ${q.name || q.id} from the queue`, detail: `Position 1 · expected ${q.expectedDate || '—'}`, urgent: false, since: q.queuedAt || null, action: api('/api/mc/queue', { action: 'promote', clientId: q.id }, `Start onboarding for ${q.name || q.id} now?`) });
-  }
   return t;
 }
 

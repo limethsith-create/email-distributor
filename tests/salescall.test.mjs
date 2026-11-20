@@ -123,7 +123,8 @@ test('no reminders once the owner moved them on, and a booking made the same day
 
 test('stages: Calendar buttons move the inquiry, and Inquiries moves the Calendar', async () => {
   assert.deepEqual(STATUSES, ['new', 'held', 'no_show', 'contacted', 'proposal', 'won', 'lost']);
-  const r = await saveInquiry(site(), { now: NOW });
+  // Won needs their website (it makes them a client).
+  const r = await saveInquiry(site({ website: 'stoneroofing.com' }), { now: NOW });
   const q = await getInquiry(r.id);
   await calendarAction({ action: 'held', id: q.meetingId }, { now: new Date('2026-11-18T15:20:00.000Z') });
   assert.equal((await getInquiry(r.id)).status, 'held');

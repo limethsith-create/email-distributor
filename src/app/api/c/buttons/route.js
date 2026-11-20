@@ -1,8 +1,8 @@
 /**
  * Client buttons (SPEC §8.8, §7.3): one signed token (`buttons`, 14 days)
- * behind three pages — "You emailed my customer", "Stop the trial", "I'm away".
+ * behind two pages — "You emailed my customer" and "I'm away".
  *   GET  ?t=                → { clientName, away }
- *   POST { t, action, ... } → action = customer | stop | away
+ *   POST { t, action, ... } → action = customer | away
  */
 
 import { readToken } from '@/lib/pagetokens';

@@ -73,7 +73,7 @@ const TRIAL = { signedDay: '2026-10-06', day1Date: '2026-10-21', day30Date: '202
 async function warming({ warmupDay = 10, leads = 220, now = FRI, trial = TRIAL, profile = PROFILE } = {}) {
   // No helper accounts in this test: the circle rule is off, so the warm-up card reads "Warming up — day N".
   await kv.hset('system:config', { 'WARMUP.minPool': JSON.stringify(0) });
-  await createClient(ID, { state: 'warming', name: 'eCreek IT', contactName: 'Sam Test', contactEmail: SAM, mainDomain: 'ecreek.com', website: 'https://ecreek.com', onboardCallSentAt: '2026-10-01T14:00:00Z' });
+  await createClient(ID, { state: 'warming', name: 'eCreek IT', contactName: 'Sam Test', contactEmail: SAM, mainDomain: 'ecreek.com', website: 'https://ecreek.com', onboardCallSentAt: '2026-10-01T14:00:00Z', createdAt: '2026-10-01T12:00:00Z' }); // a fixed date: messages are read only after it
   await kv.hset(K.onboardCall(ID), { sentAt: '2026-10-01T14:00:00Z', contactEmail: SAM, heldAt: '2026-10-06T16:00:00Z', theirZone: 'America/New_York' });
   await kv.hset(K.profile(ID), profile);
   await kv.hset(K.trial(ID), trial);
@@ -116,7 +116,7 @@ test('next_steps goes once — after the onboarding call is held, with the Day 1
   await markHeld(ID, { now: new Date('2026-10-06T15:40:00Z') });
   const plan = toSam();
   assert.equal(plan.length, 1, 'one email on Call done');
-  assert.equal(plan[0].subject, 'Your trial — what happens now');
+  assert.equal(plan[0].subject, 'What happens now');
   assert.match(plan[0].text, /^Hi Sam,\n\nGood to talk with you today/);
   assert.match(plan[0].text, /30-minute launch call/);
   assert.match(plan[0].text, /The first emails go out in about three weeks\./);

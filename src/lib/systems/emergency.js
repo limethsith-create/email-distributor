@@ -235,7 +235,7 @@ async function step4Burned(clientId, client, em, now) {
 
 async function step5Resume(clientId, client, em, now) {
   if (client.state === 'paused' && ['emergency'].includes(client.pausedReason)) {
-    const to = ['extension', 'sending'].includes(em.pausedFrom) ? em.pausedFrom : 'sending';
+    const to = 'sending';
     await setState(clientId, to, 'emergency: resumed at half volume');
   }
   await kv.hset(K.client(clientId), { emergencyActive: '0', emergencyHalved: '1', pausedReason: client.pausedReason === 'emergency' ? '' : (client.pausedReason || '') });

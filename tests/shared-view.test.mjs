@@ -9,7 +9,6 @@ import { K } from '@/lib/db/keys';
 import { saveLead } from '@/lib/db/leads';
 import { threadIdOf } from '@/lib/systems/maillog';
 import { dashboardLink, resetRateLimit } from '@/lib/systems/clientdash';
-import { demoWriteBlocked } from '@/middleware';
 import { sim, clock, et, installJourney, call } from './journey-world.mjs';
 
 const S = 'demo-summit-roofing';
@@ -95,7 +94,7 @@ test('the shared view of a paying client: the five tabs’ data, and nothing on 
   assert.equal(v.last30.days.at(-1), '2026-12-09');
   assert.deepEqual([v.last30.sent.at(-2), v.last30.sent.at(-1), v.last30.replies.at(-2)], [25, 12, 2]);
   assert.deepEqual(v.last30.totals, { sent: 37, replies: 2, booked: 0 });
-  assert.deepEqual(v.journey.steps.map((s) => s.label), ['Applied', 'Onboarding call', 'Setting up', 'Sending emails', 'Done']);
+  assert.deepEqual(v.journey.steps.map((s) => s.label), ['Call booked', 'Onboarding call', 'Setting up', 'Sending emails', 'Done']);
   assert.equal(v.journey.current, 3);
   assert.equal(v.journey.status, 'Sending emails.');
   assert.equal(v.status, v.journey.status);
@@ -197,17 +196,16 @@ test('the hub gets dashboardAccess.url (owner only), and the journey follows the
   assert.ok(Array.isArray(emp.json.dashboardAccess.sharedWith));
 
   const token = tokenOf(h.json.dashboardAccess.url);
-  const steps = { applied: 0, queued: 0, onboarding: 1, awaiting_purchase: 2, warming: 2, ready: 2, sending: 3, paused: 3, converted: 3, deciding: 4, retired: 4 };
+  const steps = { applied: 0, onboarding: 1, awaiting_purchase: 2, warming: 2, ready: 2, sending: 3, paused: 3, retired: 4 };
   for (const [state, want] of Object.entries(steps)) {
-    await kv.hset(K.client(id), { state, plan: 'trial' });
+    await kv.hset(K.client(id), { state, plan: 'starter' });
     const v = (await page(token)).json;
     assert.equal(v.journey.current, want, state);
     assert.ok(v.status && !/answer them|mark it|press|alert|to-do/i.test(v.status), `${state}: plain words for the client (${v.status})`);
   }
   // The sentences the hub shows too.
   const line = async (fields, trial = null) => { await kv.hset(K.client(id), fields); if (trial) await kv.hset(K.trial(id), trial); return (await page(token)).json.status; };
-  assert.equal(await line({ state: 'applied' }), 'Application received — it is being reviewed.');
-  assert.equal(await line({ state: 'queued' }), 'Accepted — waiting for a start date.');
+  assert.equal(await line({ state: 'applied' }), 'Your call with us is booked.');
   await kv.hdel(K.onboardCall(id), 'bookedFor', 'heldAt');
   assert.equal(await line({ state: 'onboarding' }), 'Accepted — next is the onboarding call.');
   await kv.hset(K.onboardCall(id), { bookedFor: '2026-12-10T15:00:00.000Z' });
@@ -217,16 +215,13 @@ test('the hub gets dashboardAccess.url (owner only), and the journey follows the
   await kv.hset(K.launchCall(id), { sentAt: '2026-12-01T15:00:00.000Z', bookedFor: '2026-12-12T16:30:00.000Z' });
   assert.equal(await line({ state: 'ready' }), 'Setting up. The launch call is booked for Sat, Dec 12, 11:30 AM ET.');
   assert.equal(await line({ state: 'warming' }, { day1Date: '2026-12-14' }), 'Warming up the new inboxes, so the emails land in the inbox and not in spam. Emails start on Monday, December 14.');
-  assert.equal(await line({ state: 'sending', plan: 'trial' }, { day1Date: '2026-12-01' }), 'Sending emails — day 9 of 30.');
   assert.equal(await line({ state: 'paused' }), 'Sending is paused for now.');
-  assert.equal(await line({ state: 'deciding' }), 'The 30 days are done. Next: choosing whether to go on.');
   assert.equal(await line({ state: 'declined' }), 'Not going ahead.');
-  assert.equal(await line({ state: 'retired' }), 'The trial is finished.');
-  assert.equal(await line({ state: 'converted', plan: 'growth' }), 'On the Growth plan.');
-  assert.equal(await line({ state: 'sending', plan: 'growth' }), 'Sending emails.');
+  assert.equal(await line({ state: 'retired' }), 'Sending has stopped.');
+  assert.equal(await line({ state: 'sending', plan: 'growth' }, { day1Date: '2026-12-01' }), 'Sending emails.');
   await kv.hset(K.client(id), { state: 'sending', plan: 'trial' });
   const v = (await page(token)).json;
-  assert.equal(v.plan, '30-day trial');
+  assert.equal(v.plan, 'Starter plan');
   assert.deepEqual(v.calls.ours.map((c) => [c.kind, c.status]), [['onboarding', 'booked'], ['launch', 'booked']]);
   assert.equal(v.sentSince, '2026-12-01');
   // Prospect calls: moved, being checked, cancelled.
@@ -234,60 +229,3 @@ test('the hub gets dashboardAccess.url (owner only), and the journey follows the
   assert.deepEqual((await page(token)).json.calls.prospects.map((c) => c.status), ['booked', 'cancelled', 'checking', 'moved', 'showed']);
 });
 
-test('the Test run clients: the page works, shareDashboard returns the link and sends nothing', { timeout: 120_000 }, async () => {
-  __reset();
-  resetRateLimit();
-  installJourney({ seed: 7 });
-  process.env.ENC_KEY = process.env.ENC_KEY || Buffer.alloc(32, 7).toString('base64');
-  clock.set(et('2026-12-09', '10:00'));
-  assert.equal((await call('api/mc/demo/route', 'POST', { path: '/api/mc/demo', body: { action: 'load' } })).status, 200);
-  const mark = sim.sent.length;
-
-  // The middleware lets only this through on a demo client.
-  assert.equal(demoWriteBlocked('POST', `/api/mc/clients/${S}`, 'shareDashboard'), false);
-  assert.equal(demoWriteBlocked('POST', `/api/mc/clients/${S}`, 'dashboardLink'), false);
-  assert.equal(demoWriteBlocked('POST', `/api/mc/clients/${S}`, 'unshareDashboard'), true);
-  assert.equal(demoWriteBlocked('POST', `/api/mc/clients/${S}`, 'setState'), true);
-  assert.equal(demoWriteBlocked('POST', `/api/mc/clients/${S}`), true);
-  assert.equal(demoWriteBlocked('POST', `/api/mc/clients/${S}/messages`, 'shareDashboard'), true);
-
-  const r = await act(S, { action: 'shareDashboard', email: 'someone@example.org' });
-  assert.equal(r.status, 200, JSON.stringify(r.json));
-  assert.deepEqual({ ...r.json, url: undefined }, { ok: true, url: undefined, sent: false, demo: true });
-  assert.match(r.json.url, /\/c\/[A-Za-z0-9_-]{20,}\/dashboard$/);
-  assert.equal(sim.sent.length, mark, 'no email');
-  assert.equal(await kv.hget(K.trial(S), 'dashboardSharedWith'), null, 'nobody recorded');
-  assert.equal((await act(S, { action: 'shareDashboard', email: 'nope' })).status, 400);
-  assert.equal((await act(S, { action: 'unshareDashboard' })).status, 409, 'every other button stays refused');
-  assert.equal((await act(S, { action: 'dashboardLink', fresh: true })).status, 409);
-  assert.equal((await act(S, { action: 'dashboardLink' })).json.url, r.json.url);
-
-  for (const id of [S, L]) {
-    const url = id === S ? r.json.url : (await hub(id)).json.dashboardAccess.url;
-    const token = tokenOf(url);
-    const v = await page(token);
-    assert.equal(v.status, 200, JSON.stringify(v.json));
-    assert.equal(v.json.demo, true);
-    assert.ok(v.json.five.sent > 0, `${id}: sending shows`);
-    assert.equal(v.json.journey.current, 3);
-    assertClean(v.json, `${id} dashboard`);
-    const e = await emails(token);
-    assert.equal(e.status, 200);
-    assert.ok(e.json.total > 0 && e.json.sent.every((x) => x.threadId !== 'client'));
-    assertClean(e.json, `${id} emails`);
-    const t = await threads(token);
-    assert.ok(t.json.threads.length > 0);
-    assertClean(t.json, `${id} threads`);
-    for (const x of t.json.threads.slice(0, 5)) {
-      const th = await thread(token, x.threadId);
-      assert.equal(th.status, 200);
-      assertClean(th.json, `${id} thread`);
-    }
-    const c = await thread(token, 'client');
-    if (c.status === 200) assertClean(c.json, `${id} client thread`);
-  }
-  assert.equal(sim.sent.length, mark, 'nothing was sent');
-  // Remove clears the preview links' lookups too.
-  assert.equal((await call('api/mc/demo/route', 'POST', { path: '/api/mc/demo', body: { action: 'remove' } })).status, 200);
-  assert.equal((await page(tokenOf(r.json.url))).status, 404);
-});

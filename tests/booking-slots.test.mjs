@@ -1,6 +1,6 @@
 // The website's "Book a call": the free/busy times it reads (GET /api/booking/availability), and the server
 // refusing a time that is taken or outside the call hours (POST /api/inquiry → saveInquiry → bookSalesCall strict),
-// with the slow work (paid application, research, owner alerts) after the answer.
+// with the slow work (the record held for the call, research, owner alerts) after the answer.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { __reset, kv } from '@vercel/kv';
@@ -196,16 +196,16 @@ test('POST /api/inquiry answers once the booking is saved and emailed; the appli
   assert.equal(sent.length, 1);
   const q = await getInquiry(j.id);
   assert.ok(q.meetingId, 'the call is in the Calendar before the answer');
-  assert.equal(q.clientId, undefined, 'no paid application yet');
+  assert.equal(q.clientId, undefined, 'no client record yet');
   assert.equal(alerts.length, 0, 'no owner alert yet');
   assert.equal(researchStarted, 0, 'no research before the answer');
   assert.equal(globalThis.__after.length, 1, 'the rest is queued for after the answer');
-  // After the answer (as Vercel runs it): the paid application, linked to the meeting, the owner told.
+  // After the answer (as Vercel runs it): the record held for the call, linked to the meeting, the owner told.
   for (const fn of globalThis.__after.splice(0)) await fn();
   const q2 = await getInquiry(j.id);
-  assert.ok(q2.clientId, 'the paid application was made');
+  assert.ok(q2.clientId, 'the record for the call was made');
   assert.equal((await getMeeting(q2.meetingId)).linkedClientId, q2.clientId);
-  assert.ok(alerts.some((a) => a.key === 'new_application'), 'the owner hears about it');
+  assert.ok(pushed.find((x) => /New plan inquiry: Stone Roofing/.test(x.title)), 'the owner hears about it');
   assert.ok(researchStarted > 0, 'the website was researched after the answer');
 });
 

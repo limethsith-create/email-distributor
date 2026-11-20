@@ -5,14 +5,13 @@ section is one topic; a `<!-- pages: … -->` line names the hub views it is abo
 when the user is on that view). Keep it free of real people's names, email addresses and phone numbers.
 
 ## What Aviance is and what it sells
-<!-- pages: trials, paying -->
+<!-- pages: paying -->
 Aviance runs cold-email outreach for small US businesses (plumbers, dentists, IT firms, roofers, law offices,
-physical therapists and so on). The owner runs it from Sri Lanka. Every new client gets a free 30-day trial:
-Aviance finds their best prospects, buys a look-alike sending domain and two inboxes, warms them up, writes
-the emails with them, sends for 30 days, sorts the replies and books calls into the client's calendar. The
-promise is at least one qualified call from the trial. After the trial the client can pick a paid plan
-(Starter, Growth or Scale). The system that does the work is "the machine"; the owner's window onto it is the
-hub (aviance.store).
+physical therapists and so on). The owner runs it from Sri Lanka. There is no free trial: every client is on a
+paid plan (Starter, Growth or Scale). Aviance finds their best prospects, buys a look-alike sending domain and
+two inboxes, warms them up, writes the emails with them, sends month after month, sorts the replies and books
+calls into the client's calendar. The system that does the work is "the machine"; the owner's window onto it is
+the hub (aviance.store).
 
 ## Plans and prices
 <!-- pages: paying, client, money -->
@@ -20,66 +19,42 @@ The paid plans (monthly, in US dollars, as set in the machine's config PLANS):
 - Starter — $2,497 a month, 10 qualified calls guaranteed, reaching about 2,000 companies.
 - Growth — $3,997 a month, 20 qualified calls guaranteed, reaching about 4,000 companies.
 - Scale — $8,497 a month, 50 qualified calls guaranteed, reaching about 10,000 companies.
-Extra qualified calls beyond the plan cost $150 each. Pay per show is the other option: $250 for every qualified
-call that actually attends, billed weekly (offered when a trial had interested replies but no qualified call).
-The month-one bonus, if they start within 24 hours of the day-30 page: Starter 12 calls for the price of 10,
-Growth 22 for 20, Scale 55 for 50. The owner can change prices in Advanced › config (PLANS, BONUS).
+Extra qualified calls beyond the plan cost $150 each. The owner can change prices in Advanced › config (PLANS).
 Money is only for the owner — team members never see amounts.
 
-## Which plan to recommend (the plan recommender)
-<!-- pages: client, paying -->
-At day 30 the machine recommends one plan from the trial's numbers: 3 or more qualified calls → by how many
-calls a week the client said they can take (up to 3 a week → Starter, 4–7 → Growth, 8 or more → Scale);
-1–2 qualified calls → Starter; interested replies but no qualified call → Starter, with pay-per-show shown as
-the honest alternative; no interested replies at all → no plan, the extension is the recommendation.
-
-## The whole process (how a trial works, start to finish)
-<!-- pages: trials, client -->
-Every client goes the same way: they apply on the website → the owner reads it and says yes (or no) →
-they book and have the onboarding call → their domain and two inboxes are bought and set up →
-the inboxes warm up for about two weeks → near the end of warm-up there is the launch call, where the owner
-goes through their list and their emails with them → sending runs for 30 days (a paying client keeps sending)
-→ replies are sorted and the reply bot answers simple questions → prospects book calls into the client's calendar
-→ day 29 report → on day 30 the trial client gets a decision page → if they pick a plan the month-one invoice goes
-out and the owner marks it paid. The hub shows this as five steps: 1 Applied, 2 Onboarding call, 3 Setting up,
-4 Sending emails, 5 Done.
+## The whole process (start to finish)
+<!-- pages: paying, client -->
+Every client goes the same way: they book a sales call on the website ("Book a call") → the owner has the call
+and marks the booking Won (or Lost) → they get one email to book the onboarding call → they sign the plan
+agreement and the month-one invoice goes out → their domain and two inboxes are bought and set up → the inboxes
+warm up for about two weeks → near the end of warm-up there is the launch call, where the owner goes through their
+list and their emails with them → sending starts and simply goes on → replies are sorted and the reply bot answers
+simple questions → prospects book calls into the client's calendar. The hub shows this as five steps:
+1 Call booked, 2 Onboarding call, 3 Setting up, 4 Sending emails, 5 Done.
 
 ## The five steps and the machine's states
-<!-- pages: trials, client, behind -->
-Step 1 Applied = new or queued (on the waiting list). Step 2 Onboarding call = said yes, call being booked or booked.
-Step 3 Setting up = buying the domain and inboxes, checking DNS, warming up. Step 4 Sending emails = days 1 to 30
-(or longer on the extension or a paid plan). Step 5 Done = deciding after day 30, converted to a plan, not now,
-or ended. "Not taken" means the owner said no. Behind the scenes groups them as: Applied & queued, Onboarding,
-Buying & setup, Warm-up & build, Sending, Deciding, Converted, Not now & closing, Ended.
+<!-- pages: paying, client, behind -->
+Step 1 Call booked = a booked sales call, not a client yet. Step 2 Onboarding call = Won, call being booked or booked.
+Step 3 Setting up = buying the domain and inboxes, checking DNS, warming up. Step 4 Sending emails = from Day 1 on.
+Step 5 Done = stopped or ended. "Not taken" means the booking was Lost. Behind the scenes groups them as: Waiting for
+the sales call, Onboarding, Buying & setup, Warm-up & build, Sending, Stopped & closing, Ended.
 
-## Applying (new applications)
-<!-- pages: trials, paying, client -->
-Someone applies on the website's trial form, or asks for a paid plan (Starter, Growth or Scale). They appear at the top
-of Trials (or Paying clients for a paid plan) under New applications, with a match percent from the fit check.
-Lead-generation, SDR and cold-email agencies or tools are not accepted as trial clients. Application (Word)
-downloads everything they wrote plus "What we found": a short brief about the company with where each fact comes
-from (their site, Google Maps, news, the web archive, Census figures). Research again looks the company up again.
+## Bookings and Won (how someone becomes a client)
+<!-- pages: inquiries, paying, client -->
+The only way in is the website's "Book a call" form. Each booking lands in Plan call requests, goes in the Calendar
+as a sales call with a confirmation email and reminders, and pops up on the owner's phone. When they gave a website
+the machine also researches the company before the call (see "What we found"). After the call the owner moves the
+booking on: Call done, Following up, Proposal sent, then Won or Lost. Won makes them a client and emails them to book
+the onboarding call — only the owner can press it; Ava cannot. Lost closes it and nothing is emailed. A booking
+without a website cannot be Won: add the client with "Add a paying client" (it needs their website). That button is
+also for anyone closed outside a website booking.
 
-## The fit check and "What we found"
-<!-- pages: client, trials -->
-Each application gets a fit check: each rule passes, fails or is unknown, with a note, and a match percent.
-"What we found" shows the machine's research: Before the call (a brief of up to 12 plain sentences, each with its
-source), a summary, flags in amber, About the company (services, locations, Google rating, team size and age hints,
-socials, their market size) and the Full company file: who buys from them, in the news, competitors nearby
-(never emailed) and what they write about.
-
-## Your yes (say yes / say no)
-<!-- pages: trials, paying, client -->
-Say yes (Say yes and email them) emails them at once, asking them to book the onboarding call — from then on the
-trial runs by itself and moves to step 2. If three trials are already running they join the waiting list and start
-when a place opens. Say no asks for a short reason first, then sends a polite no; they move to Done, not taken.
-Nothing is sent until the owner confirms. Only the owner can say yes or no; Ava cannot do it for him.
-
-## How many trials can run at once (the waiting list)
-<!-- pages: trials, behind -->
-Three trials run at once. Anyone else the owner says yes to joins the waiting list (queued) and starts by itself
-when a place opens; the to-do "free trial slot — start the next one" appears when one can start. While a trial is
-on its free extension no new trials are accepted.
+## "What we found" (the research before the call)
+<!-- pages: client, inquiries -->
+"What we found" shows the machine's research and a match percent: Before the call (a brief of up to 12 plain
+sentences, each with its source), a summary, flags in amber, About the company (services, locations, Google
+rating, team size and age hints, socials, their market size) and the Full company file: who buys from them, in the
+news, competitors nearby (never emailed) and what they write about. Research again looks the company up again.
 
 ## The onboarding call
 <!-- pages: client, calendar -->
@@ -104,7 +79,7 @@ the domain and the inbox logins. The machine then checks the domain's DNS (SPF, 
 <!-- pages: settings, inboxes -->
 Status: Not set up, Connected as {account}, or Problem. Steps: make a CheapInboxes account → add a card under
 Billing → create an API key → paste it → Save → Test it. Forget the key removes it. Purchases the system could not
-match to a trial are listed with "This is for…" and Link it.
+match to a client are listed with "This is for…" and Link it.
 
 ## Warm-up
 <!-- pages: client, settings, warmup -->
@@ -115,7 +90,7 @@ around …". An inbox is ready at 90% on two days in a row; below 80% is low.
 
 ## Warm-up helpers (Settings › Warm-up)
 <!-- pages: settings, warmup -->
-The circle needs at least 8 members. When it is short the trial's big button says "Add N warm-up helpers". Helpers
+The circle needs at least 8 members. When it is short the client's big button says "Add N warm-up helpers". Helpers
 are free email accounts the owner makes once (Gmail, Yahoo, AOL, iCloud, GMX, WEB.DE or Yandex) — the system never
 creates accounts. Settings › Warm-up: the circle meter ("6 of 8 in the warm-up circle"), each helper (Working, New,
 Not working with the problem, Off) with Test and Remove, and Add a helper → pick the kind → follow its steps (usually
@@ -128,10 +103,10 @@ the owner goes through their lead list and their emails with them (sharing the a
 page). He presses Approved on the call when they say OK — sending starts on Day 1. If they already approved on the
 page, the call can be skipped (Skip the call). The card has the research brief at the top (Before the call).
 
-## Sending (days 1 to 30)
+## Sending
 <!-- pages: client -->
-Sending runs for 30 days from Day 1 for a trial. Each inbox starts slowly and sends more each day: 8 cold emails per
-inbox per day on days 1–2, 12 on days 3–4, 16 on days 5–6, then at most 25. The list shows "Day 12 of 30". One email
+Sending starts on Day 1 and goes on month after month. Each inbox starts slowly and sends more each day: 8 cold emails per
+inbox per day on days 1–2, 12 on days 3–4, 16 on days 5–6, then at most 25. The list shows "Day 12". One email
 per person — follow-ups only when switched on. Every email is checked before it goes: at most 80 words, no link in
 the first email, one question, a postal address and a "reply STOP" line, no spammy words. If bounces reach 1.5% the
 sending speed is halved; over 2% it stops and the owner gets an alert. Sending only happens in US business hours
@@ -140,7 +115,6 @@ and never on US holidays.
 ## Opens are not tracked for clients
 <!-- pages: client -->
 Client emails go out without an open tracker (trackers hurt landing in the inbox), so Opened is blank for them.
-Only the owner's own outreach on My stats tracks opens.
 
 ## Replies and the reply bot
 <!-- pages: client, settings, replybot -->
@@ -159,52 +133,33 @@ colleague with an approved title still counts; a competitor never does. No-shows
 (up to 2 tries). If the client says a call doesn't count it shows as a dispute for the owner to decide (uphold or
 overturn). The Calls tab on the client's page shows every call prospects booked (when, booked / showed / no-show).
 
-## Day 29 report and the day-30 decision
-<!-- pages: client -->
-On day 29 the client gets the trial report: companies contacted, emails sent, bounces, inbox rate, replies,
-interested, booked, held and qualified calls, what worked and what didn't, and one recommendation. On day 30 a trial
-client gets the decision page with their numbers, one plan we recommend and the 24-hour month-one bonus. They can pick
-a plan (Start), ask to talk to someone, or say not now. No decision by day 45 → not now (reminders on days 33, 37 and 44).
-Paying clients have no day 30.
-
-## The free extension (no qualified call by day 30)
-<!-- pages: client -->
-With no qualified call on day 30, the trial keeps sending free until the first qualified call, up to 60 sending days
-in all (an extension). The client is told; the owner gets an alert. It ends at the first qualified call (the decision
-page follows the next morning) or at the 60-day cap. There is never a second extension.
-
 ## Handover
 <!-- pages: client -->
-On day 30 (or at the first qualified call if later) the client gets a handover email with three spreadsheets — their
-leads, the replies (with type) and the bookings — and the market report. They never get the inboxes' passwords.
+When a client stops, they get a handover email with three spreadsheets — their leads, the replies (with type) and the
+bookings — and the market report. They never get the inboxes' passwords.
 
 ## The invoice (money)
 <!-- pages: client, paying, money -->
-When a trial client picks a plan, or a paying client signs the plan agreement, the month-one invoice goes out with the
-plan price, the bonus line and the PayPal.me or Wise details from Your details; reminders go on day +3 and +7 if unpaid.
+When a client signs the plan agreement, the month-one invoice goes out with the plan price and the PayPal.me or Wise
+details from Your details; reminders go on day +3 and +7 if unpaid.
 When the money lands the owner presses Mark paid on the to-do ("invoice to mark paid when the money lands"). Money is
 only for the owner — team members never see amounts. The owner can ask Ava "how much did we make this month?".
 
-## Trials page
-<!-- pages: trials -->
-Lists every trial client. Needs you is at the top in red with what to do; In progress are the ones running with
-nothing needed; Done, not taken is folded at the bottom. Each row: the company, the journey as five squares ("Step 2
-of 5 — Onboarding call"), the machine's plain sentence and what happens next. The stage tiles (Applied, Booking the
-call, Call booked, Setting up, Warming up, Sending, Finished) count clients at each stage — tap one to filter. At the
-bottom: Add a trial client yourself (or press N). Tap a row to open the client. It refreshes itself every minute.
-
-## Paying clients page
+## Clients page
 <!-- pages: paying -->
-Works like Trials but for clients on Starter, Growth or Scale: new paid-plan applications, the stage tiles and
-every paying client. The owner also sees money received at the top. Add a paying client yourself is at the bottom.
-Plan call requests (inquiries) are here too.
+Lists every client (Starter, Growth or Scale). Needs you is at the top in red with what to do; In progress are the ones
+running with nothing needed; Done, not taken is folded at the bottom. Each row: the company, the journey as five
+squares ("Step 2 of 5 — Onboarding call"), the machine's plain sentence and what happens next. The stage tiles count
+clients at each stage — tap one to filter. The owner also sees money received at the top. At the bottom: Add a paying
+client yourself (for someone closed outside a website booking). Plan call requests (bookings) are here too.
 
-## Inquiries (plan call requests)
+## Plan call requests (bookings)
 <!-- pages: inquiries, paying -->
-People who want a paid plan without a trial book a call from the website's "Book a call" form. Each one pops up on the
-owner's phone and is an urgent to-do. The list has filters (Open, Won, Lost, All). One inquiry shows their call time,
-what they sell and the plan; Reply by email; Where it stands (Mark contacted, won or lost, with a note); Start a free
-trial and email them; and Notes. Nothing is sent to them automatically.
+Everyone who books a call on the website's "Book a call" form. Each one pops up on the owner's phone and is a to-do:
+calm while the call is ahead, urgent once it has passed ("How did the call go?"). The list has filters (Open, Won,
+Lost, All). One booking shows their call time, what they sell and the plan; Reply by email; Where it stands (Call done,
+Following up, Proposal sent, Won, Lost, with a note); and Notes. Won makes them a client and emails them to book the
+onboarding call.
 
 ## Calendar page
 <!-- pages: calendar -->
@@ -232,14 +187,13 @@ The owner's page: who signed in and out, for how long, what they opened, and new
 Approve lets a person in as a team member (read-only). The Activity badge counts people waiting.
 
 ## Where things are (every page, tab and Settings section)
-<!-- pages: trials, paying, calendar, team, mystats, activity, inquiries, behind, settings, client -->
+<!-- pages: paying, calendar, team, activity, inquiries, behind, settings, client -->
 Ava can open any of these ("open Lakeview's money", "take me to the keys", "show the warm-up settings") and read it out
-("open my stats and read it", "what's on this tab?" — the hub reads the screen aloud on your device).
-Pages: Trials (every trial client, Needs you first, stage tiles); Paying clients (Starter, Growth, Scale clients, paid
-applications, money received — owner); Calendar (every call in Sri Lanka and US Eastern time, times waiting for a yes);
-Team (who is in the hub, status lines, who looks after which clients); My stats (Aviance's own outreach: sent, opens,
-replies, bounces, per inbox, Saved history); Activity (owner: sign-ins, what people opened, accounts to approve); Plan
-call requests (inquiries); Behind the scenes (every to-do, every trial by stage, the waiting list); Settings (owner).
+("open the calendar and read it", "what's on this tab?" — the hub reads the screen aloud on your device).
+Pages: Clients (every client, Needs you first, stage tiles, money received — owner); Calendar (every call in Sri Lanka
+and US Eastern time, times waiting for a yes); Team (who is in the hub, status lines, who looks after which clients);
+Activity (owner: sign-ins, what people opened, accounts to approve); Plan call requests (bookings); Behind the scenes
+(every to-do, every client by stage); Settings (owner).
 A client's email system — shared with the client: Overview (sent, opened, replies, bounced, interested, calls booked),
 Conversations (every reply thread), Emails sent, Calls (booked, qualified, no-shows), Messages (the owner's emails with
 the client, the reply box). Only you: Money & plan (owner: plan, invoice, paid or not), Health (inboxes, warm-up, inbox
@@ -248,20 +202,20 @@ Setup & history (who can see their page / Give access, application, onboarding a
 history, actions). Team members see the shared tabs; the Only-you tabs, Settings and Activity are opened for the owner.
 Settings sections: Alerts (every machine message), Phone alerts, Your details (signer, postal address, call link,
 PayPal, Wise), Keys (every service key), Ava (brains, voice, Business facts, change requests), Google Meet, Inboxes &
-domains (CheapInboxes), Warm-up (helper inboxes), Reply bot, Test run, Is everything running? (health check), Behind the
+domains (CheapInboxes), Warm-up (helper inboxes), Reply bot, Is everything running? (health check), Behind the
 scenes, Advanced (Mission Control, config), Light or dark, Your account (log out).
 
 ## Settings sections
 <!-- pages: settings -->
 Settings has named sections, each saying its state in one word: Alerts, Phone alerts, Your details, Keys, Ava,
-Google Meet, Inboxes & domains, Warm-up, Reply bot, Test run, Is everything running?, Behind the scenes, Advanced
+Google Meet, Inboxes & domains, Warm-up, Reply bot, Is everything running?, Behind the scenes, Advanced
 (the full control panel, Mission Control), Light or dark, and Your account (log out). Settings is for the owner.
 
 ## Your details (Settings › Your details)
 <!-- pages: settings, details -->
 What the emails say about the owner: name (the signer), postal address (every cold email must carry one), email,
 the onboarding inbox, the call link, PayPal.me, Wise details and Clutch. Each box has its own Save; "Still to fill in: N"
-counts the empty ones, and the two the first trial needs are marked in amber.
+counts the empty ones, and the two the first client needs are marked in amber.
 
 ## Keys (Settings › Keys)
 <!-- pages: settings, keys -->
@@ -318,27 +272,21 @@ Every machine alert can pop up on the owner's phone as a normal notification. On
 alerts → Turn on → Allow → Send a test. Tapping an alert opens the right page. If blocked later: iPhone Settings →
 Notifications → Aviance.
 
-## Test run
-<!-- pages: settings, demo -->
-Settings › Test run loads example clients (a finished trial, a paying client and a trial mid-way) marked with a Test
-tag, so the owner can click through a whole month. No real email is ever sent for them and nothing can be changed on
-them. Remove the test run takes them away; real clients aren't touched. Owner only.
-
 ## Is everything running? (the health check)
 <!-- pages: settings, status -->
 Settings › Is everything running? shows the last check-in of the machine (the cron heartbeat), the last email sent,
-trials running, free extensions, alerts not seen, paid services used and setup still to finish. "Yes", "Mostly" or
+clients running, alerts not seen, paid services used and setup still to finish. "Yes", "Mostly" or
 "Needs a look". A missing heartbeat becomes a to-do: check the cron.
 
 ## Behind the scenes
 <!-- pages: behind, settings -->
-The full picture: every to-do in one list, every trial by stage, the waiting list and the owner's own sending. Inside a
+The full picture: every to-do in one list and every client by stage. Inside a
 client's email system, Behind the scenes has tabs: Growth, Parts (the 13 parts each OK / Working / Waiting / Blocked /
 Off), Leads, Deliverability, Inboxes, Calls, Replies, Copy, Coming up, History and Actions.
 
 ## The client page
 <!-- pages: client -->
-One card per client: the five steps, a one-line status ("Sending — day 13 of 30, 1 call booked"), and — when
+One card per client: the five steps, a one-line status ("Sending — day 13, 1 call booked"), and — when
 something needs the owner — "What do you need to do?" with one big button for the most important thing (read the
 application, say yes to a call time, answer their message, mark the call done, write about booking, buy the domain and
 inboxes, add warm-up helpers…). Under it, Open their email system shows everything else. Messages (the owner's emails
@@ -386,15 +334,11 @@ The owner can do everything. A team member sees the same screens but changes not
 money is only for the owner. New team members make an account on the sign-in page ("Create an account") and the owner
 approves them in Activity. Everyone can set their own status line and ask Ava to note a change request.
 
-## How to: add a trial client yourself
-<!-- pages: trials -->
-Trials → at the bottom "Add a trial client yourself" (or press N) → fill in the company, the person, their email and
-website → save. They start at step 1 like a website application; say yes to start. Ava can open the form for you.
-
 ## How to: add a paying client
 <!-- pages: paying -->
-Paying clients → "Add a paying client yourself" → the company, contact and plan (Starter, Growth or Scale) → save.
-The plan agreement and the month-one invoice follow.
+Clients → "Add a paying client yourself" (for someone closed outside a website booking) → the company, contact, their
+website and plan (Starter, Growth or Scale) → save. They get the onboarding-call email at once; the plan agreement and the
+month-one invoice follow.
 
 ## How to: answer a client's message
 <!-- pages: client -->
@@ -439,7 +383,7 @@ match the client's ideal customer in their area, finds the right person's email,
 email checkers (QuickEmailVerification, Verifalia, Reoon, ZeroBounce, Hunter). Leads are graded A, B or C; rejected
 ones are never emailed.
 
-## FAQ: Why is a trial stuck?
+## FAQ: Why is a client stuck?
 Look at the client's big button and the red "You need to…" line: usually a call time waiting for a yes, a message to
 answer, the domain and inboxes to buy, warm-up helpers to add, or a legal reply / send hold to clear. Settings › Is
 everything running? shows if the machine itself is behind.

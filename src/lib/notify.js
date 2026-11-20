@@ -24,6 +24,12 @@ import { pushToOwner } from '@/lib/push';
 import { cfg } from '@/lib/config';
 import { onboardPixelUrl, mailPixelUrl } from '@/lib/tokens';
 
+/** The plan's name for an email: Starter, Growth or Scale (anything else — an old 'trial' record — reads as Starter). */
+export function planNameOf(plan) {
+  const p = String(plan || '').toLowerCase();
+  return p === 'growth' ? 'Growth' : p === 'scale' ? 'Scale' : 'Starter';
+}
+
 const DEFAULT_OWNER_EMAIL = 'limethsith@gmail.com';
 const LOG_CAP = 1000;
 
@@ -238,17 +244,14 @@ export async function ackAlerts(clientId, keys, { reason = 'handled', now = new 
  */
 export async function notifyClient(clientId, key, vars = {}, opts = {}) {
   const { to = null, from = null, dedupe = key, attachments = null, pixelUrl = null, pixel = 'mail', linkify = false, inReplyTo = null, references = null, icalEvent = null, thread = true, now = null } = opts || {};
-  const { renderTemplate, TEMPLATES } = await import('@/lib/templates/client');
+  const { renderTemplate } = await import('@/lib/templates/client');
   const { getClient, isDemo } = await import('@/lib/db/client');
   const client = await getClient(clientId);
   // A Test run client (systems/demo.js) is never emailed.
   if (isDemo(client) || isDemoId(clientId)) return { sent: false, skipped: 'demo' };
-  // A paying client (Starter / Growth / Scale) gets the `<key>_paid` version of an email when there is one: the same
-  // email without the trial wording. {planName} is there for it ("the Growth plan").
-  const plan = String(client?.plan || '').toLowerCase();
-  const paid = ['starter', 'growth', 'scale'].includes(plan);
-  if (paid && TEMPLATES[`${key}_paid`]) key = `${key}_paid`;
-  if (paid && !vars.planName) vars = { ...vars, planName: plan[0].toUpperCase() + plan.slice(1) };
+  // Every client is on a plan (Starter / Growth / Scale): {planName} is there for the emails ("the Growth plan").
+  // A record from before plans were required (plan 'trial' or none) reads as Starter.
+  if (!vars.planName) vars = { ...vars, planName: planNameOf(client?.plan) };
   const recipient = to || client?.contactEmail;
   if (!recipient) throw new Error(`no contact email for ${clientId}`);
   if (dedupe) {
@@ -276,7 +279,7 @@ export async function notifyClient(clientId, key, vars = {}, opts = {}) {
   const via = from || msg.from;
   let account;
   try {
-    if (via === 'trial') {
+    if (via === 'sender' || via === 'trial') { // the client's own sending inbox ('trial': retries queued before the rename)
       const { getAccounts } = await import('@/lib/db/inboxes');
       account = (await getAccounts(clientId))[0];
     } else if (via === 'onboard') {
